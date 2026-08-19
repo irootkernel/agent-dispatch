@@ -135,3 +135,11 @@ Post-baseline decisions and documented errata. Entries amend completed E0 output
 **Context.** A re-verification of the 1.0.2 changes found these three items applied to only one of the documents each decision touched.
 
 **Consequences.** No behavioral change beyond the schema enforcement; the examples still validate.
+
+## D-015 - 2026-08-20 - E1-T1 owns the Makefile verification entrypoint, the Go schema validator, and gaori retargeting
+
+**Decision.** E1-T1 introduces the Makefile as the single deterministic verification entrypoint, with explicit targets for the package checks (manifest checksums, schema/example validation, traceability regeneration). Schema and example validation moves to a Go implementation using a standard Draft 2020-12 validator (for example `santhosh-tekuri/jsonschema`), replacing `docs/scripts/validate-json-schemas.py`; its self-test cases are migrated to Go unit tests. `.gaori/tester.yaml` commands are re-targeted from raw `bash -c` argv to the Makefile targets, so gaori evidence capture tracks the entrypoint instead of duplicated command text. The Python validation scripts are retired once their coverage is migrated.
+
+**Context.** The E0 audit remediation left a stdlib-only Python subset validator with accepted deferrals (subset-enumeration duplication, no static `$ref` target resolution, only the `date-time` and `uri` formats). The implementation language is Go (ADR-0004), and E1-T1 already required deterministic verification commands and schema/example validation in CI, so the replacement lands in the task that creates the Go module. The gaori configuration added during the E0 closeout wraps raw commands, which would silently drift from the documented verification commands once those become Makefile targets.
+
+**Consequences.** The Python dependency for document validation disappears at E1-T1, discharging the deferred standard-validator items in `VALIDATION.md`. Until E1-T1 completes, the current Python commands and gaori configuration remain the authoritative reproduction path.

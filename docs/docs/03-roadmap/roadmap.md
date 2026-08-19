@@ -281,7 +281,9 @@ Create the Go repository, package boundaries, build metadata, lint/test commands
 - `cmd/jjukkumi` minimal executable;
 - internal package skeleton matching repository layout;
 - build/version package;
-- Makefile or equivalent deterministic commands;
+- Makefile with deterministic verification targets for the package checks (manifest checksums, schema/example validation, traceability regeneration) as the single verification entrypoint (D-015);
+- Go schema and example validation using a standard Draft 2020-12 validator, replacing `docs/scripts/validate-json-schemas.py` with its self-test cases migrated to Go unit tests (D-015);
+- `.gaori/tester.yaml` commands re-targeted to the Makefile verification targets (D-015);
 - CI for format, vet/static checks, unit tests, race test where supported, and schema/example validation;
 - contribution and local verification instructions.
 
@@ -299,7 +301,8 @@ E0-T4 Completed; E0-T5 Completed.
 - `jjukkumi version --output json` follows the CLI envelope;
 - no domain behavior is stubbed with false success;
 - package dependency direction is enforceable;
-- repository verification command passes.
+- repository verification command passes;
+- the Python subset validator under `docs/scripts/` is retired with its checks and self-tests migrated to the Go validator and Makefile targets, and `gaori config check` passes with commands invoking those targets.
 
 ### Out of Scope
 

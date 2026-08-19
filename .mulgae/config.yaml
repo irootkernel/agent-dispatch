@@ -1,0 +1,12 @@
+providers:
+  codex: {}
+roles:
+  logic: {enabled: true, primary_provider: "codex"}
+  security: {enabled: true, primary_provider: "codex"}
+  maintainability: {enabled: true, primary_provider: "codex"}
+  product: {enabled: true, primary_provider: "codex"}
+  documentation: {enabled: true, primary_provider: "codex"}
+  testing: {enabled: true, primary_provider: "codex"}
+validation:
+  extraction:
+    enabled: true

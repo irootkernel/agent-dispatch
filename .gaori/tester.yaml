@@ -1,0 +1,17 @@
+version: 2
+commands:
+  manifest-check:
+    command: ["bash", "-c", "cd docs && shasum -a 256 -c MANIFEST.sha256"]
+    tags: [docs, manifest]
+    parser: generic
+    timeout_sec: 300
+  schema-validation:
+    command: ["bash", "-c", "cd docs && python3 scripts/validate-json-schemas.py"]
+    tags: [docs, schema]
+    parser: generic
+    timeout_sec: 300
+  traceability:
+    command: ["python3", "docs/scripts/generate-traceability.py"]
+    tags: [docs, traceability]
+    parser: generic
+    timeout_sec: 120

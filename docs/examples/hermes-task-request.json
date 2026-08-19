@@ -1,0 +1,42 @@
+{
+  "contract_version": "jjukkumi.hermes-task/v1",
+  "dispatch_id": "019c2234-5678-7abc-9def-0123456789ab",
+  "idempotency_key": "jjukkumi:v1:sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "route": {
+    "id": "wiki-maintenance",
+    "revision": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "resource": {
+    "id": "vault-main",
+    "workspace": "dir:/Users/example/Documents/Obsidian/MainVault"
+  },
+  "assignment": {
+    "profile": "wiki-maintainer",
+    "skills": ["llm-wiki"],
+    "mutex_key": "wiki-publish"
+  },
+  "execution_hints": {
+    "max_runtime_seconds": 1800,
+    "max_attempts": 2
+  },
+  "activation": {
+    "mode": "latest_state",
+    "generation": 1,
+    "content_fingerprint": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "manifest": [
+      {
+        "path": "Inbox/new-note.md",
+        "operation": "create",
+        "after_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    ],
+    "flags": []
+  },
+  "acceptance_criteria": [
+    "Evaluate the current vault state using the configured LLM Wiki skill.",
+    "Re-evaluate indexing, referencing, and grouping affected by the latest state.",
+    "Respect Hermes permissions, approvals, and protected-path policy.",
+    "Do not assume that a manifest path still exists at execution time.",
+    "Report a bounded JJUKKUMI work receipt when the companion CLI is available."
+  ]
+}

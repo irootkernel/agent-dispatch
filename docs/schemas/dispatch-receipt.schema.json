@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:jjukkumi:schema:dispatch-receipt:v1",
+  "title": "JJUKKUMI DispatchReceipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "dispatch_id",
+    "receipt_kind",
+    "received_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "jjukkumi.dispatch-receipt/v1"
+    },
+    "receipt_id": {
+      "type": "string"
+    },
+    "dispatch_id": {
+      "type": "string"
+    },
+    "receipt_kind": {
+      "enum": [
+        "acceptance",
+        "execution_projection"
+      ]
+    },
+    "acceptance_state": {
+      "enum": [
+        "accepted",
+        "rejected",
+        "unknown"
+      ]
+    },
+    "durable": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "execution_state": {
+      "enum": [
+        "unavailable",
+        "queued",
+        "running",
+        "succeeded",
+        "failed",
+        "canceled"
+      ]
+    },
+    "external_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "target_observed_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "receipt_kind": {
+            "const": "acceptance"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "acceptance_state"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "receipt_kind": {
+            "const": "execution_projection"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "execution_state"
+        ]
+      }
+    }
+  ]
+}

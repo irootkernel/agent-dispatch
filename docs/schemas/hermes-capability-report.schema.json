@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:jjukkumi:schema:hermes-capabilities:v1",
+  "title": "Hermes Public Interface Capability Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "probed_at",
+    "hermes_version",
+    "interface",
+    "capabilities",
+    "evidence"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "jjukkumi.hermes-capabilities/v1"
+    },
+    "probed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "hermes_version": {
+      "type": "string"
+    },
+    "interface": {
+      "enum": [
+        "public_cli",
+        "public_webhook"
+      ]
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "boolean"
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "integer",
+          "string",
+          "boolean",
+          "null"
+        ]
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

@@ -1,0 +1,114 @@
+version: 1
+
+instance:
+  id: workstation-main
+  # Prefer JJUKKUMI_STATE_DIR or the platform default in real installations.
+  state_dir: /Users/example/Library/Application Support/JJUKKUMI
+  log_paths: relative
+
+limits:
+  max_stdin_bytes: 4194304
+  max_path_bytes: 4096
+  max_hash_file_bytes: 16777216
+  max_subprocess_output_bytes: 1048576
+
+resources:
+  vault-main:
+    type: directory
+    root: /Users/example/Documents/Obsidian/MainVault
+    file_scope: markdown
+    git:
+      mode: optional
+
+targets:
+  hermes-kanban-main:
+    type: hermes-kanban
+    executable: hermes
+    capability_report: /Users/example/.config/jjukkumi/hermes-capabilities.json
+    required_capabilities:
+      - durable_acceptance
+      - submit_idempotency_key
+      - lookup_by_idempotency_key
+    submit_timeout: 30s
+    lookup_timeout: 15s
+    environment_allowlist:
+      - HOME
+      - PATH
+
+  hermes-webhook-immediate:
+    type: hermes-webhook
+    endpoint: https://example.invalid/public/hermes-hook
+    auth:
+      type: bearer
+      secret_ref: env:HERMES_WEBHOOK_TOKEN
+    submit_timeout: 30s
+    idempotency_header: Idempotency-Key
+
+routes:
+  wiki-maintenance:
+    # This permits activation only. Runtime activation still requires `route enable`.
+    # Keep false until the automatic-write acceptance gate is passed.
+    enabled: false
+    source:
+      type: watchman-trigger
+      source_id: vault-main-watchman
+      resource: vault-main
+      # Follows the trigger-name convention jjukkumi.<route-id>.<short-config-digest>
+      # documented in watchman-integration.md.
+      trigger_name: jjukkumi.wiki-maintenance.4f8c21
+      include:
+        - "**/*.md"
+      exclude:
+        - ".git/**"
+        - ".obsidian/workspace*.json"
+        - ".obsidian/cache/**"
+        - ".trash/**"
+
+    batching:
+      automatic_threshold: 25
+      hard_limit: 100
+      max_manifest_bytes: 262144
+
+    policy:
+      protected:
+        - "raw/**"
+        - "canon/**"
+      immutable: []
+      bulk_action: quarantine
+      overflow_action: reconcile
+      fresh_instance_action: reconcile
+      unsafe_path_action: quarantine
+
+    dispatch:
+      target: hermes-kanban-main
+      profile: wiki-maintainer
+      skills:
+        - llm-wiki
+      mutex_key: wiki-publish
+      latest_state: true
+      submission_retry:
+        max_attempts: 3
+        initial_backoff: 2s
+        max_backoff: 2m
+        multiplier: 2.0
+        jitter_fraction: 0.2
+      execution_hints:
+        max_runtime: 30m
+        max_attempts: 2
+      failure_budget: 2
+      active_stale_after: 2h
+
+    reconciliation:
+      initial: true
+      daily_expected: true
+
+    retention:
+      observations: 30d
+      completed_receipts: 180d
+
+retention:
+  observations: 30d
+  attempts: 30d
+  completed_receipts: 180d
+  resolved_quarantine: 180d
+  unresolved: forever

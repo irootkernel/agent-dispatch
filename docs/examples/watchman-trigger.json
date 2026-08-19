@@ -1,0 +1,22 @@
+[
+  {
+    "name": "Inbox/new-note.md",
+    "exists": true,
+    "new": true,
+    "type": "f",
+    "size": 1842
+  },
+  {
+    "name": "Notes/existing-note.md",
+    "exists": true,
+    "new": false,
+    "type": "f",
+    "size": 6240
+  },
+  {
+    "name": "Archive/removed-note.md",
+    "exists": false,
+    "new": false,
+    "type": "f"
+  }
+]

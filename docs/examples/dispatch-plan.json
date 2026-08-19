@@ -1,0 +1,29 @@
+{
+  "schema_version": "jjukkumi.dispatch-plan/v1",
+  "route": {
+    "id": "wiki-maintenance",
+    "revision": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "resource_id": "vault-main",
+  "changes": [
+    {
+      "path": "Inbox/new-note.md",
+      "operation": "create",
+      "exists_after": true,
+      "file_type": "regular",
+      "before_digest": null,
+      "after_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "digest_status": "known"
+    }
+  ],
+  "content_fingerprint": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "classification": ["normal"],
+  "disposition": "dispatch",
+  "reason_codes": ["meaningful_markdown_change"],
+  "required_capabilities": [
+    "durable_acceptance",
+    "submit_idempotency_key",
+    "lookup_by_idempotency_key"
+  ],
+  "generation_action": "create_if_idle"
+}

@@ -1,0 +1,34 @@
+{
+  "schema_version": "jjukkumi.source-observation/v1",
+  "observation_id": "019c1234-5678-7abc-9def-0123456789ab",
+  "source_event_key": "watchman:vault-main-watchman:c100:c101:sha256-example",
+  "source": {
+    "type": "watchman",
+    "source_id": "vault-main-watchman",
+    "trigger_name": "jjukkumi.wiki-maintenance.4f8c21",
+    "position": {
+      "since": "c:1700000000:123:1:100",
+      "clock": "c:1700000000:123:1:101"
+    },
+    "flags": {
+      "overflow": false,
+      "fresh_instance": false,
+      "relative_root": null
+    }
+  },
+  "resource_id": "vault-main",
+  "observed_at": "2026-08-19T03:00:00+09:00",
+  "received_at": "2026-08-19T03:00:01+09:00",
+  "raw_payload_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "changes": [
+    {
+      "path": "Inbox/new-note.md",
+      "operation": "create",
+      "exists_after": true,
+      "file_type": "regular",
+      "before_digest": null,
+      "after_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "digest_status": "known"
+    }
+  ]
+}

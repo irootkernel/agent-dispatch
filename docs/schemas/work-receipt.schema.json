@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:jjukkumi:schema:work-receipt:v1",
+  "title": "JJUKKUMI WorkReceipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "dispatch_id",
+    "run_id",
+    "resource_id",
+    "status",
+    "submitted_at",
+    "changes"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "jjukkumi.work-receipt/v1"
+    },
+    "dispatch_id": {
+      "type": "string"
+    },
+    "external_task_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "resource_id": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "begun",
+        "completed",
+        "failed"
+      ]
+    },
+    "base_revision": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "result_revision": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "submitted_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "changes": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "before_digest": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "after_digest": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "failure_code": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "agent_error",
+        "canceled",
+        "timeout",
+        "environment_error",
+        null
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "failed"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "failure_code": {
+            "enum": [
+              "agent_error",
+              "canceled",
+              "timeout",
+              "environment_error"
+            ]
+          }
+        },
+        "required": [
+          "failure_code"
+        ]
+      }
+    }
+  ]
+}

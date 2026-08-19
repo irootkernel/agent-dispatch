@@ -1,0 +1,17 @@
+{
+  "schema_version": "jjukkumi.dispatch-receipt/v1",
+  "receipt_id": "019c2234-5678-7abc-9def-0123456789cd",
+  "dispatch_id": "019c2234-5678-7abc-9def-0123456789ab",
+  "receipt_kind": "acceptance",
+  "acceptance_state": "accepted",
+  "durable": true,
+  "execution_state": "queued",
+  "external_ref": "hermes-kanban:98765",
+  "target_observed_at": "2026-08-19T09:30:14.107Z",
+  "received_at": "2026-08-19T09:30:14.210Z",
+  "payload": {
+    "version": "1",
+    "task_id": "98765",
+    "status": "created"
+  }
+}

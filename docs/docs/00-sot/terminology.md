@@ -1,0 +1,54 @@
+# Terminology
+
+Normative words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** have their conventional requirements meaning.
+
+| Term | Definition |
+|---|---|
+| **Authoritative runtime** | The system that owns agent task execution and semantic outcome. For v0.1 this is Hermes. |
+| **One-shot** | The v0.1 execution mode: a short-lived CLI process per trigger invocation. SQLite, not a daemon, coordinates concurrent processes. |
+| **Resource** | A trusted operator-configured workspace alias, such as `vault-main`, resolved to an absolute local root only inside JJUKKUMI. |
+| **Workspace** | The approved target-side working location a task is bound to, such as `dir:` plus a resolved root. It is fixed by configuration and cannot be changed by event payloads. |
+| **Route** | A versioned operator policy binding one source, one resource, filtering rules, structural dispositions, and one explicit target. |
+| **Route revision** | A canonical digest JJUKKUMI computes from behavior-affecting normalized route configuration. Decisions and records carry it; a change requires explicit operator acknowledgement before the route activates. |
+| **Policy revision** | A canonical digest of the policy subset of route configuration. A not-yet-submitted batch is re-evaluated against the active policy revision before dispatch. |
+| **Source observation** | An immutable record of what a source reported at one source position. It is evidence, not authority. |
+| **Source event key** | Stable source-provided identity or position used to recognize retransmission. It is distinct from a JJUKKUMI ID. |
+| **Settled** | Watchman trigger mode invokes JJUKKUMI only after observed changes stop for a quiet period. The payload is already one settled batch, so JJUKKUMI adds no second settle delay. |
+| **Change item** | One normalized relative-path create, modify, or delete observation. |
+| **Change batch** | A bounded, deterministically ordered set of relevant change items evaluated together. |
+| **Manifest** | A bounded list of normalized relative paths and digests attached to a task or work receipt. It is untrusted activation evidence, not an instruction or a state snapshot. |
+| **Route generation** | The logical maintenance generation for a route. While one Hermes task is unresolved, later batches increment its durable dirty generation instead of creating parallel work. |
+| **Dirty generation** | Evidence that relevant changes occurred after the active dispatch snapshot. It guarantees a later re-evaluation, not a second immediate task. |
+| **Policy decision** | Immutable output of deterministic route policy evaluation. It records a disposition and machine-readable reasons. |
+| **Disposition** | One of `drop`, `dispatch`, `merge_pending`, `quarantine`, or `reconcile`. |
+| **Sink** | A target adapter that maps a dispatch intent to one explicit public target interface and returns acceptance evidence. It never decides whether a dispatch should exist. |
+| **Capability report** | A versioned, evidence-backed record of a target's verified public capabilities and limits. Route validation checks required capabilities against it. |
+| **Reduced guarantee** | An explicitly documented operating mode for a route whose target lacks a required capability. The limitation is surfaced, never silently emulated. |
+| **Dispatch intent** | An immutable, durable request JJUKKUMI intends to submit to one target. |
+| **Dispatch attempt** | One concrete external submission attempt. Attempts may be retried while the dispatch intent remains the same. |
+| **Lease** | An expiring database-backed ownership claim ensuring only one process owns a dispatch attempt. It is a recovery tool, not proof that a remote side effect did not happen. |
+| **Dispatch receipt** | Evidence about target acceptance. Portable states are `accepted`, `rejected`, and `unknown`. Earlier drafts called this record an acceptance receipt; it is the same record. |
+| **Dead letter** | Terminal dispatch state where automatic progress has stopped. A dead-lettered dispatch remains inspectable and requires an explicit retry, reprocess, rerun, or discard action. |
+| **Execution projection** | Optional target status such as queued, running, succeeded, failed, or canceled. It is not required from every sink. |
+| **Work receipt** | A record submitted by a cooperating Hermes task or agent describing run identity and changed paths/digests. It supports feedback attribution but is not trusted until validated. |
+| **Content fingerprint** | SHA-256 of a canonical, sorted projection of normalized change evidence. It compares effective content evidence and is not an event ID. |
+| **Idempotency key** | Stable key supplied to a target so repeated submission of the same dispatch intent can resolve to one accepted task. |
+| **Observation ID** | Time-ordered unique JJUKKUMI ID for a source observation. |
+| **Batch ID** | Unique JJUKKUMI ID for a change batch. |
+| **Decision ID** | Unique JJUKKUMI ID for a policy decision. |
+| **Dispatch ID** | Unique JJUKKUMI ID for a dispatch intent. |
+| **Attempt ID** | Unique JJUKKUMI ID for one dispatch attempt. |
+| **External reference** | Target-provided task, run, or request identifier. |
+| **Durable acceptance** | Target acknowledgement that work has been persisted and can be queried after target restart. A transport-level 2xx response is not automatically durable acceptance. |
+| **Meaningful change** | A configured Markdown create or delete, or a modify whose effective digest changed. Metadata-only changes and excluded paths are not meaningful. |
+| **Latest-state processing** | Hermes receives change evidence but performs maintenance against the current vault state at execution time. |
+| **Reconciliation** | A new assessment of current authoritative state after overflow, lost position, uncertainty, or explicit request. It creates new observation lineage. |
+| **Retry** | Another submission attempt for the same dispatch intent and idempotency key. |
+| **Reprocess** | Apply the current route policy to a retained observation or batch, creating new decision lineage. |
+| **Rerun** | Intentionally request new agent work from a previously accepted dispatch. It creates a new dispatch ID and idempotency key. |
+| **Replay** | Ambiguous legacy term. It is not used as a v0.1 CLI operation; use retry, reprocess, rerun, or reconcile. |
+| **Quarantine** | Durable hold for an event that must not be automatically submitted. Release requires an explicit operator action and creates new decision lineage. |
+| **Protected path** | A route-configured path that cannot enter automatic maintenance work. JJUKKUMI does not edit or rewrite it. |
+| **Fresh instance** | Source condition indicating the previous incremental source position is no longer usable. It triggers reconciliation rather than ordinary dispatch. |
+| **Overflow** | Source condition indicating the reported change list may be incomplete. Partial dispatch is forbidden; one reconciliation is scheduled. |
+| **Hermes companion skill** | A skill shipped by JJUKKUMI that instructs a Hermes agent how to consume a JJUKKUMI task and optionally submit work receipts. It is not a Hermes plugin. |

@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:jjukkumi:schema:source-observation:v1",
+  "title": "JJUKKUMI SourceObservation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "observation_id",
+    "source",
+    "resource_id",
+    "observed_at",
+    "received_at",
+    "changes",
+    "raw_payload_digest"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "jjukkumi.source-observation/v1"
+    },
+    "observation_id": {
+      "type": "string",
+      "minLength": 16
+    },
+    "source_event_key": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "source_id",
+        "trigger_name",
+        "position",
+        "flags"
+      ],
+      "properties": {
+        "type": {
+          "const": "watchman"
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "trigger_name": {
+          "type": "string"
+        },
+        "position": {
+          "type": "object"
+        },
+        "flags": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "overflow",
+            "fresh_instance"
+          ],
+          "properties": {
+            "overflow": {
+              "type": "boolean"
+            },
+            "fresh_instance": {
+              "type": "boolean"
+            },
+            "relative_root": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "resource_id": {
+      "type": "string"
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "raw_payload_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "changes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/change"
+      }
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "operation",
+        "exists_after",
+        "file_type",
+        "digest_status"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operation": {
+          "enum": [
+            "create",
+            "modify",
+            "delete"
+          ]
+        },
+        "exists_after": {
+          "type": "boolean"
+        },
+        "file_type": {
+          "enum": [
+            "regular",
+            "directory",
+            "symlink",
+            "other",
+            "unknown"
+          ]
+        },
+        "before_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "after_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "digest_status": {
+          "enum": [
+            "known",
+            "unavailable",
+            "not_applicable"
+          ]
+        }
+      }
+    }
+  }
+}

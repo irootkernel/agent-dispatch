@@ -1,12 +1,34 @@
+version: 3
+project:
+  name: "jjukkumi"
 providers:
-  codex: {}
+  zcode: {}
+execution:
+  workspace_access: "none"
 roles:
-  logic: {enabled: true, primary_provider: "codex"}
-  security: {enabled: true, primary_provider: "codex"}
-  maintainability: {enabled: true, primary_provider: "codex"}
-  product: {enabled: true, primary_provider: "codex"}
-  documentation: {enabled: true, primary_provider: "codex"}
-  testing: {enabled: true, primary_provider: "codex"}
+  logic: {enabled: true, primary_provider: "zcode"}
+  security: {enabled: true, primary_provider: "zcode"}
+  maintainability: {enabled: true, primary_provider: "zcode"}
+  product: {enabled: true, primary_provider: "zcode"}
+  documentation: {enabled: true, primary_provider: "zcode"}
+  testing: {enabled: true, primary_provider: "zcode"}
+review:
+  required_roles: ["logic"]
+  request_changes_on: ["high", "critical", "blocker"]
 validation:
+  evidence:
+    require_verified_for: ["high", "critical", "blocker"]
+  repair:
+    enabled: true
+    max_attempts: 1
+    same_provider: true
   extraction:
     enabled: true
+resources:
+  max_active_lanes: 6
+  primary_repair_attempts: 1
+  role_max_invocations: 2
+  run_max_invocations: 12
+ci:
+  fail_on_severity: ["high", "critical", "blocker"]
+  degraded_review_fails: true

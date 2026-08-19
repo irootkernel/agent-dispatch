@@ -1,0 +1,98 @@
+# watchman -h, observed 2026-08-19 (Watchman 2026.07.27.00). Verbatim output.
+
+Usage: watchman [opts_2] command
+
+ -h, --help                         Show this help
+
+     --inetd                        Spawning from an inetd style supervisor
+
+ -S, --no-site-spawner              Don't use the site or system spawner
+
+ -v, --version                      Show version number
+
+ -U, --sockname=PATH                DEPRECATED: Specify alternate sockname. Use `--unix-listener-path` instead.
+
+     --named-pipe-path=PATH         Specify alternate named pipe path
+
+ -u, --unix-listener-path=PATH      Specify alternate unix domain socket path
+
+ -o, --logfile=PATH                 Specify path to logfile ('-' = stdout and stderr)
+
+     --log-level                    set the log level (0 = off, default = 1, verbose = 2)
+
+     --pidfile=PATH                 Specify path to pidfile
+
+ -p, --persistent                   Persist and wait for further responses
+
+ -n, --no-save-state                Don't save state between invocations
+
+     --statefile=PATH               Specify path to file to hold watch and trigger state
+
+ -j, --json-command                 Instead of parsing CLI arguments, take a single json object from stdin
+
+     --output-encoding=ARG          CLI output encoding. json (default) or bser
+
+     --server-encoding=ARG          CLI<->server encoding. bser (default) or json
+
+ -f, --foreground                   Run the service in the foreground
+
+     --pretty                        Force pretty output, even when stdout isn't a TTY
+
+     --no-pretty                    Don't pretty print JSON
+
+     --no-spawn                     Don't try to start the service if it is not available
+
+     --no-local                     When no-spawn is enabled, don't try to handle request in client mode if service is unavailable
+
+
+Available commands:
+
+      clock
+      debug-ageout
+      debug-contenthash
+      debug-drop-privs
+      debug-fsevents-inject-drop
+      debug-get-asserted-states
+      debug-get-subscriptions
+      debug-kqueue-and-fsevents-recrawl
+      debug-poison
+      debug-recrawl
+      debug-root-status
+      debug-set-parallel-crawl
+      debug-set-subscriptions-paused
+      debug-show-cursors
+      debug-status
+      debug-symlink-target-cache
+      debug-watcher-info
+      debug-watcher-info-clear
+      find
+      flush-subscriptions
+      get-config
+      get-log
+      get-pid
+      get-sockname
+      global-log-level
+      list-capabilities
+      log
+      log-level
+      query
+      shutdown-server
+      since
+      state-enter
+      state-leave
+      subscribe
+      trigger
+      trigger-del
+      trigger-list
+      unsubscribe
+      version
+      watch
+      watch-del
+      watch-del-all
+      watch-list
+      watch-project
+
+See https://github.com/facebook/watchman#watchman for more help
+
+Watchman, by Wez Furlong.
+Copyright (c) Meta Platforms, Inc.

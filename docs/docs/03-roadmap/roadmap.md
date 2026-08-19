@@ -10,21 +10,21 @@
 
 | Field | Value |
 |---|---|
-| Current epic | E0, SOT and external contract baseline |
+| Current epic | E1, Go Foundation, Configuration, and Persistence Schema |
 | Current active task | None |
-| Next task | **E0-T4, Verify Hermes public interface and freeze capability baseline** |
-| Completed tasks | 3 / 33 |
-| Planned tasks | 30 / 33 |
+| Next task | **E1-T1, Bootstrap Repository, Toolchain, and Verification Pipeline** |
+| Completed tasks | 5 / 33 |
+| Planned tasks | 28 / 33 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
-The SOT documents created in this package satisfy E0-T1 through E0-T3. Implementation begins with E0-T4.
+The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. Implementation continues with E1-T1.
 
 ## 2. Epic Summary
 
 | Epic | Title | Status | Tasks | Completion gate |
 |---|---|---:|---:|---|
-| E0 | SOT and External Contract Baseline | **In Progress** | 5 | G0 |
+| E0 | SOT and External Contract Baseline | **Completed** | 5 | G0 |
 | E1 | Go Foundation, Configuration, and Persistence Schema | **Planned** | 4 | Foundation ready |
 | E2 | Watchman Deterministic Dry-Run Pipeline | **Planned** | 5 | G1 |
 | E3 | Durable Dispatch and Route Coordination Core | **Planned** | 5 | G2 |
@@ -39,8 +39,8 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. Implement
 | 1 | E0-T1 | Completed | Product charter and scope frozen |
 | 2 | E0-T2 | Completed | Architecture, contracts, and ADR baseline frozen |
 | 3 | E0-T3 | Completed | Roadmap, acceptance, and traceability frozen |
-| 4 | E0-T4 | Planned | Real Hermes public capability report |
-| 5 | E0-T5 | Planned | Watchman interface verification and fixture baseline |
+| 4 | E0-T4 | Completed | Real Hermes public capability report |
+| 5 | E0-T5 | Completed | Watchman fixture baseline frozen |
 | 6 | E1-T1 | Planned | Buildable Go repository and verification pipeline |
 | 7 | E1-T2 | Planned | Validated YAML configuration and path layout |
 | 8 | E1-T3 | Planned | Domain primitives, IDs, digests, canonicalization |
@@ -74,7 +74,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. Implement
 
 # E0: SOT and External Contract Baseline
 
-**Epic status:** In Progress  
+**Epic status:** Completed  
 **Purpose:** Freeze the product and architecture, then replace all Hermes assumptions with verified public-interface evidence.  
 **Gate:** G0
 
@@ -169,7 +169,7 @@ This SOT package.
 
 ## E0-T4: Verify Hermes Public Interface and Freeze Capability Baseline
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -216,6 +216,10 @@ E0-T3 Completed.
 - Unsupported capabilities are false, not guessed.
 - If durable acceptance plus safe reconciliation cannot be achieved publicly, set this task to Blocked and request a product decision. Do not continue to E1 by silently weakening the contract.
 
+### Evidence
+
+`docs/integrations/hermes-public-interface-report.md`, validated `docs/integrations/hermes-capability-report.json`, and sanitized fixtures under `docs/integrations/fixtures/hermes/`, produced against Hermes 0.19.1 on 2026-08-19 using only the public CLI and a disposable, deleted probe board. Compatibility decision: supported.
+
 ### Out of Scope
 
 - writing the adapter;
@@ -225,7 +229,7 @@ E0-T3 Completed.
 
 ## E0-T5: Verify Watchman Public Interface and Freeze Fixture Baseline
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -251,6 +255,10 @@ E0-T3 Completed.
 - Fixture report and corpus are produced from a real Watchman installation.
 - Every parser assumption in E2-T1 is traceable to a frozen fixture.
 - Watchman absence and failure behavior is documented.
+
+### Evidence
+
+`docs/integrations/watchman-public-interface-report.md` and the 33-file frozen corpus under `docs/integrations/fixtures/watchman/`, produced against Watchman 2026.07.27.00 (Homebrew, fsevents watcher) on 2026-08-19 using only the public CLI and a disposable, deleted probe watch root. The assumed `WATCHMAN_FILES_OVERFLOW` field was refuted at runtime and its conservative replacement (missing-position handling per architecture §7) verified; baseline decision: supported and frozen.
 
 ---
 

@@ -1,0 +1,32 @@
+# Positional CLI trigger creation does not parse flags or an `add` subcommand,
+# observed 2026-08-19 (Watchman 2026.07.27.00). The token after `--` became the trigger
+# name, the following tokens became a wholename match expression, and `--stdin` was
+# consumed as a file name to match. Trigger definitions must be created through the JSON
+# array command interface instead (see trigger-lifecycle.txt).
+
+$ watchman trigger /private/tmp/jjukkumi-probe/vault -- add jjukkumi-e0t5 --stdin -- /bin/sh /tmp/jjukkumi-probe/bin/probe.sh
+{
+    "version": "2026.07.27.00",
+    "disposition": "created",
+    "triggerid": "add"
+}
+exit=0
+(No error is reported. The intended name, flag, and expression all landed in the wrong
+slots, as trigger-list shows immediately afterwards.)
+
+$ watchman trigger-list /private/tmp/jjukkumi-probe/vault
+{
+    "version": "2026.07.27.00",
+    "triggers": [
+        {
+            "append_files": true,
+            "name": "add",
+            "stdin": ["name", "exists", "new", "size", "mode"],
+            "expression": ["anyof", ["match", "jjukkumi-e0t5", "wholename"], ["match", "--stdin", "wholename"]],
+            "command": ["/bin/sh", "/tmp/jjukkumi-probe/bin/probe.sh"]
+        }
+    ]
+}
+exit=0
+(The normalized definition also documents the default stdin field set when a definition
+is created without an explicit field list: name, exists, new, size, mode.)

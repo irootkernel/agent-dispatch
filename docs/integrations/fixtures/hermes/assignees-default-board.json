@@ -1,0 +1,26 @@
+[
+  {
+    "name": "profile-a",
+    "on_disk": true,
+    "counts": {}
+  },
+  {
+    "name": "profile-b",
+    "on_disk": true,
+    "counts": {}
+  },
+  {
+    "name": "profile-c",
+    "on_disk": true,
+    "counts": {
+      "done": 3
+    }
+  },
+  {
+    "name": "profile-d",
+    "on_disk": true,
+    "counts": {
+      "done": 1
+    }
+  }
+]

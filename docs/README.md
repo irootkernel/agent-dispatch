@@ -72,6 +72,6 @@ The v0.1 implementation:
 
 ## Roadmap State
 
-The project is pre-implementation. Documentation baseline tasks `E0-T1` through `E0-T3` are complete. The next executable task is `E0-T4`, which verifies the real public Hermes CLI and webhook capabilities without assuming command names or response fields.
+The project is pre-implementation. Documentation baseline tasks `E0-T1` through `E0-T3` are complete. `E0-T4` is complete: the real Hermes 0.19.1 public interface was verified and the capability baseline frozen in [`integrations/hermes-public-interface-report.md`](integrations/hermes-public-interface-report.md) with a validated [`integrations/hermes-capability-report.json`](integrations/hermes-capability-report.json). `E0-T5` is complete: the real Watchman 2026.07.27.00 public interface was verified and the parser fixture baseline frozen in [`integrations/watchman-public-interface-report.md`](integrations/watchman-public-interface-report.md) with the sanitized real-payload corpus under [`integrations/fixtures/watchman/`](integrations/fixtures/watchman/). Epic `E0` and gate `G0` are closed. The next executable task is `E1-T1`, which bootstraps the Go repository, toolchain, and verification pipeline.
 
 Only one roadmap task may be active globally. See [`task-execution-rules.md`](docs/03-roadmap/task-execution-rules.md).

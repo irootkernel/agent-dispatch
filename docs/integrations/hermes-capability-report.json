@@ -1,0 +1,129 @@
+{
+  "schema_version": "jjukkumi.hermes-capabilities/v1",
+  "probed_at": "2026-08-19T21:25:24+09:00",
+  "hermes_version": "0.19.1 (2026.7.30)",
+  "interface": "public_cli",
+  "capabilities": {
+    "durable_acceptance": true,
+    "submit_idempotency_key": true,
+    "lookup_by_idempotency_key": true,
+    "lookup_by_external_ref": true,
+    "resource_mutex": true,
+    "execution_status": true,
+    "cancellation": true,
+    "result_receipt": true
+  },
+  "limits": {
+    "maximum_request_bytes": null
+  },
+  "evidence": [
+    {
+      "capability": "durable_acceptance",
+      "grade": "runtime-verified",
+      "commands": [
+        "hermes kanban boards create jjukkumi-e0t4-probe",
+        "hermes kanban --board jjukkumi-e0t4-probe create <title> --json",
+        "hermes kanban --board jjukkumi-e0t4-probe show t_6253023d --json"
+      ],
+      "fixtures": [
+        "fixtures/hermes/create-response.json",
+        "fixtures/hermes/show-response.json"
+      ],
+      "observation": "A task created in one CLI process is readable with a stable id and created_at in later, separate CLI processes. The public help text states each board is a durable SQLite-backed queue with its own DB, and boards create discloses the per-board DB path. Durability beyond SQLite's documented guarantees is not claimed."
+    },
+    {
+      "capability": "submit_idempotency_key",
+      "grade": "runtime-verified",
+      "commands": [
+        "hermes kanban --board jjukkumi-e0t4-probe create <title> --idempotency-key <key> --json"
+      ],
+      "fixtures": [
+        "fixtures/hermes/create-response.json"
+      ],
+      "observation": "create accepts --idempotency-key and echoes the persisted task."
+    },
+    {
+      "capability": "lookup_by_idempotency_key",
+      "grade": "runtime-verified",
+      "commands": [
+        "hermes kanban --board jjukkumi-e0t4-probe create <duplicate-title> --idempotency-key <same-key> --json"
+      ],
+      "fixtures": [
+        "fixtures/hermes/create-duplicate-dedup.json"
+      ],
+      "observation": "Re-submitting the same key returns the original task (t_6253023d) and does not create a duplicate; the board still held exactly one task. There is no standalone query-by-key command: the dedup create is the lookup. Dedup holds only while the existing task is non-archived; after archiving, the same key created a new task (observed t_c3385bd7), and a done-but-not-archived task still held its key (observed t_d191d897)."
+    },
+    {
+      "capability": "lookup_by_external_ref",
+      "grade": "runtime-verified",
+      "commands": [
+        "hermes kanban --board jjukkumi-e0t4-probe show t_6253023d --json",
+        "hermes kanban --board jjukkumi-e0t4-probe list --json"
+      ],
+      "fixtures": [
+        "fixtures/hermes/show-response.json",
+        "fixtures/hermes/list-response.json"
+      ],
+      "observation": "The external reference is the public task id (t_XXXXXXXX). show returns the full record; list returns the task array with status filters and sort orders."
+    },
+    {
+      "capability": "resource_mutex",
+      "grade": "help-verified",
+      "commands": [
+        "hermes kanban create --help"
+      ],
+      "fixtures": [],
+      "observation": "--mutex-key serializes a task with other running tasks using the same explicit board-local key. Not exercised at runtime because observing contention requires dispatching real workers; adapter must treat board-local key scope as the verified contract boundary."
+    },
+    {
+      "capability": "execution_status",
+      "grade": "runtime-verified",
+      "commands": [
+        "hermes kanban --board jjukkumi-e0t4-probe list --status <s> --json",
+        "hermes kanban --board jjukkumi-e0t4-probe block t_d191d897",
+        "hermes kanban --board jjukkumi-e0t4-probe unblock t_d191d897",
+        "hermes kanban --board jjukkumi-e0t4-probe complete t_d191d897"
+      ],
+      "fixtures": [
+        "fixtures/hermes/list-response.json"
+      ],
+      "observation": "Public status enum: archived, blocked, done, ready, review, running, scheduled, todo, triage. Observed transitions on probe tasks: ready -> blocked -> ready -> done (completed_at set), ready -> archived."
+    },
+    {
+      "capability": "cancellation",
+      "grade": "runtime-verified",
+      "commands": [
+        "hermes kanban --board jjukkumi-e0t4-probe block t_6253023d",
+        "hermes kanban --board jjukkumi-e0t4-probe archive t_6253023d"
+      ],
+      "fixtures": [],
+      "observation": "For a submitted, not-yet-running task, block pauses dispatch and archive removes it from the active queue (status archived) and frees its idempotency key. Cancelling an already-running worker was not exercised and would require worker dispatch."
+    },
+    {
+      "capability": "result_receipt",
+      "grade": "runtime-verified-read-path",
+      "commands": [
+        "hermes kanban --board jjukkumi-e0t4-probe show t_d191d897 --json"
+      ],
+      "fixtures": [
+        "fixtures/hermes/list-response.json"
+      ],
+      "observation": "show exposes result and completed_at on the task record; completed_at was set by the public complete operation. The worker-side submit-result flow exists in public help but was not exercised because it requires an owned running worker."
+    }
+  ],
+  "notes": [
+    "Compatibility decision: supported. All capabilities required by the durable Kanban contract are present through the public CLI; no reduced guarantee is needed for v0.19.1.",
+    "Supported Hermes version range: exactly 0.19.1 as verified on 2026-08-19. The adapter may treat >=0.19.1 <0.20.0 as the candidate range only after re-running this probe against each new version; any other version must fail route validation per HER-002/HER-005.",
+    "Version discovery is human text only: `hermes --version` prints 'Hermes Agent v0.19.1 (2026.7.30)' with no JSON mode; `hermes kanban` JSON responses do not include a version field. The adapter must gate versions by invoking `hermes --version` and matching the documented first-line format, or by configuration.",
+    "Idempotency keys are not unique forever: dedup applies only while a non-archived task holds the key. JJUKKUMI must persist the returned external task id immediately after acceptance and must not rely on key-based lookup after archival.",
+    "--assignee is not validated at create time: an unknown profile name is accepted. Validate profiles first via `hermes kanban assignees --json` (on_disk flag) or `hermes profile list`.",
+    "Runtime and retry hints: --max-runtime (seconds or durations; the dispatcher SIGTERMs then SIGKILLs and re-queues on overrun) and --max-retries (consecutive-failure circuit breaker, default 2) are per-task public fields. max-runtime acts as an enforced cap; max-retries bounds automatic retries.",
+    "Workspace binding: --workspace accepts scratch | worktree | worktree:<path> | dir:<path>; the created task echoes workspace_kind and workspace_path.",
+    "Skill selection: --skill is repeatable and echoed as the skills array; the kanban lifecycle skill is injected automatically.",
+    "Error model: unknown task and unknown board print a human message on stderr and exit 1 with a recovery hint; unrecognized arguments exit 2 (argparse); success with --json emits machine-readable JSON on stdout.",
+    "No public request-size limit is documented; maximum_request_bytes is therefore null and the adapter must enforce its own bounded manifest policy.",
+    "Webhook capabilities were inspected separately without implementation: `hermes webhook subscribe|list|remove|test` manages inbound event-driven agent activation subscriptions with an HMAC secret, event filters, optional script filter, and delivery targets; in this installation the webhook receiving platform is not enabled and `hermes webhook list` prints setup guidance. Outbound delivery adaptation remains E6-T1 scope.",
+    "All probes ran against the disposable board jjukkumi-e0t4-probe, which was hard-deleted after evidence capture; the user's active board selection was never changed and only public CLI commands were used. The per-board kanban.db path was disclosed by public CLI output but never opened or read directly.",
+    "Task ids observed in fixtures (t_6253023d, t_d191d897, t_c3385bd7) belonged to the deleted probe board and no longer exist."
+  ]
+}

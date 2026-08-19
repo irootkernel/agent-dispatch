@@ -1,0 +1,29 @@
+{
+  "id": "t_6253023d",
+  "title": "JJUKKUMI E0-T4 capability probe 1",
+  "body": "Probe task created by JJUKKUMI E0-T4 public-interface verification. Safe to archive.",
+  "assignee": null,
+  "status": "ready",
+  "priority": 5,
+  "tenant": null,
+  "workspace_kind": "scratch",
+  "workspace_path": null,
+  "branch_name": null,
+  "project_id": null,
+  "created_by": "jjukkumi-e0t4",
+  "created_at": 1787142146,
+  "started_at": null,
+  "completed_at": null,
+  "result": null,
+  "skills": [
+    "example-skill"
+  ],
+  "max_retries": 1,
+  "model_override": null,
+  "provider_override": null,
+  "session_id": null,
+  "mutex_key": "jjukkumi-vault-maintenance",
+  "workflow_type": null,
+  "workflow_template_id": null,
+  "current_step_key": null
+}

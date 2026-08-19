@@ -1,0 +1,41 @@
+# Watch root lifecycle on the disposable probe root, observed 2026-08-19 (Watchman 2026.07.27.00).
+# The root was passed on the command line as /tmp/jjukkumi-probe/vault; watchman reports and
+# stores the macOS canonical form /private/tmp/jjukkumi-probe/vault.
+
+$ watchman watch-project /tmp/jjukkumi-probe/vault
+{
+    "version": "2026.07.27.00",
+    "watcher": "fsevents",
+    "watch": "/private/tmp/jjukkumi-probe/vault"
+}
+exit=0
+
+$ watchman watch-list
+{
+    "version": "2026.07.27.00",
+    "roots": [
+        "/private/tmp/jjukkumi-probe/vault"
+    ]
+}
+exit=0
+
+$ watchman clock /private/tmp/jjukkumi-probe/vault
+{
+    "version": "2026.07.27.00",
+    "clock": "c:1787143492:48097:1:2"
+}
+exit=0
+(The clock string encodes watcher generation state; the third component changed across
+server restarts of the same root in this probe, so clocks are opaque position tokens and
+must not be parsed for ordering semantics.)
+
+$ watchman watch-del /private/tmp/jjukkumi-probe/vault
+{
+    "version": "2026.07.27.00",
+    "watch-del": true,
+    "root": "/private/tmp/jjukkumi-probe/vault"
+}
+exit=0
+(After watch-del, an immediate re-watch-project of the same root started a fresh watch with
+no triggers (see trigger-lifecycle.txt) and invalidates prior since cursors (see
+query-fresh-instance-after-rewatch.json).)

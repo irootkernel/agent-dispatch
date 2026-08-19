@@ -1,0 +1,19 @@
+# Watchman version and socket discovery, observed 2026-08-19
+# Installation: Homebrew watchman 2026.07.27.00_1 at /opt/homebrew/bin/watchman.
+# Probe host: macOS 26.5.2 (25F84), arm64.
+
+$ watchman version
+{
+    "version": "2026.07.27.00"
+}
+exit=0
+
+$ watchman get-sockname
+{
+    "sockname": "/Users/<user>/.local/state/watchman/<user>-state/sock",
+    "version": "2026.07.27.00",
+    "unix_domain": "/Users/<user>/.local/state/watchman/<user>-state/sock"
+}
+exit=0
+(get-sockname reveals the per-user state directory layout: sock, state, log, and pid files
+live under /Users/<user>/.local/state/watchman/<user>-state/.)

@@ -1,0 +1,54 @@
+# Trigger lifecycle via the JSON array command interface, observed 2026-08-19
+# (Watchman 2026.07.27.00). All commands use the form:
+#   watchman --no-pretty -j
+#   ["trigger", "/private/tmp/jjukkumi-probe/vault", { ...definition... }]
+
+$ ["trigger", <root>, {"name":"jjukkumi-e0t5","command":["/bin/sh","/tmp/jjukkumi-probe/bin/probe.sh"],"append_files":false,"stdin":["name","exists","new","size","type"],"expression":["type","f"]}]
+{"version":"2026.07.27.00","disposition":"created","triggerid":"jjukkumi-e0t5"}
+exit=0
+
+$ ["trigger", <root>, {same name, expression changed to ["match","*.md"]}]
+{"version":"2026.07.27.00","disposition":"replaced","triggerid":"jjukkumi-e0t5"}
+exit=0
+(Re-adding an existing trigger name with a different definition reports disposition
+"replaced" and resets the trigger's incremental position: the next execution delivers a
+full fresh list without WATCHMAN_SINCE, exactly like a first installation. Re-adding the
+identical normalized definition reports disposition "already_defined" and preserves the
+position: the next execution stays incremental with WATCHMAN_SINCE set, so an identical
+install is a true no-op; see trigger-payload-after-idempotent-reinstall.json.)
+
+$ watchman --no-pretty trigger-list /private/tmp/jjukkumi-probe/vault
+{"version":"2026.07.27.00","triggers":[{"expression":["match","*.md"],"stdin":["name","exists","new","size","type"],"command":["/bin/sh","/tmp/jjukkumi-probe/bin/probe.sh"],"append_files":false,"name":"jjukkumi-e0t5"}]}
+exit=0
+(trigger-list returns the normalized definition: the stdin field list, append_files,
+expression, command array, and name. This normalized form is the comparison basis for
+idempotent install checks; a second trigger with "relative_root":"Notes" appeared in the
+same list with its relative_root field and names relative to that subdirectory.)
+
+$ ["trigger", <root>, {"name":"jjukkumi-e0t5-rel",...,"relative_root":"Notes"}]
+{"version":"2026.07.27.00","disposition":"created","triggerid":"jjukkumi-e0t5-rel"}
+exit=0
+
+$ watchman --no-pretty trigger-list /private/tmp/jjukkumi-probe/vault
+{"version":"2026.07.27.00","triggers":[{"stdin":["name","exists","new","size","type"],"command":["/bin/sh","/tmp/jjukkumi-probe/bin/probe.sh"],"relative_root":"Notes","append_files":false,"name":"jjukkumi-e0t5-rel"},{"expression":["match","*.md"],"stdin":["name","exists","new","size","type"],"command":["/bin/sh","/tmp/jjukkumi-probe/bin/probe.sh"],"append_files":false,"name":"jjukkumi-e0t5"}]}
+exit=0
+
+$ watchman --no-pretty trigger-del /private/tmp/jjukkumi-probe/vault jjukkumi-e0t5
+{"version":"2026.07.27.00","deleted":true,"trigger":"jjukkumi-e0t5"}
+exit=0
+
+$ watchman --no-pretty trigger-del /private/tmp/jjukkumi-probe/vault jjukkumi-e0t5-rel
+{"version":"2026.07.27.00","deleted":true,"trigger":"jjukkumi-e0t5-rel"}
+exit=0
+
+$ watchman --no-pretty trigger-list /private/tmp/jjukkumi-probe/vault
+{"version":"2026.07.27.00","triggers":[]}
+exit=0
+
+$ watchman --no-pretty trigger-del /private/tmp/jjukkumi-probe/vault jjukkumi-nope
+{"version":"2026.07.27.00","deleted":false,"trigger":"jjukkumi-nope"}
+exit=0
+(Removing a trigger that does not exist is not an error: deleted is false and the exit
+code is 0, so uninstall is idempotent. watch-del on the root deletes the watch together
+with all of its triggers; a subsequent watch-project of the same root starts with an
+empty trigger list and invalid since cursors.)

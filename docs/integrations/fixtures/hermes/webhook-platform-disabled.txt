@@ -1,0 +1,21 @@
+
+  Webhook platform is not enabled. To set it up:
+
+  1. Run the gateway setup wizard:
+     hermes gateway setup
+
+  2. Or manually add to ~/.hermes/config.yaml:
+     platforms:
+       webhook:
+         enabled: true
+         extra:
+           port: 8644
+           secret: "your-global-hmac-secret"
+
+  3. Or set environment variables in ~/.hermes/.env:
+     WEBHOOK_ENABLED=true
+     WEBHOOK_PORT=8644
+     WEBHOOK_SECRET=your-global-secret
+
+  Then start the gateway: hermes gateway run
+

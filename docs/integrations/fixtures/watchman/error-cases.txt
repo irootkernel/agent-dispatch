@@ -1,0 +1,61 @@
+# Watchman public CLI failure and absence behavior, observed 2026-08-19
+# (Watchman 2026.07.27.00). Exit codes measured directly. Server-side errors are
+# delivered as an "error" member of a JSON response with exit code 0; only client-side
+# validation failures set a nonzero exit code. Consumers must inspect the response
+# error member and must not rely on the exit code alone.
+
+# JSON object (non-array) sent to -j is rejected by the client.
+$ watchman --no-pretty -j <<'{"command":"query","query":{...}}'
+Uncaught C++ exception: watchman::CommandValidationError: failed to validate command: invalid command (expected an array with some elements!)
+exit=1
+
+# The positional query form does not accept a JSON query spec: the second argument is
+# consumed as the since clock, and fields/expression members of the spec are silently
+# not applied (default fields, no expression filtering).
+$ watchman query /private/tmp/jjukkumi-probe/vault '{"expression":["type","f"],"fields":["name","exists","new","size","type"]}'
+{"version": "2026.07.27.00", "files": [...default-field entries including directories...], "is_fresh_instance": true, ...}
+exit=0
+
+# Query against a path that does not exist (client-side root resolution fails).
+$ watchman --no-pretty -j <<'["query", "/private/tmp/jjukkumi-probe/not-watched", {"fields":["name"]}]'
+{"cli_validated":true,"version":"2026.07.27.00","error":"failed to validate command: Could not resolve /private/tmp/jjukkumi-probe/not-watched to the canonical watch path: open: /private/tmp/jjukkumi-probe/not-watched: No such file or directory"}
+exit=1
+(trigger-list and watch-del with the same nonexistent path produce the same error shape and exit 1.)
+
+# Query against a directory that exists but is not watched (server-side resolution).
+$ watchman --no-pretty -j <<'["query", "/private/tmp/jjukkumi-probe/unwatched-dir", {"fields":["name"]}]'
+{"version":"2026.07.27.00","error":"watchman::RootResolveError: failed to resolve root: unable to resolve root /private/tmp/jjukkumi-probe/unwatched-dir: failed to resolve root: directory /private/tmp/jjukkumi-probe/unwatched-dir is not watched"}
+exit=0
+
+# trigger-list against a root whose watch was deleted: same RootResolveError, exit 0.
+$ watchman --no-pretty trigger-list /private/tmp/jjukkumi-probe/vault
+{"version": "2026.07.27.00", "error": "watchman::RootResolveError: failed to resolve root: unable to resolve root /private/tmp/jjukkumi-probe/vault: failed to resolve root: directory /private/tmp/jjukkumi-probe/vault is not watched"}
+exit=0
+
+# Structurally invalid trigger definition (empty command array): server-side validation
+# error with exit code 0.
+$ watchman --no-pretty -j <<'["trigger", "/private/tmp/jjukkumi-probe/vault", {"name":"bad","command":[]}]'
+{"version":"2026.07.27.00","error":"watchman::CommandValidationError: failed to validate command: invalid command array"}
+exit=0
+
+# Unreachable socket with --no-spawn: daemon commands are unavailable in client mode.
+$ watchman --no-pretty --no-spawn --unix-listener-path /tmp/not-a-real-sock.sock watch-list
+2026-08-19T21:53:05,658: [cli] send_error_response: ["watch-list"], failed: watchman::CommandValidationError: failed to validate command: command watch-list not available in this mode
+{"error":"watchman::CommandValidationError: failed to validate command: command watch-list not available in this mode","version":"2026.07.27.00"}
+exit=1
+
+# version is answered by the client itself and succeeds even when no daemon is reachable.
+$ watchman --no-pretty --no-spawn --unix-listener-path /tmp/not-a-real-sock.sock version
+{"version": "2026.07.27.00"}
+exit=0
+
+# --unix-listener-path without --no-spawn and an unused socket path makes the client
+# spawn a separate server bound to that path, sharing the same per-user state file as the
+# running server. This probe shut the extra server down immediately with
+# `watchman --unix-listener-path <same path> shutdown-server`. Do not pass a custom
+# listener path when targeting the user's server.
+
+# Binary absent from PATH (shell-level behavior, for doctor detection).
+$ env -i PATH=/usr/bin:/bin sh -c 'watchman version'
+sh: watchman: command not found
+exit=127

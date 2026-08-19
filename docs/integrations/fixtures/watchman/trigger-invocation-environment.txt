@@ -1,0 +1,60 @@
+# Trigger invocation environment, argv, and working directory, observed 2026-08-19
+# (Watchman 2026.07.27.00). The probe command recorded its own environment, argv, cwd,
+# and stdin byte count on every invocation; stdin bodies are frozen separately as
+# trigger-payload-*.json. Paths masked: <user>, <host>, <pid>.
+
+# First invocation of a newly defined trigger (also the first invocation after a
+# definition replacement, and the first invocation after watch-del + re-watch):
+# no WATCHMAN_SINCE, stdin was the full matching file list (504 bytes at this point).
+cwd=/private/tmp/jjukkumi-probe/vault
+argc=0
+WATCHMAN_CLOCK=c:1787143492:48097:1:45
+WATCHMAN_ROOT=/private/tmp/jjukkumi-probe/vault
+WATCHMAN_SOCK=/Users/<user>/.local/state/watchman/<user>-state/sock
+WATCHMAN_TRIGGER=jjukkumi-e0t5
+stdin-bytes=504
+
+# Every later invocation: WATCHMAN_SINCE equals the previous invocation's
+# WATCHMAN_CLOCK, stdin carried only the incremental entries.
+cwd=/private/tmp/jjukkumi-probe/vault
+argc=0
+WATCHMAN_CLOCK=c:1787143492:48097:1:46
+WATCHMAN_ROOT=/private/tmp/jjukkumi-probe/vault
+WATCHMAN_SINCE=c:1787143492:48097:1:45
+WATCHMAN_SOCK=/Users/<user>/.local/state/watchman/<user>-state/sock
+WATCHMAN_TRIGGER=jjukkumi-e0t5
+stdin-bytes=86
+
+# Trigger defined with relative_root "Notes": adds WATCHMAN_RELATIVE_ROOT (an absolute
+# path to the subdirectory) while WATCHMAN_ROOT remains the watch root; stdin names are
+# relative to the subdirectory, and the working directory becomes the relative root.
+cwd=/private/tmp/jjukkumi-probe/vault/Notes
+argc=0
+WATCHMAN_CLOCK=c:1787143492:48097:1:73
+WATCHMAN_RELATIVE_ROOT=/private/tmp/jjukkumi-probe/vault/Notes
+WATCHMAN_ROOT=/private/tmp/jjukkumi-probe/vault
+WATCHMAN_SINCE=c:1787143492:48097:1:72
+WATCHMAN_SOCK=/Users/<user>/.local/state/watchman/<user>-state/sock
+WATCHMAN_TRIGGER=jjukkumi-e0t5-rel
+stdin-bytes=82
+
+# Incremental invocation immediately after a forced recrawl: the environment is
+# indistinguishable from a normal incremental invocation.
+cwd=/private/tmp/jjukkumi-probe/vault
+argc=0
+WATCHMAN_CLOCK=c:1787143492:48097:1:77
+WATCHMAN_ROOT=/private/tmp/jjukkumi-probe/vault
+WATCHMAN_SINCE=c:1787143492:48097:1:76
+WATCHMAN_SOCK=/Users/<user>/.local/state/watchman/<user>-state/sock
+WATCHMAN_TRIGGER=jjukkumi-e0t5
+stdin-bytes=88
+
+# Across all 23 captured invocations (15 in the numbered series, one of which was
+# two concurrent writers on one capture, plus 8 uniquely-named captures) (first-run, incremental, relative-root, concurrent,
+# and post-recrawl), the environment never contained WATCHMAN_FILES_OVERFLOW or any other
+# overflow indicator. Two triggers matching the same change ran as two concurrent
+# processes started in the same second (consecutive pids 31196/31197), each with its own
+# identical SINCE/CLOCK pair: trigger command processes must expect concurrent execution.
+# With append_files false the trigger command receives no file arguments (argc=0) and
+# runs with the watch root as its working directory (the relative root instead, for a
+# trigger defined with relative_root).

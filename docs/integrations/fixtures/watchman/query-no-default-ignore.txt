@@ -1,0 +1,17 @@
+# Watchman 2026.07.27.00 applies no default ignore for .git contents or .DS_Store,
+# observed 2026-08-19 on the disposable probe root. Both were created inside the root
+# between the two documented queries; nothing else changed.
+# Command (JSON array form via standard input):
+#   watchman --no-pretty -j
+#   ["query", "/private/tmp/jjukkumi-probe/vault",
+#    {"since":"c:1787143492:48097:1:36","fields":["name","exists","new","size","type"],
+#     "expression":["type","f"]}]
+
+{"version":"2026.07.27.00","files":[{"size":7,"type":"f","new":true,"exists":true,"name":".git/config"},{"size":3,"type":"f","new":true,"exists":true,"name":".DS_Store"},{"size":5,"type":"f","new":true,"exists":true,"name":"Notes/normal-note.md"}],"is_fresh_instance":false,"clock":"c:1787143492:48097:1:38","debug":{"cookie_files":["/private/tmp/jjukkumi-probe/vault/.watchman-cookie-<host>-<pid>-10"]}}
+exit=0
+
+# A type f expression does not exclude .git/config or .DS_Store. A consumer that must not
+# observe them needs its own exclude rules; see query-unfiltered-entries.json for the same
+# change window queried without an expression, which additionally shows the symlink as
+# type "l" with size equal to the length of its target path string, and directories as
+# type "d".

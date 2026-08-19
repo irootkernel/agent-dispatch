@@ -1,0 +1,16 @@
+# Hermes kanban public CLI error behavior, observed 2026-08-19 (Hermes Agent v0.19.1)
+# All commands run against the disposable probe board; exit codes measured directly.
+
+$ hermes kanban --board jjukkumi-e0t4-probe show t_nonexistent00 --json
+no such task: t_nonexistent00
+exit=1
+
+$ hermes kanban --board jjukkumi-no-such-board list --json
+kanban: board 'jjukkumi-no-such-board' does not exist. Create it with `hermes kanban boards create jjukkumi-no-such-board`.
+exit=1
+
+$ hermes kanban --board jjukkumi-e0t4-probe log t_6253023d --json
+hermes: error: unrecognized arguments: --json
+exit=2
+(`hermes kanban log <task_id>` emits human text only and has no JSON mode; before any
+worker run it prints "(no log for <id> — task may not have spawned yet)" with exit 0.)

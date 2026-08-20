@@ -31,6 +31,10 @@ var (
 	// open (a deleted-in-flight race); the caller re-classifies rather
 	// than treating it as a type defect.
 	ErrMissing = errors.New("path disappeared before open")
+	// ErrUnreadable means an ancestor or the path itself cannot be
+	// inspected (for example EACCES); the digest stays structurally
+	// unknown rather than aborting the batch as an internal error.
+	ErrUnreadable = errors.New("path is unreadable")
 	// ErrTooLarge means the file exceeds the configured hash limit; its
 	// digest is structurally unknown.
 	ErrTooLarge = errors.New("file exceeds the size limit")
@@ -118,6 +122,9 @@ func (r *Resolver) Resolve(rel string) (string, error) {
 				return "", err
 			}
 			return joined, nil
+		}
+		if errors.Is(err, fs.ErrPermission) {
+			return "", fmt.Errorf("%w: %q: %v", ErrUnreadable, normalized, err)
 		}
 		return "", fmt.Errorf("resolving %q: %w", normalized, err)
 	}
@@ -240,6 +247,9 @@ func (r *Resolver) StatContained(rel string) (fs.FileInfo, error) {
 	}
 	info, err := os.Lstat(real)
 	if err != nil {
+		if errors.Is(err, fs.ErrPermission) {
+			return nil, fmt.Errorf("%w: %q: %v", ErrUnreadable, rel, err)
+		}
 		return nil, fmt.Errorf("lstat %q: %w", rel, err)
 	}
 	if info.Mode()&os.ModeSymlink != 0 {

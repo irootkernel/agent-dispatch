@@ -139,15 +139,33 @@ func SourceEventKey(sourceID string, pos Position, digest records.Digest) string
 // ValidateBinding checks that the trusted environment matches the trusted
 // route binding (SRC-003): the invoked trigger must be the route's trigger
 // and the watch root must be the resource root. The payload plays no part
-// in binding, so it can never select a route or resource. Roots are
-// compared after cleaning separators only; callers resolve symlinks when
-// their platform policy requires it.
+// in binding, so it can never select a route or resource. Roots compare
+// after cleaning separators, and — when either side exists on disk —
+// after symlink resolution, so a configured root expressed through a
+// symlink (macOS /tmp vs /private/tmp) still binds against Watchman's
+// canonical WATCHMAN_ROOT.
 func ValidateBinding(env Env, triggerName, resourceRoot string) error {
 	if env.Trigger != triggerName {
 		return fmt.Errorf("trigger binding mismatch: environment trigger %q is not the configured trigger %q", env.Trigger, triggerName)
 	}
-	if filepath.Clean(env.Root) != filepath.Clean(resourceRoot) {
-		return fmt.Errorf("root binding mismatch: environment root %q is not the configured resource root %q", env.Root, resourceRoot)
+	if !rootsEquivalent(env.Root, resourceRoot) {
+		return fmt.Errorf("root binding mismatch: environment root %q is not the configured resource root %q (symlinked roots must resolve to the same directory)", env.Root, resourceRoot)
 	}
 	return nil
+}
+
+// rootsEquivalent compares two absolute roots after cleaning and, when
+// resolvable, symlink canonicalization.
+func rootsEquivalent(a, b string) bool {
+	ca, cb := filepath.Clean(a), filepath.Clean(b)
+	if ca == cb {
+		return true
+	}
+	if ra, err := filepath.EvalSymlinks(ca); err == nil {
+		ca = ra
+	}
+	if rb, err := filepath.EvalSymlinks(cb); err == nil {
+		cb = rb
+	}
+	return ca == cb
 }

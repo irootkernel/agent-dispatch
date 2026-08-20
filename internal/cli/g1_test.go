@@ -464,9 +464,6 @@ func TestWatchmanTestCommand(t *testing.T) {
 // Watchman absence is actionable: lifecycle commands exit 11 with the
 // remediation text when the binary cannot be found.
 func TestWatchmanAbsenceActionable(t *testing.T) {
-	if _, err := exec.LookPath("watchman"); err != nil {
-		t.Skip("watchman binary not available on this host for PATH-shadowing test")
-	}
 	configPath, _ := planFixture(t)
 	t.Setenv("JJUKKUMI_STATE_DIR", t.TempDir())
 	// Shadow PATH with a directory that has no watchman binary.
@@ -483,5 +480,28 @@ func TestWatchmanAbsenceActionable(t *testing.T) {
 	}
 	if !strings.Contains(errb.String(), "install Watchman") {
 		t.Fatalf("absence must carry actionable remediation: %s", errb.String())
+	}
+}
+
+// The managed trigger command shape stays parseable by the CLI: the
+// installed definition and the parser must not drift (E3 will make it
+// executable; today it must at least classify as a known command with
+// valid flags, not a usage error).
+func TestManagedTriggerCommandShapeLockstep(t *testing.T) {
+	argv, err := managedCommand("some-route")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if argv[1] != "dispatch" {
+		t.Fatalf("managed command must invoke dispatch: %v", argv)
+	}
+	var out, errb bytes.Buffer
+	code := Run(argv[1:], &out, &errb)
+	if code != 2 {
+		t.Fatalf("non-dry-run dispatch exits 2 until E3, got %d", code)
+	}
+	var env ErrorEnvelope
+	if err := json.Unmarshal(errb.Bytes(), &env); err != nil || env.Error.Code != "command_not_implemented" {
+		t.Fatalf("managed command shape must parse (command_not_implemented, not a flag error): %s", errb.String())
 	}
 }

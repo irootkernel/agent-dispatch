@@ -69,7 +69,7 @@ Gate G1 closed on 2026-08-20 against the frozen E0-T5 baseline (Watchman 2026.07
 |---|---|
 | AC-101 one create → one dispatch plan change | `internal/cli/g1_test.go TestG1AC101SingleCreate` |
 | AC-102 unchanged-digest modify drops | plan-level no-prior leg in `TestG1AC102UnchangedModifyDrops`; suppression with equal prior digest in `internal/app/ingest TestUnchangedModifySuppression` |
-| AC-103 repeated saves → one final change | `TestG1AC103RepeatedSavesOneFinalChange`; three-save corpus replay in `internal/app/ingest TestRepeatedSaveFixturesAreDeliveredEveryTime` and `TestRepeatedSaveResolvesToOneFinalChange` |
+| AC-103 repeated saves → one final change | `TestG1AC103RepeatedSavesOneFinalChange`; corpus-delivery replay in `internal/adapters/watchman TestRepeatedSaveFixturesAreDeliveredEveryTime` and coalescing in `internal/app/ingest TestRepeatedSaveResolvesToOneFinalChange` |
 | AC-104 delete retained without reading | `TestG1AC104DeleteNeverRead`; `internal/app/ingest TestDeleteNeverOpensFile` |
 | AC-105 deterministic exclusions | `TestG1AC105DeterministicExclusions` (`.git/**`, Obsidian UI state, non-Markdown, `.DS_Store`); golden set in `internal/domain/policy/testdata/pattern-golden.json` |
 | AC-106 unsafe paths rejected, nothing outside root read | `TestG1AC106UnsafeInputsRejected` (absolute/traversal → exit 4 pre-access; symlink escape → exit 30 with the outside file untouched); `internal/adapters/localfs` escape suites |

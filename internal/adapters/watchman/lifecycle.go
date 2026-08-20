@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -135,11 +136,21 @@ type response struct {
 // run executes one `-j` array command and parses the response, branching
 // on the `error` member first (E0-T5 §8).
 func (c *Client) run(ctx context.Context, argv []any) (*response, error) {
+	var resp response
+	if err := c.runInto(ctx, argv, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// runInto executes one `-j` array command and decodes the response into
+// out after branching on the `error` member first.
+func (c *Client) runInto(ctx context.Context, argv []any, out any) error {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 	payload, err := json.Marshal(argv)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	cmd := exec.CommandContext(ctx, c.binary, "--no-pretty", "-j")
 	cmd.Stdin = bytes.NewReader(payload)
@@ -148,7 +159,7 @@ func (c *Client) run(ctx context.Context, argv []any) (*response, error) {
 	// copy races) and the read is bounded to maxOut (SEC-004).
 	outFile, err := os.CreateTemp("", "jjukkumi-watchman-*.json")
 	if err != nil {
-		return nil, fmt.Errorf("creating capture file: %w", err)
+		return fmt.Errorf("creating capture file: %w", err)
 	}
 	defer os.Remove(outFile.Name())
 	defer outFile.Close()
@@ -157,21 +168,26 @@ func (c *Client) run(ctx context.Context, argv []any) (*response, error) {
 	runErr := cmd.Run()
 	_, _ = outFile.Seek(0, 0)
 	raw, _ := io.ReadAll(io.LimitReader(outFile, int64(c.maxOut)))
-	out := bytes.TrimSpace(raw)
+	body := bytes.TrimSpace(raw)
 	if runErr != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return nil, &UnavailableError{Detail: fmt.Sprintf("command timed out after %s", c.timeout)}
+			return &UnavailableError{Detail: fmt.Sprintf("command timed out after %s", c.timeout)}
 		}
-		return nil, &UnavailableError{Detail: fmt.Sprintf("cannot run %q: %v%s", c.binary, runErr, hint(string(out)))}
+		return &UnavailableError{Detail: fmt.Sprintf("cannot run %q: %v%s", c.binary, runErr, hint(string(body)))}
 	}
-	var resp response
-	if err := json.Unmarshal(out, &resp); err != nil {
-		return nil, &LifecycleError{Command: fmt.Sprint(argv[0]), Message: "unparseable response: " + truncate(string(out), 300)}
+	var envelope struct {
+		Error string `json:"error"`
 	}
-	if resp.Error != "" {
-		return nil, &LifecycleError{Command: fmt.Sprint(argv[0]), Message: resp.Error}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return &LifecycleError{Command: fmt.Sprint(argv[0]), Message: "unparseable response: " + truncate(string(body), 300)}
 	}
-	return &resp, nil
+	if envelope.Error != "" {
+		return &LifecycleError{Command: fmt.Sprint(argv[0]), Message: envelope.Error}
+	}
+	if err := json.Unmarshal(body, out); err != nil {
+		return &LifecycleError{Command: fmt.Sprint(argv[0]), Message: "unparseable response: " + truncate(string(body), 300)}
+	}
+	return nil
 }
 
 func hint(stderr string) string {
@@ -199,6 +215,9 @@ func (c *Client) env() []string {
 	}
 	return out
 }
+
+// SetTimeoutForTest overrides the subprocess timeout (tests only).
+func (c *Client) SetTimeoutForTest(d time.Duration) { c.timeout = d }
 
 // Version returns the server version and verifies it against the
 // supported baseline.
@@ -248,8 +267,8 @@ func parseVersion(v string) ([4]int, bool) {
 	}
 	for i, p := range parts {
 		n := 0
-		if p == "" {
-			return out, false
+		if p == "" || len(p) > 9 {
+			return out, false // absurd components are unparseable
 		}
 		for _, r := range p {
 			if r < '0' || r > '9' {
@@ -274,6 +293,28 @@ func (c *Client) EnsureWatch(ctx context.Context, root string) (string, error) {
 		return "", &LifecycleError{Command: "watch-project", Message: "no watch root reported"}
 	}
 	return resp.Watch, nil
+}
+
+// IsWatched reports whether the given root is currently watched, so
+// status and remove can inspect state without creating a watch
+// (EnsureWatch has the side effect of starting one).
+func (c *Client) IsWatched(ctx context.Context, root string) (bool, error) {
+	var wl struct {
+		Roots []string `json:"roots"`
+	}
+	if err := c.runInto(ctx, []any{"watch-list"}, &wl); err != nil {
+		return false, err
+	}
+	want := filepath.Clean(root)
+	if resolved, err := filepath.EvalSymlinks(want); err == nil {
+		want = resolved
+	}
+	for _, r := range wl.Roots {
+		if filepath.Clean(r) == want {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // TriggerList returns the installed trigger definitions on a root.

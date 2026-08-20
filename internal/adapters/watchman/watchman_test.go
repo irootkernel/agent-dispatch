@@ -390,3 +390,25 @@ func TestDigestIsOverExactRawBytes(t *testing.T) {
 		t.Fatal("whitespace-different payloads must hash differently; digest covers exact raw bytes")
 	}
 }
+
+// TestValidateBindingSymlinkedRoot: a configured root expressed through
+// a symlink binds against Watchman's canonical WATCHMAN_ROOT (macOS
+// /tmp vs /private/tmp shape).
+func TestValidateBindingSymlinkedRoot(t *testing.T) {
+	base := t.TempDir()
+	real := filepath.Join(base, "real-root")
+	if err := os.MkdirAll(real, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(base, "alias-root")
+	if err := os.Symlink(real, alias); err != nil {
+		t.Fatal(err)
+	}
+	env := Env{Trigger: "trig", Root: real}
+	if err := ValidateBinding(env, "trig", alias); err != nil {
+		t.Fatalf("symlinked configured root must bind against the canonical env root: %v", err)
+	}
+	if err := ValidateBinding(Env{Trigger: "trig", Root: alias}, "trig", real); err != nil {
+		t.Fatalf("canonical configured root must bind against the symlinked env root: %v", err)
+	}
+}

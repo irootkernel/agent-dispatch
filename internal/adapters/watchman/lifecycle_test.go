@@ -2,6 +2,7 @@ package watchman
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -120,5 +121,80 @@ func TestTriggerDefinitionComparison(t *testing.T) {
 	b.Expression = []any{"match", "*.md"}
 	if a.Equal(b) {
 		t.Fatal("different expressions must compare unequal")
+	}
+}
+
+// newStubWatchman writes a fake watchman binary that emits canned
+// behavior keyed by a marker file, so the client's error paths are
+// testable without a server.
+func newStubWatchman(t *testing.T, script string) *Client {
+	t.Helper()
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "watchman")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"+script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return NewClient(bin)
+}
+
+func TestClientServerReportedError(t *testing.T) {
+	client := newStubWatchman(t, `echo '{"error":"root_dir failed: yo"}'; exit 0`)
+	_, err := client.Version(context.Background())
+	var le *LifecycleError
+	if err == nil || !errors.As(err, &le) {
+		t.Fatalf("server error member must surface as LifecycleError: %v", err)
+	}
+}
+
+func TestClientUnparseableResponse(t *testing.T) {
+	client := newStubWatchman(t, `echo 'not json at all'; exit 0`)
+	_, err := client.Version(context.Background())
+	var le *LifecycleError
+	if err == nil || !errors.As(err, &le) {
+		t.Fatalf("garbage must surface as LifecycleError: %v", err)
+	}
+}
+
+func TestClientNonZeroExit(t *testing.T) {
+	client := newStubWatchman(t, `echo boom >&2; exit 3`)
+	_, err := client.Version(context.Background())
+	var ue *UnavailableError
+	if err == nil || !errors.As(err, &ue) {
+		t.Fatalf("non-zero exit must surface as UnavailableError: %v", err)
+	}
+}
+
+func TestClientTimeout(t *testing.T) {
+	client := newStubWatchman(t, `sleep 5`)
+	client.SetTimeoutForTest(200 * time.Millisecond)
+	_, err := client.Version(context.Background())
+	var ue *UnavailableError
+	if err == nil || !errors.As(err, &ue) {
+		t.Fatalf("timeout must surface as UnavailableError: %v", err)
+	}
+}
+
+func TestVersionComparisonTable(t *testing.T) {
+	cases := []struct {
+		version string
+		wantErr bool
+	}{
+		{"2025.01.01.00", true},
+		{"2026.07.26.99", true},
+		{"2026.07.27.00", false}, // exact baseline
+		{"2026.08.01.00", false},
+		{"2027.01.01.00", false},
+		{"", true},
+		{"nonsense", true},
+		{"1.2.3", true},
+		{"2026.07.27", true},
+		{"2026.07.27.00-beta", true},
+		{"12345678901234.1.1.1", true}, // absurd component fails closed
+	}
+	for _, c := range cases {
+		err := CheckVersionSupported(c.version)
+		if (err != nil) != c.wantErr {
+			t.Fatalf("version %q: err=%v wantErr=%v", c.version, err, c.wantErr)
+		}
 	}
 }

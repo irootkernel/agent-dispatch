@@ -122,6 +122,11 @@ func resolveConfigPath(explicit string) string {
 	return platformpaths.DefaultConfigPath()
 }
 
+// DefaultMaxHashFileBytes is the fallback hash bound when the operator
+// sets no limits.max_hash_file_bytes, matching the documented
+// configuration-spec example envelope (16 MiB).
+const DefaultMaxHashFileBytes int64 = 16 << 20
+
 // runPlan plans one Watchman invocation end to end with no SQLite
 // mutation and no target call: parse stdin, validate the trusted
 // environment binding, normalize the batch against trusted route
@@ -186,11 +191,16 @@ func runPlan(command string, args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
 	}
-	maxHash := int64(0)
+	if cfg.Limits.MaxPathBytes != nil {
+		engine.SetMaxPathBytes(int(*cfg.Limits.MaxPathBytes))
+		resolver.SetLimits(*cfg.Limits.MaxPathBytes)
+	}
+	maxHash := DefaultMaxHashFileBytes
 	if cfg.Limits.MaxHashFileBytes != nil {
+		if *cfg.Limits.MaxHashFileBytes <= 0 {
+			return planErr(stderr, command, "config_invalid", "configuration", "limits.max_hash_file_bytes must be positive when set", 3)
+		}
 		maxHash = *cfg.Limits.MaxHashFileBytes
-	} else {
-		maxHash = 64 << 20
 	}
 
 	batch, err := ingest.BuildBatch(input.Entries, engine, resolver, ingest.NoFacts{}, env.Flags(), route.Source.Resource, ingest.Options{MaxHashBytes: maxHash})

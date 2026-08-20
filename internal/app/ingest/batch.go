@@ -205,6 +205,10 @@ func BuildBatch(entries []watchman.Entry, engine *policy.Engine, resolver *local
 				case errors.Is(err, fs.ErrNotExist), errors.Is(err, localfs.ErrNotRegular):
 					res.Dropped = append(res.Dropped, DropRecord{Path: path, Reason: ReasonCreateDeleteNever})
 					continue
+				case errors.Is(err, localfs.ErrUnreadable):
+					res.HashUnknown = append(res.HashUnknown, path)
+					// An unreadable path is not proven absent: keep the
+					// uncertain delete rather than asserting non-existence.
 				case err == nil:
 					// The file survives: keep the uncertain delete.
 				default:
@@ -228,7 +232,7 @@ func BuildBatch(entries []watchman.Entry, engine *policy.Engine, resolver *local
 				res.Replacements[path] = true
 			case errors.Is(err, fs.ErrNotExist):
 				finalOp = records.OpDelete
-			case errors.Is(err, localfs.ErrNotRegular):
+			case errors.Is(err, localfs.ErrNotRegular), errors.Is(err, localfs.ErrUnreadable):
 				finalOp = records.OpCreate
 				res.Replacements[path] = true
 				forcedUnknown[path] = true
@@ -329,7 +333,8 @@ func hashFile(resolver *localfs.Resolver, path string, maxBytes int64) (records.
 	if err != nil {
 		if errors.Is(err, localfs.ErrTooLarge) ||
 			errors.Is(err, localfs.ErrNotRegular) ||
-			errors.Is(err, localfs.ErrMissing) {
+			errors.Is(err, localfs.ErrMissing) ||
+			errors.Is(err, localfs.ErrUnreadable) {
 			return "", false, nil
 		}
 		if errors.Is(err, localfs.ErrEscape) || errors.Is(err, localfs.ErrPathTooLong) {

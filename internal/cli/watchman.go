@@ -109,12 +109,31 @@ func newLifecycleClient(command string, stderr io.Writer) (*watchman.Client, con
 		if errors.As(err, &unavailable) {
 			return nil, nil, "", planErr(stderr, command, "watchman_unavailable", "target_unavailable", unavailable.Error()+"; "+unavailable.Remediation(), 11)
 		}
+		var protocol *watchman.LifecycleError
+		if errors.As(err, &protocol) {
+			return nil, nil, "", planErr(stderr, command, "target_response_invalid", "acceptance_unknown", protocol.Error(), 13)
+		}
 		return nil, nil, "", planErr(stderr, command, "watchman_unavailable", "target_unavailable", err.Error(), 11)
 	}
 	if err := watchman.CheckVersionSupported(version); err != nil {
 		return nil, nil, "", planErr(stderr, command, "watchman_version_unsupported", "target_unavailable", err.Error(), 11)
 	}
 	return client, ctx, version, 0
+}
+
+// lifecycleErr maps a client failure to the registered code: absence or
+// an unusable server is target_unavailable (11); a server-reported
+// protocol error is target_response_invalid (13).
+func lifecycleErr(stderr io.Writer, command string, err error) int {
+	var unavailable *watchman.UnavailableError
+	if errors.As(err, &unavailable) {
+		return planErr(stderr, command, "watchman_unavailable", "target_unavailable", unavailable.Error()+"; "+unavailable.Remediation(), 11)
+	}
+	var protocol *watchman.LifecycleError
+	if errors.As(err, &protocol) {
+		return planErr(stderr, command, "target_response_invalid", "acceptance_unknown", protocol.Error(), 13)
+	}
+	return planErr(stderr, command, "watchman_unavailable", "target_unavailable", err.Error(), 11)
 }
 
 // managedCommand builds the trigger command that invokes this binary's
@@ -145,7 +164,7 @@ func runWatchmanInstall(args []string, stdout, stderr io.Writer) int {
 	}
 	watchRoot, err := client.EnsureWatch(ctx, resource.Root)
 	if err != nil {
-		return planErr(stderr, command, "watchman_unavailable", "target_unavailable", err.Error(), 11)
+		return lifecycleErr(stderr, command, err)
 	}
 	cmdArgv, err := managedCommand(opts.routeID)
 	if err != nil {
@@ -155,7 +174,7 @@ func runWatchmanInstall(args []string, stdout, stderr io.Writer) int {
 
 	installed, err := client.TriggerList(ctx, watchRoot)
 	if err != nil {
-		return planErr(stderr, command, "watchman_unavailable", "target_unavailable", err.Error(), 11)
+		return lifecycleErr(stderr, command, err)
 	}
 	if current, exists := watchman.FindTrigger(installed, expected.Name); exists {
 		if current.Equal(expected) {
@@ -177,7 +196,7 @@ func runWatchmanInstall(args []string, stdout, stderr io.Writer) int {
 	}
 	disposition, err := client.TriggerInstall(ctx, watchRoot, expected)
 	if err != nil {
-		return planErr(stderr, command, "watchman_unavailable", "target_unavailable", err.Error(), 11)
+		return lifecycleErr(stderr, command, err)
 	}
 	// The conflict gate above is advisory against same-user concurrency:
 	// if the server replaced a definition we believed equal or absent,
@@ -220,13 +239,29 @@ func runWatchmanStatus(args []string, stdout, stderr io.Writer) int {
 	if code != 0 {
 		return code
 	}
+	// Status never creates a watch: an unwatched root reports missing
+	// rather than establishing one.
+	watched, err := client.IsWatched(ctx, resource.Root)
+	if err != nil {
+		return lifecycleErr(stderr, command, err)
+	}
+	if !watched {
+		return writeEnvelope(stdout, command, map[string]any{
+			"route":            opts.routeID,
+			"watch_root":       resource.Root,
+			"watch_root_state": "not_watched",
+			"watchman_version": version,
+			"trigger":          route.Source.TriggerName,
+			"state":            "missing",
+		})
+	}
 	watchRoot, err := client.EnsureWatch(ctx, resource.Root)
 	if err != nil {
-		return planErr(stderr, command, "watchman_unavailable", "target_unavailable", err.Error(), 11)
+		return lifecycleErr(stderr, command, err)
 	}
 	installed, err := client.TriggerList(ctx, watchRoot)
 	if err != nil {
-		return planErr(stderr, command, "watchman_unavailable", "target_unavailable", err.Error(), 11)
+		return lifecycleErr(stderr, command, err)
 	}
 	cmdArgv, err := managedCommand(opts.routeID)
 	if err != nil {
@@ -282,15 +317,29 @@ func runWatchmanRemove(args []string, stdout, stderr io.Writer) int {
 	if code != 0 {
 		return code
 	}
+	// Remove never creates a watch either: an unwatched root is already
+	// free of the managed trigger.
+	watched, err := client.IsWatched(ctx, resource.Root)
+	if err != nil {
+		return lifecycleErr(stderr, command, err)
+	}
+	if !watched {
+		return writeEnvelope(stdout, command, map[string]any{
+			"route":      opts.routeID,
+			"watch_root": resource.Root,
+			"trigger":    route.Source.TriggerName,
+			"action":     "noop",
+		})
+	}
 	watchRoot, err := client.EnsureWatch(ctx, resource.Root)
 	if err != nil {
-		return planErr(stderr, command, "watchman_unavailable", "target_unavailable", err.Error(), 11)
+		return lifecycleErr(stderr, command, err)
 	}
 	// Removes only the exact managed trigger; deleting an absent trigger
 	// is idempotent. The watch root is never removed.
 	deleted, err := client.TriggerDelete(ctx, watchRoot, route.Source.TriggerName)
 	if err != nil {
-		return planErr(stderr, command, "watchman_unavailable", "target_unavailable", err.Error(), 11)
+		return lifecycleErr(stderr, command, err)
 	}
 	action := "removed"
 	if !deleted {

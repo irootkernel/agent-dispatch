@@ -1,0 +1,114 @@
+package cli
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+
+	"github.com/rootkernel/jjukkumi/internal/config"
+	"github.com/rootkernel/jjukkumi/internal/platformpaths"
+)
+
+// runInit implements `jjukkumi init` (cli-spec §3): it creates the state
+// directory and a disabled example configuration after checking for
+// existing files. It never installs a Watchman trigger or enables
+// dispatch; those require their own explicit commands. The state directory
+// is prepared first so a failure writing the configuration cannot leave a
+// partially initialized installation that init then refuses to repair.
+func runInit(args []string, stdout, stderr io.Writer) int {
+	instanceID := ""
+	configPath := ""
+	stateDir := ""
+	resourceRoot := ""
+	jsonOutput := false
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--config":
+			if i+1 >= len(args) {
+				return usageError(stderr, "init", "--config requires a path")
+			}
+			i++
+			configPath = args[i]
+		case "--state-dir":
+			if i+1 >= len(args) {
+				return usageError(stderr, "init", "--state-dir requires a path")
+			}
+			i++
+			stateDir = args[i]
+		case "--instance-id":
+			if i+1 >= len(args) {
+				return usageError(stderr, "init", "--instance-id requires a value")
+			}
+			i++
+			instanceID = args[i]
+		case "--resource-root":
+			if i+1 >= len(args) {
+				return usageError(stderr, "init", "--resource-root requires a directory path")
+			}
+			i++
+			resourceRoot = args[i]
+		case "--output", "-o":
+			if i+1 >= len(args) {
+				return usageError(stderr, "init", "--output requires a value: --output json")
+			}
+			i++
+			if args[i] != "json" && args[i] != "human" {
+				return usageError(stderr, "init", fmt.Sprintf("unsupported --output value %q (human or json)", args[i]))
+			}
+			jsonOutput = args[i] == "json"
+		case "--output=json":
+			jsonOutput = true
+		case "--output=human":
+			jsonOutput = false
+		default:
+			return usageError(stderr, "init", fmt.Sprintf("unknown argument %q for init", args[i]))
+		}
+	}
+	if configPath == "" {
+		configPath = platformpaths.DefaultConfigPath()
+	}
+	if stateDir == "" {
+		stateDir = platformpaths.ResolveStateDir("")
+	}
+	if instanceID == "" {
+		instanceID = "jjukkumi-local"
+	}
+	if resourceRoot == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			writeError(stderr, "init", "config_invalid", "configuration", fmt.Sprintf("cannot resolve home directory: %v", err))
+			return 3
+		}
+		resourceRoot = filepath.Join(home, "Documents", "Obsidian", "MainVault")
+	}
+
+	if err := config.EnsureStateDir(stateDir); err != nil {
+		if config.IsStateDirPlacementError(err) {
+			writeError(stderr, "init", "state_directory_not_local", "configuration", err.Error())
+		} else {
+			writeError(stderr, "init", "config_invalid", "configuration", fmt.Sprintf("state directory: %v", err))
+		}
+		return 3
+	}
+	// Spec section 3: a state directory inside the watched vault warns.
+	if w := config.StateDirInsideRootWarning(stateDir, resourceRoot); w != "" {
+		fmt.Fprintf(stderr, "warning: %s\n", w)
+	}
+	cfg := config.Example(instanceID, resourceRoot, platformpaths.DefaultCapabilityReportPath())
+	if err := config.WriteExample(cfg, configPath); err != nil {
+		writeError(stderr, "init", "config_invalid", "configuration", err.Error())
+		return 3
+	}
+	if jsonOutput {
+		return writeEnvelope(stdout, "init", map[string]any{
+			"config_path": configPath,
+			"state_dir":   stateDir,
+			"enabled":     false,
+		})
+	}
+	fmt.Fprintf(stdout, "wrote disabled example configuration: %s\n", configPath)
+	fmt.Fprintf(stdout, "created state directory: %s\n", stateDir)
+	fmt.Fprintf(stdout, "dispatch stays disabled until 'jjukkumi route enable' is run explicitly\n")
+	return 0
+}

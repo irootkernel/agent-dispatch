@@ -11,6 +11,7 @@ require (
 	golang.org/x/sync v0.11.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/tools v0.30.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 	honnef.co/go/tools v0.6.1 // indirect
 )
 

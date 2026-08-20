@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -88,8 +89,8 @@ func TestUnknownCommandFailsClosed(t *testing.T) {
 
 func TestEveryKnownCommandClassifiesAsNotImplemented(t *testing.T) {
 	for name := range knownCommands {
-		if name == "version" {
-			continue // the one implemented command
+		if name == "version" || name == "init" {
+			continue // the implemented commands
 		}
 		var out, errb bytes.Buffer
 		if code := Run([]string{name}, &out, &errb); code != 2 {
@@ -127,5 +128,66 @@ func TestNoArgumentsUsageError(t *testing.T) {
 	var env ErrorEnvelope
 	if err := json.Unmarshal(errb.Bytes(), &env); err != nil {
 		t.Fatalf("stderr is not the error envelope: %s", errb.String())
+	}
+}
+
+func TestVersionUsageErrors(t *testing.T) {
+	cases := [][]string{
+		{"version", "--output"},
+		{"version", "--output", "yaml"},
+		{"version", "--bogus"},
+	}
+	for _, args := range cases {
+		var out, errb bytes.Buffer
+		if code := Run(args, &out, &errb); code != 2 {
+			t.Errorf("%v: exit = %d, want 2", args, code)
+		}
+		var env ErrorEnvelope
+		if err := json.Unmarshal(errb.Bytes(), &env); err != nil || env.Error.Code != "flag_invalid" {
+			t.Errorf("%v: unexpected envelope %v (%s)", args, err, errb.String())
+		}
+	}
+}
+
+func TestWriteEnvelopeFailureExits40(t *testing.T) {
+	code := writeEnvelope(alwaysFailWriter{}, "version", map[string]any{})
+	if code != 40 {
+		t.Errorf("envelope write failure exit = %d, want 40", code)
+	}
+}
+
+type alwaysFailWriter struct{}
+
+func (alwaysFailWriter) Write([]byte) (int, error) { return 0, errWriteFailed }
+
+var errWriteFailed = errors.New("write failed")
+
+func TestVersionOutputFlagForms(t *testing.T) {
+	dir := "" // version takes no paths; forms verified by envelope shape
+	_ = dir
+	cases := [][]string{
+		{"version", "--output", "json"},
+		{"version", "--output=json"},
+		{"version", "-o", "json"},
+	}
+	for _, args := range cases {
+		var out, errb bytes.Buffer
+		if code := Run(args, &out, &errb); code != 0 {
+			t.Errorf("%v: exit %d", args, code)
+			continue
+		}
+		if !json.Valid(out.Bytes()) {
+			t.Errorf("%v: expected JSON envelope, got %q", args, out.String())
+		}
+	}
+	for _, args := range [][]string{{"version", "--output", "human"}, {"version", "--output=human"}} {
+		var out, errb bytes.Buffer
+		if code := Run(args, &out, &errb); code != 0 {
+			t.Errorf("%v: exit %d", args, code)
+			continue
+		}
+		if json.Valid(out.Bytes()) {
+			t.Errorf("%v: human output must not be JSON: %q", args, out.String())
+		}
 	}
 }

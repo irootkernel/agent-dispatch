@@ -150,4 +150,4 @@ Post-baseline decisions and documented errata. Entries amend completed E0 output
 
 **Context.** The registry predated any executable CLI and contained no usage-class codes, so the first real `jjukkumi` binary had no legal encoding for its failure modes; emitting unregistered codes would violate error-model §4 ("implementations emit only the codes below").
 
-**Consequences.** SOT 1.0.4. `version --output json` remains the only implemented command; every other tree entry fails closed with `command_not_implemented` instead of silently succeeding.
+**Consequences.** SOT 1.0.4. `version` and `init` are the first implemented commands (init landed with E1-T2); every other tree entry fails closed with `command_not_implemented` instead of silently succeeding.

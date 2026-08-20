@@ -1,0 +1,523 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:jjukkumi:schema:config:v1",
+  "title": "JJUKKUMI Configuration v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "instance",
+    "resources",
+    "targets",
+    "routes"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "instance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "state_dir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "log_paths": {
+          "enum": [
+            "relative",
+            "redacted",
+            "full"
+          ]
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_stdin_bytes": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 67108864
+        },
+        "max_path_bytes": {
+          "type": "integer",
+          "minimum": 128,
+          "maximum": 65536
+        },
+        "max_hash_file_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1073741824
+        },
+        "max_subprocess_output_bytes": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 67108864
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/resource"
+      }
+    },
+    "targets": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/hermesKanban"
+          },
+          {
+            "$ref": "#/$defs/hermesWebhook"
+          }
+        ]
+      }
+    },
+    "routes": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/route"
+      }
+    },
+    "retention": {
+      "$ref": "#/$defs/retention"
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9._-]{0,63}$"
+    },
+    "duration": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*(ms|s|m|h|d)$"
+    },
+    "secretRef": {
+      "type": "string",
+      "pattern": "^(env:[A-Za-z_][A-Za-z0-9_]*|file:/.*|keychain:.+|fd:[1-9][0-9]*)$"
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "root",
+        "file_scope"
+      ],
+      "properties": {
+        "type": {
+          "const": "directory"
+        },
+        "root": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file_scope": {
+          "const": "markdown"
+        },
+        "git": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "enum": [
+                "disabled",
+                "optional"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "capability": {
+      "enum": [
+        "durable_acceptance",
+        "submit_idempotency_key",
+        "lookup_by_idempotency_key",
+        "lookup_by_external_ref",
+        "resource_mutex",
+        "execution_status",
+        "cancellation",
+        "result_receipt"
+      ]
+    },
+    "hermesKanban": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "executable",
+        "capability_report",
+        "required_capabilities"
+      ],
+      "properties": {
+        "type": {
+          "const": "hermes-kanban"
+        },
+        "executable": {
+          "type": "string",
+          "minLength": 1
+        },
+        "capability_report": {
+          "type": "string",
+          "minLength": 1
+        },
+        "required_capabilities": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/capability"
+          }
+        },
+        "submit_timeout": {
+          "$ref": "#/$defs/duration"
+        },
+        "lookup_timeout": {
+          "$ref": "#/$defs/duration"
+        },
+        "environment_allowlist": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          }
+        }
+      }
+    },
+    "hermesWebhook": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "endpoint",
+        "auth"
+      ],
+      "properties": {
+        "type": {
+          "const": "hermes-webhook"
+        },
+        "endpoint": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "auth": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "secret_ref"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "bearer",
+                "header"
+              ]
+            },
+            "header_name": {
+              "type": "string"
+            },
+            "secret_ref": {
+              "$ref": "#/$defs/secretRef"
+            }
+          }
+        },
+        "submit_timeout": {
+          "$ref": "#/$defs/duration"
+        },
+        "idempotency_header": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "retry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_attempts",
+        "initial_backoff",
+        "max_backoff",
+        "multiplier",
+        "jitter_fraction"
+      ],
+      "properties": {
+        "max_attempts": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "initial_backoff": {
+          "$ref": "#/$defs/duration"
+        },
+        "max_backoff": {
+          "$ref": "#/$defs/duration"
+        },
+        "multiplier": {
+          "type": "number",
+          "minimum": 1.0,
+          "maximum": 10.0
+        },
+        "jitter_fraction": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 0.5
+        }
+      }
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "source",
+        "batching",
+        "policy",
+        "dispatch",
+        "reconciliation"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "source_id",
+            "resource",
+            "trigger_name",
+            "include",
+            "exclude"
+          ],
+          "properties": {
+            "type": {
+              "const": "watchman-trigger"
+            },
+            "source_id": {
+              "$ref": "#/$defs/id"
+            },
+            "resource": {
+              "$ref": "#/$defs/id"
+            },
+            "trigger_name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "include": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "exclude": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "batching": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "automatic_threshold",
+            "hard_limit",
+            "max_manifest_bytes"
+          ],
+          "properties": {
+            "automatic_threshold": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            },
+            "hard_limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000
+            },
+            "max_manifest_bytes": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 16777216
+            }
+          }
+        },
+        "policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "protected",
+            "immutable",
+            "bulk_action",
+            "overflow_action",
+            "fresh_instance_action",
+            "unsafe_path_action"
+          ],
+          "properties": {
+            "protected": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "immutable": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "bulk_action": {
+              "enum": [
+                "quarantine",
+                "reconcile"
+              ]
+            },
+            "overflow_action": {
+              "const": "reconcile"
+            },
+            "fresh_instance_action": {
+              "const": "reconcile"
+            },
+            "unsafe_path_action": {
+              "const": "quarantine"
+            }
+          }
+        },
+        "dispatch": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "target",
+            "profile",
+            "skills",
+            "mutex_key",
+            "latest_state",
+            "submission_retry",
+            "execution_hints",
+            "active_stale_after",
+            "failure_budget"
+          ],
+          "properties": {
+            "target": {
+              "$ref": "#/$defs/id"
+            },
+            "profile": {
+              "type": "string",
+              "minLength": 1
+            },
+            "skills": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "mutex_key": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "latest_state": {
+              "const": true
+            },
+            "submission_retry": {
+              "$ref": "#/$defs/retry"
+            },
+            "execution_hints": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "max_runtime",
+                "max_attempts"
+              ],
+              "properties": {
+                "max_runtime": {
+                  "$ref": "#/$defs/duration"
+                },
+                "max_attempts": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10
+                }
+              }
+            },
+            "active_stale_after": {
+              "$ref": "#/$defs/duration"
+            },
+            "failure_budget": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10
+            }
+          }
+        },
+        "reconciliation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "initial",
+            "daily_expected"
+          ],
+          "properties": {
+            "initial": {
+              "type": "boolean"
+            },
+            "daily_expected": {
+              "type": "boolean"
+            }
+          }
+        },
+        "retention": {
+          "$ref": "#/$defs/retention"
+        }
+      }
+    },
+    "retention": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "observations": {
+          "$ref": "#/$defs/duration"
+        },
+        "attempts": {
+          "$ref": "#/$defs/duration"
+        },
+        "completed_receipts": {
+          "$ref": "#/$defs/duration"
+        },
+        "resolved_quarantine": {
+          "$ref": "#/$defs/duration"
+        },
+        "unresolved": {
+          "enum": [
+            "forever"
+          ]
+        }
+      }
+    }
+  }
+}

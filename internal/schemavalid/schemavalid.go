@@ -14,6 +14,7 @@ import (
 	"sort"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
+	"gopkg.in/yaml.v3"
 )
 
 // schemaLessExamples are illustrative examples without a dedicated schema;
@@ -189,6 +190,30 @@ func Validate(root string) ([]string, []Failure, error) {
 			continue
 		}
 		lines = append(lines, fmt.Sprintf("ok   %s (against %s)", target.Path, target.Schema))
+	}
+
+	// The YAML operator configuration example is parsed with duplicate-key
+	// detection (yaml.v3 rejects duplicate mapping keys) and validated
+	// against the config schema (SCP-006; the reproducible check deferred
+	// from E1-T1 to E1-T2).
+	configExample := filepath.Join(root, "examples", "config.yaml")
+	raw, err := readFile(configExample)
+	if err != nil {
+		return nil, nil, fmt.Errorf("examples/config.yaml: %w", err)
+	}
+	var configDoc any
+	if err := yaml.Unmarshal(raw, &configDoc); err != nil {
+		failures = append(failures, Failure{"examples/config.yaml", err.Error()})
+	} else {
+		sch := compiled["urn:jjukkumi:schema:config:v1"]
+		if sch == nil {
+			return nil, nil, fmt.Errorf("config schema urn:jjukkumi:schema:config:v1 not found")
+		}
+		if err := sch.Validate(configDoc); err != nil {
+			failures = append(failures, Failure{"examples/config.yaml", err.Error()})
+		} else {
+			lines = append(lines, "ok   examples/config.yaml (against urn:jjukkumi:schema:config:v1)")
+		}
 	}
 	return lines, failures, nil
 }

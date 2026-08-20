@@ -68,10 +68,10 @@ var knownCommands = map[string]bool{
 }
 
 // Run executes the CLI with the given arguments and writes output to the
-// given streams. It returns the process exit code. E1-T1 implements only
-// the version command; every other registered command is reported as an
-// explicit not-implemented error rather than silently succeeding, and an
-// unrecognized name is command_unknown.
+// given streams. It returns the process exit code. This build implements
+// the version and init commands; every other registered command is
+// reported as an explicit not-implemented error rather than silently
+// succeeding, and an unrecognized name is command_unknown.
 func Run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		writeError(stderr, "", "command_unknown", "usage", "usage: jjukkumi <command> [flags]; run 'jjukkumi version --output json'")
@@ -80,6 +80,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "version":
 		return runVersion(args[1:], stdout, stderr)
+	case "init":
+		return runInit(args[1:], stdout, stderr)
 	default:
 		if knownCommands[args[0]] {
 			writeError(stderr, args[0], "command_not_implemented", "usage",
@@ -101,12 +103,14 @@ func runVersion(args []string, stdout, stderr io.Writer) int {
 				return usageError(stderr, "version", "--output requires a value: --output json")
 			}
 			i++
-			if args[i] != "json" {
-				return usageError(stderr, "version", fmt.Sprintf("unsupported --output value %q (only json is supported)", args[i]))
+			if args[i] != "json" && args[i] != "human" {
+				return usageError(stderr, "version", fmt.Sprintf("unsupported --output value %q (human or json)", args[i]))
 			}
-			jsonOutput = true
+			jsonOutput = args[i] == "json"
 		case "--output=json":
 			jsonOutput = true
+		case "--output=human":
+			jsonOutput = false
 		default:
 			return usageError(stderr, "version", fmt.Sprintf("unknown argument %q for version", args[i]))
 		}
@@ -166,8 +170,8 @@ func writeEnvelope(w io.Writer, command string, result interface{}) int {
 // point's panic recovery (exit 40, error-model §2).
 func WriteInternalError(w io.Writer, cause any) {
 	writeError(w, "", "internal_unclassified", "internal",
-		"recovered an unexpected internal failure; see diagnostics")
-	_, _ = fmt.Fprintf(w, "%v\n", cause)
+		"recovered an unexpected internal failure")
+	_ = cause // the raw panic value stays out of diagnostics (SEC-007)
 }
 
 func writeError(w io.Writer, command, code, category, message string) {

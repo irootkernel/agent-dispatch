@@ -12,13 +12,13 @@
 |---|---|
 | Current epic | E1, Go Foundation, Configuration, and Persistence Schema |
 | Current active task | None |
-| Next task | **E1-T2, Implement Configuration Loading, Validation, and Platform Paths** |
-| Completed tasks | 6 / 33 |
-| Planned tasks | 27 / 33 |
+| Next task | **E1-T3, Implement Domain Primitives, Canonicalization, and Identity** |
+| Completed tasks | 7 / 33 |
+| Planned tasks | 26 / 33 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
-The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Implementation continues with E1-T2.
+The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Implementation continues with E1-T3.
 
 ## 2. Epic Summary
 
@@ -42,7 +42,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 4 | E0-T4 | Completed | Real Hermes public capability report |
 | 5 | E0-T5 | Completed | Watchman fixture baseline frozen |
 | 6 | E1-T1 | Completed | Buildable Go repository and verification pipeline |
-| 7 | E1-T2 | Planned | Validated YAML configuration and path layout |
+| 7 | E1-T2 | Completed | Validated YAML configuration and path layout |
 | 8 | E1-T3 | Planned | Domain primitives, IDs, digests, canonicalization |
 | 9 | E1-T4 | Planned | SQLite schema, migrations, and repositories |
 | 10 | E2-T1 | Planned | Bounded Watchman input parser |
@@ -318,7 +318,7 @@ Config parsing, SQLite tables, Watchman, and Hermes invocation.
 
 ## E1-T2: Implement Configuration Loading, Validation, and Platform Paths
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -353,6 +353,13 @@ E1-T1 Completed.
 - secret values are never printed;
 - behavior-affecting route revision is deterministic;
 - state directory inside the vault produces a warning or error according to policy.
+
+### Evidence
+
+- `internal/config`: strict YAML loader (duplicate keys rejected, unknown fields fail closed via KnownFields), JSON Schema validation against the embedded SOT config schema with a drift test, semantic validation (route/resource/target references, max-backoff bound, state directory outside the vault, secret-reference well-formedness), secret-reference parser without resolution, redacted deterministic normalized output with a golden test, and the deterministic behavior-affecting `RouteRevision` (POL-007) with determinism/sensitivity/exclusion tests.
+- `internal/platformpaths`: default config/state paths for macOS and Linux, `JJUKKUMI_STATE_DIR` and `XDG_*` precedence.
+- `internal/cli`: `jjukkumi init` writes a schema-validated disabled example configuration (0600, refuse-overwrite) and creates the state directory (0700) without installing Watchman triggers or enabling dispatch.
+- `make schema-validation` now reproducibly validates `docs/examples/config.yaml` (YAML parse plus config schema), closing the E1-T1 deferral; unit tests re-validate the golden example through the full loader including placeholder-path replacement.
 
 ## E1-T3: Implement Domain Primitives, Canonicalization, and Identity
 

@@ -1,13 +1,13 @@
 # SOT Package Validation
 
-> **Validated:** 2026-08-20 (post E1-T1)  
+> **Validated:** 2026-08-20 (post E1-T2)  
 > **Package target:** JJUKKUMI SOT 1.0.4 / implementation v0.1.0
 
 ## Completed Checks
 
 - All JSON files parse.
 - All eight JSON Schemas pass standard Draft 2020-12 validation (D-015).
-- The example YAML configuration was validated against `config.schema.json` after YAML parsing at the SOT 1.0.3 baseline with the `jsonschema` library; reproducible YAML validation is deferred to E1-T2, which owns YAML configuration loading.
+- The example YAML configuration is validated reproducibly by the Go loader pipeline in every `make schema-validation` and `go test` run: YAML parsing with duplicate-key rejection, JSON Schema validation, and semantic validation (E1-T2).
 - Source observation, dispatch plan, dispatch intent, dispatch receipt, work receipt, Hermes capability-report, and Hermes task-request examples validate against their schemas (structural validation of type, const, enum, required, properties and additionalProperties, items with minItems/maxItems/uniqueItems, pattern, minLength/maxLength, minimum/maximum with exclusive bounds, minProperties/maxProperties, allOf/anyOf/oneOf/not, and if/then/else conditional constraints; `$ref` resolved across schema documents).
 - The `dispatch-intent` example's `request` field validates against `hermes-task-request.schema.json` through the schema `$ref`.
 - The real Hermes capability report `integrations/hermes-capability-report.json` validates against `schemas/hermes-capability-report.schema.json`.
@@ -18,7 +18,7 @@
 - Markdown code fences are balanced.
 - The roadmap contains exactly 7 epics and 33 task headings.
 - Every task uses one allowed status value.
-- Current task statuses are 6 Completed and 27 Planned, with no active task.
+- Current task statuses are 7 Completed and 26 Planned, with no active task.
 - Required-spec IDs are unique.
 - Acceptance-scenario IDs are unique.
 - No em dash characters remain in the package.
@@ -41,7 +41,7 @@ All package checks are reachable from the repository root through the Makefile, 
 - Everything: `make verify` (build, format, vet, staticcheck, import-direction lint, unit tests, race tests, and the three package checks below).
 - Checksums: `make manifest-check` (runs `shasum -a 256 -c MANIFEST.sha256` from the package root; `sha256sum` on Linux). After editing any file in this package, regenerate the manifest from the package root: `find . -type f ! -name MANIFEST.sha256 | sed 's|^\./||' | sort | shasum -a 256 > MANIFEST.sha256`.
 - Traceability: `make traceability` rewrites `docs/00-sot/traceability-matrix.md` deterministically via `scripts/generate-traceability.py`, fails on unknown requirement IDs, and fails if the committed matrix drifted.
-- Schema and example validation: `make schema-validation` (`go run ./internal/tools/schemavalid -root docs`). Every schema document is compiled as standard Draft 2020-12 with format assertions enabled (invalid patterns, malformed subschemas, and unknown type names fail closed at compilation regardless of instance reachability); every schema-covered `examples/*.json` must match at least one schema, and the real `integrations/hermes-capability-report.json` validates against `schemas/hermes-capability-report.schema.json` with URN-based cross-document `$ref` resolution. The retired subset validator's keyword self-test cases, including `$ref` resolution, Draft 2020-12 `$ref`-sibling application, numeric equality across int/float, and the `date-time`/`uri` formats, run as Go unit tests in `internal/schemavalid/selftest_test.go` on every `go test`. Two semantics intentionally changed with the standard validator: boolean subschemas are legal Draft 2020-12 (the subset could not enforce them and rejected them; they are now compiled and enforced), and `https:` is accepted by the `uri` format per RFC 3986 (empty path). Reproducible `examples/config.yaml` validation is deferred to E1-T2, which owns YAML configuration loading.
+- Schema and example validation: `make schema-validation` (`go run ./internal/tools/schemavalid -root docs`). Every schema document is compiled as standard Draft 2020-12 with format assertions enabled (invalid patterns, malformed subschemas, and unknown type names fail closed at compilation regardless of instance reachability); every schema-covered `examples/*.json` must match at least one schema, and the real `integrations/hermes-capability-report.json` validates against `schemas/hermes-capability-report.schema.json` with URN-based cross-document `$ref` resolution. The retired subset validator's keyword self-test cases, including `$ref` resolution, Draft 2020-12 `$ref`-sibling application, numeric equality across int/float, and the `date-time`/`uri` formats, run as Go unit tests in `internal/schemavalid/selftest_test.go` on every `go test`. Two semantics intentionally changed with the standard validator: boolean subschemas are legal Draft 2020-12 (the subset could not enforce them and rejected them; they are now compiled and enforced), and `https:` is accepted by the `uri` format per RFC 3986 (empty path). `examples/config.yaml` is additionally parsed as YAML with duplicate-key rejection and validated against `config.schema.json` (E1-T2), and the typed loader in `internal/config` re-validates it with semantic checks in `go test`. Configuration-spec section 12 checks that require runtime probing (resource-root overlap and symlink canonicalization, capability-report freshness, required-capability availability, activation acknowledgement) are owned by E2-T2, E4, and E3 respectively and are documented in `internal/config/semantic.go`.
 - Hermes capability baseline: see `integrations/hermes-public-interface-report.md` §Method for the exact public CLI commands; every capability claim cites its fixture under `integrations/fixtures/hermes/`.
 - Watchman fixture baseline: see `integrations/watchman-public-interface-report.md` §1 for the method and boundary; every shape and lifecycle claim cites its fixture under `integrations/fixtures/watchman/`.
 

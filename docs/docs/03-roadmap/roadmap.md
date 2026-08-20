@@ -12,13 +12,13 @@
 |---|---|
 | Current epic | E3, Durable Dispatch and Route Coordination Core |
 | Current active task | None |
-| Next task | **E3-T5, Crash, Migration, and Concurrency Gate G2** |
-| Completed tasks | 18 / 33 |
-| Planned tasks | 15 / 33 |
+| Next task | **E4-T1, Hermes Kanban Adapter Capability Implementation** |
+| Completed tasks | 19 / 33 |
+| Planned tasks | 14 / 33 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
-The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). E2-T1 delivered the bounded Watchman input parser against the frozen E0-T5 fixture corpus. E2-T2 delivered the safe path containment resolver and the deterministic pattern policy engine. E2-T3 delivered meaningful-change confirmation and batch normalization. E2-T4 delivered the structural policy planner and the side-effect-free `route plan` / `dispatch --dry-run` CLI. E2-T5 delivered the managed Watchman trigger lifecycle and closed gate G1. Epic E2 is complete: the bounded parser, safe path containment, pattern engine, batch normalization, structural policy planner, dry-run CLI, and the real Watchman trigger lifecycle were delivered, audited (one cross-task remediation commit), and validated. E3-T1 delivered the validated dispatch and route state transition services as the authoritative domain table with typed reasons, guards, and the acceptance/execution projection separation. E3-T2 delivered the durable intent commit, the attempt lease, and the fake sink port: the ingestion transaction, conditional leasing, submitting recovery, and the submit flow that proves the committed intent exists before any target invocation. E3-T3 delivered the bounded retry core, unknown reconciliation, dead-letter handling with operator actions, the dispatches and route command groups with stable exit codes, the result classifier, and the dispatch-attempt and dead-letter record contracts. E3-T4 delivered the route coordination core: one active dispatch per route under concurrency, durable dirty generations for later bursts, the merge-pending transaction, and the single latest-state follow-up collapse. Implementation continues with E3-T5.
+The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). E2-T1 delivered the bounded Watchman input parser against the frozen E0-T5 fixture corpus. E2-T2 delivered the safe path containment resolver and the deterministic pattern policy engine. E2-T3 delivered meaningful-change confirmation and batch normalization. E2-T4 delivered the structural policy planner and the side-effect-free `route plan` / `dispatch --dry-run` CLI. E2-T5 delivered the managed Watchman trigger lifecycle and closed gate G1. Epic E2 is complete: the bounded parser, safe path containment, pattern engine, batch normalization, structural policy planner, dry-run CLI, and the real Watchman trigger lifecycle were delivered, audited (one cross-task remediation commit), and validated. E3-T1 delivered the validated dispatch and route state transition services as the authoritative domain table with typed reasons, guards, and the acceptance/execution projection separation. E3-T2 delivered the durable intent commit, the attempt lease, and the fake sink port: the ingestion transaction, conditional leasing, submitting recovery, and the submit flow that proves the committed intent exists before any target invocation. E3-T3 delivered the bounded retry core, unknown reconciliation, dead-letter handling with operator actions, the dispatches and route command groups with stable exit codes, the result classifier, and the dispatch-attempt and dead-letter record contracts. E3-T4 delivered the route coordination core: one active dispatch per route under concurrency, durable dirty generations for later bursts, the merge-pending transaction, and the single latest-state follow-up collapse. E3-T5 delivered the crash-injection framework, the multi-process harness, and gate G2: AC-201 through AC-207 verified with executable evidence in docs/VALIDATION.md section Gate G2. Implementation continues with the E3 validation audit and closeout before E4-T1.
 
 ## 2. Epic Summary
 
@@ -54,7 +54,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 16 | E3-T2 | Completed | Durable intent transaction and attempt leases |
 | 17 | E3-T3 | Planned | Retry, unknown, reconciliation, and dead-letter core |
 | 18 | E3-T4 | Completed | One active route task and dirty generations |
-| 19 | E3-T5 | Planned | Crash, migration, and concurrency gate G2 |
+| 19 | E3-T5 | Completed | Crash, migration, and concurrency gate G2 |
 | 20 | E4-T1 | Planned | Hermes Kanban adapter capability implementation |
 | 21 | E4-T2 | Planned | Safe Hermes task request renderer |
 | 22 | E4-T3 | Planned | Submit, idempotency lookup, and delivery reconciliation |
@@ -839,7 +839,7 @@ E3-T3 Completed.
 
 ## E3-T5: Execute Crash, Migration, and Concurrency Gate G2
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -868,6 +868,13 @@ E3-T4 Completed.
 - no test relies solely on mocks for SQLite behavior;
 - power-loss claim is limited to documented SQLite durability and tested crash model;
 - all known invariant violations are fixed before review completes.
+
+### Evidence
+
+- `internal/testsupport/crashbin`: the crash-injection and multi-process harness (TST-004/TST-005) — real process deaths at the ingestion transaction boundary (`mid-transaction`, dying with observation, batch, and decision written uncommitted), immediately after the full lineage commit (`after-commit`), after the lease transaction with no attempt completion (`lease --die` / `acquire-race`), and inside the migration sequence (`migrate-partial`); plus `arrive`, one simultaneous one-shot arrival competing for the route slot. Every command drives a real SQLite file.
+- `internal/app/dispatch/g2_test.go`: the executable G2 acceptance suite — `TestG2AC201` (WAL recovery discards the uncommitted lineage; the arrival recommits cleanly), `TestG2AC202` (the restarted process submits the ready intent exactly once and a second submission is refused), `TestG2AC203` (remote acceptance with a held lease recovers to unknown, the lookup proves acceptance, zero additional submissions), `TestG2AC204` (four concurrent acquire processes, one winner, one distinct open-attempt owner), `TestG2AC205` (persisted backoff deadlines under one idempotency key with the drain stopping at the limit), `TestG2AC206` (terminal rejection remains fully inspectable with no sink switch), `TestG2AC207` (an interrupted migration leaves the valid previous version and a restart reaches the newest version with a passing integrity check; the pre-ledger version read is skipped because the ledger exists only after the first migration), and `TestG2MultiProcessOneActiveRouteDispatch` (six simultaneous arrivals, one durable dispatch holding the route slot).
+- Migration interruption inside a unit and the backup path stay covered by the in-package suite (atomic failure, pre-migration backup, fail-closed backup verification, ledger gap detection, integrity checks); the durability claim is bounded to process death at transaction boundaries under the verified WAL/synchronous=FULL pragmas (OPS-008), not machine power loss.
+- Gate G2 report: `docs/VALIDATION.md` section Gate G2 records the per-criterion evidence table, the supporting concurrency evidence, and the boundary of the durability claim. `make verify` green including race tests; Gaori manifest-check, schema-validation, traceability exit 0. No invariant violation remained: every defect found during the gate (activation self-reservation races, absent lookup-status normalization for absent results, IDLE-merge windows) was fixed in E3-T4/E3-T5 development before this review.
 
 ---
 

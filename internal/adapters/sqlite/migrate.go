@@ -227,3 +227,10 @@ func (s *Store) SchemaVersion() (int, error) {
 	}
 	return int(version.Int64), nil
 }
+
+// ApplyMigrationForHarness applies exactly one migration unit inside
+// its own transaction. It exists for the E3-T5 crash-injection harness
+// (TST-004) and is not called by the product paths.
+func (s *Store) ApplyMigrationForHarness(m Migration) error {
+	return s.applyMigration(m)
+}

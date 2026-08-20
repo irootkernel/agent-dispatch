@@ -662,6 +662,7 @@ E2-T4 Completed.
 
 ---
 
+- Audit remediation (E4 validation, cross-task seam): `watchman install` now also materializes the route's durable registration (resource, route revision, runtime state) idempotently from the configuration, and `route enable` creates the missing registration on first use, so the production first-use flow — install, enable, dispatch — works without manual state seeding (`TestFirstUseRegistrationFlow`); previously no production path created the runtime row.
 # E3: Durable Dispatch and Route Coordination Core
 
 **Epic status:** Completed  

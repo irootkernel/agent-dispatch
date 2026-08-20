@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/rootkernel/jjukkumi/internal/domain/records"
@@ -29,6 +30,10 @@ func (s *Store) ListIntents(ctx context.Context, f ports.IntentFilter) ([]ports.
 	if f.TargetID != "" {
 		where = append(where, "target_id = ?")
 		args = append(args, f.TargetID)
+	}
+	if f.DispatchID != "" {
+		where = append(where, "dispatch_id = ?")
+		args = append(args, f.DispatchID)
 	}
 	limit := f.Limit
 	if limit <= 0 {
@@ -485,4 +490,201 @@ func (s *Store) saveIntentTakeOverOriginal(tx *sql.Tx, i IntentRecord, originalD
 		return fmt.Errorf("route %s already has an active dispatch (invariant 5): %w", i.RouteID, ErrOptimisticConcurrency)
 	}
 	return nil
+}
+
+// SaveExecutionProjection appends one execution-projection receipt
+// (E4-T4, HER-008): separate from acceptance, one row per refresh so
+// the projection history stays inspectable; the caller mints a unique
+// receipt id per refresh.
+func (s *Store) SaveExecutionProjection(ctx context.Context, in ports.ExecutionProjectionInput) error {
+	_, err := s.ExecContext(ctx, `INSERT INTO dispatch_receipts
+		(receipt_id, dispatch_id, receipt_kind, execution_state, durable, external_ref, target_observed_at, received_at, payload_version, bounded_payload)
+		VALUES (?,?, 'execution_projection', ?, NULL, ?, ?, ?, 'jjukkumi.execution/v1', ?)`,
+		in.ReceiptID, in.DispatchID, string(in.ExecutionState), nullString(in.ExternalRef),
+		nullString(in.TargetObservedAt), in.ReceivedAt, in.BoundedPayload)
+	return err
+}
+
+// ListReceipts returns receipts matching the filter, newest first
+// (receipts list, OPS-002). Work receipts live in their own table and
+// are selected (or unioned, with an empty kind) from it.
+func (s *Store) ListReceipts(ctx context.Context, f ports.ReceiptFilter) ([]ports.ReceiptRecord, error) {
+	if f.Kind == "work" {
+		return s.listWorkReceipts(ctx, f)
+	}
+	disp, err := s.listDispatchReceipts(ctx, f, f.Kind)
+	if err != nil || f.Kind != "" {
+		return disp, err
+	}
+	work, err := s.listWorkReceipts(ctx, f)
+	if err != nil {
+		return nil, err
+	}
+	merged := append(disp, work...)
+	sort.Slice(merged, func(i, j int) bool {
+		if merged[i].ReceivedAt != merged[j].ReceivedAt {
+			return merged[i].ReceivedAt > merged[j].ReceivedAt
+		}
+		return merged[i].ReceiptID > merged[j].ReceiptID
+	})
+	if cap := f.Limit; cap > 0 && len(merged) > cap {
+		merged = merged[:cap]
+	}
+	return merged, nil
+}
+
+func (s *Store) listDispatchReceipts(ctx context.Context, f ports.ReceiptFilter, kind string) ([]ports.ReceiptRecord, error) {
+	where := []string{"1=1"}
+	args := []any{}
+	if f.DispatchID != "" {
+		where = append(where, "r.dispatch_id = ?")
+		args = append(args, f.DispatchID)
+	}
+	if f.RouteID != "" {
+		where = append(where, "i.route_id = ?")
+		args = append(args, f.RouteID)
+	}
+	if kind != "" {
+		where = append(where, "r.receipt_kind = ?")
+		args = append(args, kind)
+	}
+	limit := f.Limit
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	args = append(args, limit)
+	rows, err := s.QueryContext(ctx, `SELECT r.receipt_id, r.dispatch_id, r.receipt_kind, r.acceptance_state, r.execution_state, r.durable, r.external_ref, r.target_observed_at, r.received_at
+		FROM dispatch_receipts r JOIN dispatch_intents i ON i.dispatch_id = r.dispatch_id
+		WHERE `+strings.Join(where, " AND ")+`
+		ORDER BY r.received_at DESC, r.receipt_id DESC LIMIT ?`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ports.ReceiptRecord
+	for rows.Next() {
+		var rec ports.ReceiptRecord
+		var acceptance, execution, external, observed sql.NullString
+		var durable sql.NullInt64
+		if err := rows.Scan(&rec.ReceiptID, &rec.DispatchID, &rec.ReceiptKind, &acceptance, &execution, &durable, &external, &observed, &rec.ReceivedAt); err != nil {
+			return nil, err
+		}
+		rec.AcceptanceState = records.AcceptanceState(acceptance.String)
+		rec.ExecutionState = records.ExecutionState(execution.String)
+		rec.Durable = durable.Int64 == 1
+		rec.ExternalRef = external.String
+		rec.TargetObservedAt = observed.String
+		out = append(out, rec)
+	}
+	return out, rows.Err()
+}
+
+// loadWorkReceipt returns one work receipt as detail.
+func (s *Store) loadWorkReceipt(ctx context.Context, receiptID string) (ports.ReceiptDetail, error) {
+	var detail ports.ReceiptDetail
+	var status, external, baseRev, resultRev, changes, reasons, failure sql.NullString
+	err := s.QueryRowContext(ctx, `SELECT receipt_id, dispatch_id, run_id, resource_id, status, failure_code, external_task_id, base_revision, result_revision, changes_json, submitted_at, validation_state, validation_reasons_json
+		FROM work_receipts WHERE receipt_id = ?`, receiptID).
+		Scan(&detail.ReceiptID, &detail.DispatchID, &detail.RunID, &detail.ResourceID, &status, &failure,
+			&external, &baseRev, &resultRev, &changes, &detail.ReceivedAt, &detail.ValidationState, &reasons)
+	detail.FailureCode = failure.String
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return detail, ports.ErrReceiptNotFound
+		}
+		return detail, err
+	}
+	detail.ReceiptKind = "work"
+	detail.ExternalRef = external.String
+	switch status.String {
+	case "completed":
+		detail.ExecutionState = records.ExecSucceeded
+	case "failed":
+		detail.ExecutionState = records.ExecFailed
+	default:
+		detail.ExecutionState = records.ExecRunning
+	}
+	// The bounded payload is the stored changes projection; work
+	// receipts never carry note bodies (DAT-008).
+	detail.BoundedPayload = changes.String
+	if detail.BoundedPayload == "" {
+		detail.BoundedPayload = "{}"
+	}
+	return detail, nil
+}
+
+// listWorkReceipts selects work receipts from their own table, mapped
+// onto the shared receipt record shape.
+func (s *Store) listWorkReceipts(ctx context.Context, f ports.ReceiptFilter) ([]ports.ReceiptRecord, error) {
+	where := []string{"1=1"}
+	args := []any{}
+	if f.DispatchID != "" {
+		where = append(where, "w.dispatch_id = ?")
+		args = append(args, f.DispatchID)
+	}
+	if f.RouteID != "" {
+		where = append(where, "i.route_id = ?")
+		args = append(args, f.RouteID)
+	}
+	limit := f.Limit
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	args = append(args, limit)
+	rows, err := s.QueryContext(ctx, `SELECT w.receipt_id, w.dispatch_id, w.status, w.external_task_id, w.submitted_at
+		FROM work_receipts w JOIN dispatch_intents i ON i.dispatch_id = w.dispatch_id
+		WHERE `+strings.Join(where, " AND ")+`
+		ORDER BY w.submitted_at DESC, w.receipt_id DESC LIMIT ?`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ports.ReceiptRecord
+	for rows.Next() {
+		var rec ports.ReceiptRecord
+		var status, external sql.NullString
+		if err := rows.Scan(&rec.ReceiptID, &rec.DispatchID, &status, &external, &rec.ReceivedAt); err != nil {
+			return nil, err
+		}
+		rec.ReceiptKind = "work"
+		rec.ExternalRef = external.String
+		// The work-receipt status is the agent run's execution outcome;
+		// it maps onto the portable execution axis (begun=running,
+		// completed=succeeded, failed=failed).
+		switch status.String {
+		case "completed":
+			rec.ExecutionState = records.ExecSucceeded
+		case "failed":
+			rec.ExecutionState = records.ExecFailed
+		default:
+			rec.ExecutionState = records.ExecRunning
+		}
+		out = append(out, rec)
+	}
+	return out, rows.Err()
+}
+
+// LoadReceipt returns one receipt with its bounded persisted payload
+// (receipts show, OPS-002).
+func (s *Store) LoadReceipt(ctx context.Context, receiptID string) (ports.ReceiptDetail, error) {
+	var detail ports.ReceiptDetail
+	var acceptance, execution, external, observed, payload sql.NullString
+	var durable sql.NullInt64
+	err := s.QueryRowContext(ctx, `SELECT receipt_id, dispatch_id, receipt_kind, acceptance_state, execution_state, durable, external_ref, target_observed_at, received_at, bounded_payload
+		FROM dispatch_receipts WHERE receipt_id = ?`, receiptID).
+		Scan(&detail.ReceiptID, &detail.DispatchID, &detail.ReceiptKind, &acceptance, &execution, &durable, &external, &observed, &detail.ReceivedAt, &payload)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// Work receipts live in their own table; show them too.
+			return s.loadWorkReceipt(ctx, receiptID)
+		}
+		return detail, err
+	}
+	detail.AcceptanceState = records.AcceptanceState(acceptance.String)
+	detail.ExecutionState = records.ExecutionState(execution.String)
+	detail.Durable = durable.Int64 == 1
+	detail.ExternalRef = external.String
+	detail.TargetObservedAt = observed.String
+	detail.BoundedPayload = payload.String
+	return detail, nil
 }

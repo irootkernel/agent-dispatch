@@ -193,13 +193,38 @@ func TestSinkLookupByKeyUnsupported(t *testing.T) {
 	}
 }
 
-// TestSinkExecutionUnsupportedUntilE4T4 proves the execution projection
-// is not emulated before its owning task.
-func TestSinkExecutionUnsupportedUntilE4T4(t *testing.T) {
+// TestSinkGetExecution proves the execution projection through the
+// read-only show: the queued projection for a fresh task (the
+// done/succeeded and full mapping table cases are covered by
+// TestMapExecutionTable) and the honest unsupported boundary when the
+// capability is absent.
+func TestSinkGetExecution(t *testing.T) {
 	sink := sinkFixture(t, stubhermes.Write(t))
-	_, err := sink.GetExecution(context.Background(), "t_00000001")
+	accepted, err := sink.Submit(context.Background(), goldenRequestMut(t, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	projection, err := sink.GetExecution(context.Background(), accepted.ExternalRef)
+	if err != nil {
+		t.Fatalf("queued projection: %v", err)
+	}
+	if projection.State != "queued" || projection.ExternalRef != accepted.ExternalRef {
+		t.Fatalf("queued projection wrong: %+v", projection)
+	}
+
+	// A capability-less target reports unsupported and is not emulated.
+	withoutExecution := filepath.Join(t.TempDir(), "report.json")
+	body := `{"schema_version":"jjukkumi.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":true,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":true,"execution_status":false,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
+	if err := os.WriteFile(withoutExecution, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	plain, err := NewSink("t", stubhermes.Write(t), withoutExecution, nil, "b", ProcessLimits{}, 262144)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = plain.GetExecution(context.Background(), "t_00000001")
 	if err == nil || !errors.Is(err, ports.ErrCapabilityUnsupported) {
-		t.Fatalf("execution must be capability_unsupported, got %v", err)
+		t.Fatalf("execution capability absent must be capability_unsupported, got %v", err)
 	}
 }
 

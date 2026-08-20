@@ -12,10 +12,11 @@ import (
 
 // IntentFilter selects intents for listing.
 type IntentFilter struct {
-	RouteID  string
-	State    records.IntentState
-	TargetID string
-	Limit    int
+	RouteID    string
+	State      records.IntentState
+	TargetID   string
+	DispatchID string
+	Limit      int
 }
 
 // IntentSummary is one listed dispatch intent row.
@@ -97,6 +98,58 @@ type InspectionStore interface {
 	LoadIntentLineage(ctx context.Context, dispatchID string) (IntentLineage, error)
 	// LoadBatchEvidence returns one retained batch and its changes.
 	LoadBatchEvidence(ctx context.Context, batchID string) (BatchEvidence, error)
+}
+
+// ReceiptFilter bounds one receipts list query.
+type ReceiptFilter struct {
+	DispatchID string
+	RouteID    string
+	Kind       string // acceptance | execution_projection | work; empty lists all
+	Limit      int
+}
+
+// ReceiptDetail is one receipt with its bounded persisted payload
+// (already redacted at the source; OPS-002). The work-receipt fields
+// apply to kind work only.
+type ReceiptDetail struct {
+	ReceiptRecord
+	BoundedPayload  string `json:"bounded_payload"`
+	RunID           string `json:"run_id,omitempty"`
+	ResourceID      string `json:"resource_id,omitempty"`
+	FailureCode     string `json:"failure_code,omitempty"`
+	ValidationState string `json:"validation_state,omitempty"`
+}
+
+// ReceiptStore is the receipt repository surface (E4-T4): durable
+// execution-projection receipts plus the inspectable receipt list and
+// detail behind `receipts list|show` (OPS-002). Each refresh appends a
+// new projection receipt so the projection history stays inspectable.
+type ReceiptStore interface {
+	// SaveExecutionProjection appends one execution-projection receipt
+	// for a dispatch (HER-008: separate from acceptance; one per
+	// refresh, never overwriting history).
+	SaveExecutionProjection(ctx context.Context, in ExecutionProjectionInput) error
+	// ListReceipts returns receipts matching the filter, newest first.
+	// Kind "work" reads the work-receipt table; an empty kind unions
+	// dispatch receipts and work receipts.
+	ListReceipts(ctx context.Context, f ReceiptFilter) ([]ReceiptRecord, error)
+	// LoadReceipt returns one receipt with its bounded payload.
+	// ErrReceiptNotFound reports an unknown receipt id.
+	LoadReceipt(ctx context.Context, receiptID string) (ReceiptDetail, error)
+}
+
+// ErrReceiptNotFound reports that no receipt carries the given id.
+var ErrReceiptNotFound = errors.New("receipt not found")
+
+// ExecutionProjectionInput is one persisted execution projection.
+type ExecutionProjectionInput struct {
+	ReceiptID        string
+	DispatchID       string
+	ExecutionState   records.ExecutionState
+	ExternalRef      string
+	TargetObservedAt string
+	ReceivedAt       string
+	BoundedPayload   string
 }
 
 // OperatorStore is the operator-action surface (explicit retry, due

@@ -49,6 +49,9 @@ func parsePlanFlags(command string, args []string, stdout, stderr io.Writer) (*p
 				return nil, usageError(stderr, command, "--input requires 'watchman' in this build")
 			}
 			i++
+		case "--no-submit":
+			// Consumed by the caller (runDispatch): the pipeline plans
+			// and persists; the submit phase is skipped upstream.
 		case "--output=json":
 			opts.jsonOutput = true
 		case "--output=human":

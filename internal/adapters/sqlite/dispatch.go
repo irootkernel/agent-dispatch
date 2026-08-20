@@ -259,6 +259,16 @@ func (s *Store) CompleteAttempt(ctx context.Context, res ports.AttemptResult) er
 			nullString(res.Receipt.PayloadVersion), res.Receipt.BoundedPayload); err != nil {
 			return err
 		}
+		// The accepted external reference is also recorded on the
+		// intent row: the current reference for lookup refresh and
+		// inspection, with the receipt remaining the historical
+		// evidence (E4-T4).
+		if res.Receipt.ExternalRef != "" {
+			if _, err := tx.Exec(`UPDATE dispatch_intents SET external_ref = ?, updated_at = ? WHERE dispatch_id = ?`,
+				res.Receipt.ExternalRef, completedAt, res.DispatchID); err != nil {
+				return err
+			}
+		}
 	}
 	if err := s.appendValidatedTransition(tx, res.Transition.TransitionID, res.DispatchID, from, res.Transition.To, res.Transition.Reason,
 		res.Transition.Evidence, completedAt,

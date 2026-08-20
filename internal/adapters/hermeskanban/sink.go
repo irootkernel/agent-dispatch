@@ -174,12 +174,6 @@ func (s *Sink) LookupByExternalRef(ctx context.Context, ref string) (ports.Looku
 	}, nil
 }
 
-// GetExecution implements ports.Sink; the execution projection arrives
-// with E4-T4 and is not emulated before then.
-func (s *Sink) GetExecution(ctx context.Context, ref string) (ports.ExecutionProjection, error) {
-	return ports.ExecutionProjection{}, fmt.Errorf("%w: the execution status projection arrives with roadmap task E4-T4", ports.ErrCapabilityUnsupported)
-}
-
 // loadValidatedCaps reads the frozen report and validates it against
 // the configured requirements; construction and every invocation share
 // it so no cached snapshot can diverge from the report on disk.

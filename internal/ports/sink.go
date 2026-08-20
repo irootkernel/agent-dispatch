@@ -135,9 +135,9 @@ type LookupResult struct {
 // ExecutionProjection is the portable target execution status of one
 // submitted task.
 type ExecutionProjection struct {
-	State            records.ExecutionState
-	ExternalRef      string
-	TargetObservedAt string
+	State            records.ExecutionState `json:"state"`
+	ExternalRef      string                 `json:"external_ref,omitempty"`
+	TargetObservedAt string                 `json:"target_observed_at,omitempty"`
 }
 
 // ErrCapabilityUnsupported is returned by sink methods the target does
@@ -217,5 +217,11 @@ type Sink interface {
 	Submit(ctx context.Context, req TaskRequest) (SubmitResult, error)
 	LookupByIdempotencyKey(ctx context.Context, key string) (LookupResult, error)
 	LookupByExternalRef(ctx context.Context, ref string) (LookupResult, error)
+	// GetExecution projects one submitted task's execution status. The
+	// persist-vs-fail convention: an error together with a projection
+	// whose State is unavailable is the unknown projection — the caller
+	// persists it with the error as the reason; an error with a zero
+	// projection carries no derivable state and nothing is persisted
+	// (HER-008 acceptance/execution separation).
 	GetExecution(ctx context.Context, ref string) (ExecutionProjection, error)
 }

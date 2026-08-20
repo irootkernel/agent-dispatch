@@ -20,7 +20,7 @@ import (
 // knownDispatchesSubcommands is the published dispatches command tree
 // (cli-spec §6).
 var knownDispatchesSubcommands = map[string]bool{
-	"list": true, "show": true, "retry": true, "reprocess": true, "rerun": true, "drain": true,
+	"list": true, "show": true, "retry": true, "reprocess": true, "rerun": true, "refresh": true, "drain": true,
 }
 
 func requestCtx() context.Context { return context.Background() }
@@ -39,7 +39,7 @@ func (f dispatchesFlags) val(name string) string { return f.values[name] }
 // bare positional operand.
 func parseDispatchesFlags(command string, args []string, stderr io.Writer, allowed map[string]bool) (dispatchesFlags, int) {
 	out := dispatchesFlags{values: map[string]string{}}
-	valueFlags := map[string]bool{"--config": true, "--route": true, "--state": true, "--target": true, "--reason": true, "--max": true, "--limit": true}
+	valueFlags := map[string]bool{"--config": true, "--route": true, "--state": true, "--target": true, "--reason": true, "--max": true, "--limit": true, "--dispatch": true, "--kind": true}
 	for name := range allowed {
 		valueFlags[name] = true
 	}
@@ -77,7 +77,7 @@ func parseDispatchesFlags(command string, args []string, stderr io.Writer, allow
 // runDispatches implements `dispatches` (E3-T3, CLI-004).
 func runDispatches(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		return usageError(stderr, "dispatches", "dispatches requires a subcommand: list, show, retry, reprocess, rerun, or drain")
+		return usageError(stderr, "dispatches", "dispatches requires a subcommand: list, show, retry, reprocess, rerun, refresh, or drain")
 	}
 	sub, rest := args[0], args[1:]
 	if !knownDispatchesSubcommands[sub] {
@@ -95,6 +95,8 @@ func runDispatches(args []string, stdout, stderr io.Writer) int {
 		return runDispatchesReprocess(command, rest, stdout, stderr)
 	case "rerun":
 		return runDispatchesRerun(command, rest, stdout, stderr)
+	case "refresh":
+		return runDispatchesRefresh(command, rest, stdout, stderr)
 	default:
 		return runDispatchesDrain(command, rest, stdout, stderr)
 	}

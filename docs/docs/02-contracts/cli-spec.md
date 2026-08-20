@@ -33,7 +33,7 @@ jjukkumi config validate|show
 jjukkumi route list|show|plan|enable|disable
 jjukkumi watchman install|status|remove|test
 jjukkumi dispatch
-jjukkumi dispatches list|show|retry|reprocess|rerun|drain
+jjukkumi dispatches list|show|retry|reprocess|rerun|refresh|drain
 jjukkumi receipts list|show
 jjukkumi work begin|complete|fail
 jjukkumi quarantine list|show|release|discard
@@ -141,6 +141,10 @@ Shows full redacted lineage: observation, batch, decision, attempts, receipts, r
 
 Uses the same dispatch request and idempotency key. Allowed only when state and reconciliation evidence permit it. Requires `--reason` for dead-lettered or operator-resolved unknown work.
 
+### `dispatches refresh <id>`
+
+Re-reads the target execution status for one accepted dispatch (public lookup by its stored external reference) and persists an execution-projection receipt. Acceptance is never reinterpreted (HER-008): a projection that cannot be derived is recorded as unavailable with its reason, never as success, and a target without the execution capability reports `lookup_unsupported` instead of an emulated projection. `route show` projects the active dispatch's latest persisted execution state and warns when the active dispatch is older than the configured `active_stale_after`; stale work is warned, never auto-failed.
+
 ### `dispatches reprocess <batch-id>`
 
 Evaluates a retained batch against the current route policy and creates a new decision. It does not mutate the original decision.
@@ -161,7 +165,12 @@ Operator command for bounded ready/retry work. First reconciles the route's `unk
 
 ### `receipts list|show`
 
-Inspect acceptance, execution projection, and work receipts. Output is redacted.
+```text
+jjukkumi receipts list [--route <id>] [--dispatch <id>] [--kind acceptance|execution_projection|work] [--limit <N>]
+jjukkumi receipts show <receipt-id>
+```
+
+Inspect acceptance, execution projection, and work receipts. Output is redacted: detail carries the bounded persisted payload only, never note bodies or unrestricted target output (OPS-001/OPS-002).
 
 ### `work begin`
 

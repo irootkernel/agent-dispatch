@@ -9,7 +9,9 @@ import (
 
 	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
 	"github.com/rootkernel/jjukkumi/internal/app/dispatch"
+	"github.com/rootkernel/jjukkumi/internal/app/receipts"
 	"github.com/rootkernel/jjukkumi/internal/config"
+	"github.com/rootkernel/jjukkumi/internal/ports"
 )
 
 // Route runtime-management subcommands (E3-T3, CLI-004): list, show,
@@ -46,7 +48,7 @@ func runRouteList(command string, args []string, stdout, stderr io.Writer) int {
 	defer closer.Close()
 	rows, err := store.ListRoutes(requestCtx())
 	if err != nil {
-		return planErr(stderr, command, "sqlite_open_failed", "storage", err.Error(), 20)
+		return planErr(stderr, command, "sqlite_query_failed", "storage", err.Error(), 20)
 	}
 	return writeEnvelope(stdout, command, map[string]any{"routes": rows, "count": len(rows)})
 }
@@ -70,14 +72,78 @@ func runRouteShow(command string, args []string, stdout, stderr io.Writer) int {
 	defer closer.Close()
 	rows, err := store.ListRoutes(requestCtx())
 	if err != nil {
-		return planErr(stderr, command, "sqlite_open_failed", "storage", err.Error(), 20)
+		return planErr(stderr, command, "sqlite_query_failed", "storage", err.Error(), 20)
 	}
 	for _, row := range rows {
-		if row.RouteID == routeID {
-			return writeEnvelope(stdout, command, row)
+		if row.RouteID != routeID {
+			continue
 		}
+		// Route status projection (E4-T4): the active dispatch's
+		// acceptance and latest persisted execution projection, with
+		// stale-active detection that warns and never auto-fails.
+		result := map[string]any{
+			"route_id": row.RouteID, "revision": row.Revision, "resource_id": row.ResourceID,
+			"target_id": row.TargetID, "activation_state": row.ActivationState,
+			"acknowledged_revision": row.AcknowledgedRevision, "route_state": row.RouteState,
+			"active_dispatch_id": row.ActiveDispatchID, "dirty_generation": row.DirtyGeneration,
+		}
+		var warnings []string
+		if row.ActiveDispatchID != "" {
+			intent, err := store.LoadIntent(requestCtx(), row.ActiveDispatchID)
+			if err != nil {
+				writeError(stderr, command, "sqlite_query_failed", "storage", fmt.Sprintf("loading active dispatch %s: %v", row.ActiveDispatchID, err))
+				return 20
+			}
+			result["active_dispatch_state"] = string(intent.State)
+			result["active_dispatch_external_ref"] = intent.ExternalRef
+			projected, err := store.ListReceipts(requestCtx(), ports.ReceiptFilter{DispatchID: row.ActiveDispatchID, Kind: "execution_projection", Limit: 1})
+			if err != nil {
+				writeError(stderr, command, "sqlite_query_failed", "storage", fmt.Sprintf("loading execution projection: %v", err))
+				return 20
+			}
+			if len(projected) == 1 {
+				result["execution_projection"] = string(projected[0].ExecutionState)
+				result["execution_observed_at"] = projected[0].TargetObservedAt
+			}
+			staleAfter, staleErr := routeActiveStaleAfter(flags.val("--config"), routeID)
+			if staleErr != nil {
+				warnings = append(warnings, "stale-active window unreadable: "+staleErr.Error())
+			} else if staleAfter > 0 {
+				summaries, err := store.ListIntents(requestCtx(), ports.IntentFilter{DispatchID: row.ActiveDispatchID, Limit: 1})
+				if err != nil {
+					writeError(stderr, command, "sqlite_query_failed", "storage", fmt.Sprintf("loading active dispatch summary: %v", err))
+					return 20
+				}
+				if len(summaries) == 1 && receipts.StaleActive(summaries[0].CreatedAt, dispatch.Timestamp(time.Now()), staleAfter) {
+					warnings = append(warnings, fmt.Sprintf("active dispatch %s is older than the configured active_stale_after %s; it is warned, not auto-failed — inspect and reconcile explicitly", row.ActiveDispatchID, staleAfter))
+				}
+			}
+		}
+		return writeEnvelopeWithWarnings(stdout, command, result, warnings)
 	}
 	return planErr(stderr, command, "config_route_not_found", "configuration", fmt.Sprintf("route %q has no materialized state; run the route once or check the configuration", routeID), 3)
+}
+
+// routeActiveStaleAfter resolves the configured stale window for one
+// route; zero disables the check and a configuration failure is
+// surfaced instead of silently skipped.
+func routeActiveStaleAfter(configPath, routeID string) (time.Duration, error) {
+	cfg, err := config.Load(resolveConfigPath(configPath))
+	if err != nil {
+		return 0, fmt.Errorf("configuration: %v", err)
+	}
+	route, ok := cfg.Routes[routeID]
+	if !ok {
+		return 0, fmt.Errorf("route %q is not defined", routeID)
+	}
+	if route.Dispatch.ActiveStaleAfter == "" {
+		return 0, nil
+	}
+	d, err := config.ParseDuration(route.Dispatch.ActiveStaleAfter)
+	if err != nil {
+		return 0, fmt.Errorf("active_stale_after: %v", err)
+	}
+	return time.Duration(d.Nanos), nil
 }
 
 func runRouteEnable(command string, args []string, stdout, stderr io.Writer) int {

@@ -193,7 +193,9 @@ func ValidateRouteTransition(snap RouteSnapshot, to RouteState, reason RouteReas
 		if ev.ActivatingDispatchID == "" {
 			return routeRejected(from, to, reason, "activation requires the dispatch being accepted")
 		}
-		if snap.ActiveDispatchID != "" {
+		// A dispatch's own pre-commit slot reservation is not a second
+		// active dispatch: activation may consume exactly that reservation.
+		if snap.ActiveDispatchID != "" && snap.ActiveDispatchID != ev.ActivatingDispatchID {
 			return routeRejected(from, to, reason, fmt.Sprintf("route already holds active dispatch %s (invariant 5)", snap.ActiveDispatchID))
 		}
 	case (routeEdge{RouteActiveClean, RouteActiveDirty}), (routeEdge{RouteActiveDirty, RouteActiveDirty}):

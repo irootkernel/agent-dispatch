@@ -12,13 +12,13 @@
 |---|---|
 | Current epic | E3, Durable Dispatch and Route Coordination Core |
 | Current active task | None |
-| Next task | **E3-T4, One Active Route Task and Dirty Generations** |
-| Completed tasks | 17 / 33 |
-| Planned tasks | 16 / 33 |
+| Next task | **E3-T5, Crash, Migration, and Concurrency Gate G2** |
+| Completed tasks | 18 / 33 |
+| Planned tasks | 15 / 33 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
-The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). E2-T1 delivered the bounded Watchman input parser against the frozen E0-T5 fixture corpus. E2-T2 delivered the safe path containment resolver and the deterministic pattern policy engine. E2-T3 delivered meaningful-change confirmation and batch normalization. E2-T4 delivered the structural policy planner and the side-effect-free `route plan` / `dispatch --dry-run` CLI. E2-T5 delivered the managed Watchman trigger lifecycle and closed gate G1. Epic E2 is complete: the bounded parser, safe path containment, pattern engine, batch normalization, structural policy planner, dry-run CLI, and the real Watchman trigger lifecycle were delivered, audited (one cross-task remediation commit), and validated. E3-T1 delivered the validated dispatch and route state transition services as the authoritative domain table with typed reasons, guards, and the acceptance/execution projection separation. E3-T2 delivered the durable intent commit, the attempt lease, and the fake sink port: the ingestion transaction, conditional leasing, submitting recovery, and the submit flow that proves the committed intent exists before any target invocation. E3-T3 delivered the bounded retry core, unknown reconciliation, dead-letter handling with operator actions, the dispatches and route command groups with stable exit codes, the result classifier, and the dispatch-attempt and dead-letter record contracts. Implementation continues with E3-T4.
+The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). E2-T1 delivered the bounded Watchman input parser against the frozen E0-T5 fixture corpus. E2-T2 delivered the safe path containment resolver and the deterministic pattern policy engine. E2-T3 delivered meaningful-change confirmation and batch normalization. E2-T4 delivered the structural policy planner and the side-effect-free `route plan` / `dispatch --dry-run` CLI. E2-T5 delivered the managed Watchman trigger lifecycle and closed gate G1. Epic E2 is complete: the bounded parser, safe path containment, pattern engine, batch normalization, structural policy planner, dry-run CLI, and the real Watchman trigger lifecycle were delivered, audited (one cross-task remediation commit), and validated. E3-T1 delivered the validated dispatch and route state transition services as the authoritative domain table with typed reasons, guards, and the acceptance/execution projection separation. E3-T2 delivered the durable intent commit, the attempt lease, and the fake sink port: the ingestion transaction, conditional leasing, submitting recovery, and the submit flow that proves the committed intent exists before any target invocation. E3-T3 delivered the bounded retry core, unknown reconciliation, dead-letter handling with operator actions, the dispatches and route command groups with stable exit codes, the result classifier, and the dispatch-attempt and dead-letter record contracts. E3-T4 delivered the route coordination core: one active dispatch per route under concurrency, durable dirty generations for later bursts, the merge-pending transaction, and the single latest-state follow-up collapse. Implementation continues with E3-T5.
 
 ## 2. Epic Summary
 
@@ -53,7 +53,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 15 | E3-T1 | Completed | Validated dispatch and route state machines |
 | 16 | E3-T2 | Completed | Durable intent transaction and attempt leases |
 | 17 | E3-T3 | Planned | Retry, unknown, reconciliation, and dead-letter core |
-| 18 | E3-T4 | Planned | One active route task and dirty generations |
+| 18 | E3-T4 | Completed | One active route task and dirty generations |
 | 19 | E3-T5 | Planned | Crash, migration, and concurrency gate G2 |
 | 20 | E4-T1 | Planned | Hermes Kanban adapter capability implementation |
 | 21 | E4-T2 | Planned | Safe Hermes task request renderer |
@@ -799,7 +799,7 @@ E3-T2 Completed.
 
 ## E3-T4: Implement One Active Route Task and Dirty Generations
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -829,6 +829,13 @@ E3-T3 Completed.
 - active completion creates at most one follow-up;
 - local serialization works even if target mutex capability is false;
 - latest-state instruction remains part of follow-up.
+
+### Evidence
+
+- `internal/ports/coordination.go`: the route coordination surface — LoadRouteState (the domain RouteSnapshot projection), CommitMergePending (one transaction persisting the arriving lineage as merge_pending and durably incrementing the dirty generation, CON-002/FBK-001), CompleteActive (the work-completion transaction applying the E3-T1-validated route transition and creating exactly one follow-up decision and intent when dirty work or pending reconciliation remains, CON-003), ActivateDispatch and ActivateFollowup (slot-consuming activation transitions).
+- `internal/adapters/sqlite/coordination.go`: the implementation. Merge-pending applies the validated ACTIVE_CLEAN -> ACTIVE_DIRTY (later_relevant_change) or ACTIVE_DIRTY -> ACTIVE_DIRTY (more_changes_merged) transitions with the strictly incremented dirty count and dirty_since; FOLLOWUP_READY and UNCERTAIN retain their state with the dirty count still recording the burst (the latest-state follow-up or operator resolution absorbs it, CON-004/CON-005); a reserved-but-not-activated slot consumes its own reservation first, and arrivals that lost a slot race merge durably. CompleteActive enforces the holding dispatch, evaluates the caller-owned failure budget (configuration-spec section 9) against the E3-T1 guards, clears the completed slot, collapses the dirty generation into one follow-up (new dispatch, generation+1, new idempotency key, generation-lineage decision), and returns IDLE only on clean completion; budget exhaustion becomes UNCERTAIN. Activation is idempotent for the slot-holding dispatch and a typed conflict for any other.
+- `internal/app/dispatch/coordination.go`: the Coordinator — Arrival routes one incoming lineage through the E3-T1 CanActivateNormalDispatch gate (commit+activate for the single winner; ErrRouteSlotHeld losers merge, AC-204 posture), Completion refuses dirty routes without a prepared follow-up request and applies the completion transaction, Activate promotes accepted follow-ups, and BuildFollowupRequest constructs the latest-state follow-up (new identity and generation, the same acceptance criteria and assignment, the retained latest-state instruction). Serialization is a local route invariant enforced regardless of any target mutex capability (CON-006).
+- Tests: twelve concurrent arrivals produce exactly one dispatch with dirty generation 11; local serialization without any mutex capability; four bursts collapse into exactly one follow-up with the latest-state instruction and generation+1, follow-up activation, refusal of double completion; clean completion returns to IDLE with a free slot; failure with remaining budget creates one follow-up and exhaustion becomes UNCERTAIN (with arrivals during uncertainty merging). Race-enabled runs green. `make verify` green; Gaori manifest-check, schema-validation, traceability exit 0.
 
 ## E3-T5: Execute Crash, Migration, and Concurrency Gate G2
 

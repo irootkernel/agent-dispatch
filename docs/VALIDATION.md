@@ -60,3 +60,24 @@ These checks cannot be completed by a design-only SOT package:
 Hermes public-interface capability verification (E0-T4) is complete: every capability claim in `integrations/hermes-capability-report.json` is backed by the cited public-interface evidence, and no exact Hermes command or response field is asserted beyond what that report records.
 
 Watchman public-interface and fixture-baseline verification (E0-T5) is complete: every payload, environment, field, lifecycle, and failure claim in `integrations/watchman-public-interface-report.md` is backed by the cited runtime fixture under `integrations/fixtures/watchman/`, and the one refuted SOT assumption (`WATCHMAN_FILES_OVERFLOW`) is recorded there with its verified conservative replacement.
+
+## Gate G1: Watchman Deterministic Dry-Run Pipeline (E2)
+
+Gate G1 closed on 2026-08-20 against the frozen E0-T5 baseline (Watchman 2026.07.27.00, Homebrew, macOS). Every acceptance check runs through the public dry-run surface (`jjukkumi route plan` / `jjukkumi dispatch --dry-run`) over real temporary vaults; the evidence is executable and reproducible via `make verify`.
+
+| Check | Evidence |
+|---|---|
+| AC-101 one create → one dispatch plan change | `internal/cli/g1_test.go TestG1AC101SingleCreate` |
+| AC-102 unchanged-digest modify drops | plan-level no-prior leg in `TestG1AC102UnchangedModifyDrops`; suppression with equal prior digest in `internal/app/ingest TestUnchangedModifySuppression` |
+| AC-103 repeated saves → one final change | `TestG1AC103RepeatedSavesOneFinalChange`; three-save corpus replay in `internal/app/ingest TestRepeatedSaveFixturesAreDeliveredEveryTime` and `TestRepeatedSaveResolvesToOneFinalChange` |
+| AC-104 delete retained without reading | `TestG1AC104DeleteNeverRead`; `internal/app/ingest TestDeleteNeverOpensFile` |
+| AC-105 deterministic exclusions | `TestG1AC105DeterministicExclusions` (`.git/**`, Obsidian UI state, non-Markdown, `.DS_Store`); golden set in `internal/domain/policy/testdata/pattern-golden.json` |
+| AC-106 unsafe paths rejected, nothing outside root read | `TestG1AC106UnsafeInputsRejected` (absolute/traversal → exit 4 pre-access; symlink escape → exit 30 with the outside file untouched); `internal/adapters/localfs` escape suites |
+| AC-107 overflow/fresh/unusable position → one reconciliation, never partial | `TestG1AC107OverflowClassYieldsReconciliation` (missing `WATCHMAN_SINCE`; a hostile `WATCHMAN_FILES_OVERFLOW` value is ignored — the field was refuted by E0-T5 and is not in the allowlist) |
+| AC-108 over-threshold → configured bulk disposition, no truncation | `TestG1AC108BulkDispositionNoTruncation` (30 of threshold 25 → quarantine with all 30 changes) |
+| AC-109 payload cannot affect route authority | `TestG1AC109PayloadCannotAffectRouteAuthority` (hostile names and front matter never reach target/profile/skills/policy) |
+| AC-110 byte-stable fingerprint and plan | `TestG1AC110StableFingerprintAndPlan`; planner determinism in `internal/app/dispatch TestDeterministicOutput` |
+
+Lifecycle acceptance (E2-T5): identical trigger install is a true no-op preserving the incremental position (`disposition: already_defined`), replacement requires `--replace` (conflict is refused otherwise; replacement resets the position), removal touches only the exact managed trigger and is idempotent, the first installation reports one pending initial reconciliation instead of per-file tasks, and Watchman absence produces actionable output (`config validate` reports `watchman: unavailable` with install remediation; lifecycle commands exit 11 with the same guidance). Evidence: `internal/adapters/watchman/lifecycle_test.go` and `internal/cli/g1_test.go TestWatchmanCLILifecycle` against the real installed Watchman on disposable temporary watch roots. SRC-006 holds structurally: no stage of the E2 pipeline sleeps and the configuration schema has no settle field (`TestG1NoSettleSleep`).
+
+Known recorded notes: AC-107's given clause still names the refuted `WATCHMAN_FILES_OVERFLOW=true` variable (the E0-T5 evidence and architecture §7 record the refutation; the implemented signal is the missing position or fresh instance, both covered). Linux Watchman integration evidence is an environment gap in this workspace; the lifecycle tests skip when no Watchman binary is present, and macOS is the recorded evidence platform.

@@ -12,13 +12,13 @@
 |---|---|
 | Current epic | E2, Watchman Deterministic Dry-Run Pipeline |
 | Current active task | None |
-| Next task | **E2-T5, Watchman Trigger Lifecycle and G1** |
-| Completed tasks | 13 / 33 |
-| Planned tasks | 20 / 33 |
+| Next task | **E3-T1, Dispatch and Route State Transition Services** |
+| Completed tasks | 14 / 33 |
+| Planned tasks | 19 / 33 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
-The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). E2-T1 delivered the bounded Watchman input parser against the frozen E0-T5 fixture corpus. E2-T2 delivered the safe path containment resolver and the deterministic pattern policy engine. E2-T3 delivered meaningful-change confirmation and batch normalization. E2-T4 delivered the structural policy planner and the side-effect-free `route plan` / `dispatch --dry-run` CLI. Implementation continues with E2-T5.
+The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). E2-T1 delivered the bounded Watchman input parser against the frozen E0-T5 fixture corpus. E2-T2 delivered the safe path containment resolver and the deterministic pattern policy engine. E2-T3 delivered meaningful-change confirmation and batch normalization. E2-T4 delivered the structural policy planner and the side-effect-free `route plan` / `dispatch --dry-run` CLI. E2-T5 delivered the managed Watchman trigger lifecycle and closed gate G1. Implementation continues with E3-T1.
 
 ## 2. Epic Summary
 
@@ -49,7 +49,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 11 | E2-T2 | Completed | Safe path containment and pattern engine |
 | 12 | E2-T3 | Completed | Meaningful-change, hashing, and batch normalization |
 | 13 | E2-T4 | Completed | Deterministic policy planner and dry-run CLI |
-| 14 | E2-T5 | Planned | Real Watchman trigger lifecycle and G1 fixtures |
+| 14 | E2-T5 | Completed | Real Watchman trigger lifecycle and G1 fixtures |
 | 15 | E3-T1 | Planned | Validated dispatch and route state machines |
 | 16 | E3-T2 | Planned | Durable intent transaction and attempt leases |
 | 17 | E3-T3 | Planned | Retry, unknown, reconciliation, and dead-letter core |
@@ -574,7 +574,7 @@ E2-T2 Completed.
 ### Evidence
 
 - `internal/app/ingest`: `BuildBatch` normalizes parsed entries into one canonical sorted, fingerprinted batch. Same-path sequences coalesce to the final observed state per processing-pipeline §4 (modify+modify→final-digest modify; create+modify→create; modify+delete→delete; delete+create→create only when the file exists at planning time (a vanished path falls back to delete, a non-regular recreated path keeps an unknown-digest create, containment anomalies fail the build), marked as replacement evidence with no rename claim; create+delete→drop only when the path neither had a prior digest nor exists at planning time, else a delete carrying the prior digest as uncertainty evidence; any delete followed by later create/modify carries replacement evidence and identical content is never suppressed as unchanged). Hashing goes through the E2-T2 containment-checked `OpenRegular` and hashes only the final state; oversize, non-regular, or vanished files stay structurally unknown (`HashUnknown`), never falsely unchanged.
-- Unchanged-modify suppression (PTH-006): a final modify whose known digest equals the prior path-fact digest is dropped with reason `unchanged_modify`; absent or unknown digests are always meaningful. Deletes are never opened (PTH-005). Excluded paths drop without reads; protected and immutable paths stay in the batch for quarantine but are never hashed.
+- Unchanged-modify suppression (PTH-006): a final modify whose known digest equals the prior path-fact digest is dropped with reason `unchanged_content` (the AC-102 reason string); absent or unknown digests are always meaningful. Deletes are never opened (PTH-005). Excluded paths drop without reads; protected and immutable paths stay in the batch for quarantine but are never hashed.
 - `PathFacts` port (prior-digest lookup; durable implementation arrives with the E3 ingestion transaction) with `NoFacts`/`MapFacts` implementations, and the optional `GitEvidence` port with a `NoGit` default (SCP-009: Git may enrich but never gates ingestion; the real adapter arrives with later Git enrichment work). Batch order and fingerprint are deterministic regardless of payload order (DAT-005 via the E1-T3 fingerprint projection).
 - Tests: coalescing-rule table including the uncertainty and fallback branches, suppression trichotomy (same/different/no prior), delete-without-open, oversize-unknown, protected-not-hashed, excluded-drop, order/fingerprint determinism with content sensitivity, empty-batch fingerprint stability, and replays of the frozen atomic-save and replacement corpus shapes through `watchman.ParsePayload` into `BuildBatch`.
 
@@ -620,7 +620,7 @@ E2-T3 Completed.
 
 ## E2-T5: Implement Watchman Trigger Lifecycle and Complete G1
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -652,6 +652,13 @@ E2-T4 Completed.
 - no second settle sleep exists;
 - first installation creates one initial reconciliation plan rather than per-file tasks;
 - Watchman absence produces actionable `config validate` output.
+
+### Evidence
+
+- `internal/adapters/watchman/lifecycle.go`: lifecycle client over the contract-grade `-j` array interface only (E0-T5: positional forms mis-parse), branching on the response `error` member first, with a controlled environment (PATH/HOME/socket/TMPDIR allowlist), a bounded temp-file output capture, and a subprocess timeout (SEC-004). Version check against the frozen baseline 2026.07.27.00, `watch-project` canonical-root resolution, trigger-list/install (`created`/`replaced`/`already_defined` dispositions)/delete (idempotent), and the managed trigger definition generator (unique name per route, `append_files:false`, the verified stdin field set, coarse `["type","f"]` prefilter with the trusted pattern engine remaining the include/exclude authority, SRC-007).
+- Registry and evidence notes: the error-model registry gained `watchman_unavailable` and `watchman_version_unsupported` (target_unavailable, 11) and `watchman_trigger_conflict` (conflict, 14), recorded in docs/CHANGELOG.md 1.0.5; capability gating is subsumed by the version gate for the frozen 2026.07.27.00 baseline (the E0-T5 `list-capabilities` capture shows `cmd-trigger`, `cmd-trigger-list`, and `cmd-trigger-del` present); the install conflict gate is advisory against same-user concurrency and surfaces a warning when the server-side disposition contradicts the pre-check.
+- `internal/cli/watchman.go`: `watchman install --route <id> [--replace]` (identical definition → true no-op preserving the incremental position; diverged definition without `--replace` → conflict exit 14; install reports the pending initial reconciliation), `watchman status` (installed/diverged/missing with expected vs installed definitions), `watchman remove --route <id> --yes` (exact managed trigger only, never the watch root, idempotent), and `watchman test` (fixture replay to the normalized source-input DTO with a synthetic environment, no Watchman or Hermes contact). `internal/cli/config.go` adds `config validate` including the actionable Watchman availability check (absence → warning with install remediation; lifecycle commands exit 11 with the same guidance).
+- Gate G1: AC-101..110 verified by executable acceptance tests in `internal/cli/g1_test.go` over real temporary vaults, with the per-check evidence table and lifecycle notes recorded in `docs/VALIDATION.md` §Gate G1. Real-Watchman integration tests (`internal/adapters/watchman/lifecycle_test.go`, `internal/cli TestWatchmanCLILifecycle`) run against the installed Watchman 2026.07.27.00 on disposable temporary watch roots and skip with an explicit gap when no binary exists. Linux runner evidence remains an environment gap; macOS is the recorded platform. The installed trigger command targets the E3 durable dispatch path (`jjukkumi dispatch --route <id> --input watchman`); its default (non-dry-run) execution stays `command_not_implemented` until E3 by design.
 
 ---
 

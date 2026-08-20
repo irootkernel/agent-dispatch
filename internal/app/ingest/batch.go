@@ -69,7 +69,7 @@ type Result struct {
 	// sorted batch and source flags (DAT-005).
 	Fingerprint records.Digest
 	// Dropped records suppressed paths with machine-readable reasons
-	// (unchanged_modify, create_delete_never_existed).
+	// (unchanged_content, create_delete_never_existed).
 	Dropped []DropRecord
 	// Replacements marks paths that were deleted and re-created within
 	// one batch (optional evidence; no rename claim).
@@ -97,7 +97,7 @@ type DropRecord struct {
 }
 
 const (
-	ReasonUnchangedModify   = "unchanged_modify"
+	ReasonUnchangedModify   = "unchanged_content"
 	ReasonCreateDeleteNever = "create_delete_never_existed"
 	ReasonExcluded          = "excluded"
 )

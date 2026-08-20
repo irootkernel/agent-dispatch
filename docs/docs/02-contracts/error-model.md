@@ -98,10 +98,13 @@ The v0.1 registry is closed: implementations emit only the codes below. Adding o
 | `sqlite_busy` | `transient_local` | 10 |
 | `hermes_executable_missing` | `target_unavailable` | 11 |
 | `hermes_version_unsupported` | `target_unavailable` | 11 |
+| `watchman_unavailable` | `target_unavailable` | 11 |
+| `watchman_version_unsupported` | `target_unavailable` | 11 |
 | `target_definite_unavailable` | `target_unavailable` | 11 |
 | `target_rejected` | `target_rejected` | 12 |
 | `target_acceptance_unknown` | `acceptance_unknown` | 13 |
 | `target_response_invalid` | `acceptance_unknown` | 13 |
+| `watchman_trigger_conflict` | `conflict` | 14 |
 | `transition_invalid` | `conflict` | 14 |
 | `attempt_lease_conflict` | `conflict` | 14 |
 | `dispatch_dead_lettered` | `conflict` | 14 |

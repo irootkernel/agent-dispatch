@@ -1,5 +1,13 @@
 # SOT Changelog
 
+## 1.0.5 - 2026-08-20
+
+E2 errata:
+
+- extended the closed error-code registry with the Watchman lifecycle surface: `watchman_unavailable` and `watchman_version_unsupported` (`target_unavailable`, exit 11) and `watchman_trigger_conflict` (`conflict`, exit 14);
+- recorded in architecture `watchman-integration.md` §2/§7 that `WATCHMAN_FILES_OVERFLOW` was refuted by the E0-T5 probe and the allowlist includes `WATCHMAN_SOCK`;
+- the AC-102 drop reason is emitted as `unchanged_content` (matching the acceptance text) and the E2-T3 same-path coalescing rules are qualified for persisted-prior paths (a create observed over a prior digest is conservatively a modify).
+
 ## 1.0.4 - 2026-08-20
 
 Implementation bootstrap errata (E1-T1):

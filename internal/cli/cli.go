@@ -70,8 +70,8 @@ var knownCommands = map[string]bool{
 
 // Run executes the CLI with the given arguments and writes output to the
 // given streams. It returns the process exit code. This build implements
-// the version, init, route plan, and dispatch --dry-run commands; every
-// other registered command is
+// the version, init, config validate, route plan, dispatch --dry-run,
+// and watchman lifecycle commands; every other registered command is
 // reported as an explicit not-implemented error rather than silently
 // succeeding, and an unrecognized name is command_unknown.
 func Run(args []string, stdout, stderr io.Writer) int {
@@ -88,6 +88,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runRoute(args[1:], stdout, stderr)
 	case "dispatch":
 		return runDispatch(args[1:], stdout, stderr)
+	case "watchman":
+		return runWatchman(args[1:], stdout, stderr)
+	case "config":
+		return runConfig(args[1:], stdout, stderr)
 	default:
 		if knownCommands[args[0]] {
 			writeError(stderr, args[0], "command_not_implemented", "usage",

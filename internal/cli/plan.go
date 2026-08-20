@@ -109,6 +109,19 @@ func parsePlanFlags(command string, args []string, stdout, stderr io.Writer) (*p
 	return opts, 0
 }
 
+// resolveConfigPath applies the shared configuration-path precedence
+// (cli-spec §1): explicit path, then JJUKKUMI_CONFIG, then the platform
+// default.
+func resolveConfigPath(explicit string) string {
+	if explicit != "" {
+		return explicit
+	}
+	if env := os.Getenv("JJUKKUMI_CONFIG"); env != "" {
+		return env
+	}
+	return platformpaths.DefaultConfigPath()
+}
+
 // runPlan plans one Watchman invocation end to end with no SQLite
 // mutation and no target call: parse stdin, validate the trusted
 // environment binding, normalize the batch against trusted route
@@ -121,13 +134,7 @@ func runPlan(command string, args []string, stdout, stderr io.Writer) int {
 	if code != 0 {
 		return code
 	}
-	if opts.configPath == "" {
-		if env := os.Getenv("JJUKKUMI_CONFIG"); env != "" {
-			opts.configPath = env
-		} else {
-			opts.configPath = platformpaths.DefaultConfigPath()
-		}
-	}
+	opts.configPath = resolveConfigPath(opts.configPath)
 	cfg, err := config.Load(opts.configPath)
 	if err != nil {
 		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)

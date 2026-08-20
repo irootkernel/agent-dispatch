@@ -18,14 +18,14 @@ jjukkumi dispatch --route wiki-maintenance --input watchman --output json
 
 Watchman supplies JSON on standard input. JJUKKUMI treats selected environment variables as source metadata only after verifying the configured trigger binding.
 
-Fields to capture when present:
+Fields to capture when present (the verified allowlist; `WATCHMAN_FILES_OVERFLOW` was refuted by the E0-T5 probe, 0/23 invocations — see `docs/integrations/watchman-public-interface-report.md` §3):
 
 - `WATCHMAN_TRIGGER`
 - `WATCHMAN_ROOT`
 - `WATCHMAN_RELATIVE_ROOT`
 - `WATCHMAN_SINCE`
 - `WATCHMAN_CLOCK`
-- `WATCHMAN_FILES_OVERFLOW`
+- `WATCHMAN_SOCK` (diagnostics only; never part of the source model)
 
 The adapter must tolerate absent optional fields in fixtures, but production validation may require the fields established by `E2-T5` against the installed Watchman version.
 
@@ -77,8 +77,8 @@ The adapter must conservatively identify incomplete incremental evidence.
 
 | Condition | Action |
 |---|---|
-| `WATCHMAN_FILES_OVERFLOW=true` | Persist source observation; do not dispatch partial manifest; merge one reconciliation generation. |
-| Fresh instance semantics | Same as overflow. |
+| Overflow-class signal | Persist source observation; do not dispatch partial manifest; merge one reconciliation generation. The verified signal is the missing or unusable previous position itself (no `WATCHMAN_SINCE`) plus fresh-instance semantics — `WATCHMAN_FILES_OVERFLOW` was refuted by E0-T5 (0/23 invocations) and is never read. |
+| Fresh instance semantics | Same as overflow-class signal. |
 | Missing or unusable previous position | Same as overflow unless first-install baseline policy explicitly says otherwise. |
 | Recrawl warning or evidence | Mark source uncertainty and reconcile. |
 | First installation | Default to one explicit initial full reconciliation, not thousands of ordinary tasks. |

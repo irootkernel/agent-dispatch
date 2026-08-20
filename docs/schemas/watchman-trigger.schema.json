@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:jjukkumi:schema:watchman-trigger:v1",
+  "title": "JJUKKUMI Watchman trigger stdin payload v1",
+  "description": "The bare JSON array of file objects a Watchman trigger delivers on stdin, as frozen by the E0-T5 fixture corpus (docs/integrations/watchman-public-interface-report.md \u00a73-\u00a74). The payload carries no route, resource, or target information of any kind (SRC-003).",
+  "type": "array",
+  "minItems": 1,
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "name",
+      "exists",
+      "new"
+    ],
+    "oneOf": [
+      {
+        "required": [
+          "type"
+        ]
+      },
+      {
+        "required": [
+          "mode"
+        ]
+      }
+    ],
+    "properties": {
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Path relative to the watch root (or relative root). Untrusted input."
+      },
+      "exists": {
+        "type": "boolean"
+      },
+      "new": {
+        "type": "boolean"
+      },
+      "size": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Current size; on delete entries the pre-deletion size. Optional by contract (a trigger definition can omit it from its requested field set); an absent size is accepted as absent evidence. The runtime parser additionally requires the plain integer spelling (1.0 or 1e3 are rejected).",
+        "maximum": 9223372036854775807
+      },
+      "type": {
+        "enum": [
+          "f",
+          "d",
+          "l",
+          "b",
+          "c"
+        ],
+        "description": "Watchman type letter."
+      },
+      "mode": {
+        "type": "string",
+        "pattern": "^[0-7]{1,7}$",
+        "description": "Octal mode string (definition-time default field set); the S_IFMT bits carry the type."
+      }
+    }
+  }
+}

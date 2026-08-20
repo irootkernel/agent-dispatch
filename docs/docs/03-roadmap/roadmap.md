@@ -12,13 +12,13 @@
 |---|---|
 | Current epic | E2, Watchman Deterministic Dry-Run Pipeline |
 | Current active task | None |
-| Next task | **E2-T1, Bounded Watchman Input Parser** |
-| Completed tasks | 9 / 33 |
-| Planned tasks | 24 / 33 |
+| Next task | **E2-T2, Safe Path Containment and Pattern Policy** |
+| Completed tasks | 10 / 33 |
+| Planned tasks | 23 / 33 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
-The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). Implementation continues with E2-T1.
+The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). E2-T1 delivered the bounded Watchman input parser against the frozen E0-T5 fixture corpus. Implementation continues with E2-T2.
 
 ## 2. Epic Summary
 
@@ -45,7 +45,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 7 | E1-T2 | Completed | Validated YAML configuration and path layout |
 | 8 | E1-T3 | Completed | Domain primitives, IDs, digests, canonicalization |
 | 9 | E1-T4 | Completed | SQLite schema, migrations, and repositories |
-| 10 | E2-T1 | Planned | Bounded Watchman input parser |
+| 10 | E2-T1 | Completed | Bounded Watchman input parser |
 | 11 | E2-T2 | Planned | Safe path containment and pattern engine |
 | 12 | E2-T3 | Planned | Meaningful-change, hashing, and batch normalization |
 | 13 | E2-T4 | Planned | Deterministic policy planner and dry-run CLI |
@@ -456,7 +456,7 @@ E1-T3 Completed.
 
 ## E2-T1: Implement Bounded Watchman Input and Environment Parsing
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -487,6 +487,14 @@ E1-T4 Completed; E0-T5 Completed.
 - payload cannot select route/resource;
 - relevant position and overflow fields are preserved;
 - no SQLite mutation or target call occurs in parser tests.
+
+### Evidence
+
+- `internal/adapters/watchman`: bounded stdin reader enforcing `limits.max_stdin_bytes` (SEC-009, default 4 MiB) that fails on oversized or empty input before parsing; strict payload parser over the requestable field set (`name`, `exists`, `new`, `size`, `type`, or the definition-time `mode` form) with fail-closed unknown-field, type-letter, mode, size, and name handling (traversal, absolute, NUL, backslash, non-UTF-8); canonical operation mapping create/modify/delete per the E0-T5 report §4; raw payload digest over the exact stdin bytes; ordinal preservation for the deterministic ordering tiebreaker.
+- Trusted environment allowlist limited to `WATCHMAN_{TRIGGER,ROOT,RELATIVE_ROOT,SINCE,CLOCK,SOCK}` with required/optional semantics and env-value bounds; `WATCHMAN_FILES_OVERFLOW` is deliberately not read (refuted 0/23 by E0-T5), and the missing-position/first-run signal is carried as the fresh-instance flag per architecture watchman-integration §7. Clocks and since tokens stay opaque.
+- Source binding validation (`ValidateBinding`) binds observation to route/resource only from trusted configuration (trigger name and resource root); the payload carries no route authority (SRC-003). Source event key `watchman:<source-id>:<since>:<clock>:<digest>` when a trustworthy position exists, null otherwise (architecture §8).
+- Dedicated Draft 2020-12 schemas `docs/schemas/watchman-trigger.schema.json` and `docs/schemas/watchman-environment.schema.json` freeze the payload and allowlist contracts; the previously schema-less examples now validate in `make schema-validation`, and the environment example no longer carries the refuted `WATCHMAN_FILES_OVERFLOW` field.
+- Tests: every frozen `trigger-payload-*.json` fixture parses (18 real payloads including bulk-60 unsorted order, replacement delete+modify, atomic-save single entry, repeated-save create→modify→modify); 19 synthetic malformed mutations under `internal/adapters/watchman/testdata/malformed/` fail closed (E0-T5 §9); oversized-at-bound boundary tests; env allowlist, flags, event key, and binding tests. No SQLite or target code is imported by the parser tests.
 
 ## E2-T2: Implement Safe Path Containment and Pattern Policy
 

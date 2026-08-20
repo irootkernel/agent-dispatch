@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:jjukkumi:schema:watchman-environment:v1",
+  "title": "JJUKKUMI Watchman trigger environment v1",
+  "description": "The allowlisted WATCHMAN_* environment variables JJUKKUMI reads from a trigger invocation (SRC-002). WATCHMAN_FILES_OVERFLOW is deliberately absent: E0-T5 refuted it (0/23 invocations); the overflow-class signal is the missing WATCHMAN_SINCE position (architecture watchman-integration \u00a77). maxLength counts JSON string code points; the runtime parser enforces the bound as 4096 bytes and is the authority when the two differ.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "WATCHMAN_TRIGGER",
+    "WATCHMAN_ROOT",
+    "WATCHMAN_CLOCK"
+  ],
+  "properties": {
+    "WATCHMAN_TRIGGER": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "WATCHMAN_ROOT": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "WATCHMAN_SINCE": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Previous position; absent on the first invocation after trigger definition, replacement, or watch re-creation.",
+      "maxLength": 4096
+    },
+    "WATCHMAN_CLOCK": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Current batch position; opaque token, never parsed locally.",
+      "maxLength": 4096
+    },
+    "WATCHMAN_RELATIVE_ROOT": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "WATCHMAN_SOCK": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    }
+  }
+}

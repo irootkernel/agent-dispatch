@@ -17,13 +17,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// schemaLessExamples are illustrative examples without a dedicated schema;
-// the real Watchman payload shapes are frozen by E0-T5 and schematized by
-// E2-T1.
-var schemaLessExamples = map[string]bool{
-	"watchman-trigger.json":     true,
-	"watchman-environment.json": true,
-}
+// schemaLessExamples are illustrative examples without a dedicated schema.
+// The Watchman trigger payload and environment examples gained dedicated
+// schemas in E2-T1 and are now validated like every other example.
+var schemaLessExamples = map[string]bool{}
 
 // reportTargets are integration documents validated against one dedicated
 // schema $id rather than "matches at least one schema".

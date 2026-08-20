@@ -29,8 +29,8 @@ func AdapterVersions() map[string]string {
 	return map[string]string{
 		"watchman":      "not-implemented (E2)",
 		"localfs":       "not-implemented (E2)",
-		"sqlite":        "schema-v1 (E1-T4 repositories)",
-		"hermeskanban":  "public-cli transport + capability probe, verified hermes 0.19.1 (E4-T1; durable submit arrives E4-T3)",
+		"sqlite":        "schema-v1..v2 (E1-T4 repositories; v2 E4-T5 attempts uniqueness)",
+		"hermeskanban":  "public-cli transport, capability probe, and durable sink, verified hermes 0.19.1 (E4-T1..T4)",
 		"hermeswebhook": "not-implemented (E6)",
 	}
 }

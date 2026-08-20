@@ -100,7 +100,7 @@ Supporting concurrency evidence (TST-005's active-dispatch clause at the process
 
 Migration interruption inside a migration unit (checksummed atomicity, ledger gap detection, pre-migration backup, and fail-closed backup verification) is covered by the in-package suite: `TestMigrationFailureIsAtomic`, `TestBackupBeforeMigration`, `TestBackupVerificationFailsClosed`, `TestMigrationLedgerGapDetected`, and `TestIntegrityCheckAndSchemaVersion`.
 
-Boundary of the durability claim: the tested crash model is process death at the documented transaction boundaries against SQLite with the verified pragmas (WAL, synchronous=FULL, OPS-008). Machine power loss beyond SQLite's documented durability guarantees is not claimed. The submit-phase target invocation runs against the fake sink (TST-006 scenarios); the real Hermes adapter arrives with E4 and gate G3 re-runs the delivery-level evidence against it.
+Boundary of the durability claim: the tested crash model is process death at the documented transaction boundaries against SQLite with the verified pragmas (WAL, synchronous=FULL, OPS-008). Machine power loss beyond SQLite's documented durability guarantees is not claimed. The submit-phase target invocation runs against the fake sink (TST-006 scenarios); the real Hermes adapter arrives with E4 — delivered: gate G3 below re-runs the delivery-level evidence against it.
 
 ## Gate G3: Hermes Kanban Durable Integration (E4)
 

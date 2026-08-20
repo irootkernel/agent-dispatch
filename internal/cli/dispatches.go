@@ -334,10 +334,10 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 	report, err := rt.Drain(requestCtx(), routeID, max, store)
 	if err != nil {
 		// The reconciliation mutations already committed; surface them
-		// in the error message so the operator sees what changed.
+		// inside the single failure envelope so the operator sees what
+		// changed without a second, mislabeled error document.
 		if len(reconciled) > 0 {
-			writeError(stderr, command, "target_acceptance_unknown", "acceptance_unknown",
-				fmt.Sprintf("%d unknown dispatch(es) were reconciled before the drain failure; inspect with 'jjukkumi dispatches list --route %s'", len(reconciled), routeID))
+			err = fmt.Errorf("%w (note: %d unknown dispatch(es) were reconciled before this failure; inspect with 'jjukkumi dispatches list --route %s')", err, len(reconciled), routeID)
 		}
 		return intentErr(stderr, command, err)
 	}
@@ -366,6 +366,14 @@ func reconcileUnknownDispatches(store storeOp, sink ports.Sink, routeID string, 
 	var out []map[string]any
 	var failures []string
 	for _, sum := range intents {
+		// The reconciliation must read the target that accepted the
+		// dispatch: a configuration change that re-points the route to
+		// a different target (or board) must never turn a wrong-board
+		// absence into a resubmission proof (F001).
+		if sink.ID() != sum.TargetID {
+			failures = append(failures, fmt.Sprintf("reconciling %s skipped: it was accepted by target %q but the route now resolves to %q", sum.DispatchID, sum.TargetID, sink.ID()))
+			continue
+		}
 		res, err := recon.Reconcile(requestCtx(), sum.DispatchID, "drain", backoff.Exhausted(sum.AttemptCount))
 		if err != nil {
 			failures = append(failures, fmt.Sprintf("reconciling %s failed: %v", sum.DispatchID, err))

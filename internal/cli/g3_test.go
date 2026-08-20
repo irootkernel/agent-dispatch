@@ -233,11 +233,16 @@ routes:
 	return h
 }
 
-// g3Register seeds the route runtime state through the store (the
-// production registration surface is recorded for the epic audit).
+// g3Register materializes the route registration through the
+// production first-use entry point — `route enable` with the
+// production-gate flags — so the gate exercises the remediated
+// operator flow rather than direct store seeding.
 func (h *g3) g3Register(t *testing.T) {
 	t.Helper()
-	e4t3RegisterRoute(t, h.configPath)
+	_, _, errb, code := g3Run(t, h.bin, "route", "enable", "--route", "wiki", "--config", h.configPath, "--acknowledge-production-gate", "--yes")
+	if code != 0 {
+		t.Fatalf("production route enable: %s", errb)
+	}
 }
 
 // g3WaitAccepted polls the dispatches list until one dispatch reaches

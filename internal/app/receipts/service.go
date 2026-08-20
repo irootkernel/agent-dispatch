@@ -7,6 +7,8 @@ package receipts
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -78,9 +80,10 @@ func (s *Service) Refresh(ctx context.Context, dispatchID string) (RefreshResult
 	received := Timestamp(receivedAt)
 	// One receipt per refresh: the projection history stays inspectable
 	// (never overwritten), newest first on the list surface. The id
-	// carries the nanosecond clock so same-second refreshes stay unique;
-	// the stored received_at keeps the canonical second precision.
-	out.ReceiptID = "rcpt-exec-" + dispatchID + "-" + receivedAt.UTC().Format("20060102T150405.000000000")
+	// carries the nanosecond clock plus a random suffix so refreshes
+	// stay unique even across a backward clock step; the stored
+	// received_at keeps the canonical second precision.
+	out.ReceiptID = "rcpt-exec-" + dispatchID + "-" + receivedAt.UTC().Format("20060102T150405.000000000") + "-" + randomSuffix()
 	payload, _ := json.Marshal(map[string]string{
 		"external_ref": projection.ExternalRef,
 		"projection":   string(projection.State),
@@ -137,6 +140,16 @@ func StaleActive(activeSince, now string, staleAfter time.Duration) bool {
 		return false
 	}
 	return current.Sub(started) > staleAfter
+}
+
+// randomSuffix renders four random bytes as hex, making receipt ids
+// unique by construction rather than by wall-clock trust.
+func randomSuffix() string {
+	var b [4]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "00000000"
+	}
+	return hex.EncodeToString(b[:])
 }
 
 // Timestamp renders the canonical UTC RFC 3339 second-precision form.

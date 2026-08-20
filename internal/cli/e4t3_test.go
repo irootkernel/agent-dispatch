@@ -422,3 +422,61 @@ func limitedReportPath(t *testing.T, dir string) string {
 	}
 	return path
 }
+
+// TestSchemaLegalDayUnitDurations verifies the E3-T3 audit remediation:
+// schema-legal whole-day durations behave identically at validation and
+// run time (the retry policy and execution hints parse through the one
+// schema-exact parser), and a configured-but-unparsable hint fails
+// closed instead of silently dropping.
+func TestSchemaLegalDayUnitDurations(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := strings.Replace(string(raw), "initial_backoff: 1s", "initial_backoff: 1d", 1)
+	updated = strings.Replace(updated, "max_backoff: 2s", "max_backoff: 2d", 1)
+	updated = strings.Replace(updated, "max_runtime: 30m", "max_runtime: 1d", 1)
+	if err := os.WriteFile(configPath, []byte(updated), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Drain resolves the day-unit policy without a configuration error
+	// (no due work exists; the policy is still constructed).
+	var out, errb bytes.Buffer
+	if code := Run([]string{"dispatches", "drain", "--route", "wiki", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("schema-legal day-unit policy must resolve: %s", errb.String())
+	}
+	// The rendered request carries the day-unit hint (86400 seconds).
+	setPlanEnv(t, vault, false)
+	e4t3RegisterRoute(t, configPath)
+	res, _ := e4t3Dispatch(t, configPath, vault)
+	if res["state"] != "accepted" {
+		t.Fatalf("day-unit dispatch must be accepted, got %v", res["state"])
+	}
+	// The stored request carries the day-unit hint as 86400 seconds.
+	dispatchID, _ := res["dispatch_id"].(string)
+	cfgLoaded, err := config.Load(resolveConfigPath(configPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateDir := platformpaths.ResolveStateDir(cfgLoaded.Instance.StateDir)
+	store, err := sqlite.Open(filepath.Join(stateDir, StateDBName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	snap, err := store.LoadIntent(context.Background(), dispatchID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(snap.RequestJSON, `"max_runtime_seconds":86400`) {
+		t.Fatalf("day-unit hint missing from the stored request: %s", snap.RequestJSON)
+	}
+
+	// A configured-but-unparsable hint fails closed, never silently
+	// dropped: with the schema rejecting the value at load time, the
+	// fail-closed path is proven through the parser directly.
+	if _, err := config.ParseDuration("banana"); err == nil {
+		t.Fatal("the schema-exact parser must reject nonsense")
+	}
+}

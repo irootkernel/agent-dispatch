@@ -93,6 +93,7 @@ const DefaultMaxHashFileBytes int64 = 16 << 20
 // planArtifacts is one evaluated invocation: the loaded configuration,
 // the trusted environment binding, the normalized batch, and the plan.
 type planArtifacts struct {
+	hints    *ports.TaskExecutionHints
 	opts     *planOptions
 	cfg      *config.Config
 	route    config.Route
@@ -207,10 +208,14 @@ func planPipeline(command string, args []string, stderr io.Writer) (*planArtifac
 	if plan.Route.Revision != revision {
 		return nil, planErr(stderr, command, "internal_unclassified", "internal", "plan revision does not match the active route revision", 40)
 	}
+	hints, err := hintsOf(route)
+	if err != nil {
+		return nil, planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
+	}
 	return &planArtifacts{
 		opts: opts, cfg: cfg, route: route, resource: resource,
 		targetID: route.Dispatch.Target, target: target, revision: revision,
-		env: env, input: input, batch: batch, plan: plan,
+		env: env, input: input, batch: batch, plan: plan, hints: hints,
 	}, 0
 }
 
@@ -423,7 +428,7 @@ func buildLineage(a *planArtifacts) (ports.Lineage, error) {
 		Flags:              flagsOf(a.env),
 		AcceptanceCriteria: dispatch.WikiAcceptanceCriteria,
 		Assignment:         assignmentOf(a.route),
-		ExecutionHints:     hintsOf(a.route),
+		ExecutionHints:     a.hints,
 	})
 	if err != nil {
 		return ports.Lineage{}, fmt.Errorf("task request: %v", err)
@@ -493,17 +498,25 @@ func assignmentOf(route config.Route) *ports.TaskAssignment {
 	}
 }
 
-// hintsOf maps the route's execution hints when set.
-func hintsOf(route config.Route) *ports.TaskExecutionHints {
+// hintsOf maps the configured execution hints onto the request. The
+// runtime parses through the one schema-exact parser (whole-day units
+// included), and a configured but unparsable runtime fails closed
+// instead of silently dropping the hint (HER-006: missing mappings are
+// reported, never discarded).
+func hintsOf(route config.Route) (*ports.TaskExecutionHints, error) {
 	if route.Dispatch.ExecutionHints.MaxRuntime == "" && route.Dispatch.ExecutionHints.MaxAttempts == 0 {
-		return nil
+		return nil, nil
 	}
 	hints := &ports.TaskExecutionHints{}
-	if secs, err := time.ParseDuration(route.Dispatch.ExecutionHints.MaxRuntime); err == nil && secs > 0 {
-		hints.MaxRuntimeSeconds = int64(secs.Seconds())
+	if route.Dispatch.ExecutionHints.MaxRuntime != "" {
+		parsed, err := config.ParseDuration(route.Dispatch.ExecutionHints.MaxRuntime)
+		if err != nil {
+			return nil, fmt.Errorf("execution_hints.max_runtime: %v", err)
+		}
+		hints.MaxRuntimeSeconds = parsed.Nanos / int64(time.Second)
 	}
 	hints.MaxAttempts = int64(route.Dispatch.ExecutionHints.MaxAttempts)
-	return hints
+	return hints, nil
 }
 
 // newPatternEngine compiles the route's pattern sets with the case mode

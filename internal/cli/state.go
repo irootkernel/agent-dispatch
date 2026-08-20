@@ -99,16 +99,26 @@ func resolveSink(cfg *config.Config, target config.Target, route config.Route) (
 
 // backoffFromConfig maps the route's configured submission retry policy
 // (configuration-spec §9) onto the runtime policy; an invalid configured
-// policy fails closed.
+// policy fails closed. Durations parse through the one schema-exact
+// parser so every schema-legal unit (including whole days) behaves
+// identically at validation and run time.
 func backoffFromConfig(retry config.Retry) (dispatch.Backoff, error) {
-	initial, err := time.ParseDuration(retry.InitialBackoff)
+	initial, err := config.ParseDuration(retry.InitialBackoff)
 	if err != nil {
 		return dispatch.Backoff{}, fmt.Errorf("submission_retry.initial_backoff: %v", err)
 	}
-	maximum, err := time.ParseDuration(retry.MaxBackoff)
+	maximum, err := config.ParseDuration(retry.MaxBackoff)
 	if err != nil {
 		return dispatch.Backoff{}, fmt.Errorf("submission_retry.max_backoff: %v", err)
 	}
+	return backoffFromNanos(retry, initial.Nanos, maximum.Nanos)
+}
+
+// backoffFromNanos assembles the policy from parsed nanosecond
+// durations.
+func backoffFromNanos(retry config.Retry, initialNanos, maximumNanos int64) (dispatch.Backoff, error) {
+	initial := time.Duration(initialNanos)
+	maximum := time.Duration(maximumNanos)
 	b := dispatch.Backoff{
 		MaxAttempts:    retry.MaxAttempts,
 		InitialBackoff: initial,

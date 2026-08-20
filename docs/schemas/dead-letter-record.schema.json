@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:jjukkumi:schema:dead-letter-record:v1",
+  "title": "JJUKKUMI DeadLetterRecord v1",
+  "description": "The inspectable record of one dead-lettered dispatch (DUR-009): automatic progress stopped, the full lineage remains, and only an explicit operator retry, reprocess, rerun, or discard can proceed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "dispatch_id",
+    "route_id",
+    "target_id",
+    "idempotency_key",
+    "state",
+    "attempt_count",
+    "dead_letter_reason",
+    "attempts",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "jjukkumi.dead-letter-record/v1"
+    },
+    "dispatch_id": {
+      "type": "string"
+    },
+    "route_id": {
+      "type": "string"
+    },
+    "target_id": {
+      "type": "string"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "pattern": "^jjukkumi:v1:sha256:[0-9a-f]{64}$"
+    },
+    "state": {
+      "const": "dead_lettered"
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "attempt_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "dead_letter_reason": {
+      "enum": [
+        "unresolved_or_limit_reached",
+        "terminal_policy"
+      ]
+    },
+    "attempts": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:jjukkumi:schema:dispatch-attempt:v1"
+      }
+    },
+    "external_ref": {
+      "type": ["string", "null"]
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "operator_actions": {
+      "type": "array",
+      "items": {
+        "enum": ["retry", "reprocess", "rerun", "discard"]
+      }
+    }
+  }
+}

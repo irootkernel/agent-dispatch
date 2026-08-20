@@ -88,6 +88,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runRoute(args[1:], stdout, stderr)
 	case "dispatch":
 		return runDispatch(args[1:], stdout, stderr)
+	case "dispatches":
+		return runDispatches(args[1:], stdout, stderr)
 	case "watchman":
 		return runWatchman(args[1:], stdout, stderr)
 	case "config":

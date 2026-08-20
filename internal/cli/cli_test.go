@@ -71,7 +71,7 @@ func TestVersionHumanOutputIsNotJSON(t *testing.T) {
 
 func TestUnknownCommandFailsClosed(t *testing.T) {
 	var out, errb bytes.Buffer
-	code := Run([]string{"dispatch"}, &out, &errb)
+	code := Run([]string{"definitely-not-a-command"}, &out, &errb)
 	if code == 0 {
 		t.Fatal("unknown command must not exit 0")
 	}
@@ -82,14 +82,14 @@ func TestUnknownCommandFailsClosed(t *testing.T) {
 	if err := json.Unmarshal(errb.Bytes(), &env); err != nil {
 		t.Fatalf("stderr is not the error envelope (%v): %s", err, errb.String())
 	}
-	if env.OK || env.Error.Code != "command_not_implemented" {
+	if env.OK || env.Error.Code != "command_unknown" {
 		t.Errorf("unexpected error envelope: %+v", env)
 	}
 }
 
 func TestEveryKnownCommandClassifiesAsNotImplemented(t *testing.T) {
 	for name := range knownCommands {
-		if name == "version" || name == "init" || name == "route" || name == "dispatch" || name == "watchman" || name == "config" {
+		if name == "version" || name == "init" || name == "route" || name == "dispatch" || name == "dispatches" || name == "watchman" || name == "config" {
 			continue // the implemented commands
 		}
 		var out, errb bytes.Buffer

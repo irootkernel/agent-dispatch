@@ -133,9 +133,13 @@ type IntentSnapshot struct {
 	DispatchID     string
 	RouteID        string
 	TargetID       string
+	TargetType     string
+	Generation     int64
 	IdempotencyKey string
 	State          records.IntentState
 	RequestJSON    string
+	ManifestDigest string
+	ExternalRef    string
 	LeaseOwner     string
 	LeaseExpiresAt string
 	AttemptCount   int
@@ -162,6 +166,9 @@ type AttemptResult struct {
 	ResponseDigest string
 	Diagnostic     string
 	CompletedAt    string
+	// NextAttemptAt persists the backoff deadline for retryable outcomes
+	// (DUR-007); empty leaves the stored value unchanged.
+	NextAttemptAt string
 	// Transition is the validated intent transition this result carries.
 	Transition AttemptTransition
 	// Receipt, when non-nil, persists the acceptance evidence durably in

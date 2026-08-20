@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:jjukkumi:schema:dispatch-attempt:v1",
+  "title": "JJUKKUMI DispatchAttempt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "attempt_id",
+    "dispatch_id",
+    "lease_owner",
+    "started_at",
+    "outcome"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "jjukkumi.dispatch-attempt/v1"
+    },
+    "attempt_id": {
+      "type": "string"
+    },
+    "dispatch_id": {
+      "type": "string"
+    },
+    "lease_owner": {
+      "type": "string"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "outcome": {
+      "enum": ["accepted", "rejected", "unknown", "transport_failure", "open"]
+    },
+    "error_code": {
+      "type": ["string", "null"]
+    },
+    "response_digest": {
+      "type": ["string", "null"],
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "diagnostic": {
+      "type": ["string", "null"]
+    }
+  }
+}

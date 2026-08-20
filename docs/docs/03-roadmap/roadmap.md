@@ -12,13 +12,13 @@
 |---|---|
 | Current epic | E3, Durable Dispatch and Route Coordination Core |
 | Current active task | None |
-| Next task | **E3-T3, Retry, Unknown Reconciliation, and Dead Letter** |
-| Completed tasks | 16 / 33 |
-| Planned tasks | 17 / 33 |
+| Next task | **E3-T4, One Active Route Task and Dirty Generations** |
+| Completed tasks | 17 / 33 |
+| Planned tasks | 16 / 33 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
-The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). E2-T1 delivered the bounded Watchman input parser against the frozen E0-T5 fixture corpus. E2-T2 delivered the safe path containment resolver and the deterministic pattern policy engine. E2-T3 delivered meaningful-change confirmation and batch normalization. E2-T4 delivered the structural policy planner and the side-effect-free `route plan` / `dispatch --dry-run` CLI. E2-T5 delivered the managed Watchman trigger lifecycle and closed gate G1. Epic E2 is complete: the bounded parser, safe path containment, pattern engine, batch normalization, structural policy planner, dry-run CLI, and the real Watchman trigger lifecycle were delivered, audited (one cross-task remediation commit), and validated. E3-T1 delivered the validated dispatch and route state transition services as the authoritative domain table with typed reasons, guards, and the acceptance/execution projection separation. E3-T2 delivered the durable intent commit, the attempt lease, and the fake sink port: the ingestion transaction, conditional leasing, submitting recovery, and the submit flow that proves the committed intent exists before any target invocation. Implementation continues with E3-T3.
+The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). E2-T1 delivered the bounded Watchman input parser against the frozen E0-T5 fixture corpus. E2-T2 delivered the safe path containment resolver and the deterministic pattern policy engine. E2-T3 delivered meaningful-change confirmation and batch normalization. E2-T4 delivered the structural policy planner and the side-effect-free `route plan` / `dispatch --dry-run` CLI. E2-T5 delivered the managed Watchman trigger lifecycle and closed gate G1. Epic E2 is complete: the bounded parser, safe path containment, pattern engine, batch normalization, structural policy planner, dry-run CLI, and the real Watchman trigger lifecycle were delivered, audited (one cross-task remediation commit), and validated. E3-T1 delivered the validated dispatch and route state transition services as the authoritative domain table with typed reasons, guards, and the acceptance/execution projection separation. E3-T2 delivered the durable intent commit, the attempt lease, and the fake sink port: the ingestion transaction, conditional leasing, submitting recovery, and the submit flow that proves the committed intent exists before any target invocation. E3-T3 delivered the bounded retry core, unknown reconciliation, dead-letter handling with operator actions, the dispatches and route command groups with stable exit codes, the result classifier, and the dispatch-attempt and dead-letter record contracts. Implementation continues with E3-T4.
 
 ## 2. Epic Summary
 
@@ -751,7 +751,7 @@ E3-T1 Completed.
 
 ## E3-T3: Implement Retry, Unknown Reconciliation, and Dead Letter
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -785,6 +785,17 @@ E3-T2 Completed.
 - automatic attempts stop at limit;
 - no automatic target fallback exists;
 - dead-lettered work remains fully inspectable.
+
+### Evidence
+
+- `internal/app/dispatch/backoff.go`: the persisted exponential submission retry policy (configuration-spec §9, DUR-007) — deterministic delays from an injected jitter unit in [0,1), capping at max_backoff, fail-closed envelope validation (attempts 1..10, positive backoffs, jitter 0..0.5), and exhaustion reporting so automatic attempts stop at the configured limit.
+- `internal/app/dispatch/classify.go`: the adapter result classifier — accepted (durable status recorded), rejected, definite_not_submitted (the only automatically retryable outcome), and unknown for every ambiguous outcome including sink errors and malformed responses; no classification ever yields failed-from-ambiguity or a target switch (DUR-005, DUR-008).
+- `internal/app/dispatch/runtime.go`: SubmitOnce now schedules the persisted backoff deadline on retryable outcomes and a bounded Drain driver that skips not-yet-due and budget-exhausted intents; `operator.go` implements the explicit operator actions: dead-lettered retry requires --reason, resets the budget, and retains the request and key (DUR-009); retry_wait retry makes the intent due; rerun builds a new dispatch, generation, and idempotency key under a superseding decision and takes over the route slot held by the work it replaces.
+- `internal/app/reconcile`: the unknown-resolution workflow (DUR-006) — lookup by idempotency key (then external reference) before any other submission; found-accepted resolves to accepted, proven non-acceptance (found-rejected or absent) retries while budget remains, and an ambiguous or exhausted outcome dead-letters for the operator. The store applies both transitions through the E3-T1 guards in one transaction.
+- `internal/adapters/sqlite/inspection.go`: the read side (ListIntents with filters, full LoadIntentLineage with attempts, receipts, and audit history — dead-lettered work remains fully inspectable), LoadBatchEvidence for reprocessing, ApplyOperatorRetry, MakeRetryDue, RerunIntent with superseding decision lineage, ReconcileUnknown, and route activation (SetRouteActivation records the acknowledged revision on enable; disable preserves observations, active work, and dirty state) plus ListRoutes.
+- CLI: `dispatches list|show|retry|reprocess|rerun|drain` and `route list|show|enable|disable` are implemented with the JSON envelope and stable documented exit codes (CLI-004, CLI-008; new registry codes dispatch_duplicate, route_slot_held, route_not_registered, dispatch_not_found, batch_not_found); `dispatch` without `--dry-run` is executable since E3: it persists the full observation-to-intent lineage (UUIDv7 identity, source-event-key retransmission recognition, self-contained request with the contract acceptance criteria and manifest digest) and reports the documented target-unavailable error at the submit phase until the E4 adapter exists — with `--no-submit` persisting and leaving the intent ready; no automatic target fallback exists.
+- Contracts: `docs/schemas/dispatch-attempt.schema.json` and `docs/schemas/dead-letter-record.schema.json` with validating examples define the JSON output contracts for dispatch attempt and dead-letter records (DUR-009 inspectability).
+- Tests: deterministic and bounded backoff, the full classifier scenario table, retry_wait with persisted backoff, drain stopping at the limit, the end-to-end dead-letter path (ambiguous submit -> unknown -> unresolved reconciliation with exhausted budget -> dead-lettered -> inspectable lineage -> operator retry resetting the budget and retaining the key), rerun lineage/key separation, reconcile lookup scenarios (found-accepted, found-rejected, absent with and without budget, ambiguous, unavailable lookup), non-unknown re-entry refusal, and CLI suites for dispatches list/show, route enable/list/show/disable with the production gate flags and state_dir-pointed configuration. `make verify` green.
 
 ## E3-T4: Implement One Active Route Task and Dirty Generations
 

@@ -484,9 +484,9 @@ func TestWatchmanAbsenceActionable(t *testing.T) {
 }
 
 // The managed trigger command shape stays parseable by the CLI: the
-// installed definition and the parser must not drift (E3 will make it
-// executable; today it must at least classify as a known command with
-// valid flags, not a usage error).
+// installed definition and the parser must not drift (E3 makes it
+// executable; it must classify as a known executable command, never a
+// usage or not-implemented error).
 func TestManagedTriggerCommandShapeLockstep(t *testing.T) {
 	argv, err := managedCommand("some-route")
 	if err != nil {
@@ -497,11 +497,14 @@ func TestManagedTriggerCommandShapeLockstep(t *testing.T) {
 	}
 	var out, errb bytes.Buffer
 	code := Run(argv[1:], &out, &errb)
-	if code != 2 {
-		t.Fatalf("non-dry-run dispatch exits 2 until E3, got %d", code)
+	if code == 2 {
+		t.Fatalf("non-dry-run dispatch is executable since E3, got usage/not-implemented: %s", errb.String())
 	}
 	var env ErrorEnvelope
-	if err := json.Unmarshal(errb.Bytes(), &env); err != nil || env.Error.Code != "command_not_implemented" {
-		t.Fatalf("managed command shape must parse (command_not_implemented, not a flag error): %s", errb.String())
+	if err := json.Unmarshal(errb.Bytes(), &env); err != nil {
+		t.Fatalf("managed command shape must parse into the error envelope: %s", errb.String())
+	}
+	if env.Error.Code == "command_not_implemented" || env.Error.Code == "command_unknown" || env.Error.Code == "flag_invalid" {
+		t.Fatalf("managed command must be a known executable command: %s", errb.String())
 	}
 }

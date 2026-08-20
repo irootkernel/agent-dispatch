@@ -1,65 +1,24 @@
 package cli
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/rootkernel/jjukkumi/internal/adapters/localfs"
 	"github.com/rootkernel/jjukkumi/internal/adapters/watchman"
 	"github.com/rootkernel/jjukkumi/internal/app/dispatch"
 	"github.com/rootkernel/jjukkumi/internal/app/ingest"
 	"github.com/rootkernel/jjukkumi/internal/config"
+	"github.com/rootkernel/jjukkumi/internal/domain/ids"
 	"github.com/rootkernel/jjukkumi/internal/domain/policy"
+	"github.com/rootkernel/jjukkumi/internal/domain/records"
 	"github.com/rootkernel/jjukkumi/internal/platformpaths"
+	"github.com/rootkernel/jjukkumi/internal/ports"
 )
-
-// runRoute implements the route command tree (cli-spec §3); this build
-// implements the side-effect-free `route plan` subcommand. Route
-// runtime-management subcommands (list/show/enable/disable) arrive with
-// the E3 dispatch core.
-// knownRouteSubcommands is the published route command tree (cli-spec
-// §2). Only `plan` is implemented in this build.
-var knownRouteSubcommands = map[string]bool{
-	"plan": true, "list": true, "show": true, "enable": true, "disable": true,
-}
-
-func runRoute(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		return usageError(stderr, "route", "route requires a subcommand; this build implements 'route plan'")
-	}
-	if args[0] != "plan" {
-		if knownRouteSubcommands[args[0]] {
-			writeError(stderr, "route "+args[0], "command_not_implemented", "usage",
-				fmt.Sprintf("route %q is not implemented in this build; only 'route plan' is", args[0]))
-			return 2
-		}
-		return usageError(stderr, "route", fmt.Sprintf("unknown route subcommand %q; this build implements 'route plan'", args[0]))
-	}
-	return runPlan("route plan", args[1:], stdout, stderr)
-}
-
-// runDispatch implements `dispatch` (cli-spec §5). Only `--dry-run` is
-// implemented in this build: the default persist-and-submit path and
-// `--no-submit` arrive with the E3 durable dispatch core.
-func runDispatch(args []string, stdout, stderr io.Writer) int {
-	dryRun := false
-	rest := make([]string, 0, len(args))
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--dry-run":
-			dryRun = true
-		default:
-			rest = append(rest, args[i])
-		}
-	}
-	if !dryRun {
-		return planErr(stderr, "dispatch", "command_not_implemented", "usage",
-			"only --dry-run is implemented in this build; durable dispatch arrives with the E3 core", 2)
-	}
-	return runPlan("dispatch", rest, stdout, stderr)
-}
 
 // planOptions carries the shared planning flags.
 type planOptions struct {
@@ -127,46 +86,58 @@ func resolveConfigPath(explicit string) string {
 // configuration-spec example envelope (16 MiB).
 const DefaultMaxHashFileBytes int64 = 16 << 20
 
-// runPlan plans one Watchman invocation end to end with no SQLite
-// mutation and no target call: parse stdin, validate the trusted
-// environment binding, normalize the batch against trusted route
-// configuration, and evaluate the pure policy planner. The route
-// revision is recomputed from the loaded configuration and carried in
-// the plan (POL-007, POL-008, SEC-010: a consumer must revalidate it
-// before any side effect).
-func runPlan(command string, args []string, stdout, stderr io.Writer) int {
-	opts, code := parsePlanFlags(command, args, stdout, stderr)
+// planArtifacts is one evaluated invocation: the loaded configuration,
+// the trusted environment binding, the normalized batch, and the plan.
+type planArtifacts struct {
+	opts     *planOptions
+	cfg      *config.Config
+	route    config.Route
+	resource config.Resource
+	targetID string
+	target   config.Target
+	revision string
+	env      watchman.Env
+	input    watchman.Input
+	batch    *ingest.Result
+	plan     *dispatch.Plan
+}
+
+// planPipeline runs the shared read-only planning pipeline: parse stdin,
+// validate the trusted environment binding, normalize the batch, and
+// evaluate the pure policy planner (POL-007, POL-008, SEC-010).
+func planPipeline(command string, args []string, stderr io.Writer) (*planArtifacts, int) {
+	opts, code := parsePlanFlags(command, args, nil, stderr)
 	if code != 0 {
-		return code
+		return nil, code
 	}
 	opts.configPath = resolveConfigPath(opts.configPath)
 	cfg, err := config.Load(opts.configPath)
 	if err != nil {
-		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
+		return nil, planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
 	}
 	route, ok := cfg.Routes[opts.routeID]
 	if !ok {
-		return planErr(stderr, command, "config_route_not_found", "configuration", fmt.Sprintf("route %q is not defined", opts.routeID), 3)
+		return nil, planErr(stderr, command, "config_route_not_found", "configuration", fmt.Sprintf("route %q is not defined", opts.routeID), 3)
 	}
 	resource, ok := cfg.Resources[route.Source.Resource]
 	if !ok {
-		return planErr(stderr, command, "config_invalid", "configuration", fmt.Sprintf("resource %q is not defined", route.Source.Resource), 3)
+		return nil, planErr(stderr, command, "config_invalid", "configuration", fmt.Sprintf("resource %q is not defined", route.Source.Resource), 3)
 	}
 	target, ok := cfg.Targets[route.Dispatch.Target]
 	if !ok {
-		return planErr(stderr, command, "config_invalid", "configuration", fmt.Sprintf("target %q is not defined", route.Dispatch.Target), 3)
+		return nil, planErr(stderr, command, "config_invalid", "configuration", fmt.Sprintf("target %q is not defined", route.Dispatch.Target), 3)
 	}
 	revision, ok := config.RouteRevision(cfg, opts.routeID)
 	if !ok {
-		return planErr(stderr, command, "internal_unclassified", "internal", "route revision could not be computed", 40)
+		return nil, planErr(stderr, command, "internal_unclassified", "internal", "route revision could not be computed", 40)
 	}
 
 	env, err := watchman.ParseEnv(os.LookupEnv)
 	if err != nil {
-		return planErr(stderr, command, "source_missing_required_metadata", "input_rejected", err.Error(), 4)
+		return nil, planErr(stderr, command, "source_missing_required_metadata", "input_rejected", err.Error(), 4)
 	}
 	if err := watchman.ValidateBinding(env, route.Source.TriggerName, resource.Root); err != nil {
-		return planErr(stderr, command, "source_binding_mismatch", "input_rejected", err.Error(), 4)
+		return nil, planErr(stderr, command, "source_binding_mismatch", "input_rejected", err.Error(), 4)
 	}
 
 	maxStdin := int64(0)
@@ -178,18 +149,18 @@ func runPlan(command string, args []string, stdout, stderr io.Writer) int {
 	input, err := watchman.ReadInput(os.Stdin, env, maxStdin)
 	if err != nil {
 		if errors.Is(err, watchman.ErrStdinTooLarge) {
-			return planErr(stderr, command, "source_input_too_large", "input_rejected", err.Error(), 4)
+			return nil, planErr(stderr, command, "source_input_too_large", "input_rejected", err.Error(), 4)
 		}
-		return planErr(stderr, command, "source_malformed_json", "input_rejected", err.Error(), 4)
+		return nil, planErr(stderr, command, "source_malformed_json", "input_rejected", err.Error(), 4)
 	}
 
 	engine, err := newPatternEngine(route)
 	if err != nil {
-		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
+		return nil, planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
 	}
 	resolver, err := localfs.NewResolver(resource.Root)
 	if err != nil {
-		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
+		return nil, planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
 	}
 	if cfg.Limits.MaxPathBytes != nil {
 		engine.SetMaxPathBytes(int(*cfg.Limits.MaxPathBytes))
@@ -198,7 +169,7 @@ func runPlan(command string, args []string, stdout, stderr io.Writer) int {
 	maxHash := DefaultMaxHashFileBytes
 	if cfg.Limits.MaxHashFileBytes != nil {
 		if *cfg.Limits.MaxHashFileBytes <= 0 {
-			return planErr(stderr, command, "config_invalid", "configuration", "limits.max_hash_file_bytes must be positive when set", 3)
+			return nil, planErr(stderr, command, "config_invalid", "configuration", "limits.max_hash_file_bytes must be positive when set", 3)
 		}
 		maxHash = *cfg.Limits.MaxHashFileBytes
 	}
@@ -206,9 +177,9 @@ func runPlan(command string, args []string, stdout, stderr io.Writer) int {
 	batch, err := ingest.BuildBatch(input.Entries, engine, resolver, ingest.NoFacts{}, env.Flags(), route.Source.Resource, ingest.Options{MaxHashBytes: maxHash})
 	if err != nil {
 		if errors.Is(err, ingest.ErrUnsafePath) {
-			return planErr(stderr, command, "source_unsafe_path", "security", err.Error(), 30)
+			return nil, planErr(stderr, command, "source_unsafe_path", "security", err.Error(), 30)
 		}
-		return planErr(stderr, command, "internal_unclassified", "internal", err.Error(), 40)
+		return nil, planErr(stderr, command, "internal_unclassified", "internal", err.Error(), 40)
 	}
 
 	plan, err := dispatch.Evaluate(dispatch.RoutePolicy{
@@ -224,19 +195,248 @@ func runPlan(command string, args []string, stdout, stderr io.Writer) int {
 		RequiredCapabilities: target.RequiredCapabilities,
 	}, dispatch.Input{Batch: batch, Flags: env.Flags()})
 	if err != nil {
-		return planErr(stderr, command, "internal_unclassified", "internal", err.Error(), 40)
+		return nil, planErr(stderr, command, "internal_unclassified", "internal", err.Error(), 40)
 	}
 
 	// POL-008/SEC-010: revalidate the plan's revision against the active
-	// snapshot before emitting it; single-shot today, load-bearing when
-	// persistence arrives.
+	// snapshot before emitting or persisting it.
 	if plan.Route.Revision != revision {
-		return planErr(stderr, command, "internal_unclassified", "internal", "plan revision does not match the active route revision", 40)
+		return nil, planErr(stderr, command, "internal_unclassified", "internal", "plan revision does not match the active route revision", 40)
 	}
-	if !opts.jsonOutput {
-		opts.jsonOutput = true // machine output only (CLI-001)
+	return &planArtifacts{
+		opts: opts, cfg: cfg, route: route, resource: resource,
+		targetID: route.Dispatch.Target, target: target, revision: revision,
+		env: env, input: input, batch: batch, plan: plan,
+	}, 0
+}
+
+// runPlan plans one Watchman invocation end to end with no SQLite
+// mutation and no target call.
+func runPlan(command string, args []string, stdout, stderr io.Writer) int {
+	artifacts, code := planPipeline(command, args, stderr)
+	if code != 0 {
+		return code
 	}
-	return writeEnvelope(stdout, command, plan)
+	_ = artifacts.opts.jsonOutput // machine output only (CLI-001)
+	return writeEnvelope(stdout, command, artifacts.plan)
+}
+
+// runDispatch implements `dispatch` (cli-spec §5). `--dry-run` stays
+// side-effect-free; the default path persists the full
+// observation-to-intent lineage through the E3 durable core (DUR-002)
+// and then attempts submission. Until the Hermes adapters arrive with
+// E4, the submit phase reports the documented target-unavailable error
+// while the persisted intent stays ready and inspectable; `--no-submit`
+// persists and leaves the intent ready without a submit attempt.
+func runDispatch(args []string, stdout, stderr io.Writer) int {
+	dryRun := false
+	noSubmit := false
+	rest := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--dry-run":
+			dryRun = true
+		case "--no-submit":
+			noSubmit = true
+		default:
+			rest = append(rest, args[i])
+		}
+	}
+	if dryRun {
+		return runPlan("dispatch", rest, stdout, stderr)
+	}
+	command := "dispatch"
+	if noSubmit {
+		rest = append(rest, "--no-submit")
+	}
+	artifacts, code := planPipeline(command, rest, stderr)
+	if code != 0 {
+		return code
+	}
+	lin, exit := persistLineage(command, artifacts, stderr)
+	if exit != 0 {
+		return exit
+	}
+	if noSubmit {
+		return writeEnvelope(stdout, command, map[string]any{
+			"route_id": artifacts.opts.routeID, "dispatch_id": lin.Intent.DispatchID,
+			"state": "ready", "submitted": false,
+		})
+	}
+	// The submit phase needs the E4 sink adapter; the intent is durable
+	// and ready, and no automatic target fallback exists (DUR-008).
+	if _, err := resolveSink(artifacts.target.Type); err != nil {
+		writeError(stderr, command, "target_definite_unavailable", "target_unavailable", err.Error())
+		return sinkUnavailableExit
+	}
+	return writeEnvelope(stdout, command, map[string]any{"route_id": artifacts.opts.routeID, "dispatch_id": lin.Intent.DispatchID, "submitted": true})
+}
+
+// persistLineage commits the planned observation-to-intent lineage into
+// the durable store (DUR-002: the committed intent exists before any
+// target invocation).
+func persistLineage(command string, artifacts *planArtifacts, stderr io.Writer) (ports.Lineage, int) {
+	store, closer, exit := openOperatorStore(command, artifacts.opts.configPath, stderr)
+	if exit != 0 {
+		return ports.Lineage{}, exit
+	}
+	defer closer.Close()
+	lin, err := buildLineage(artifacts)
+	if err != nil {
+		writeError(stderr, command, "internal_unclassified", "internal", err.Error())
+		return ports.Lineage{}, 40
+	}
+	if err := store.CommitLineage(requestCtx(), lin); err != nil {
+		switch {
+		case errors.Is(err, ports.ErrIdempotencyConflict):
+			writeError(stderr, command, "dispatch_duplicate", "conflict", err.Error())
+			return ports.Lineage{}, 14
+		case errors.Is(err, ports.ErrRouteSlotHeld):
+			writeError(stderr, command, "route_slot_held", "conflict", err.Error())
+			return ports.Lineage{}, 14
+		default:
+			writeError(stderr, command, "sqlite_open_failed", "storage", err.Error())
+			return ports.Lineage{}, 20
+		}
+	}
+	return lin, 0
+}
+
+// buildLineage assembles the durable persistence unit from the planned
+// artifacts: one observation with its normalized changes, the canonical
+// batch, the immutable decision, and the intent with its self-contained
+// request.
+func buildLineage(a *planArtifacts) (ports.Lineage, error) {
+	gen := ids.NewUUIDv7(time.Now)
+	observationID, err := gen.NewID()
+	if err != nil {
+		return ports.Lineage{}, err
+	}
+	batchID, err := gen.NewID()
+	if err != nil {
+		return ports.Lineage{}, err
+	}
+	decisionID, err := gen.NewID()
+	if err != nil {
+		return ports.Lineage{}, err
+	}
+	dispatchID, err := gen.NewID()
+	if err != nil {
+		return ports.Lineage{}, err
+	}
+	now := dispatch.Timestamp(time.Now())
+	changes := make([]ports.ObservationChange, 0, len(a.batch.Changes))
+	for i, c := range a.batch.Changes {
+		changes = append(changes, ports.ObservationChange{
+			Ordinal: i, Path: c.Path, Operation: string(c.Operation), ExistsAfter: c.ExistsAfter,
+			FileType: string(c.FileType), BeforeDigest: string(c.BeforeDigest), AfterDigest: string(c.AfterDigest),
+			DigestStatus: string(c.DigestStatus),
+		})
+	}
+	flagsJSON, err := json.Marshal(a.env.Flags())
+	if err != nil {
+		return ports.Lineage{}, err
+	}
+	reasons, err := json.Marshal(a.plan.ReasonCodes)
+	if err != nil {
+		return ports.Lineage{}, err
+	}
+	classification := "normal"
+	if len(a.plan.Classification) > 0 {
+		classification = a.plan.Classification[0]
+	}
+	req, key, err := dispatch.BuildRequest(dispatch.RequestInput{
+		DispatchID:         string(dispatchID),
+		Route:              ports.TaskRouteRef{ID: a.opts.routeID, Revision: a.plan.Route.Revision},
+		Resource:           ports.TaskResource{ID: a.route.Source.Resource, Workspace: a.resource.Root},
+		TargetID:           a.targetID,
+		Generation:         1,
+		Fingerprint:        records.Digest(a.plan.ContentFingerprint),
+		Changes:            a.batch.Changes,
+		Flags:              flagsOf(a.env),
+		AcceptanceCriteria: dispatch.WikiAcceptanceCriteria,
+		Assignment:         assignmentOf(a.route),
+		ExecutionHints:     hintsOf(a.route),
+	})
+	if err != nil {
+		return ports.Lineage{}, fmt.Errorf("task request: %v", err)
+	}
+	requestJSON, err := dispatch.MarshalRequest(req)
+	if err != nil {
+		return ports.Lineage{}, err
+	}
+	return ports.Lineage{
+		Observation: ports.ObservationInput{
+			ObservationID: string(observationID), SchemaVersion: "jjukkumi.source-observation/v1",
+			SourceType: "watchman", SourceID: a.route.Source.SourceID,
+			SourceEventKey: a.input.SourceEventKey(a.route.Source.SourceID),
+			TriggerName:    a.env.Trigger, ResourceID: a.route.Source.Resource,
+			ObservedAt: now, ReceivedAt: now,
+			RawPayloadDigest: string(a.input.RawDigest), IngestStatus: "accepted",
+			FlagsJSON: string(flagsJSON), Changes: changes,
+		},
+		Batch: ports.BatchInput{
+			BatchID: string(batchID), RouteID: a.opts.routeID, RouteRevision: a.plan.Route.Revision,
+			ResourceID: a.route.Source.Resource, CreatedAt: now,
+			ContentFingerprint: a.plan.ContentFingerprint,
+			ObservationIDs:     []string{string(observationID)},
+		},
+		Decision: ports.DecisionInput{
+			DecisionID: string(decisionID), BatchID: string(batchID), RouteID: a.opts.routeID,
+			RouteRevision: a.plan.Route.Revision, PolicyRevision: a.revision,
+			Disposition: a.plan.Disposition, Classification: classification,
+			ReasonCodesJSON: string(reasons), CreatedAt: now, Actor: "planner",
+		},
+		Intent: ports.IntentInput{
+			DispatchID: string(dispatchID), DecisionID: string(decisionID), RouteID: a.opts.routeID,
+			RouteRevision: a.plan.Route.Revision, TargetID: a.targetID, TargetType: a.target.Type,
+			ResourceID: a.route.Source.Resource, Generation: 1, IdempotencyKey: key,
+			ContentFingerprint: a.plan.ContentFingerprint, ManifestDigest: dispatch.ManifestDigest(a.batch.Changes),
+			RequestVersion: dispatch.RequestContractVersion, RequestJSON: requestJSON, CreatedAt: now,
+		},
+	}, nil
+}
+
+// flagsOf projects the trusted source flags onto the request flag list.
+func flagsOf(env watchman.Env) []string {
+	flags := []string{}
+	if env.Flags().Overflow {
+		flags = append(flags, "overflow")
+	}
+	if env.Flags().FreshInstance {
+		flags = append(flags, "fresh_instance")
+	}
+	if env.Flags().HasRelative {
+		flags = append(flags, "relative_root")
+	}
+	return flags
+}
+
+// assignmentOf maps the route's dispatch block onto the request
+// assignment (sink-adapter-contract §8: the mutex is a capability
+// request, never prompt text).
+func assignmentOf(route config.Route) *ports.TaskAssignment {
+	if route.Dispatch.Profile == "" && len(route.Dispatch.Skills) == 0 {
+		return nil
+	}
+	return &ports.TaskAssignment{
+		Profile:  route.Dispatch.Profile,
+		Skills:   route.Dispatch.Skills,
+		MutexKey: route.Dispatch.MutexKey,
+	}
+}
+
+// hintsOf maps the route's execution hints when set.
+func hintsOf(route config.Route) *ports.TaskExecutionHints {
+	if route.Dispatch.ExecutionHints.MaxRuntime == "" && route.Dispatch.ExecutionHints.MaxAttempts == 0 {
+		return nil
+	}
+	hints := &ports.TaskExecutionHints{}
+	if secs, err := time.ParseDuration(route.Dispatch.ExecutionHints.MaxRuntime); err == nil && secs > 0 {
+		hints.MaxRuntimeSeconds = int64(secs.Seconds())
+	}
+	hints.MaxAttempts = int64(route.Dispatch.ExecutionHints.MaxAttempts)
+	return hints
 }
 
 // newPatternEngine compiles the route's pattern sets with the case mode

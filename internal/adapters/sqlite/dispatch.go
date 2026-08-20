@@ -107,10 +107,11 @@ func portsIntent(i ports.IntentInput) IntentRecord {
 // LoadIntent returns the durable snapshot of one dispatch intent.
 func (s *Store) LoadIntent(ctx context.Context, dispatchID string) (ports.IntentSnapshot, error) {
 	var snap ports.IntentSnapshot
-	var leaseOwner, leaseExpires, nextAttempt sql.NullString
-	err := s.QueryRowContext(ctx, `SELECT dispatch_id, route_id, target_id, idempotency_key, state, request_json, lease_owner, lease_expires_at, attempt_count, next_attempt_at
+	var leaseOwner, leaseExpires, nextAttempt, externalRef sql.NullString
+	err := s.QueryRowContext(ctx, `SELECT dispatch_id, route_id, target_id, target_type, generation, idempotency_key, state, request_json, manifest_digest, external_ref, lease_owner, lease_expires_at, attempt_count, next_attempt_at
 		FROM dispatch_intents WHERE dispatch_id = ?`, dispatchID).Scan(
-		&snap.DispatchID, &snap.RouteID, &snap.TargetID, &snap.IdempotencyKey, &snap.State, &snap.RequestJSON,
+		&snap.DispatchID, &snap.RouteID, &snap.TargetID, &snap.TargetType, &snap.Generation, &snap.IdempotencyKey,
+		&snap.State, &snap.RequestJSON, &snap.ManifestDigest, &externalRef,
 		&leaseOwner, &leaseExpires, &snap.AttemptCount, &nextAttempt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return snap, fmt.Errorf("%w: %s", ports.ErrIntentNotFound, dispatchID)
@@ -121,7 +122,8 @@ func (s *Store) LoadIntent(ctx context.Context, dispatchID string) (ports.Intent
 	if _, perr := records.ParseIntentState(string(snap.State)); perr != nil {
 		return snap, fmt.Errorf("stored intent state %q is not a contract state: %v", snap.State, perr)
 	}
-	snap.LeaseOwner, snap.LeaseExpiresAt, snap.NextAttemptAt = nullText(leaseOwner), nullText(leaseExpires), nullText(nextAttempt)
+	snap.ExternalRef, snap.LeaseOwner, snap.LeaseExpiresAt, snap.NextAttemptAt =
+		nullText(externalRef), nullText(leaseOwner), nullText(leaseExpires), nullText(nextAttempt)
 	return snap, nil
 }
 
@@ -225,8 +227,14 @@ func (s *Store) CompleteAttempt(ctx context.Context, res ports.AttemptResult) er
 	if err := state.ValidateIntentTransition(from, res.Transition.To, res.Transition.Reason, res.Transition.Evidence); err != nil {
 		return err
 	}
-	upd, err := tx.Exec(`UPDATE dispatch_intents SET state = ?, lease_owner = NULL, lease_expires_at = NULL, updated_at = ? WHERE dispatch_id = ? AND state = ?`,
-		string(res.Transition.To), completedAt, res.DispatchID, current)
+	var upd sql.Result
+	if res.NextAttemptAt != "" {
+		upd, err = tx.Exec(`UPDATE dispatch_intents SET state = ?, lease_owner = NULL, lease_expires_at = NULL, next_attempt_at = ?, updated_at = ? WHERE dispatch_id = ? AND state = ?`,
+			string(res.Transition.To), normalizeTimestamp(res.NextAttemptAt), completedAt, res.DispatchID, current)
+	} else {
+		upd, err = tx.Exec(`UPDATE dispatch_intents SET state = ?, lease_owner = NULL, lease_expires_at = NULL, updated_at = ? WHERE dispatch_id = ? AND state = ?`,
+			string(res.Transition.To), completedAt, res.DispatchID, current)
+	}
 	if err != nil {
 		return err
 	}

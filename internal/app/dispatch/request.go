@@ -1,6 +1,8 @@
 package dispatch
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 
@@ -115,4 +117,27 @@ func MarshalRequest(req ports.TaskRequest) (string, error) {
 		return "", err
 	}
 	return string(raw), nil
+}
+
+// WikiAcceptanceCriteria is the fixed v1 acceptance list from
+// hermes-task-contract.md §2: the durable request carries it verbatim.
+var WikiAcceptanceCriteria = []string{
+	"Evaluate the current vault state using the configured LLM Wiki skill.",
+	"Re-evaluate indexing, referencing, and grouping affected by the latest state.",
+	"Respect Hermes permissions, approvals, and protected-path policy.",
+	"Do not assume that a manifest path still exists at execution time.",
+	"Report a bounded JJUKKUMI work receipt when the companion CLI is available.",
+}
+
+// ManifestDigest derives the manifest digest recorded on the intent: the
+// SHA-256 of the canonical JSON projection of the sorted change
+// manifest, the same bytes the request's activation manifest carries.
+func ManifestDigest(changes []records.ChangeItem) string {
+	items := manifest(changes)
+	raw, err := json.Marshal(items)
+	if err != nil {
+		raw = []byte("[]")
+	}
+	sum := sha256.Sum256(raw)
+	return "sha256:" + hex.EncodeToString(sum[:])
 }

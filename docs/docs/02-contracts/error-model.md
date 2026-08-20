@@ -105,6 +105,11 @@ The v0.1 registry is closed: implementations emit only the codes below. Adding o
 | `target_acceptance_unknown` | `acceptance_unknown` | 13 |
 | `target_response_invalid` | `acceptance_unknown` | 13 |
 | `watchman_trigger_conflict` | `conflict` | 14 |
+| `dispatch_duplicate` | `conflict` | 14 |
+| `route_slot_held` | `conflict` | 14 |
+| `route_not_registered` | `conflict` | 14 |
+| `dispatch_not_found` | `usage` | 4 |
+| `batch_not_found` | `usage` | 4 |
 | `transition_invalid` | `conflict` | 14 |
 | `attempt_lease_conflict` | `conflict` | 14 |
 | `dispatch_dead_lettered` | `conflict` | 14 |

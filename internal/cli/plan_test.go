@@ -227,15 +227,23 @@ func TestRoutePlanUnknownRoute(t *testing.T) {
 	}
 }
 
-func TestDispatchWithoutDryRunNotImplemented(t *testing.T) {
+func TestDispatchWithoutDryRunExecutesDurablePath(t *testing.T) {
 	var out, errb bytes.Buffer
 	code := Run([]string{"dispatch", "--route", "wiki"}, &out, &errb)
-	if code != 2 {
-		t.Fatalf("exit %d", code)
+	if code == 2 {
+		t.Fatalf("non-dry-run dispatch is executable since E3, got command_not_implemented: %s", errb.String())
 	}
 	var env ErrorEnvelope
-	if err := json.Unmarshal(errb.Bytes(), &env); err != nil || env.Error.Code != "command_not_implemented" {
-		t.Fatalf("wrong envelope: %s", errb.String())
+	if err := json.Unmarshal(errb.Bytes(), &env); err != nil {
+		t.Fatalf("stderr is not the error envelope: %s", errb.String())
+	}
+	// Without a real configuration the durable path stops at the
+	// documented configuration error, never at command_not_implemented.
+	if env.Error.Code == "command_not_implemented" || env.Error.Code == "command_unknown" {
+		t.Fatalf("durable dispatch must be a known executable command: %s", errb.String())
+	}
+	if code != 3 {
+		t.Fatalf("exit %d with envelope %s", code, errb.String())
 	}
 }
 

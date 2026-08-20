@@ -10,7 +10,7 @@
 
 | Field | Value |
 |---|---|
-| Current epic | E2, Watchman Deterministic Dry-Run Pipeline |
+| Current epic | E3, Durable Dispatch and Route Coordination Core |
 | Current active task | None |
 | Next task | **E3-T1, Dispatch and Route State Transition Services** |
 | Completed tasks | 14 / 33 |
@@ -18,7 +18,7 @@
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
-The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). E2-T1 delivered the bounded Watchman input parser against the frozen E0-T5 fixture corpus. E2-T2 delivered the safe path containment resolver and the deterministic pattern policy engine. E2-T3 delivered meaningful-change confirmation and batch normalization. E2-T4 delivered the structural policy planner and the side-effect-free `route plan` / `dispatch --dry-run` CLI. E2-T5 delivered the managed Watchman trigger lifecycle and closed gate G1. Implementation continues with E3-T1.
+The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). E2-T1 delivered the bounded Watchman input parser against the frozen E0-T5 fixture corpus. E2-T2 delivered the safe path containment resolver and the deterministic pattern policy engine. E2-T3 delivered meaningful-change confirmation and batch normalization. E2-T4 delivered the structural policy planner and the side-effect-free `route plan` / `dispatch --dry-run` CLI. E2-T5 delivered the managed Watchman trigger lifecycle and closed gate G1. Epic E2 is complete: the bounded parser, safe path containment, pattern engine, batch normalization, structural policy planner, dry-run CLI, and the real Watchman trigger lifecycle were delivered, audited (one cross-task remediation commit), and validated. Implementation continues with E3-T1.
 
 ## 2. Epic Summary
 
@@ -26,7 +26,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 |---|---|---:|---:|---|
 | E0 | SOT and External Contract Baseline | **Completed** | 5 | G0 |
 | E1 | Go Foundation, Configuration, and Persistence Schema | **Completed** | 4 | Foundation ready |
-| E2 | Watchman Deterministic Dry-Run Pipeline | **Planned** | 5 | G1 |
+| E2 | Watchman Deterministic Dry-Run Pipeline | **Completed** | 5 | G1 |
 | E3 | Durable Dispatch and Route Coordination Core | **Planned** | 5 | G2 |
 | E4 | Hermes Kanban Durable Integration | **Planned** | 5 | G3 |
 | E5 | Feedback Loop, Quarantine, and Reconciliation | **Planned** | 5 | G4 |
@@ -450,7 +450,7 @@ E1-T3 Completed.
 
 # E2: Watchman Deterministic Dry-Run Pipeline
 
-**Epic status:** Planned  
+**Epic status:** Completed  
 **Purpose:** Convert real Watchman input into a safe, deterministic dispatch plan with no agent side effect.  
 **Gate:** G1
 

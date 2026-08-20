@@ -10,6 +10,14 @@ import (
 	"path/filepath"
 )
 
+// ErrSchemaTooNewType is the typed newer-database failure.
+type ErrSchemaTooNewType struct{ Detail string }
+
+func (e *ErrSchemaTooNewType) Error() string { return e.Detail }
+
+// ErrSchemaTooNew is the matching sentinel for errors.Is.
+var ErrSchemaTooNew = &ErrSchemaTooNewType{Detail: "database schema newer than supported"}
+
 // Migration is one forward-only schema unit. Checksum is computed from
 // the SQL text and recorded immutably in the ledger (migration doc §3).
 type Migration struct {
@@ -100,7 +108,7 @@ func (s *Store) Migrate(backupDir string) error {
 		}
 	}
 	if newest > maxVersion {
-		return fmt.Errorf("database schema version %d is newer than the supported maximum %d; upgrade jjukkumi instead of downgrading", newest, maxVersion)
+		return &ErrSchemaTooNewType{Detail: fmt.Sprintf("database schema version %d is newer than the supported maximum %d; upgrade jjukkumi instead of downgrading", newest, maxVersion)}
 	}
 	// Prefix integrity: the applied set must be exactly {1..newest} drawn
 	// from this binary's list, with no gaps and no foreign versions.

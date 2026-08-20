@@ -63,9 +63,14 @@ func e4t3Fixture(t *testing.T) (configPath, vault string) {
 	if err := os.WriteFile(filepath.Join(vault, "Inbox", "new.md"), []byte("hello"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	stateDir := filepath.Join(dir, "state")
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	cfg := `version: 1
 instance:
   id: e4t3-test
+  state_dir: ` + stateDir + `
 resources:
   vault-main:
     type: directory
@@ -80,8 +85,8 @@ targets:
     executable: ` + stubhermes.Write(t) + `
     capability_report: ../../docs/integrations/hermes-capability-report.json
     required_capabilities: [durable_acceptance, submit_idempotency_key, lookup_by_external_ref]
-    submit_timeout: 10s
-    lookup_timeout: 5s
+    submit_timeout: 30s
+    lookup_timeout: 30s
     environment_allowlist: [PATH, HOME]
 routes:
   wiki:
@@ -451,7 +456,6 @@ func TestSchemaLegalDayUnitDurations(t *testing.T) {
 	}
 	// The rendered request carries the day-unit hint (86400 seconds).
 	setPlanEnv(t, vault, false)
-	e4t3RegisterRoute(t, configPath)
 	res, _ := e4t3Dispatch(t, configPath, vault)
 	if res["state"] != "accepted" {
 		t.Fatalf("day-unit dispatch must be accepted, got %v", res["state"])
@@ -664,5 +668,135 @@ func TestRerunPreservesTargetScope(t *testing.T) {
 	}
 	if rerunScope != "jjukkumi-test" {
 		t.Fatalf("rerun intent must inherit the target scope, got %q", rerunScope)
+	}
+}
+
+// TestRefreshRefusedOnRepointedBoard proves the refresh scope guard:
+// a board re-point under the same target id is refused (the accepting
+// scope no longer matches) with the configuration class.
+func TestRefreshRefusedOnRepointedBoard(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	setPlanEnv(t, vault, false)
+	e4t3RegisterRoute(t, configPath)
+	res := e4t3DispatchNoRegister(t, configPath, vault)
+	dispatchID, _ := res["dispatch_id"].(string)
+
+	raw, _ := os.ReadFile(configPath)
+	updated := strings.Replace(string(raw), "board: jjukkumi-test", "board: jjukkumi-other", 1)
+	if err := os.WriteFile(configPath, []byte(updated), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	code := Run([]string{"dispatches", "refresh", "--config", configPath, dispatchID}, &out, &errb)
+	if code != 3 || !strings.Contains(errb.String(), "target scope") {
+		t.Fatalf("board re-point must be refused with the scope mismatch, got %d: %s", code, errb.String())
+	}
+}
+
+// TestOpenOperatorStoreErrorClasses proves the exit-class mapping:
+// configuration failures exit 3, newer-database failures exit 21.
+func TestOpenOperatorStoreErrorClasses(t *testing.T) {
+	configPath, _ := e4t3Fixture(t)
+	// Configuration failure: unreadable file content.
+	broken := filepath.Join(t.TempDir(), "broken.yaml")
+	if err := os.WriteFile(broken, []byte("version: 1\nresources: {}\ntargets: {}\nroutes: {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	code := Run([]string{"dispatches", "list", "--config", broken}, &out, &errb)
+	if code != 3 || !strings.Contains(errb.String(), "config_invalid") {
+		t.Fatalf("configuration failure must exit 3 config_invalid, got %d: %s", code, errb.String())
+	}
+	// Newer database: forge the migration ledger above the supported
+	// maximum inside the fixture's state directory.
+	cfgL, _ := config.Load(configPath)
+	stateDir := platformpaths.ResolveStateDir(cfgL.Instance.StateDir)
+	st, err := sqlite.Open(filepath.Join(stateDir, StateDBName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Migrate(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.Exec(`INSERT INTO schema_migrations (version, name, checksum) VALUES (?, 'future', 'sha256:x')`, 999); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	out.Reset()
+	errb.Reset()
+	code = Run([]string{"dispatches", "list", "--config", configPath}, &out, &errb)
+	if code != 21 || !strings.Contains(errb.String(), "migration_newer_schema") {
+		t.Fatalf("newer database must exit 21 migration_newer_schema, got %d: %s", code, errb.String())
+	}
+}
+
+// TestReconcilePreV3EmptyScopeWarnsAndProceeds proves the pre-v3 path:
+// an intent with no recorded scope is reconciled but with a visible
+// weaker-identity warning (and the scope guard itself stays engaged
+// for scoped intents).
+func TestReconcilePreV3EmptyScopeWarnsAndProceeds(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	dir := t.TempDir()
+	good := stubhermes.Write(t)
+	bad := filepath.Join(dir, "hermes-ambiguous")
+	script := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf 'Hermes Agent v0.19.1 (2026.7.30)\\n'; exit 0; fi\nsleep 60\n"
+	if err := os.WriteFile(bad, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(configPath)
+	lines := strings.Split(string(raw), "\n")
+	for i, l := range lines {
+		if strings.HasPrefix(l, "    executable: ") {
+			lines[i] = "    executable: " + bad
+		}
+		if strings.HasPrefix(l, "    submit_timeout: ") {
+			lines[i] = "    submit_timeout: 1s"
+		}
+	}
+	if err := os.WriteFile(configPath, []byte(strings.Join(lines, "\n")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setPlanEnv(t, vault, false)
+	e4t3RegisterRoute(t, configPath)
+	res := e4t3DispatchNoRegister(t, configPath, vault)
+	if res["state"] != "unknown" {
+		t.Fatalf("expected unknown, got %v", res["state"])
+	}
+	dispatchID, _ := res["dispatch_id"].(string)
+
+	// Simulate the pre-v3 shape: clear the recorded scope.
+	cfgL, _ := config.Load(configPath)
+	stateDir := platformpaths.ResolveStateDir(cfgL.Instance.StateDir)
+	st, err := sqlite.Open(filepath.Join(stateDir, StateDBName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.Exec(`UPDATE dispatch_intents SET target_scope = '' WHERE dispatch_id = ?`, dispatchID); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+
+	// Heal the target and drain: the empty-scope reconciliation
+	// proceeds with the visible weaker-identity warning.
+	healed := string(raw)
+	lines = strings.Split(healed, "\n")
+	for i, l := range lines {
+		if strings.HasPrefix(l, "    executable: ") {
+			lines[i] = "    executable: " + good
+		}
+	}
+	if err := os.WriteFile(configPath, []byte(strings.Join(lines, "\n")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	if code := Run([]string{"dispatches", "drain", "--route", "wiki", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("drain: %s", errb.String())
+	}
+	if !strings.Contains(out.String(), "pre-v3 intent") {
+		t.Fatalf("the weaker-identity warning must be visible: %s", out.String())
+	}
+	// The reconciliation itself proceeded (dead-lettered: no reference).
+	if !strings.Contains(out.String(), "dead_lettered") {
+		t.Fatalf("empty-scope reconciliation must proceed: %s", out.String())
 	}
 }

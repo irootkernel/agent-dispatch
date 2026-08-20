@@ -66,11 +66,15 @@ type storeOp interface {
 func openOperatorStore(command string, configPath string, stderr io.Writer) (storeOp, *sqlite.Store, int) {
 	s, err := openStateStore(resolveConfigPath(configPath))
 	if err != nil {
-		if strings.Contains(err.Error(), "configuration:") {
+		// The typed prefix from openStateStore distinguishes the
+		// configuration class; the sentinel distinguishes a newer
+		// database; everything else is storage.
+		var tooNew *sqlite.ErrSchemaTooNewType
+		if strings.HasPrefix(err.Error(), "configuration:") {
 			writeError(stderr, command, "config_invalid", "configuration", err.Error())
 			return nil, nil, 3
 		}
-		if strings.Contains(err.Error(), "schema version") || strings.Contains(err.Error(), "migration") {
+		if errors.As(err, &tooNew) {
 			writeError(stderr, command, "migration_newer_schema", "migration", err.Error())
 			return nil, nil, 21
 		}

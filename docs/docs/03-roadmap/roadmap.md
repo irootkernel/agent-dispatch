@@ -12,13 +12,13 @@
 |---|---|
 | Current epic | E2, Watchman Deterministic Dry-Run Pipeline |
 | Current active task | None |
-| Next task | **E2-T3, Meaningful-Change Confirmation and Batch Normalization** |
-| Completed tasks | 11 / 33 |
-| Planned tasks | 22 / 33 |
+| Next task | **E2-T4, Structural Policy Planner and Dry-Run CLI** |
+| Completed tasks | 12 / 33 |
+| Planned tasks | 21 / 33 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
-The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). E2-T1 delivered the bounded Watchman input parser against the frozen E0-T5 fixture corpus. E2-T2 delivered the safe path containment resolver and the deterministic pattern policy engine. Implementation continues with E2-T3.
+The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). E2-T1 delivered the bounded Watchman input parser against the frozen E0-T5 fixture corpus. E2-T2 delivered the safe path containment resolver and the deterministic pattern policy engine. E2-T3 delivered meaningful-change confirmation and batch normalization. Implementation continues with E2-T4.
 
 ## 2. Epic Summary
 
@@ -47,7 +47,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 9 | E1-T4 | Completed | SQLite schema, migrations, and repositories |
 | 10 | E2-T1 | Completed | Bounded Watchman input parser |
 | 11 | E2-T2 | Completed | Safe path containment and pattern engine |
-| 12 | E2-T3 | Planned | Meaningful-change, hashing, and batch normalization |
+| 12 | E2-T3 | Completed | Meaningful-change, hashing, and batch normalization |
 | 13 | E2-T4 | Planned | Deterministic policy planner and dry-run CLI |
 | 14 | E2-T5 | Planned | Real Watchman trigger lifecycle and G1 fixtures |
 | 15 | E3-T1 | Planned | Validated dispatch and route state machines |
@@ -537,7 +537,7 @@ E2-T1 Completed.
 
 ## E2-T3: Implement Meaningful-Change Confirmation and Batch Normalization
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -570,6 +570,13 @@ E2-T2 Completed.
 - rename correctness does not depend on pairing;
 - file above hash limit is structurally unknown, not falsely unchanged;
 - output order and fingerprint are deterministic.
+
+### Evidence
+
+- `internal/app/ingest`: `BuildBatch` normalizes parsed entries into one canonical sorted, fingerprinted batch. Same-path sequences coalesce to the final observed state per processing-pipeline §4 (modify+modify→final-digest modify; create+modify→create; modify+delete→delete; delete+create→create only when the file exists at planning time (a vanished path falls back to delete, a non-regular recreated path keeps an unknown-digest create, containment anomalies fail the build), marked as replacement evidence with no rename claim; create+delete→drop only when the path neither had a prior digest nor exists at planning time, else a delete carrying the prior digest as uncertainty evidence; any delete followed by later create/modify carries replacement evidence and identical content is never suppressed as unchanged). Hashing goes through the E2-T2 containment-checked `OpenRegular` and hashes only the final state; oversize, non-regular, or vanished files stay structurally unknown (`HashUnknown`), never falsely unchanged.
+- Unchanged-modify suppression (PTH-006): a final modify whose known digest equals the prior path-fact digest is dropped with reason `unchanged_modify`; absent or unknown digests are always meaningful. Deletes are never opened (PTH-005). Excluded paths drop without reads; protected and immutable paths stay in the batch for quarantine but are never hashed.
+- `PathFacts` port (prior-digest lookup; durable implementation arrives with the E3 ingestion transaction) with `NoFacts`/`MapFacts` implementations, and the optional `GitEvidence` port with a `NoGit` default (SCP-009: Git may enrich but never gates ingestion; the real adapter arrives with later Git enrichment work). Batch order and fingerprint are deterministic regardless of payload order (DAT-005 via the E1-T3 fingerprint projection).
+- Tests: coalescing-rule table including the uncertainty and fallback branches, suppression trichotomy (same/different/no prior), delete-without-open, oversize-unknown, protected-not-hashed, excluded-drop, order/fingerprint determinism with content sensitivity, empty-batch fingerprint stability, and replays of the frozen atomic-save and replacement corpus shapes through `watchman.ParsePayload` into `BuildBatch`.
 
 ## E2-T4: Implement Structural Policy Planner and Dry-Run CLI
 

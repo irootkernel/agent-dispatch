@@ -85,7 +85,7 @@ For multiple entries referring to the same relative path in one source batch, us
 | Source sequence | Canonical result |
 |---|---|
 | modify, modify | one modify with final digest |
-| create, modify | one create with final digest |
+| create, modify | one create with final digest (when the path has no prior digest; a create observed over a persisted prior path is conservatively a modify) |
 | modify, delete | one delete |
 | delete, create | create if file exists at planning time; mark `replacement=true` as optional evidence |
 | create, delete | drop if the path did not exist before and does not exist after, otherwise delete with uncertainty reason |

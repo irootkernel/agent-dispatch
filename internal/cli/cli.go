@@ -172,6 +172,26 @@ func WriteInternalError(w io.Writer, cause any) {
 	_ = cause // the raw panic value stays out of diagnostics (SEC-007)
 }
 
+// writeEnvelopeWithWarnings emits a success envelope carrying warnings.
+func writeEnvelopeWithWarnings(w io.Writer, command string, result interface{}, warnings []string) int {
+	if warnings == nil {
+		warnings = []string{}
+	}
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(Envelope{
+		APIVersion: APIVersion,
+		Command:    command,
+		OK:         true,
+		Result:     result,
+		Warnings:   warnings,
+		TraceID:    "",
+	}); err != nil {
+		return 40
+	}
+	return 0
+}
+
 func writeError(w io.Writer, command, code, category, message string) {
 	enc := json.NewEncoder(w)
 	enc.SetEscapeHTML(false)

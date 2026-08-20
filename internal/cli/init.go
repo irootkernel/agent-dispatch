@@ -95,8 +95,9 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		return 3
 	}
 	// Spec section 3: a state directory inside the watched vault warns.
+	var warnings []string
 	if w := config.StateDirInsideRootWarning(stateDir, resourceRoot); w != "" {
-		fmt.Fprintf(stderr, "warning: %s\n", w)
+		warnings = append(warnings, w)
 	}
 	cfg := config.Example(instanceID, resourceRoot, platformpaths.DefaultCapabilityReportPath())
 	if err := config.WriteExample(cfg, configPath); err != nil {
@@ -104,11 +105,14 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		return 3
 	}
 	if jsonOutput {
-		return writeEnvelope(stdout, "init", map[string]any{
+		return writeEnvelopeWithWarnings(stdout, "init", map[string]any{
 			"config_path": configPath,
 			"state_dir":   stateDir,
 			"enabled":     false,
-		})
+		}, warnings)
+	}
+	for _, w := range warnings {
+		fmt.Fprintf(stderr, "warning: %s\n", w)
 	}
 	fmt.Fprintf(stdout, "wrote disabled example configuration: %s\n", configPath)
 	fmt.Fprintf(stdout, "state directory ready: %s\n", stateDir)

@@ -60,6 +60,9 @@ schema-validation:
 # roadmap and required-spec.
 traceability:
 	python3 docs/scripts/generate-traceability.py
+	@if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
+	  echo "traceability drift check requires a git repository"; exit 1; \
+	fi
 	@git diff --quiet -- docs/docs/00-sot/traceability-matrix.md || \
 	  (echo "traceability-matrix.md is stale; commit the regenerated file"; exit 1)
 

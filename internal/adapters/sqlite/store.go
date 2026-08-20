@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 )
 
 // ErrOptimisticConcurrency is returned when a conditional update matched
@@ -172,6 +173,11 @@ type IntentRecord struct {
 // attempt must be due, and any previous lease expired; ownership is
 // established by one conditional update checked by affected row count.
 func (s *Store) AcquireLease(tx *sql.Tx, dispatchID, owner string, leaseExpiresAt, nextAttemptAt, now string) error {
+	// Lease predicates compare timestamps as TEXT, which is exact only for
+	// one canonical form; normalize to UTC second precision first.
+	now = normalizeTimestamp(now)
+	leaseExpiresAt = normalizeTimestamp(leaseExpiresAt)
+	nextAttemptAt = normalizeTimestamp(nextAttemptAt)
 	ownTx := tx == nil
 	var err error
 	if ownTx {
@@ -416,4 +422,20 @@ func boolInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// normalizeTimestamp parses an RFC 3339 timestamp and renders it in UTC
+// at second precision, the canonical TEXT-comparable form used by lease
+// predicates.
+func normalizeTimestamp(ts string) string {
+	if ts == "" {
+		return ts
+	}
+	parsed, err := time.Parse(time.RFC3339, ts)
+	if err != nil {
+		// Non-RFC-3339 values are rejected elsewhere; pass through so the
+		// failure surfaces with the original text.
+		return ts
+	}
+	return parsed.UTC().Truncate(time.Second).Format(time.RFC3339)
 }

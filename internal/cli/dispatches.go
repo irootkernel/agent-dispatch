@@ -131,7 +131,7 @@ func runDispatchesList(command string, args []string, stdout, stderr io.Writer) 
 		Limit:    limit,
 	})
 	if err != nil {
-		return planErr(stderr, command, "sqlite_open_failed", "storage", err.Error(), 20)
+		return planErr(stderr, command, "sqlite_query_failed", "storage", err.Error(), 20)
 	}
 	return writeEnvelope(stdout, command, map[string]any{"dispatches": intents, "count": len(intents)})
 }
@@ -210,6 +210,10 @@ func runDispatchesReprocess(command string, args []string, stdout, stderr io.Wri
 	if !ok {
 		return planErr(stderr, command, "config_route_not_found", "configuration", fmt.Sprintf("route %q is not defined", batch.RouteID), 3)
 	}
+	revision, ok := config.RouteRevision(cfg, batch.RouteID)
+	if !ok {
+		return planErr(stderr, command, "internal_unclassified", "internal", "route revision could not be computed", 40)
+	}
 	_ = route
 	disposition := "dispatch"
 	if len(batch.Changes) == 0 {
@@ -220,8 +224,8 @@ func runDispatchesReprocess(command string, args []string, stdout, stderr io.Wri
 		DecisionID:      "dec-reprocess-" + flags.positional + "-" + strings.ReplaceAll(now, ":", ""),
 		BatchID:         flags.positional,
 		RouteID:         batch.RouteID,
-		RouteRevision:   batch.RouteRevision,
-		PolicyRevision:  "current",
+		RouteRevision:   revision,
+		PolicyRevision:  revision,
 		Disposition:     disposition,
 		Classification:  "normal",
 		ReasonCodesJSON: `["operator_reprocess"]`,
@@ -229,7 +233,7 @@ func runDispatchesReprocess(command string, args []string, stdout, stderr io.Wri
 		Actor:           "operator",
 	}
 	if err := closer.SaveDecision(nil, decision); err != nil {
-		return planErr(stderr, command, "sqlite_open_failed", "storage", err.Error(), 20)
+		return planErr(stderr, command, "sqlite_query_failed", "storage", err.Error(), 20)
 	}
 	return writeEnvelope(stdout, command, map[string]any{
 		"batch_id": flags.positional, "changes": len(batch.Changes),
@@ -285,12 +289,28 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 		}
 		max = n
 	}
+	cfg, err := config.Load(resolveConfigPath(flags.val("--config")))
+	if err != nil {
+		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
+	}
+	route, ok := cfg.Routes[routeID]
+	if !ok {
+		return planErr(stderr, command, "config_route_not_found", "configuration", fmt.Sprintf("route %q is not defined", routeID), 3)
+	}
+	target, ok := cfg.Targets[route.Dispatch.Target]
+	if !ok {
+		return planErr(stderr, command, "config_invalid", "configuration", fmt.Sprintf("target %q is not defined", route.Dispatch.Target), 3)
+	}
+	backoff, err := backoffFromConfig(route.Dispatch.SubmissionRetry)
+	if err != nil {
+		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
+	}
 	store, closer, exit := openOperatorStore(command, flags.val("--config"), stderr)
 	if exit != 0 {
 		return exit
 	}
 	defer closer.Close()
-	sink, err := resolveSink("hermes-kanban")
+	sink, err := resolveSink(target.Type)
 	if err != nil {
 		writeError(stderr, command, "target_definite_unavailable", "target_unavailable", err.Error())
 		return sinkUnavailableExit
@@ -298,6 +318,7 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 	rt := &dispatch.Runtime{
 		Store: store, Sink: sink,
 		Now: time.Now, LeaseTTL: time.Minute, Actor: "drain",
+		Backoff: backoff, JitterUnit: jitterUnit,
 	}
 	report, err := rt.Drain(requestCtx(), routeID, max, store)
 	if err != nil {

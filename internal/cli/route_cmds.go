@@ -1,11 +1,13 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 	"time"
 
+	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
 	"github.com/rootkernel/jjukkumi/internal/app/dispatch"
 	"github.com/rootkernel/jjukkumi/internal/config"
 )
@@ -107,6 +109,9 @@ func runRouteEnable(command string, args []string, stdout, stderr io.Writer) int
 	}
 	defer closer.Close()
 	if err := store.SetRouteActivation(requestCtx(), routeID, "enabled", revision, dispatch.Timestamp(time.Now())); err != nil {
+		if errors.Is(err, sqlite.ErrOptimisticConcurrency) {
+			return planErr(stderr, command, "transition_invalid", "conflict", err.Error(), 14)
+		}
 		return planErr(stderr, command, "route_not_registered", "conflict", err.Error(), 14)
 	}
 	return writeEnvelope(stdout, command, map[string]any{"route_id": routeID, "activation_state": "enabled", "acknowledged_revision": revision})
@@ -127,6 +132,9 @@ func runRouteDisable(command string, args []string, stdout, stderr io.Writer) in
 	}
 	defer closer.Close()
 	if err := store.SetRouteActivation(requestCtx(), routeID, "disabled", "", dispatch.Timestamp(time.Now())); err != nil {
+		if errors.Is(err, sqlite.ErrOptimisticConcurrency) {
+			return planErr(stderr, command, "transition_invalid", "conflict", err.Error(), 14)
+		}
 		return planErr(stderr, command, "route_not_registered", "conflict", err.Error(), 14)
 	}
 	warnings := []string{}

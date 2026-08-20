@@ -26,7 +26,7 @@ import (
 
 // PathFacts is the read-only prior-digest lookup port (PTH-006): the last
 // known content digest per path. The durable implementation arrives with
-// the E3 ingestion transaction; tests and dry-run use maps or NoFacts.
+// the E5-T3 exact-suppression core; tests and dry-run use maps or NoFacts.
 type PathFacts interface {
 	// PriorDigest returns the last known digest for path and whether one
 	// exists. An error is a lookup failure, not absence.

@@ -96,6 +96,7 @@ The v0.1 registry is closed: implementations emit only the codes below. Adding o
 | `protected_path_quarantined` | `quarantined` | 5 |
 | `unsafe_path_quarantined` | `quarantined` | 5 |
 | `sqlite_busy` | `transient_local` | 10 |
+| `sqlite_query_failed` | `storage` | 20 |
 | `hermes_executable_missing` | `target_unavailable` | 11 |
 | `hermes_version_unsupported` | `target_unavailable` | 11 |
 | `watchman_unavailable` | `target_unavailable` | 11 |

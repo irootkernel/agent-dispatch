@@ -260,6 +260,24 @@ func (s *Store) RerunIntent(ctx context.Context, in ports.RerunInput) (ports.Int
 	if err := s.saveIntentTakeOverOriginal(tx, portsIntent(in.New), in.OriginalDispatchID); err != nil {
 		return sum, mapIntentConstraint(err)
 	}
+	// The takeover applies the route transition matching the state it
+	// found, so the rerun holds the slot as genuinely active work.
+	snap, err := s.routeSnapshotInTx(tx, in.New.RouteID)
+	if err != nil {
+		return sum, err
+	}
+	switch snap.State {
+	case state.RouteIdle:
+		if err := applyRouteTransition(tx, snap, state.RouteActiveClean, state.ReasonDispatchAccepted,
+			state.RouteEvidence{Actor: in.Actor, ActivatingDispatchID: in.New.DispatchID}, now,
+			fmt.Sprintf(`{"reason":%q,"dispatch_id":%q,"operator_rerun":true}`, state.ReasonDispatchAccepted, in.New.DispatchID)); err != nil {
+			return sum, err
+		}
+	case state.RouteFollowupReady, state.RouteActiveClean, state.RouteActiveDirty:
+		// Already an activation shape holding the rerun's own takeover.
+	default:
+		return sum, fmt.Errorf("%w: route %s is %s; rerun requires a resolved route", ports.ErrStateNotEligible, in.New.RouteID, snap.State)
+	}
 	if err := s.AppendTransition(tx, in.New.DispatchID+":created", "dispatch_intent", in.New.DispatchID, "", "ready", now,
 		fmt.Sprintf(`{"reason":"operator_rerun","actor":%q,"operator_reason":%q,"supersedes_dispatch":%q,"new_generation":%d}`, in.Actor, in.Reason, in.OriginalDispatchID, in.New.Generation)); err != nil {
 		return sum, err

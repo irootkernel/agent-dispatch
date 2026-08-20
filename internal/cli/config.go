@@ -11,8 +11,8 @@ import (
 )
 
 // runConfig implements the config command tree (cli-spec §3); this build
-// implements `config validate`. `config show` arrives with the E3
-// runtime-management surface.
+// implements `config validate`. `config show` arrives with the E6-T2
+// operational observability surface.
 func runConfig(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 || args[0] != "validate" {
 		if len(args) > 0 && args[0] == "show" {

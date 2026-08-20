@@ -89,12 +89,18 @@ func (r *Runtime) SubmitOnce(ctx context.Context, dispatchID, owner string) (Sub
 
 	var req ports.TaskRequest
 	if err := json.Unmarshal([]byte(snap.RequestJSON), &req); err != nil {
+		// Validated before leasing: a malformed stored request must not
+		// strand the intent in submitting with an open attempt.
 		return report, fmt.Errorf("stored request is not the task contract shape: %w", err)
 	}
 	res, sinkErr := r.Sink.Submit(ctx, req)
 	classified := ClassifyResult(res, sinkErr)
 	if sinkErr != nil {
-		res.Diagnostic = sinkErr.Error()
+		// Adapter error text is untrusted for persistence (the sink
+		// contract's Diagnostic is redacted at the source); record the
+		// bounded class only until the E4 adapter provides the redaction
+		// contract.
+		res.Diagnostic = fmt.Sprintf("sink error (%T); message redacted", sinkErr)
 	}
 	report.Classification = res.Classification
 	completion := ports.AttemptResult{

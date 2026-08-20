@@ -9,6 +9,7 @@ import (
 
 	"github.com/rootkernel/jjukkumi/internal/domain/records"
 	"github.com/rootkernel/jjukkumi/internal/domain/state"
+	"github.com/rootkernel/jjukkumi/internal/ports"
 )
 
 // ErrOptimisticConcurrency is returned when a conditional update matched
@@ -148,7 +149,7 @@ func (s *Store) SaveIntent(tx *sql.Tx, i IntentRecord) error {
 		if err := txOrDB(tx, s.DB).QueryRow(`SELECT 1 FROM route_runtime_state WHERE route_id = ?`, i.RouteID).Scan(&exists); err != nil {
 			return fmt.Errorf("route %s has no runtime state row: %w", i.RouteID, ErrOptimisticConcurrency)
 		}
-		return fmt.Errorf("route %s already has an active dispatch (invariant 5): %w", i.RouteID, ErrOptimisticConcurrency)
+		return fmt.Errorf("route %s: %w", i.RouteID, ports.ErrRouteSlotHeld)
 	}
 	return nil
 }

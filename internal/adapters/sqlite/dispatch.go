@@ -10,6 +10,8 @@ import (
 	"github.com/rootkernel/jjukkumi/internal/domain/records"
 	"github.com/rootkernel/jjukkumi/internal/domain/state"
 	"github.com/rootkernel/jjukkumi/internal/ports"
+
+	"modernc.org/sqlite"
 )
 
 // The Store type implements ports.DispatchStore (E3-T2). Every method
@@ -41,25 +43,28 @@ func (s *Store) CommitLineage(ctx context.Context, lin ports.Lineage) error {
 }
 
 // mapIntentConstraint converts driver constraint rejections into the
-// typed port errors callers branch on.
+// typed port errors callers branch on. The slot error is typed at its
+// source (SaveIntent); unique-constraint identification inspects the
+// driver error code and the constrained columns, never prose alone.
 func mapIntentConstraint(err error) error {
-	if errors.Is(err, ErrOptimisticConcurrency) {
-		if strings.Contains(err.Error(), "active dispatch") {
-			return fmt.Errorf("%w: %v", ports.ErrRouteSlotHeld, err)
-		}
+	if errors.Is(err, ports.ErrRouteSlotHeld) {
 		return err
 	}
-	var msg string
-	var serr interface{ Error() string }
-	if errors.As(err, &serr) {
-		msg = serr.Error()
-	} else if err != nil {
-		msg = err.Error()
+	if errors.Is(err, ErrOptimisticConcurrency) {
+		return err
 	}
-	if strings.Contains(msg, "UNIQUE constraint") && strings.Contains(msg, "idempotency_key") {
+	var derr *sqlite.Error
+	if errors.As(err, &derr) && isUniqueConstraint(derr) && strings.Contains(derr.Error(), "idempotency_key") {
 		return fmt.Errorf("%w: %v", ports.ErrIdempotencyConflict, err)
 	}
 	return err
+}
+
+// isUniqueConstraint reports a SQLITE_CONSTRAINT_UNIQUE (2067) or
+// generic constraint (19) rejection from the driver.
+func isUniqueConstraint(err *sqlite.Error) bool {
+	code := err.Code()
+	return code == 2067 || code == 19
 }
 
 func portsObservation(o ports.ObservationInput) ObservationRecord {

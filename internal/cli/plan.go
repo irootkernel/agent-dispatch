@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/rootkernel/jjukkumi/internal/adapters/localfs"
+	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
 	"github.com/rootkernel/jjukkumi/internal/adapters/watchman"
 	"github.com/rootkernel/jjukkumi/internal/app/dispatch"
 	"github.com/rootkernel/jjukkumi/internal/app/ingest"
@@ -253,53 +254,115 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	if code != 0 {
 		return code
 	}
-	lin, exit := persistLineage(command, artifacts, stderr)
+	outcome, exit := persistThroughCoordinator(command, artifacts, stderr)
 	if exit != 0 {
 		return exit
 	}
-	if noSubmit {
+	if outcome.merged {
+		// Another dispatch holds the route slot: the burst merged into
+		// the durable dirty generation (CON-002, FBK-001).
 		return writeEnvelope(stdout, command, map[string]any{
-			"route_id": artifacts.opts.routeID, "dispatch_id": lin.Intent.DispatchID,
+			"route_id": artifacts.opts.routeID, "disposition": "merge_pending",
+			"dirty_generation": outcome.dirty, "submitted": false,
+		})
+	}
+	if noSubmit {
+		outcome.Close()
+		return writeEnvelope(stdout, command, map[string]any{
+			"route_id": artifacts.opts.routeID, "dispatch_id": outcome.dispatchID,
 			"state": "ready", "submitted": false,
 		})
 	}
 	// The submit phase needs the E4 sink adapter; the intent is durable
 	// and ready, and no automatic target fallback exists (DUR-008).
-	if _, err := resolveSink(artifacts.target.Type); err != nil {
+	sink, err := resolveSink(artifacts.target.Type)
+	if err != nil {
+		outcome.Close()
 		writeError(stderr, command, "target_definite_unavailable", "target_unavailable", err.Error())
 		return sinkUnavailableExit
 	}
-	return writeEnvelope(stdout, command, map[string]any{"route_id": artifacts.opts.routeID, "dispatch_id": lin.Intent.DispatchID, "submitted": true})
+	backoff, err := backoffFromConfig(artifacts.route.Dispatch.SubmissionRetry)
+	if err != nil {
+		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
+	}
+	rt := &dispatch.Runtime{
+		Store: outcome.store, Sink: sink, Now: time.Now,
+		LeaseTTL: time.Minute, Backoff: backoff, JitterUnit: jitterUnit, Actor: "dispatch",
+	}
+	report, err := rt.SubmitOnce(requestCtx(), outcome.dispatchID, "jjukkumi-dispatch")
+	outcome.Close()
+	if err != nil {
+		return intentErr(stderr, command, err)
+	}
+	return writeEnvelope(stdout, command, map[string]any{
+		"route_id": artifacts.opts.routeID, "dispatch_id": outcome.dispatchID,
+		"state": string(report.To), "reason": string(report.Reason), "submitted": true,
+	})
 }
 
-// persistLineage commits the planned observation-to-intent lineage into
-// the durable store (DUR-002: the committed intent exists before any
-// target invocation).
-func persistLineage(command string, artifacts *planArtifacts, stderr io.Writer) (ports.Lineage, int) {
+// persistOutcome reports what the coordinator did with one arrival. The
+// store stays open for the submit phase and must be closed by the
+// caller.
+type persistOutcome struct {
+	merged     bool
+	dirty      int
+	dispatchID string
+	store      storeOp
+	closer     *sqlite.Store
+}
+
+// Close releases the outcome's store handle when the submit phase is
+// done with it.
+func (o persistOutcome) Close() {
+	if o.closer != nil {
+		o.closer.Close()
+	}
+}
+
+// persistThroughCoordinator routes the planned arrival through the E3-T4
+// coordinator: the single slot winner commits and activates its intent
+// (DUR-002: the committed intent exists before any target invocation);
+// every competing burst merges into the durable dirty generation instead
+// of failing (CON-002, FBK-001).
+func persistThroughCoordinator(command string, artifacts *planArtifacts, stderr io.Writer) (persistOutcome, int) {
 	store, closer, exit := openOperatorStore(command, artifacts.opts.configPath, stderr)
 	if exit != 0 {
-		return ports.Lineage{}, exit
+		return persistOutcome{}, exit
 	}
-	defer closer.Close()
 	lin, err := buildLineage(artifacts)
 	if err != nil {
+		closer.Close()
 		writeError(stderr, command, "internal_unclassified", "internal", err.Error())
-		return ports.Lineage{}, 40
+		return persistOutcome{}, 40
 	}
-	if err := store.CommitLineage(requestCtx(), lin); err != nil {
+	coordinator := &dispatch.Coordinator{
+		Store: store, Now: func() string { return dispatch.Timestamp(time.Now()) }, Actor: "dispatch-cli",
+	}
+	merged, err := coordinator.Arrival(requestCtx(), lin)
+	if err != nil {
+		closer.Close()
 		switch {
 		case errors.Is(err, ports.ErrIdempotencyConflict):
 			writeError(stderr, command, "dispatch_duplicate", "conflict", err.Error())
-			return ports.Lineage{}, 14
+			return persistOutcome{}, 14
 		case errors.Is(err, ports.ErrRouteSlotHeld):
 			writeError(stderr, command, "route_slot_held", "conflict", err.Error())
-			return ports.Lineage{}, 14
+			return persistOutcome{}, 14
 		default:
-			writeError(stderr, command, "sqlite_open_failed", "storage", err.Error())
-			return ports.Lineage{}, 20
+			writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
+			return persistOutcome{}, 20
 		}
 	}
-	return lin, 0
+	if merged {
+		snap, err := store.LoadRouteState(requestCtx(), artifacts.opts.routeID)
+		closer.Close()
+		if err != nil {
+			writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
+			return persistOutcome{}, 20
+		}
+		return persistOutcome{merged: true, dirty: snap.DirtyGeneration}, 0
+	}
+	return persistOutcome{dispatchID: lin.Intent.DispatchID, store: store, closer: closer}, 0
 }
 
 // buildLineage assembles the durable persistence unit from the planned

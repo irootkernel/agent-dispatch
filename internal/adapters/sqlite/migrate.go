@@ -21,11 +21,36 @@ type Migration struct {
 // Migrations is the ordered, gap-free migration list the binary supports.
 var Migrations = []Migration{
 	{Version: 1, Name: "initial-schema", SQL: schemaV1},
+	{Version: 2, Name: "attempts-unique-by-attempt-id", SQL: schemaV2AttemptsUniqueByAttemptID},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
 // database at a newer version is refused rather than silently modified.
 var MaxSchemaVersion = Migrations[len(Migrations)-1].Version
+
+// schemaV2AttemptsUniqueByAttemptID drops the over-constraining
+// UNIQUE(dispatch_id, started_at) on dispatch_attempts: with the
+// canonical second-precision timestamps it rejected legitimate
+// same-second retries of one dispatch (the explicit operator retry of
+// dead-lettered work). Attempt identity is the primary-keyed attempt
+// id; per-dispatch ordering stays queryable through started_at.
+const schemaV2AttemptsUniqueByAttemptID = `
+CREATE TABLE dispatch_attempts_v2 (
+	attempt_id     TEXT PRIMARY KEY,
+	dispatch_id    TEXT NOT NULL REFERENCES dispatch_intents(dispatch_id),
+	lease_owner    TEXT NOT NULL,
+	started_at     TEXT NOT NULL,
+	completed_at   TEXT,
+	outcome        TEXT CHECK (outcome IN ('accepted','rejected','unknown','transport_failure')),
+	error_code     TEXT,
+	response_digest TEXT,
+	diagnostic     TEXT
+);
+INSERT INTO dispatch_attempts_v2 SELECT attempt_id, dispatch_id, lease_owner, started_at, completed_at, outcome, error_code, response_digest, diagnostic FROM dispatch_attempts;
+DROP TABLE dispatch_attempts;
+ALTER TABLE dispatch_attempts_v2 RENAME TO dispatch_attempts;
+CREATE INDEX idx_attempts_dispatch ON dispatch_attempts(dispatch_id, started_at);
+`
 
 // checksum returns the immutable migration checksum.
 func (m Migration) checksum() string {

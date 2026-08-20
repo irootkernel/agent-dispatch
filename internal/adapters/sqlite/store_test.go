@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -10,7 +11,9 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/rootkernel/jjukkumi/internal/domain/records"
 	"github.com/rootkernel/jjukkumi/internal/domain/state"
+	"github.com/rootkernel/jjukkumi/internal/ports"
 )
 
 // openTestStore opens a real SQLite file under t.TempDir(), migrates it,
@@ -287,7 +290,7 @@ func TestIntegrityCheckAndSchemaVersion(t *testing.T) {
 	if err := s.IntegrityCheck(true); err != nil {
 		t.Fatalf("integrity_check: %v", err)
 	}
-	if v, err := s.SchemaVersion(); err != nil || v != 1 {
+	if v, err := s.SchemaVersion(); err != nil || v != MaxSchemaVersion {
 		t.Fatalf("schema version = %d, %v", v, err)
 	}
 }
@@ -551,14 +554,14 @@ func TestMigrationFailureIsAtomic(t *testing.T) {
 	if err := s.Migrate(t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
-	bad := Migration{Version: 2, Name: "broken", SQL: `CREATE TABLE broken (x); THIS IS NOT SQL`}
+	bad := Migration{Version: MaxSchemaVersion + 1, Name: "broken", SQL: `CREATE TABLE broken (x); THIS IS NOT SQL`}
 	if err := s.applyMigration(bad); err == nil {
 		t.Fatal("broken migration must fail")
 	}
-	// Nothing of the failed migration persisted: still version 1 and no
-	// broken artifacts.
+	// Nothing of the failed migration persisted: still at the shipped
+	// baseline and no broken artifacts.
 	v, err := s.SchemaVersion()
-	if err != nil || v != 1 {
+	if err != nil || v != MaxSchemaVersion {
 		t.Fatalf("failed migration must not advance the ledger: %d %v", v, err)
 	}
 	var n int
@@ -671,9 +674,12 @@ func TestBackupVerificationFailsClosed(t *testing.T) {
 func TestMigrationLedgerGapDetected(t *testing.T) {
 	s := openTestStore(t)
 	// Forge a ledger entry with a foreign checksum below the effective
-	// maximum: the binary's test history knows versions 1..3.
-	s.migrations = []Migration{Migrations[0], {Version: 2, Name: "test-2", SQL: "CREATE TABLE t2 (x)"}, {Version: 3, Name: "test-3", SQL: "CREATE TABLE t3 (x)"}}
-	if _, err := s.Exec(`INSERT INTO schema_migrations (version, name, checksum) VALUES (2, 'ghost', 'sha256:0')`); err != nil {
+	// maximum: the binary's test history knows versions 1..3 beyond the
+	// shipped baseline.
+	s.migrations = append(append([]Migration{}, Migrations...),
+		Migration{Version: MaxSchemaVersion + 1, Name: "test-next", SQL: "CREATE TABLE t2 (x)"},
+		Migration{Version: MaxSchemaVersion + 2, Name: "test-last", SQL: "CREATE TABLE t3 (x)"})
+	if _, err := s.Exec(fmt.Sprintf(`INSERT INTO schema_migrations (version, name, checksum) VALUES (%d, 'ghost', 'sha256:0')`, MaxSchemaVersion+1)); err != nil {
 		t.Fatal(err)
 	}
 	err := s.Migrate(t.TempDir())
@@ -683,14 +689,167 @@ func TestMigrationLedgerGapDetected(t *testing.T) {
 	// A true gap: ledger {1,3} against a test history of three
 	// migrations, so version 3 is supported and the missing version 2 is
 	// the detected defect.
-	if _, err := s.Exec(`DELETE FROM schema_migrations WHERE version = 2`); err != nil {
+	if _, err := s.Exec(fmt.Sprintf(`DELETE FROM schema_migrations WHERE version = %d`, MaxSchemaVersion+1)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Exec(`INSERT INTO schema_migrations (version, name, checksum) VALUES (3, 'ghost', 'sha256:0')`); err != nil {
+	if _, err := s.Exec(fmt.Sprintf(`INSERT INTO schema_migrations (version, name, checksum) VALUES (%d, 'ghost', 'sha256:0')`, MaxSchemaVersion+2)); err != nil {
 		t.Fatal(err)
 	}
 	err = s.Migrate(t.TempDir())
 	if err == nil || !strings.Contains(err.Error(), "gap") {
 		t.Fatalf("ledger gap must be detected: %v", err)
+	}
+}
+
+// TestSameSecondRetriesAllowed proves the migration v2 remediation: two
+// attempts of one dispatch inside the same canonical second both
+// persist (the over-constraining UNIQUE(dispatch_id, started_at) is
+// gone), and per-dispatch ordering stays queryable.
+func TestSameSecondRetriesAllowed(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	seedRouteForAttempts(t, s)
+	now := "2026-08-21T00:00:00Z"
+	first, err := s.AcquireAttempt(ctx, ports.AcquireAttempt{
+		DispatchID: "dispatch-samesecond", Owner: "drain",
+		AttemptID: "att-ss-1", Now: now, LeaseExpiresAt: now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The first attempt fails definitely and becomes due again inside
+	// the same canonical second (backoff elapsed, operator made it due).
+	if err := s.CompleteAttempt(ctx, ports.AttemptResult{
+		AttemptID: first, DispatchID: "dispatch-samesecond", Outcome: "transport_failure",
+		ErrorCode: "definite_not_submitted", CompletedAt: now,
+		Transition: ports.AttemptTransition{To: records.IntentRetryWait, Reason: state.ReasonTransientFailure,
+			TransitionID: first + ":transient_failure"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MakeRetryDue(ctx, "dispatch-samesecond", now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AcquireAttempt(ctx, ports.AcquireAttempt{
+		DispatchID: "dispatch-samesecond", Owner: "operator-retry",
+		AttemptID: "att-ss-2", Now: now, LeaseExpiresAt: now,
+	}); err != nil {
+		t.Fatalf("the same-second retry must persist after migration v2: %v", err)
+	}
+	var count int
+	if err := s.QueryRow(`SELECT COUNT(*) FROM dispatch_attempts WHERE dispatch_id = 'dispatch-samesecond' AND started_at = ?`, now).Scan(&count); err != nil || count != 2 {
+		t.Fatalf("both same-second attempts must be recorded: %d (err=%v)", count, err)
+	}
+}
+
+// TestMigrationV2PreservesAttemptRows proves the v1→v2 upgrade: attempt
+// rows written at v1 survive the destructive rebuild with their
+// columns, a pre-migration backup is taken, and the over-constraint is
+// gone afterwards.
+func TestMigrationV2PreservesAttemptRows(t *testing.T) {
+	dir := t.TempDir()
+	db := filepath.Join(dir, "state.db")
+	s, err := Open(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Apply only v1 (a one-migration history), then write one attempt
+	// row.
+	s.migrations = []Migration{Migrations[0]}
+	if err := s.Migrate(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RegisterResource(nil, "vault-main", "r", "/srv/vault", "/srv/vault", "markdown", "disabled"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RegisterRoute(nil, "wiki", "rev-1", "rev-1", "vault-main", "hermes-kanban-main", "{}", "2026-08-21T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InitializeRouteState(nil, "wiki"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CommitLineage(context.Background(), attemptLineage("dispatch-mig", "decision-mig", "obs-mig", "batch-mig", "2026-08-21T00:00:00Z")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Exec(`INSERT INTO dispatch_attempts (attempt_id, dispatch_id, lease_owner, started_at, completed_at, outcome, diagnostic)
+		VALUES ('att-mig', 'dispatch-mig', 'drain', '2026-08-21T00:00:00Z', '2026-08-21T00:00:01Z', 'accepted', 'ok')`); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+
+	// Reopen and migrate to v2 with a real backup directory.
+	s2, err := Open(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s2.Close()
+	backupDir := filepath.Join(dir, "backups")
+	if err := s2.Migrate(backupDir); err != nil {
+		t.Fatal(err)
+	}
+	var owner, completed, outcome string
+	if err := s2.QueryRow(`SELECT lease_owner, completed_at, outcome FROM dispatch_attempts WHERE attempt_id = 'att-mig'`).
+		Scan(&owner, &completed, &outcome); err != nil {
+		t.Fatalf("v1 attempt row must survive the v2 rebuild: %v", err)
+	}
+	if owner != "drain" || completed != "2026-08-21T00:00:01Z" || outcome != "accepted" {
+		t.Fatalf("v1 attempt row altered by the rebuild: %s %s %s", owner, completed, outcome)
+	}
+	// A second same-second attempt is now allowed.
+	if _, err := s2.Exec(`INSERT INTO dispatch_attempts (attempt_id, dispatch_id, lease_owner, started_at)
+		VALUES ('att-mig-2', 'dispatch-mig', 'retry', '2026-08-21T00:00:00Z')`); err != nil {
+		t.Fatalf("same-second second attempt must be allowed after v2: %v", err)
+	}
+	// A pre-migration backup was taken.
+	matches, _ := filepath.Glob(filepath.Join(backupDir, "*"))
+	if len(matches) == 0 {
+		t.Fatal("the v2 migration must take a pre-migration backup")
+	}
+}
+
+// attemptLineage builds one full observation-to-intent lineage for the
+// attempts tests.
+func attemptLineage(dispatchID, decisionID, obsID, batchID, now string) ports.Lineage {
+	return ports.Lineage{
+		Observation: ports.ObservationInput{
+			ObservationID: obsID, SchemaVersion: "jjukkumi.source-observation/v1",
+			SourceType: "watchman", SourceID: "watchman-main", TriggerName: "trig",
+			ResourceID: "vault-main", ObservedAt: now, ReceivedAt: now,
+			RawPayloadDigest: "sha256:a", IngestStatus: "accepted",
+		},
+		Batch: ports.BatchInput{
+			BatchID: batchID, RouteID: "wiki", RouteRevision: "rev-1",
+			ResourceID: "vault-main", CreatedAt: now,
+			ContentFingerprint: "sha256:a", ObservationIDs: []string{obsID},
+		},
+		Decision: ports.DecisionInput{
+			DecisionID: decisionID, BatchID: batchID, RouteID: "wiki",
+			RouteRevision: "rev-1", PolicyRevision: "rev-1",
+			Disposition: "dispatch", Classification: "normal", CreatedAt: now, Actor: "planner",
+		},
+		Intent: ports.IntentInput{
+			DispatchID: dispatchID, DecisionID: decisionID, RouteID: "wiki", RouteRevision: "rev-1",
+			TargetID: "hermes-kanban-main", TargetType: "hermes-kanban", ResourceID: "vault-main",
+			Generation: 1, IdempotencyKey: "key-" + dispatchID, ContentFingerprint: "sha256:a",
+			ManifestDigest: "sha256:b", RequestVersion: "jjukkumi.hermes-task/v1", RequestJSON: "{}", CreatedAt: now,
+		},
+	}
+}
+
+// seedRouteForAttempts registers the minimal lineage the attempts table
+// requires.
+func seedRouteForAttempts(t *testing.T, s *Store) {
+	t.Helper()
+	if err := s.RegisterResource(nil, "vault-main", "r", "/srv/vault", "/srv/vault", "markdown", "disabled"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RegisterRoute(nil, "wiki", "rev-1", "rev-1", "vault-main", "hermes-kanban-main", "{}", "2026-08-21T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InitializeRouteState(nil, "wiki"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CommitLineage(context.Background(), attemptLineage("dispatch-samesecond", "decision-ss", "obs-ss", "batch-ss", "2026-08-21T00:00:00Z")); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -18,8 +18,9 @@ const ConfigVersion = "1"
 
 // SchemaRange is the range of SQLite migration versions this build
 // supports, inclusive; schema v1 is the initial durable schema delivered
-// by E1-T4.
-const SchemaRange = "1-1"
+// by E1-T4 and v2 drops the over-constraining attempts uniqueness
+// (E4-T5 gate finding).
+const SchemaRange = "1-2"
 
 // AdapterVersions returns the pinned adapter implementation versions the
 // build carries. Each entry names the delivered surface and its verified

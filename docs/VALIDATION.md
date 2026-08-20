@@ -1,6 +1,6 @@
 # SOT Package Validation
 
-> **Validated:** 2026-08-20 (post E1-T4)  
+> **Validated:** 2026-08-20 (post E1 closeout)  
 > **Package target:** JJUKKUMI SOT 1.0.4 / implementation v0.1.0
 
 ## Completed Checks

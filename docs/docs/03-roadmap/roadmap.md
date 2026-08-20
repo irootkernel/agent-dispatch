@@ -10,22 +10,22 @@
 
 | Field | Value |
 |---|---|
-| Current epic | E1, Go Foundation, Configuration, and Persistence Schema |
+| Current epic | E2, Watchman Deterministic Dry-Run Pipeline |
 | Current active task | None |
-| Next task | None (E1 complete pending audit) |
+| Next task | **E2-T1, Bounded Watchman Input Parser** |
 | Completed tasks | 9 / 33 |
 | Planned tasks | 24 / 33 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
-The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. E1-T4 completed the durable SQLite schema, migrations, and repositories; all E1 member tasks are done pending the epic audit.
+The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). Implementation continues with E2-T1.
 
 ## 2. Epic Summary
 
 | Epic | Title | Status | Tasks | Completion gate |
 |---|---|---:|---:|---|
 | E0 | SOT and External Contract Baseline | **Completed** | 5 | G0 |
-| E1 | Go Foundation, Configuration, and Persistence Schema | **In Progress** | 4 | Foundation ready |
+| E1 | Go Foundation, Configuration, and Persistence Schema | **Completed** | 4 | Foundation ready |
 | E2 | Watchman Deterministic Dry-Run Pipeline | **Planned** | 5 | G1 |
 | E3 | Durable Dispatch and Route Coordination Core | **Planned** | 5 | G2 |
 | E4 | Hermes Kanban Durable Integration | **Planned** | 5 | G3 |
@@ -264,7 +264,7 @@ E0-T3 Completed.
 
 # E1: Go Foundation, Configuration, and Persistence Schema
 
-**Epic status:** In Progress  
+**Epic status:** Completed  
 **Purpose:** Create a buildable, testable foundation with no source or target side effects.
 
 ## E1-T1: Bootstrap Repository, Toolchain, and Verification Pipeline

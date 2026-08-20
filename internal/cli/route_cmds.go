@@ -176,9 +176,17 @@ func runRouteEnable(command string, args []string, stdout, stderr io.Writer) int
 	defer closer.Close()
 	if err := store.SetRouteActivation(requestCtx(), routeID, "enabled", revision, dispatch.Timestamp(time.Now())); err != nil {
 		if errors.Is(err, sqlite.ErrOptimisticConcurrency) {
-			return planErr(stderr, command, "transition_invalid", "conflict", err.Error(), 14)
+			// First use: materialize the registration from the
+			// configuration and retry the activation once.
+			if regErr := registerRouteState(requestCtx(), closer, cfg, routeID); regErr != nil {
+				return planErr(stderr, command, "route_not_registered", "conflict", regErr.Error(), 14)
+			}
+			if err := store.SetRouteActivation(requestCtx(), routeID, "enabled", revision, dispatch.Timestamp(time.Now())); err != nil {
+				return planErr(stderr, command, "transition_invalid", "conflict", err.Error(), 14)
+			}
+		} else {
+			return planErr(stderr, command, "route_not_registered", "conflict", err.Error(), 14)
 		}
-		return planErr(stderr, command, "route_not_registered", "conflict", err.Error(), 14)
 	}
 	return writeEnvelope(stdout, command, map[string]any{"route_id": routeID, "activation_state": "enabled", "acknowledged_revision": revision})
 }

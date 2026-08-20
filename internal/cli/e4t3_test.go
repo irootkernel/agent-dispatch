@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -15,9 +16,10 @@ import (
 	"github.com/rootkernel/jjukkumi/internal/testsupport/stubhermes"
 )
 
-// e4t3RegisterRoute creates the route runtime state row the coordinator
-// requires (the same registration the crash harness performs; a
-// production registration surface is tracked for the epic audit).
+// e4t3RegisterRoute creates the route runtime state row directly (the
+// same seeding the crash harness uses); production first-use
+// registration flows through `watchman install` and `route enable`
+// (TestFirstUseRegistrationFlow).
 func e4t3RegisterRoute(t *testing.T, configPath string) {
 	t.Helper()
 	cfg, err := config.Load(resolveConfigPath(configPath))
@@ -479,4 +481,64 @@ func TestSchemaLegalDayUnitDurations(t *testing.T) {
 	if _, err := config.ParseDuration("banana"); err == nil {
 		t.Fatal("the schema-exact parser must reject nonsense")
 	}
+}
+
+// TestFirstUseRegistrationFlow proves the E4 audit remediation for the
+// route-registration seam: on a fresh state directory the operator's
+// entry points themselves materialize the registration — `route
+// enable` succeeds on first use, `watchman install` registers the
+// route, and a dispatched change reaches acceptance with no manual
+// state seeding (production first use works end to end).
+func TestFirstUseRegistrationFlow(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	// Fresh state, no e4t3RegisterRoute seeding.
+	setPlanEnv(t, vault, false)
+
+	// route enable succeeds on first use and registers the route.
+	var out, errb bytes.Buffer
+	code := Run([]string{"route", "enable", "--route", "wiki", "--config", configPath, "--acknowledge-production-gate", "--yes"}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("first-use route enable must register and succeed: %s", errb.String())
+	}
+
+	// watchman install (guarded on the real Watchman) also registers
+	// idempotently.
+	if _, err := exec.LookPath("watchman"); err == nil {
+		out.Reset()
+		errb.Reset()
+		if code := Run([]string{"watchman", "install", "--route", "wiki", "--config", configPath}, &out, &errb); code != 0 {
+			t.Fatalf("watchman install: %s", errb.String())
+		}
+		Run([]string{"watchman", "remove", "--route", "wiki", "--config", configPath, "--yes"}, &out, &errb)
+	}
+
+	// A dispatched change reaches acceptance with no manual seeding.
+	res := e4t3DispatchNoRegister(t, configPath, vault)
+	if res["state"] != "accepted" {
+		t.Fatalf("first-use dispatch must reach acceptance, got %v", res["state"])
+	}
+}
+
+// e4t3DispatchNoRegister runs the dispatch without seeding route state.
+func e4t3DispatchNoRegister(t *testing.T, configPath, vault string) map[string]any {
+	t.Helper()
+	var out, errb bytes.Buffer
+	var code int
+	payload := `[{"name":"Inbox/new.md","exists":true,"new":true,"size":5,"type":"f"}]`
+	withStdin(t, payload, func() {
+		code = Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman"}, &out, &errb)
+	})
+	if code != 0 {
+		t.Fatalf("dispatch failed (exit %d): %s", code, errb.String())
+	}
+	var env Envelope
+	if err := json.Unmarshal(out.Bytes(), &env); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(env.Result)
+	var res map[string]any
+	if err := json.Unmarshal(raw, &res); err != nil {
+		t.Fatal(err)
+	}
+	return res
 }

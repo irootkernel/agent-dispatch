@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -170,4 +171,47 @@ func writeSinkError(stderr io.Writer, command string, err error) int {
 		writeError(stderr, command, "target_definite_unavailable", "target_unavailable", err.Error())
 		return sinkUnavailableExit
 	}
+}
+
+// registerRouteState materializes one route's durable registration
+// (E4 audit remediation for the E2-T5/E3 seam): the resource, the route
+// revision, and the runtime state row, idempotently. The operator entry
+// points — `watchman install` and `route enable` — call it so the
+// first-use flow never meets an unregistered route; the configuration
+// is the authority for every recorded value.
+func registerRouteState(ctx context.Context, store *sqlite.Store, cfg *config.Config, routeID string) error {
+	route, ok := cfg.Routes[routeID]
+	if !ok {
+		return fmt.Errorf("route %q is not defined", routeID)
+	}
+	resource, ok := cfg.Resources[route.Source.Resource]
+	if !ok {
+		return fmt.Errorf("resource %q is not defined", route.Source.Resource)
+	}
+	revision, ok := config.RouteRevision(cfg, routeID)
+	if !ok {
+		return fmt.Errorf("route %q revision could not be computed", routeID)
+	}
+	canonical := filepath.Clean(resource.Root)
+	if resolved, err := filepath.EvalSymlinks(canonical); err == nil {
+		canonical = resolved
+	}
+	gitMode := "disabled"
+	if resource.Git != nil {
+		gitMode = resource.Git.Mode
+	}
+	now := dispatch.Timestamp(time.Now())
+	if err := store.RegisterResource(nil, route.Source.Resource, revision, resource.Root, canonical, resource.FileScope, gitMode); err != nil {
+		return err
+	}
+	if err := store.RegisterRoute(nil, routeID, revision, revision, route.Source.Resource, route.Dispatch.Target, "{}", now); err != nil {
+		return err
+	}
+	var exists int
+	if err := store.QueryRowContext(ctx, `SELECT 1 FROM route_runtime_state WHERE route_id = ?`, routeID).Scan(&exists); err == sql.ErrNoRows {
+		return store.InitializeRouteState(nil, routeID)
+	} else if err != nil {
+		return err
+	}
+	return nil
 }

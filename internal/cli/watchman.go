@@ -172,6 +172,14 @@ func runWatchmanInstall(args []string, stdout, stderr io.Writer) int {
 	}
 	expected := watchman.ManagedTrigger(route.Source.TriggerName, cmdArgv)
 
+	// The install is the operator's first-use entry point: it also
+	// materializes the route's durable registration (resource, route
+	// revision, runtime state) from the configuration, idempotently,
+	// so the first dispatched change never meets an unregistered route
+	// (E4 audit remediation for the E2-T5/E3 seam).
+	if err := registerRouteFromConfig(command, opts.configPath, opts.routeID, stderr); err != 0 {
+		return err
+	}
 	installed, err := client.TriggerList(ctx, watchRoot)
 	if err != nil {
 		return lifecycleErr(stderr, command, err)
@@ -223,6 +231,25 @@ func runWatchmanInstall(args []string, stdout, stderr io.Writer) int {
 		"disposition":                    disposition,
 		"initial_reconciliation_pending": route.Reconciliation.Initial,
 	})
+}
+
+// registerRouteFromConfig loads the configuration and materializes the
+// route registration through the shared store.
+func registerRouteFromConfig(command, configPath, routeID string, stderr io.Writer) int {
+	cfg, err := config.Load(resolveConfigPath(configPath))
+	if err != nil {
+		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
+	}
+	_, closer, exit := openOperatorStore(command, configPath, stderr)
+	if exit != 0 {
+		return exit
+	}
+	defer closer.Close()
+	if err := registerRouteState(requestCtx(), closer, cfg, routeID); err != nil {
+		writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
+		return 20
+	}
+	return 0
 }
 
 func runWatchmanStatus(args []string, stdout, stderr io.Writer) int {

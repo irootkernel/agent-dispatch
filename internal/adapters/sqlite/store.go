@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -167,41 +168,75 @@ type IntentRecord struct {
 }
 
 // AcquireLease performs the conditional-write lease acquisition
-// (persistence §5): ownership is established by one conditional update
-// checked by affected row count.
+// (persistence §5): the intent must be READY or RETRY_WAIT, the next
+// attempt must be due, and any previous lease expired; ownership is
+// established by one conditional update checked by affected row count.
 func (s *Store) AcquireLease(tx *sql.Tx, dispatchID, owner string, leaseExpiresAt, nextAttemptAt, now string) error {
+	ownTx := tx == nil
+	var err error
+	if ownTx {
+		tx, err = s.BeginTx(context.Background(), nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+	}
 	res, err := execOn(tx, s.DB, `UPDATE dispatch_intents
 		SET state = 'submitting', lease_owner = ?, lease_expires_at = ?, next_attempt_at = ?, updated_at = ?
-		WHERE dispatch_id = ? AND state IN ('ready','retry_wait')`,
-		owner, leaseExpiresAt, nextAttemptAt, now, dispatchID)
+		WHERE dispatch_id = ?
+		  AND state IN ('ready','retry_wait')
+		  AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+		  AND (lease_expires_at IS NULL OR lease_expires_at < ?)`,
+		owner, leaseExpiresAt, nextAttemptAt, now, dispatchID, now, now)
 	if err != nil {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return fmt.Errorf("lease not acquired for %s: %w", dispatchID, ErrOptimisticConcurrency)
 	}
+	if ownTx {
+		return tx.Commit()
+	}
 	return nil
 }
 
 // TransitionIntent records a validated state transition and updates the
-// intent state in one transaction (DUR-011: transactional, validated,
-// audited).
+// intent state atomically (DUR-011: transactional, validated, audited).
+// The state guard is a conditional update checked by row count, so the
+// check and the write cannot interleave; the audit record commits in the
+// same transaction.
 func (s *Store) TransitionIntent(tx *sql.Tx, transitionID, dispatchID, fromState, toState, recordedAt, contextJSON string) error {
-	var current string
-	db := txOrDB(tx, s.DB)
-	if err := db.QueryRow(`SELECT state FROM dispatch_intents WHERE dispatch_id = ?`, dispatchID).Scan(&current); err != nil {
-		return err
-	}
-	if current != fromState {
-		return fmt.Errorf("intent %s is %s, not %s (invariant 3): %w", dispatchID, current, fromState, ErrOptimisticConcurrency)
-	}
 	if !validIntentTransition(fromState, toState) {
 		return fmt.Errorf("invalid dispatch transition %s -> %s", fromState, toState)
 	}
-	if _, err := execOn(tx, s.DB, `UPDATE dispatch_intents SET state = ?, updated_at = ? WHERE dispatch_id = ?`, toState, recordedAt, dispatchID); err != nil {
+	ownTx := tx == nil
+	var err error
+	if ownTx {
+		tx, err = s.BeginTx(context.Background(), nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+	}
+	res, err := execOn(tx, s.DB, `UPDATE dispatch_intents SET state = ?, updated_at = ? WHERE dispatch_id = ? AND state = ?`,
+		toState, recordedAt, dispatchID, fromState)
+	if err != nil {
 		return err
 	}
-	return s.AppendTransition(tx, transitionID, "dispatch_intent", dispatchID, fromState, toState, recordedAt, contextJSON)
+	if n, _ := res.RowsAffected(); n == 0 {
+		var current string
+		if err := tx.QueryRow(`SELECT state FROM dispatch_intents WHERE dispatch_id = ?`, dispatchID).Scan(&current); err != nil {
+			return fmt.Errorf("intent %s not found: %w", dispatchID, ErrOptimisticConcurrency)
+		}
+		return fmt.Errorf("intent %s is %s, not %s (invariant 3): %w", dispatchID, current, fromState, ErrOptimisticConcurrency)
+	}
+	if err := s.AppendTransition(tx, transitionID, "dispatch_intent", dispatchID, fromState, toState, recordedAt, contextJSON); err != nil {
+		return err
+	}
+	if ownTx {
+		return tx.Commit()
+	}
+	return nil
 }
 
 // AppendTransition appends one audit record; the table triggers make any

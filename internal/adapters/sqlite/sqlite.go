@@ -31,16 +31,18 @@ func Open(path string) (*Store, error) {
 		}
 		path = abs
 	}
-	if err := rejectNetworkPlacement(path); err != nil {
-		return nil, err
-	}
 	dir := filepath.Dir(path)
 	if dir != "" && dir != "." {
 		// Create the parent with owner-only permissions so database and
-		// configuration permissions stay owner-only by default (SEC-008).
+		// configuration permissions stay owner-only by default (SEC-008);
+		// create it before the placement check so a missing directory is
+		// not misreported as a placement failure.
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return nil, err
 		}
+	}
+	if err := rejectNetworkPlacement(path); err != nil {
+		return nil, err
 	}
 	db, err := sql.Open("sqlite", path+"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
 	if err != nil {
@@ -86,6 +88,7 @@ func Open(path string) (*Store, error) {
 	}{
 		{"PRAGMA foreign_keys", "1"},
 		{"PRAGMA busy_timeout", "5000"},
+		{"PRAGMA synchronous", "2"}, // FULL
 	} {
 		var got string
 		if err := db.QueryRow(pragma.stmt).Scan(&got); err != nil {

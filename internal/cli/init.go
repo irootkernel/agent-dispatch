@@ -63,7 +63,13 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	if configPath == "" {
-		configPath = platformpaths.DefaultConfigPath()
+		// Same precedence as configuration loading (spec section 1): an
+		// explicit path, then JJUKKUMI_CONFIG, then the platform default.
+		if env := os.Getenv("JJUKKUMI_CONFIG"); env != "" {
+			configPath = env
+		} else {
+			configPath = platformpaths.DefaultConfigPath()
+		}
 	}
 	if stateDir == "" {
 		stateDir = platformpaths.ResolveStateDir("")
@@ -105,7 +111,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		})
 	}
 	fmt.Fprintf(stdout, "wrote disabled example configuration: %s\n", configPath)
-	fmt.Fprintf(stdout, "created state directory: %s\n", stateDir)
+	fmt.Fprintf(stdout, "state directory ready: %s\n", stateDir)
 	fmt.Fprintf(stdout, "dispatch stays disabled until 'jjukkumi route enable' is run explicitly\n")
 	return 0
 }

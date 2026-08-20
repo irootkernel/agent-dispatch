@@ -1,6 +1,7 @@
 package platformpaths
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -97,5 +98,8 @@ func TestTempFallbackPerUser(t *testing.T) {
 	}
 	if !filepath.IsAbs(tempFallbackDir()) {
 		t.Errorf("fallback must be absolute: %q", tempFallbackDir())
+	}
+	if !strings.HasSuffix(tempFallbackDir(), fmt.Sprintf("-%d", os.Getuid())) {
+		t.Errorf("fallback must be per-uid: %q", tempFallbackDir())
 	}
 }

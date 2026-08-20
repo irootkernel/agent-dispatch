@@ -1,8 +1,8 @@
 {
   "schema_version": "jjukkumi.dispatch-plan/v1",
   "route": {
-    "id": "wiki-maintenance",
-    "revision": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    "id": "wiki",
+    "revision": "rev-1"
   },
   "resource_id": "vault-main",
   "changes": [
@@ -11,12 +11,11 @@
       "operation": "create",
       "exists_after": true,
       "file_type": "regular",
-      "before_digest": null,
-      "after_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "after_digest": "sha256:edb465624291e4053c6c5ea4b7eb320dec773e10a57d26b95dcf0564f8e310f8",
       "digest_status": "known"
     }
   ],
-  "content_fingerprint": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "content_fingerprint": "sha256:dd56de4137951d9c92681b03416ec15f886b4482a27e3a517d32f085244cbe5d",
   "classification": [
     "normal"
   ],
@@ -25,9 +24,8 @@
     "normal_batch"
   ],
   "required_capabilities": [
-    "durable_acceptance",
-    "submit_idempotency_key",
-    "lookup_by_idempotency_key"
+    "kanban.create",
+    "kanban.lookup"
   ],
   "generation_action": "create_if_idle"
 }

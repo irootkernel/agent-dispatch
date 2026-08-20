@@ -12,13 +12,13 @@
 |---|---|
 | Current epic | E2, Watchman Deterministic Dry-Run Pipeline |
 | Current active task | None |
-| Next task | **E2-T4, Structural Policy Planner and Dry-Run CLI** |
-| Completed tasks | 12 / 33 |
-| Planned tasks | 21 / 33 |
+| Next task | **E2-T5, Watchman Trigger Lifecycle and G1** |
+| Completed tasks | 13 / 33 |
+| Planned tasks | 20 / 33 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
-The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). E2-T1 delivered the bounded Watchman input parser against the frozen E0-T5 fixture corpus. E2-T2 delivered the safe path containment resolver and the deterministic pattern policy engine. E2-T3 delivered meaningful-change confirmation and batch normalization. Implementation continues with E2-T4.
+The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). E2-T1 delivered the bounded Watchman input parser against the frozen E0-T5 fixture corpus. E2-T2 delivered the safe path containment resolver and the deterministic pattern policy engine. E2-T3 delivered meaningful-change confirmation and batch normalization. E2-T4 delivered the structural policy planner and the side-effect-free `route plan` / `dispatch --dry-run` CLI. Implementation continues with E2-T5.
 
 ## 2. Epic Summary
 
@@ -48,7 +48,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 10 | E2-T1 | Completed | Bounded Watchman input parser |
 | 11 | E2-T2 | Completed | Safe path containment and pattern engine |
 | 12 | E2-T3 | Completed | Meaningful-change, hashing, and batch normalization |
-| 13 | E2-T4 | Planned | Deterministic policy planner and dry-run CLI |
+| 13 | E2-T4 | Completed | Deterministic policy planner and dry-run CLI |
 | 14 | E2-T5 | Planned | Real Watchman trigger lifecycle and G1 fixtures |
 | 15 | E3-T1 | Planned | Validated dispatch and route state machines |
 | 16 | E3-T2 | Planned | Durable intent transaction and attempt leases |
@@ -580,7 +580,7 @@ E2-T2 Completed.
 
 ## E2-T4: Implement Structural Policy Planner and Dry-Run CLI
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -611,6 +611,12 @@ E2-T3 Completed.
 - no semantic LLM or note-content decision exists;
 - same input and route snapshot produce the same plan;
 - JSON examples validate against schemas.
+
+### Evidence
+
+- `internal/app/dispatch`: pure deterministic planner (`Evaluate`) implementing the processing-pipeline §5 precedence — overflow-class signal (flags from the E2-T1 environment model) → reconcile with `merge_reconcile` following the route's overflow/fresh action; no meaningful changes → drop; protected or immutable paths → quarantine (PTH-008, protected precedence over bulk); hard-limit and serialized manifest bound (deterministic `ManifestBytes` estimate, POL-004) → quarantine; over automatic threshold → the route-configured bulk action (quarantine or reconcile); unresolved active dispatch → merge_pending with `increment_dirty`; otherwise dispatch with `create_if_idle`. Machine-readable reason codes accompany every disposition (POL-006); no note content is ever inspected (POL-003) and a payload can never request a disposition. The computed route revision — which now records the host-resolved pattern case mode (configuration-spec §7) — is carried in the plan and revalidated before emission (POL-007, POL-008, SEC-010).
+- `internal/cli/plan.go`: `route plan --route <id> --input watchman` and `dispatch --route <id> --input watchman --dry-run` (cli-spec §3/§5) run the full side-effect-free pipeline — config load, trusted environment parsing and binding validation, bounded stdin parse, pattern engine with host-resolved case mode, batch normalization without path facts (no SQLite access), planning, and the versioned dispatch plan in the CLI JSON envelope (CLI-001..003). Malformed input fails with `source_malformed_json` (exit 4) before any file access; missing environment metadata with `source_missing_required_metadata` (4); binding mismatch with `source_binding_mismatch` (4); oversized stdin with `source_input_too_large` (4); containment violations with `source_unsafe_path` (exit 30, the non-durable security rejection per error-model §4; durable `unsafe_path_quarantined` arrives with E5 quarantine persistence); configuration failures exit 3. Malformed and unsafe inputs are rejected before the planner, so its `malformed` classification is unreachable by construction; `stale` and `unknown` classifications arrive with the E3/E5 state consumers. Non-dry-run dispatch remains `command_not_implemented` until the E3 durable core.
+- Tests: full precedence table including protected-over-bulk and action fallbacks, manifest bound, overflow/fresh never partial, plan JSON validated against the compiled `dispatch-plan` v1 Draft 2020-12 schema, deterministic byte-identical output, a pinned golden plan file (`internal/app/dispatch/testdata/plan-golden.json`), and CLI end-to-end tests over a real temporary vault (normal dispatch plan, fresh-instance reconcile, binding mismatch, malformed stdin, unknown route, dry-run-only guard). `docs/examples/dispatch-plan.json` continues to validate in `make schema-validation`.
 
 ## E2-T5: Implement Watchman Trigger Lifecycle and Complete G1
 

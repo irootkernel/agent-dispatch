@@ -78,7 +78,17 @@ type Result struct {
 	// (oversize, non-regular, vanished); they are never treated as
 	// unchanged.
 	HashUnknown []string
+	// Protected lists the batch's protected paths (PTH-008): classified
+	// but never hashed; the planner quarantines them.
+	Protected []string
+	// Immutable lists the batch's immutable paths.
+	Immutable []string
 }
+
+// ErrUnsafePath wraps containment violations (lexical escape, symlink
+// escape, over-length path) so callers can distinguish security
+// rejections from other build failures.
+var ErrUnsafePath = errors.New("unsafe path")
 
 // DropRecord is one suppressed path and why.
 type DropRecord struct {
@@ -152,11 +162,20 @@ func BuildBatch(entries []watchman.Entry, engine *policy.Engine, resolver *local
 		s := byPath[path]
 		status, err := engine.Classify(path)
 		if err != nil {
-			return nil, fmt.Errorf("path %q: %w", path, err)
+			return nil, fmt.Errorf("%w: classify %q: %v", ErrUnsafePath, path, err)
 		}
 		if status == policy.StatusExcluded {
 			res.Dropped = append(res.Dropped, DropRecord{Path: path, Reason: ReasonExcluded})
 			continue
+		}
+		// Protected and immutable status applies to every operation,
+		// including deletes: the planner quarantines regardless of the
+		// coalesced operation.
+		switch status {
+		case policy.StatusProtected:
+			res.Protected = append(res.Protected, path)
+		case policy.StatusImmutable:
+			res.Immutable = append(res.Immutable, path)
 		}
 		prior, hadPrior, err := facts.PriorDigest(path)
 		if err != nil {
@@ -214,7 +233,7 @@ func BuildBatch(entries []watchman.Entry, engine *policy.Engine, resolver *local
 				res.Replacements[path] = true
 				forcedUnknown[path] = true
 			default:
-				return nil, fmt.Errorf("checking replacement state of %q: %w", path, err)
+				return nil, fmt.Errorf("%w: checking replacement state of %q: %v", ErrUnsafePath, path, err)
 			}
 		case s.ops[0] == records.OpCreate && !hadPrior:
 			// create,modify (or a bare create): the path is new.
@@ -277,6 +296,8 @@ func BuildBatch(entries []watchman.Entry, engine *policy.Engine, resolver *local
 		return res.Dropped[i].Reason < res.Dropped[j].Reason
 	})
 	sort.Strings(res.HashUnknown)
+	sort.Strings(res.Protected)
+	sort.Strings(res.Immutable)
 	fpInput := records.ContentFingerprintInput{
 		Changes:      projection(res.Changes),
 		ResourceID:   resourceID,
@@ -310,6 +331,9 @@ func hashFile(resolver *localfs.Resolver, path string, maxBytes int64) (records.
 			errors.Is(err, localfs.ErrNotRegular) ||
 			errors.Is(err, localfs.ErrMissing) {
 			return "", false, nil
+		}
+		if errors.Is(err, localfs.ErrEscape) || errors.Is(err, localfs.ErrPathTooLong) {
+			return "", false, fmt.Errorf("%w: opening %q: %v", ErrUnsafePath, path, err)
 		}
 		return "", false, fmt.Errorf("opening %q: %w", path, err)
 	}

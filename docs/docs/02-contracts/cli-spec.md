@@ -83,7 +83,7 @@ The config field `enabled: true` permits activation but does not by itself activ
 jjukkumi route plan --route <id> --input watchman < fixture.json
 ```
 
-Side-effect-free. Prints a versioned dispatch plan. It may read files under the resource root to hash them, but does not write SQLite unless `--with-state` is explicitly supported and documented. The default is no database mutation.
+Side-effect-free. Prints a versioned dispatch plan. It may read files under the resource root to hash them, but does not write SQLite unless `--with-state` is explicitly supported and documented. The default is no database mutation. This command accepts only `--output json`; it has no human rendering (CLI-001 machine-output discipline).
 
 ## 4. Watchman Commands
 
@@ -121,7 +121,7 @@ jjukkumi dispatch \
   [--no-submit]
 ```
 
-- `--dry-run`: no SQLite mutation and no target call.
+- `--dry-run`: no SQLite mutation and no target call. Dry-run output is the structured dispatch plan and accepts only `--output json`.
 - `--no-submit`: persists observation, batch, decision, and eligible intent, but leaves it ready. This option is operator-only and is not used by the installed Watchman trigger.
 - default: persist and attempt the one newly eligible intent plus at most one route-local recovery intent, as bounded by architecture.
 

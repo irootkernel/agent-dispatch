@@ -3,6 +3,7 @@ package watchman
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -54,6 +55,10 @@ type Input struct {
 	Env       Env
 }
 
+// ErrStdinTooLarge reports an over-bound stdin payload so callers can
+// map it to its dedicated error code (error-model source_input_too_large).
+var ErrStdinTooLarge = errors.New("stdin payload exceeds the limit")
+
 // ReadInput reads at most maxStdinBytes from stdin (SEC-009). Oversized or
 // empty input fails before any payload parsing and therefore before any
 // file access. The bound is checked without max+1 arithmetic so a
@@ -68,7 +73,7 @@ func ReadInput(stdin io.Reader, env Env, maxStdinBytes int64) (Input, error) {
 	}
 	var probe [1]byte
 	if n, _ := io.ReadFull(stdin, probe[:]); n > 0 {
-		return Input{}, fmt.Errorf("stdin payload exceeds %d bytes", maxStdinBytes)
+		return Input{}, fmt.Errorf("%w: exceeds %d bytes", ErrStdinTooLarge, maxStdinBytes)
 	}
 	if len(raw) == 0 {
 		return Input{}, fmt.Errorf("stdin payload is empty")

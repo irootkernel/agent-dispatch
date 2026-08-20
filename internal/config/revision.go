@@ -4,8 +4,20 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"runtime"
 	"sort"
 )
+
+// CaseMode resolves the v0.1 default `filesystem` case policy for this
+// host: macOS path lookup is case-insensitive, Linux case-sensitive. The
+// pattern engine consumes this resolved value so behavior is explicit
+// and identical across hosts for the same resolved mode.
+func CaseMode() string {
+	if runtime.GOOS == "darwin" {
+		return "insensitive"
+	}
+	return "sensitive"
+}
 
 // RouteRevision computes the deterministic behavior-affecting revision of
 // one route (configuration-spec §13, POL-007). The canonical projection
@@ -30,6 +42,11 @@ func RouteRevision(cfg *Config, routeID string) (string, bool) {
 			"trigger_name": route.Source.TriggerName,
 			"include":      sortedCopy(route.Source.Include),
 			"exclude":      sortedCopy(route.Source.Exclude),
+			// The resolved pattern case mode is behavior-affecting
+			// (configuration-spec §7: v0.1 default `filesystem`) and is
+			// recorded so plans classified under different modes cannot
+			// share a revision.
+			"case_mode": CaseMode(),
 		},
 		"batching": route.Batching,
 		"policy": map[string]any{

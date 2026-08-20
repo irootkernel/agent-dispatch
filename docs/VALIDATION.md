@@ -1,6 +1,6 @@
 # SOT Package Validation
 
-> **Validated:** 2026-08-20 (post E1-T3)  
+> **Validated:** 2026-08-20 (post E1-T4)  
 > **Package target:** JJUKKUMI SOT 1.0.4 / implementation v0.1.0
 
 ## Completed Checks
@@ -18,7 +18,7 @@
 - Markdown code fences are balanced.
 - The roadmap contains exactly 7 epics and 33 task headings.
 - Every task uses one allowed status value.
-- Current task statuses are 8 Completed and 25 Planned, with no active task.
+- Current task statuses are 9 Completed and 24 Planned, with no active task.
 - Required-spec IDs are unique.
 - Acceptance-scenario IDs are unique.
 - No em dash characters remain in the package.

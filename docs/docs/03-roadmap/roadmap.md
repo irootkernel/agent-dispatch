@@ -12,13 +12,13 @@
 |---|---|
 | Current epic | E1, Go Foundation, Configuration, and Persistence Schema |
 | Current active task | None |
-| Next task | **E1-T4, Implement SQLite Schema, Migrations, and Repositories** |
-| Completed tasks | 8 / 33 |
-| Planned tasks | 25 / 33 |
+| Next task | None (E1 complete pending audit) |
+| Completed tasks | 9 / 33 |
+| Planned tasks | 24 / 33 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
-The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Implementation continues with E1-T4.
+The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. E1-T4 completed the durable SQLite schema, migrations, and repositories; all E1 member tasks are done pending the epic audit.
 
 ## 2. Epic Summary
 
@@ -44,7 +44,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 6 | E1-T1 | Completed | Buildable Go repository and verification pipeline |
 | 7 | E1-T2 | Completed | Validated YAML configuration and path layout |
 | 8 | E1-T3 | Completed | Domain primitives, IDs, digests, canonicalization |
-| 9 | E1-T4 | Planned | SQLite schema, migrations, and repositories |
+| 9 | E1-T4 | Completed | SQLite schema, migrations, and repositories |
 | 10 | E2-T1 | Planned | Bounded Watchman input parser |
 | 11 | E2-T2 | Planned | Safe path containment and pattern engine |
 | 12 | E2-T3 | Planned | Meaningful-change, hashing, and batch normalization |
@@ -405,7 +405,7 @@ E1-T2 Completed.
 
 ## E1-T4: Implement SQLite Schema, Migrations, and Repositories
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -439,6 +439,14 @@ E1-T3 Completed.
 - integration tests use actual SQLite files, not only mocks.
 
 ---
+
+### Evidence
+
+- `internal/adapters/sqlite`: pure-Go driver `modernc.org/sqlite` (pinned), Open with verified pragmas (WAL journal mode verified, synchronous FULL, foreign keys, busy timeout) and network-placement rejection where reliably detectable (macOS MNT_LOCAL, Linux network filesystem magic; otherwise explicitly unsupported).
+- Migration framework: checksummed forward-only migrations in a ledger with prefix-integrity and gap checks, newer-unsupported-schema refusal, atomic apply (a failed migration leaves no ledger entry or partial DDL, tested), and a mandatory pre-migration online backup (`VACUUM INTO`, owner-only 0600, verified restorable via `PRAGMA quick_check` on the backup).
+- Schema v1 covers every canonical table with foreign keys, unique constraints (per-source event keys, target+idempotency keys, batch/observation pairs), CHECK constraints for every closed enum, and append-only `state_transitions` enforced by triggers.
+- Repositories: observations and changes, batches with lineage, decisions (exactly-one-lineage CHECK), intents with same-transaction route slot reservation (tested atomic), conditional-write lease acquisition persisting retry eligibility, validated dispatch state-machine transitions with audit, route runtime state with optimistic concurrency, work receipts (bounded manifests only, DAT-008).
+- Real-file integration tests cover fresh-vs-migrated schema identity, constraint enforcement, interrupted-upgrade atomicity, backup restore verification, lease conditionality, transition matrix exhaustively, and rollback atomicity (TST-002, OPS-009).
 
 # E2: Watchman Deterministic Dry-Run Pipeline
 

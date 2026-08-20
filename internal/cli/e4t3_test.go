@@ -542,3 +542,85 @@ func e4t3DispatchNoRegister(t *testing.T, configPath, vault string) map[string]a
 	}
 	return res
 }
+
+// TestReconcileSkipsRepointedScope proves the accepting-scope guard:
+// an unknown dispatch submitted against one board is not reconciled
+// against a re-pointed board — the skip is a visible warning, never a
+// wrong-board absence proof.
+func TestReconcileSkipsRepointedScope(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Dispatch with an ambiguous stub so the intent sits in unknown.
+	dir := t.TempDir()
+	good := stubhermes.Write(t)
+	bad := filepath.Join(dir, "hermes-ambiguous")
+	script := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf 'Hermes Agent v0.19.1 (2026.7.30)\\n'; exit 0; fi\nsleep 60\n"
+	if err := os.WriteFile(bad, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(string(raw), "\n")
+	for i, l := range lines {
+		if strings.HasPrefix(l, "    executable: ") {
+			lines[i] = "    executable: " + bad
+		}
+		if strings.HasPrefix(l, "    submit_timeout: ") {
+			lines[i] = "    submit_timeout: 1s"
+		}
+	}
+	if err := os.WriteFile(configPath, []byte(strings.Join(lines, "\n")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setPlanEnv(t, vault, false)
+	e4t3RegisterRoute(t, configPath)
+	var out, errb bytes.Buffer
+	var code int
+	withStdin(t, `[{"name":"Inbox/new.md","exists":true,"new":true,"size":5,"type":"f"}]`, func() {
+		code = Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman"}, &out, &errb)
+	})
+	if code != 0 {
+		t.Fatalf("ambiguous dispatch failed: %s", errb.String())
+	}
+	var env Envelope
+	json.Unmarshal(out.Bytes(), &env)
+	resRaw, _ := json.Marshal(env.Result)
+	var res map[string]any
+	json.Unmarshal(resRaw, &res)
+	if res["state"] != "unknown" {
+		t.Fatalf("expected unknown, got %v", res["state"])
+	}
+
+	// Re-point the target to a different board (scope change) and heal
+	// the executable; the drain must skip the reconciliation visibly.
+	updated := strings.Replace(string(raw), "board: jjukkumi-test", "board: jjukkumi-other", 1)
+	lines = strings.Split(updated, "\n")
+	for i, l := range lines {
+		if strings.HasPrefix(l, "    executable: ") {
+			lines[i] = "    executable: " + good
+		}
+	}
+	if err := os.WriteFile(configPath, []byte(strings.Join(lines, "\n")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"dispatches", "drain", "--route", "wiki", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("drain: %s", errb.String())
+	}
+	body := out.String() + errb.String()
+	if !strings.Contains(body, "submitted against target scope") || !strings.Contains(body, "jjukkumi-test") {
+		t.Fatalf("the re-pointed scope skip must be visible: %s", body)
+	}
+	// The dispatch is untouched (still unknown, not dead-lettered by a
+	// wrong-board proof).
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"dispatches", "list", "--config", configPath, "--route", "wiki", "--state", "unknown"}, &out, &errb); code != 0 {
+		t.Fatalf("list: %s", errb.String())
+	}
+	if !strings.Contains(out.String(), "\"unknown\"") {
+		t.Fatalf("the dispatch must remain unknown after the scope skip: %s", out.String())
+	}
+}

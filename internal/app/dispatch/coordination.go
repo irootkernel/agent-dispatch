@@ -125,7 +125,7 @@ func BuildFollowupRequest(original ports.IntentSnapshot, manifest []records.Chan
 	}
 	return ports.IntentInput{
 		DispatchID: id, RouteID: original.RouteID, RouteRevision: req.Route.Revision,
-		TargetID: original.TargetID, TargetType: original.TargetType, ResourceID: req.Resource.ID,
+		TargetID: original.TargetID, TargetType: original.TargetType, TargetScope: original.TargetScope, ResourceID: req.Resource.ID,
 		Generation: original.Generation + 1, IdempotencyKey: key,
 		ContentFingerprint: next.Activation.ContentFingerprint,
 		ManifestDigest:     ManifestDigest(manifest),

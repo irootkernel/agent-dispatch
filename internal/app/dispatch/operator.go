@@ -97,7 +97,7 @@ func (o *OperatorService) Rerun(ctx context.Context, dispatchID, actor, reason s
 		Actor:              actor,
 		Reason:             reason,
 		New: ports.IntentInput{
-			DispatchID: newDispatchID, DecisionID: "", RouteID: snap.RouteID, RouteRevision: req.Route.Revision,
+			DispatchID: newDispatchID, DecisionID: "", RouteID: snap.RouteID, RouteRevision: req.Route.Revision, TargetScope: snap.TargetScope,
 			TargetID: snap.TargetID, TargetType: snap.TargetType, ResourceID: req.Resource.ID,
 			Generation: next.Activation.Generation, IdempotencyKey: next.IdempotencyKey,
 			ContentFingerprint: next.Activation.ContentFingerprint,

@@ -22,6 +22,7 @@ type Migration struct {
 var Migrations = []Migration{
 	{Version: 1, Name: "initial-schema", SQL: schemaV1},
 	{Version: 2, Name: "attempts-unique-by-attempt-id", SQL: schemaV2AttemptsUniqueByAttemptID},
+	{Version: 3, Name: "intent-target-scope", SQL: schemaV3IntentTargetScope},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
@@ -50,6 +51,16 @@ INSERT INTO dispatch_attempts_v2 SELECT attempt_id, dispatch_id, lease_owner, st
 DROP TABLE dispatch_attempts;
 ALTER TABLE dispatch_attempts_v2 RENAME TO dispatch_attempts;
 CREATE INDEX idx_attempts_dispatch ON dispatch_attempts(dispatch_id, started_at);
+`
+
+// schemaV3IntentTargetScope records the resolved target scope (for
+// hermes-kanban, the board slug) on each dispatch intent at lineage
+// commit, so later reconciliation can prove it reads the same target
+// scope that was configured at submission time (E4 audit: a re-pointed
+// board must never turn a wrong-board absence into a resubmission
+// proof).
+const schemaV3IntentTargetScope = `
+ALTER TABLE dispatch_intents ADD COLUMN target_scope TEXT NOT NULL DEFAULT '';
 `
 
 // checksum returns the immutable migration checksum.

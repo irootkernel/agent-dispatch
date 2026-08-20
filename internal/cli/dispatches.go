@@ -327,7 +327,7 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 	// more work without the required lookup ordering is never allowed.
 	// A per-dispatch reconciliation failure is isolated as a warning so
 	// one broken dispatch cannot block the route's due work.
-	reconciled, reconcileErrors, err := reconcileUnknownDispatches(store, sink, routeID, backoff)
+	reconciled, reconcileErrors, err := reconcileUnknownDispatches(cfg, store, sink, routeID, backoff)
 	if err != nil {
 		return intentErr(stderr, command, err)
 	}
@@ -336,8 +336,8 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 		// The reconciliation mutations already committed; surface them
 		// inside the single failure envelope so the operator sees what
 		// changed without a second, mislabeled error document.
-		if len(reconciled) > 0 {
-			err = fmt.Errorf("%w (note: %d unknown dispatch(es) were reconciled before this failure; inspect with 'jjukkumi dispatches list --route %s')", err, len(reconciled), routeID)
+		if len(reconciled) > 0 || len(reconcileErrors) > 0 {
+			err = fmt.Errorf("%w (note: %d unknown dispatch(es) were reconciled and %d were skipped or failed before this failure; inspect with 'jjukkumi dispatches list --route %s')", err, len(reconciled), len(reconcileErrors), routeID)
 		}
 		return intentErr(stderr, command, err)
 	}
@@ -355,7 +355,7 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 // dead-letters for the operator, whose retry resubmits the same
 // idempotency key (the dedup-safe path). One dispatch's failure never
 // aborts the others; failures are returned as visible warnings.
-func reconcileUnknownDispatches(store storeOp, sink ports.Sink, routeID string, backoff dispatch.Backoff) ([]map[string]any, []string, error) {
+func reconcileUnknownDispatches(cfg *config.Config, store storeOp, sink ports.Sink, routeID string, backoff dispatch.Backoff) ([]map[string]any, []string, error) {
 	recon := &reconcile.Service{Store: store, Sink: sink, Now: func() string { return dispatch.Timestamp(time.Now()) }}
 	intents, err := store.ListIntents(requestCtx(), ports.IntentFilter{RouteID: routeID, State: "unknown", Limit: 1000})
 	if err != nil {
@@ -365,13 +365,24 @@ func reconcileUnknownDispatches(store storeOp, sink ports.Sink, routeID string, 
 	}
 	var out []map[string]any
 	var failures []string
+	scope := ""
+	if route, ok := cfg.Routes[routeID]; ok {
+		if target, ok := cfg.Targets[route.Dispatch.Target]; ok {
+			scope = target.Board
+		}
+	}
 	for _, sum := range intents {
-		// The reconciliation must read the target that accepted the
-		// dispatch: a configuration change that re-points the route to
-		// a different target (or board) must never turn a wrong-board
-		// absence into a resubmission proof (F001).
+		// The reconciliation must read the same target identity and
+		// scope that were configured at submission: a configuration
+		// change that re-points the route to a different target or
+		// board must never turn a wrong-board absence into a
+		// resubmission proof.
 		if sink.ID() != sum.TargetID {
 			failures = append(failures, fmt.Sprintf("reconciling %s skipped: it was accepted by target %q but the route now resolves to %q", sum.DispatchID, sum.TargetID, sink.ID()))
+			continue
+		}
+		if snap, err := store.LoadIntent(requestCtx(), sum.DispatchID); err == nil && snap.TargetScope != "" && snap.TargetScope != scope {
+			failures = append(failures, fmt.Sprintf("reconciling %s skipped: it was submitted against target scope %q but the route now resolves to scope %q; restore the accepting scope or resolve the dispatch manually", sum.DispatchID, snap.TargetScope, scope))
 			continue
 		}
 		res, err := recon.Reconcile(requestCtx(), sum.DispatchID, "drain", backoff.Exhausted(sum.AttemptCount))

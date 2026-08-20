@@ -126,9 +126,9 @@ func (r *Runtime) SubmitOnce(ctx context.Context, dispatchID, owner string) (Sub
 	classified := ClassifyResult(res, sinkErr)
 	if sinkErr != nil {
 		// Adapter error text is untrusted for persistence (the sink
-		// contract's Diagnostic is redacted at the source); record the
-		// bounded class only until the E4 adapter provides the redaction
-		// contract.
+		// contract redacts diagnostics at the source and classifies
+		// through the result, so a returned error keeps only the
+		// bounded class here).
 		res.Diagnostic = fmt.Sprintf("sink error (%T); message redacted", sinkErr)
 	}
 	report.Classification = res.Classification

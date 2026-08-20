@@ -130,9 +130,9 @@ type DecisionRecord struct {
 // slot in the same transaction (intent transaction, ADR-0005).
 func (s *Store) SaveIntent(tx *sql.Tx, i IntentRecord) error {
 	if _, err := execOn(tx, s.DB, `INSERT INTO dispatch_intents
-		(dispatch_id, decision_id, route_id, route_revision, target_id, target_type, resource_id, generation, idempotency_key, content_fingerprint, manifest_digest, request_version, request_json, state, created_at, updated_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'ready',?,?)`,
-		i.DispatchID, i.DecisionID, i.RouteID, i.RouteRevision, i.TargetID, i.TargetType, i.ResourceID, i.Generation,
+		(dispatch_id, decision_id, route_id, route_revision, target_id, target_type, target_scope, resource_id, generation, idempotency_key, content_fingerprint, manifest_digest, request_version, request_json, state, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'ready',?,?)`,
+		i.DispatchID, i.DecisionID, i.RouteID, i.RouteRevision, i.TargetID, i.TargetType, i.TargetScope, i.ResourceID, i.Generation,
 		i.IdempotencyKey, i.ContentFingerprint, i.ManifestDigest, i.RequestVersion, i.RequestJSON, i.CreatedAt, i.CreatedAt); err != nil {
 		return err
 	}
@@ -156,6 +156,7 @@ func (s *Store) SaveIntent(tx *sql.Tx, i IntentRecord) error {
 
 // IntentRecord is the persistence shape of a dispatch intent.
 type IntentRecord struct {
+	TargetScope        string
 	DispatchID         string
 	DecisionID         string
 	RouteID            string

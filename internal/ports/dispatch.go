@@ -112,6 +112,10 @@ type DecisionInput struct {
 
 // IntentInput is the durable dispatch-intent creation.
 type IntentInput struct {
+	// TargetScope records the resolved target scope at submission
+	// planning time (for hermes-kanban, the board slug): reconciliation
+	// proves it still reads the same scope before trusting absence.
+	TargetScope        string
 	DispatchID         string
 	DecisionID         string
 	RouteID            string
@@ -133,6 +137,7 @@ type IntentSnapshot struct {
 	DispatchID     string
 	RouteID        string
 	TargetID       string
+	TargetScope    string
 	TargetType     string
 	Generation     int64
 	IdempotencyKey string

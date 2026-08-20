@@ -768,7 +768,22 @@ func TestMigrationV2PreservesAttemptRows(t *testing.T) {
 	if err := s.InitializeRouteState(nil, "wiki"); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CommitLineage(context.Background(), attemptLineage("dispatch-mig", "decision-mig", "obs-mig", "batch-mig", "2026-08-21T00:00:00Z")); err != nil {
+	// The intent is written with the v1 column list: this phase tests
+	// the migration from a real v1 database, not from this binary's
+	// current writer.
+	batchv1 := `INSERT INTO change_batches (batch_id, route_id, route_revision, resource_id, created_at, content_fingerprint)
+		VALUES ('batch-mig', 'wiki', 'rev-1', 'vault-main', '2026-08-21T00:00:00Z', 'sha256:a')`
+	if _, err := s.Exec(batchv1); err != nil {
+		t.Fatal(err)
+	}
+	decisionv1 := `INSERT INTO policy_decisions (decision_id, batch_id, route_id, route_revision, policy_revision, disposition, classification, reason_codes_json, created_at, actor)
+		VALUES ('decision-mig', 'batch-mig', 'wiki', 'rev-1', 'rev-1', 'dispatch', 'normal', '[]', '2026-08-21T00:00:00Z', 'planner')`
+	if _, err := s.Exec(decisionv1); err != nil {
+		t.Fatal(err)
+	}
+	seedv1 := `INSERT INTO dispatch_intents (dispatch_id, decision_id, route_id, route_revision, target_id, target_type, resource_id, generation, idempotency_key, content_fingerprint, manifest_digest, request_version, request_json, state, created_at, updated_at)
+		VALUES ('dispatch-mig', 'decision-mig', 'wiki', 'rev-1', 'hermes-kanban-main', 'hermes-kanban', 'vault-main', 1, 'key', 'sha256:a', 'sha256:b', 'jjukkumi.hermes-task/v1', '{}', 'accepted', '2026-08-21T00:00:00Z', '2026-08-21T00:00:00Z')`
+	if _, err := s.Exec(seedv1); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Exec(`INSERT INTO dispatch_attempts (attempt_id, dispatch_id, lease_owner, started_at, completed_at, outcome, diagnostic)

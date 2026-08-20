@@ -103,7 +103,7 @@ func portsDecision(d ports.DecisionInput) DecisionRecord {
 func portsIntent(i ports.IntentInput) IntentRecord {
 	return IntentRecord{
 		DispatchID: i.DispatchID, DecisionID: i.DecisionID, RouteID: i.RouteID, RouteRevision: i.RouteRevision,
-		TargetID: i.TargetID, TargetType: i.TargetType, ResourceID: i.ResourceID, Generation: int(i.Generation),
+		TargetID: i.TargetID, TargetType: i.TargetType, TargetScope: i.TargetScope, ResourceID: i.ResourceID, Generation: int(i.Generation),
 		IdempotencyKey: i.IdempotencyKey, ContentFingerprint: i.ContentFingerprint, ManifestDigest: i.ManifestDigest,
 		RequestVersion: i.RequestVersion, RequestJSON: i.RequestJSON, CreatedAt: i.CreatedAt,
 	}
@@ -113,9 +113,9 @@ func portsIntent(i ports.IntentInput) IntentRecord {
 func (s *Store) LoadIntent(ctx context.Context, dispatchID string) (ports.IntentSnapshot, error) {
 	var snap ports.IntentSnapshot
 	var leaseOwner, leaseExpires, nextAttempt, externalRef sql.NullString
-	err := s.QueryRowContext(ctx, `SELECT dispatch_id, route_id, target_id, target_type, generation, idempotency_key, state, request_json, manifest_digest, external_ref, lease_owner, lease_expires_at, attempt_count, next_attempt_at
+	err := s.QueryRowContext(ctx, `SELECT dispatch_id, route_id, target_id, target_type, target_scope, generation, idempotency_key, state, request_json, manifest_digest, external_ref, lease_owner, lease_expires_at, attempt_count, next_attempt_at
 		FROM dispatch_intents WHERE dispatch_id = ?`, dispatchID).Scan(
-		&snap.DispatchID, &snap.RouteID, &snap.TargetID, &snap.TargetType, &snap.Generation, &snap.IdempotencyKey,
+		&snap.DispatchID, &snap.RouteID, &snap.TargetID, &snap.TargetType, &snap.TargetScope, &snap.Generation, &snap.IdempotencyKey,
 		&snap.State, &snap.RequestJSON, &snap.ManifestDigest, &externalRef,
 		&leaseOwner, &leaseExpires, &snap.AttemptCount, &nextAttempt)
 	if errors.Is(err, sql.ErrNoRows) {

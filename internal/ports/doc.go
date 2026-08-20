@@ -1,4 +1,7 @@
-// Package ports is a skeleton placeholder created by E1-T1 per
-// docs/docs/04-implementation/repository-layout.md. Its behavior arrives
-// with its owning roadmap task; it intentionally defines none yet.
+// Package ports declares the driving and driven boundaries of the
+// application (repository-layout.md): the sink target interface
+// (sink-adapter-contract.md), the durable dispatch surface the runtime
+// consumes (E3-T2), and the source/filesystem/process/secrets/git ports
+// owned by later roadmap tasks. Ports carry application-level types only;
+// adapters implement them.
 package ports

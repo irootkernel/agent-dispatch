@@ -12,13 +12,13 @@
 |---|---|
 | Current epic | E3, Durable Dispatch and Route Coordination Core |
 | Current active task | None |
-| Next task | **E3-T2, Durable Intent Commit and Attempt Leasing** |
-| Completed tasks | 15 / 33 |
-| Planned tasks | 18 / 33 |
+| Next task | **E3-T3, Retry, Unknown Reconciliation, and Dead Letter** |
+| Completed tasks | 16 / 33 |
+| Planned tasks | 17 / 33 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
-The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). E2-T1 delivered the bounded Watchman input parser against the frozen E0-T5 fixture corpus. E2-T2 delivered the safe path containment resolver and the deterministic pattern policy engine. E2-T3 delivered meaningful-change confirmation and batch normalization. E2-T4 delivered the structural policy planner and the side-effect-free `route plan` / `dispatch --dry-run` CLI. E2-T5 delivered the managed Watchman trigger lifecycle and closed gate G1. Epic E2 is complete: the bounded parser, safe path containment, pattern engine, batch normalization, structural policy planner, dry-run CLI, and the real Watchman trigger lifecycle were delivered, audited (one cross-task remediation commit), and validated. E3-T1 delivered the validated dispatch and route state transition services as the authoritative domain table with typed reasons, guards, and the acceptance/execution projection separation. Implementation continues with E3-T2.
+The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). E2-T1 delivered the bounded Watchman input parser against the frozen E0-T5 fixture corpus. E2-T2 delivered the safe path containment resolver and the deterministic pattern policy engine. E2-T3 delivered meaningful-change confirmation and batch normalization. E2-T4 delivered the structural policy planner and the side-effect-free `route plan` / `dispatch --dry-run` CLI. E2-T5 delivered the managed Watchman trigger lifecycle and closed gate G1. Epic E2 is complete: the bounded parser, safe path containment, pattern engine, batch normalization, structural policy planner, dry-run CLI, and the real Watchman trigger lifecycle were delivered, audited (one cross-task remediation commit), and validated. E3-T1 delivered the validated dispatch and route state transition services as the authoritative domain table with typed reasons, guards, and the acceptance/execution projection separation. E3-T2 delivered the durable intent commit, the attempt lease, and the fake sink port: the ingestion transaction, conditional leasing, submitting recovery, and the submit flow that proves the committed intent exists before any target invocation. Implementation continues with E3-T3.
 
 ## 2. Epic Summary
 
@@ -51,7 +51,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 13 | E2-T4 | Completed | Deterministic policy planner and dry-run CLI |
 | 14 | E2-T5 | Completed | Real Watchman trigger lifecycle and G1 fixtures |
 | 15 | E3-T1 | Completed | Validated dispatch and route state machines |
-| 16 | E3-T2 | Planned | Durable intent transaction and attempt leases |
+| 16 | E3-T2 | Completed | Durable intent transaction and attempt leases |
 | 17 | E3-T3 | Planned | Retry, unknown, reconciliation, and dead-letter core |
 | 18 | E3-T4 | Planned | One active route task and dirty generations |
 | 19 | E3-T5 | Planned | Crash, migration, and concurrency gate G2 |
@@ -710,7 +710,7 @@ E2-T5 Completed.
 
 ## E3-T2: Implement Durable Intent Commit and Attempt Leasing
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -740,6 +740,14 @@ E3-T1 Completed.
 - crash after commit leaves recoverable ready/submitting evidence;
 - no transaction remains open across sink call;
 - duplicate idempotency constraint is enforced.
+
+### Evidence
+
+- `internal/ports`: the sink port (sink-adapter-contract.md §2) — `Sink` with `Probe`, `Submit`, both lookups, and `GetExecution`; typed `Capabilities`, `SubmitResult` with the four-value classification (accepted / rejected / definite_not_submitted / unknown) and tri-state durability, `LookupResult`, `ExecutionProjection`, `TaskRequest` as the immutable hermes-task/v1 shape, and `ErrCapabilityUnsupported` (never emulated). `ports.DispatchStore` declares the durable surface: `CommitLineage`, `LoadIntent`, `AcquireAttempt`, `CompleteAttempt`, and `RecoverExpiredSubmitting`, each completing its own transaction so no store transaction can span a sink call (DUR-001, ADR-0005), with typed `ErrIdempotencyConflict`, `ErrRouteSlotHeld`, `ErrLeaseHeld`, and `ErrIntentNotFound`.
+- `internal/adapters/sqlite/dispatch.go`: the port implementation. `CommitLineage` persists observation, batch, decision, and intent plus the route active-slot reservation in one transaction and maps driver rejections to the typed errors (duplicate target+idempotency key, second active dispatch). `AcquireAttempt` reads the from-state and performs the conditional lease write with attempt-row creation, attempt_count increment, and the domain-validated `ready/retry_wait -> submitting` audit transition in one transaction; a lost competition returns `ErrLeaseHeld` (DUR-012). `CompleteAttempt` closes the attempt, persists the acceptance receipt, and applies the E3-T1-guarded transition atomically. `RecoverExpiredSubmitting` moves expired submitting intents to `unknown` with audit evidence and closes the open attempt as `unknown/lease_expired` (persistence §5).
+- `internal/app/dispatch/runtime.go` + `request.go`: the runtime. `BuildRequest` constructs the immutable task request and derives the idempotency key through `fingerprint.Idempotency` (target, route revision, generation, contract version, content fingerprint). `SubmitOnce` commits the lease before invoking the sink, passes the stored request verbatim, and maps the adapter classification to the domain transition (accepted/rejected with durable receipts, definite_not_submitted to retry_wait, unknown and sink errors to unknown per DUR-005); `Recover` wraps lease recovery.
+- `internal/testsupport/fakesink`: the TST-006 fake sink — scripted accepted, rejected, definite-not-submitted, timeout-before-accept, timeout-after-accept, malformed-response, duplicate-idempotency replay, unavailable/ambiguous/absent lookups, and execution status progression, with a mid-flight submit hook.
+- Tests: fake-sink scenario suite; SQLite tests for whole-chain persistence, duplicate-idempotency and route-slot refusal without partial persistence, lease exclusivity (first owner wins, expired submitting requires recovery rather than direct re-lease), validated completion rejection, accepted completion with receipt, and expiry recovery; runtime tests over a real database proving the leased submitting intent is observable mid-sink-call, a concurrent write succeeds during the call (no open transaction), the loser never invokes the sink, crash-after-commit leaves recoverable submitting evidence that recovery moves to unknown, request determinism, and schema validation of the built request against `hermes-task-request/v1`. `make verify` green.
 
 ## E3-T3: Implement Retry, Unknown Reconciliation, and Dead Letter
 

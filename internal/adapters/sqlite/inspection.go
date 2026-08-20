@@ -473,9 +473,9 @@ func (s *Store) ListRoutes(ctx context.Context) ([]RouteRow, error) {
 // the route slot held by the dispatch it supersedes.
 func (s *Store) saveIntentTakeOverOriginal(tx *sql.Tx, i IntentRecord, originalDispatchID string) error {
 	if _, err := execOn(tx, s.DB, `INSERT INTO dispatch_intents
-		(dispatch_id, decision_id, route_id, route_revision, target_id, target_type, resource_id, generation, idempotency_key, content_fingerprint, manifest_digest, request_version, request_json, state, created_at, updated_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'ready',?,?)`,
-		i.DispatchID, i.DecisionID, i.RouteID, i.RouteRevision, i.TargetID, i.TargetType, i.ResourceID, int(i.Generation),
+		(dispatch_id, decision_id, route_id, route_revision, target_id, target_type, target_scope, resource_id, generation, idempotency_key, content_fingerprint, manifest_digest, request_version, request_json, state, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'ready',?,?)`,
+		i.DispatchID, i.DecisionID, i.RouteID, i.RouteRevision, i.TargetID, i.TargetType, i.TargetScope, i.ResourceID, int(i.Generation),
 		i.IdempotencyKey, i.ContentFingerprint, i.ManifestDigest, i.RequestVersion, i.RequestJSON, i.CreatedAt, i.CreatedAt); err != nil {
 		return err
 	}

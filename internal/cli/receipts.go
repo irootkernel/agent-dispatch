@@ -131,11 +131,17 @@ func runDispatchesRefresh(command string, args []string, stdout, stderr io.Write
 	if err != nil {
 		return writeSinkError(stderr, command, err)
 	}
-	// The projection must read the target that accepted the dispatch;
-	// a configuration change since acceptance must not redirect it.
+	// The projection must read the target that accepted the dispatch —
+	// both its identity and its recorded scope; a configuration change
+	// since acceptance must not redirect it.
 	if sink.ID() != intent.TargetID {
 		writeError(stderr, command, "config_invalid", "configuration",
 			fmt.Sprintf("dispatch %s was accepted by target %q but the route now resolves to %q; restore the accepting target configuration before refreshing", dispatchID, intent.TargetID, sink.ID()))
+		return 3
+	}
+	if scope := targetBoard(cfg, intent.RouteID); intent.TargetScope != "" && intent.TargetScope != scope {
+		writeError(stderr, command, "config_invalid", "configuration",
+			fmt.Sprintf("dispatch %s was accepted against target scope %q but the route now resolves to scope %q; restore the accepting board before refreshing", dispatchID, intent.TargetScope, scope))
 		return 3
 	}
 	service := &receipts.Service{Store: store, Sink: sink, Now: time.Now}
@@ -163,4 +169,16 @@ func runDispatchesRefresh(command string, args []string, stdout, stderr io.Write
 		}
 	}
 	return writeEnvelope(stdout, command, result)
+}
+
+// targetBoard resolves the configured board slug for one route.
+func targetBoard(cfg *config.Config, routeID string) string {
+	route, ok := cfg.Routes[routeID]
+	if !ok {
+		return ""
+	}
+	if target, ok := cfg.Targets[route.Dispatch.Target]; ok {
+		return target.Board
+	}
+	return ""
 }

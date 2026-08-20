@@ -13,6 +13,7 @@ import (
 	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
 	"github.com/rootkernel/jjukkumi/internal/config"
 	"github.com/rootkernel/jjukkumi/internal/platformpaths"
+	"github.com/rootkernel/jjukkumi/internal/ports"
 	"github.com/rootkernel/jjukkumi/internal/testsupport/stubhermes"
 )
 
@@ -622,5 +623,46 @@ func TestReconcileSkipsRepointedScope(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "\"unknown\"") {
 		t.Fatalf("the dispatch must remain unknown after the scope skip: %s", out.String())
+	}
+}
+
+// TestRerunPreservesTargetScope proves rerun intents carry the
+// predecessor's target scope so the reconciliation guard stays
+// effective across reruns.
+func TestRerunPreservesTargetScope(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	setPlanEnv(t, vault, false)
+	e4t3RegisterRoute(t, configPath)
+	res := e4t3DispatchNoRegister(t, configPath, vault)
+	dispatchID, _ := res["dispatch_id"].(string)
+
+	var out, errb bytes.Buffer
+	if code := Run([]string{"dispatches", "rerun", "--config", configPath, "--yes", dispatchID, "--reason", "audit scope check"}, &out, &errb); code != 0 {
+		t.Fatalf("rerun: %s", errb.String())
+	}
+	cfgL, _ := config.Load(configPath)
+	stateDir := platformpaths.ResolveStateDir(cfgL.Instance.StateDir)
+	st, err := sqlite.Open(filepath.Join(stateDir, StateDBName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	// Find the rerun intent (new id) and verify the scope was inherited.
+	sums, err := st.ListIntents(context.Background(), ports.IntentFilter{RouteID: "wiki", Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rerunScope string
+	for _, sum := range sums {
+		if sum.DispatchID != dispatchID {
+			snap, err := st.LoadIntent(context.Background(), sum.DispatchID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rerunScope = snap.TargetScope
+		}
+	}
+	if rerunScope != "jjukkumi-test" {
+		t.Fatalf("rerun intent must inherit the target scope, got %q", rerunScope)
 	}
 }

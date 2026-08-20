@@ -21,7 +21,8 @@
 ```text
 jjukkumi status --output json
 jjukkumi doctor --output json
-jjukkumi dispatches list --state unknown,dead_lettered
+jjukkumi dispatches list --state unknown
+jjukkumi dispatches list --state dead_lettered
 jjukkumi quarantine list
 jjukkumi receipts list --route wiki-maintenance
 ```

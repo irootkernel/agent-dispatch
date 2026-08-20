@@ -8,6 +8,7 @@ import (
 	"io"
 	"math/rand"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/rootkernel/jjukkumi/internal/adapters/hermeskanban"
@@ -59,10 +60,20 @@ type storeOp interface {
 }
 
 // openOperatorStore opens the store and narrows it to the operator
-// surface, mapping open failures to the documented storage error.
+// surface, mapping open failures to their documented classes:
+// configuration failures exit 3, migration failures (including a
+// newer unsupported schema) exit 21, and storage failures exit 20.
 func openOperatorStore(command string, configPath string, stderr io.Writer) (storeOp, *sqlite.Store, int) {
 	s, err := openStateStore(resolveConfigPath(configPath))
 	if err != nil {
+		if strings.Contains(err.Error(), "configuration:") {
+			writeError(stderr, command, "config_invalid", "configuration", err.Error())
+			return nil, nil, 3
+		}
+		if strings.Contains(err.Error(), "schema version") || strings.Contains(err.Error(), "migration") {
+			writeError(stderr, command, "migration_newer_schema", "migration", err.Error())
+			return nil, nil, 21
+		}
 		writeError(stderr, command, "sqlite_open_failed", "storage", err.Error())
 		return nil, nil, 20
 	}

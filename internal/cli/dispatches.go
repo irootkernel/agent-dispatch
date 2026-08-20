@@ -381,7 +381,19 @@ func reconcileUnknownDispatches(cfg *config.Config, store storeOp, sink ports.Si
 			failures = append(failures, fmt.Sprintf("reconciling %s skipped: it was accepted by target %q but the route now resolves to %q", sum.DispatchID, sum.TargetID, sink.ID()))
 			continue
 		}
-		if snap, err := store.LoadIntent(requestCtx(), sum.DispatchID); err == nil && snap.TargetScope != "" && snap.TargetScope != scope {
+		snap, loadErr := store.LoadIntent(requestCtx(), sum.DispatchID)
+		if loadErr != nil {
+			// Failing closed: without the recorded scope the identity
+			// proof is unavailable, so the dispatch is never
+			// reconciled on trust alone.
+			failures = append(failures, fmt.Sprintf("reconciling %s skipped: its durable scope could not be read: %v", sum.DispatchID, loadErr))
+			continue
+		}
+		if snap.TargetScope == "" {
+			// Pre-v3 intents carry no recorded scope: reconcile, but
+			// surface the weaker identity proof visibly.
+			failures = append(failures, fmt.Sprintf("reconciling %s proceeds without a recorded target scope (pre-v3 intent); its board identity cannot be verified", sum.DispatchID))
+		} else if snap.TargetScope != scope {
 			failures = append(failures, fmt.Sprintf("reconciling %s skipped: it was submitted against target scope %q but the route now resolves to scope %q; restore the accepting scope or resolve the dispatch manually", sum.DispatchID, snap.TargetScope, scope))
 			continue
 		}

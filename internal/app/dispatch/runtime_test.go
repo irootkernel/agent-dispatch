@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -425,5 +426,44 @@ func TestBoundedPayloadAlwaysValidJSON(t *testing.T) {
 	}
 	if err := json.Unmarshal([]byte(oversized), &marker); err != nil || !marker.Truncated || marker.Bytes != 8192 {
 		t.Fatalf("oversized payload must persist the truncation marker, got %q (err=%v)", oversized, err)
+	}
+}
+
+// TestMalformedStoredRequestCompletesAttempt proves the E4 audit
+// remediation: a persisted intent whose stored request is not the
+// contract shape completes its attempt as a definite pre-invocation
+// failure (retry_wait with a persisted backoff deadline) instead of
+// stranding in submitting until the lease expires, and the sink is
+// never invoked.
+func TestMalformedStoredRequestCompletesAttempt(t *testing.T) {
+	store := openRuntimeStore(t)
+	sink := fakesink.New("fake-main", fakesink.Step{Result: fakesink.Accepted("t_6253023d")})
+	if err := store.CommitLineage(context.Background(), runtimeLineage(t, "dispatch-1", "{not-json")); err != nil {
+		t.Fatal(err)
+	}
+	rt := &Runtime{
+		Store: store, Sink: sink,
+		Now:      testClock(time.Date(2026, 8, 20, 1, 0, 0, 0, time.UTC)),
+		LeaseTTL: time.Minute, Actor: "runtime-test",
+		Backoff: Backoff{MaxAttempts: 3, InitialBackoff: time.Second, MaxBackoff: time.Minute, Multiplier: 2, JitterFraction: 0},
+	}
+	report, err := rt.SubmitOnce(context.Background(), "dispatch-1", "drain")
+	if err == nil || !strings.Contains(err.Error(), "not the task contract shape") {
+		t.Fatalf("malformed stored request must surface its error: %v", err)
+	}
+	if report.To != records.IntentRetryWait {
+		t.Fatalf("the attempt must complete to retry_wait, got %s", report.To)
+	}
+	// The intent is immediately re-eligible rather than stranded: no
+	// open submitting lease remains.
+	snap, err := store.LoadIntent(context.Background(), "dispatch-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.State != records.IntentRetryWait || snap.LeaseOwner != "" {
+		t.Fatalf("intent must sit in retry_wait without an open lease: %+v", snap)
+	}
+	if len(sink.Submissions()) != 0 {
+		t.Fatal("the sink must never be invoked for a malformed stored request")
 	}
 }

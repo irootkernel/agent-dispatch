@@ -89,8 +89,37 @@ func (r *Runtime) SubmitOnce(ctx context.Context, dispatchID, owner string) (Sub
 
 	var req ports.TaskRequest
 	if err := json.Unmarshal([]byte(snap.RequestJSON), &req); err != nil {
-		// Validated before leasing: a malformed stored request must not
-		// strand the intent in submitting with an open attempt.
+		// A malformed stored request can never be submitted, but the
+		// lease is already held: complete the attempt as a definite
+		// pre-invocation failure so the intent lands in retry_wait with
+		// bounded budget (eventually dead-lettering through the normal
+		// machinery) instead of stranding in submitting until the lease
+		// expires (E4 audit remediation for the E3-T2 reopen).
+		report.Classification = ports.SubmitDefiniteNotSubmitted
+		completion := ports.AttemptResult{
+			AttemptID:   acquired,
+			DispatchID:  dispatchID,
+			Outcome:     "transport_failure",
+			ErrorCode:   "stored_request_invalid",
+			CompletedAt: Timestamp(r.Now()),
+			Diagnostic:  "stored request is not the task contract shape",
+			Transition: ports.AttemptTransition{
+				To:           records.IntentRetryWait,
+				Reason:       state.ReasonTransientFailure,
+				TransitionID: acquired + ":" + string(state.ReasonTransientFailure),
+			},
+		}
+		if r.Backoff != (Backoff{}) {
+			delay, derr := r.Backoff.Delay(snap.AttemptCount+1, 0)
+			if derr == nil {
+				completion.NextAttemptAt = Timestamp(r.Now().Add(delay))
+			}
+		}
+		if err := r.Store.CompleteAttempt(ctx, completion); err != nil {
+			return report, err
+		}
+		report.To = completion.Transition.To
+		report.Reason = completion.Transition.Reason
 		return report, fmt.Errorf("stored request is not the task contract shape: %w", err)
 	}
 	res, sinkErr := r.Sink.Submit(ctx, req)

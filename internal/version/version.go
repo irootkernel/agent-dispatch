@@ -29,7 +29,7 @@ func AdapterVersions() map[string]string {
 	return map[string]string{
 		"watchman":      "not-implemented (E2)",
 		"localfs":       "not-implemented (E2)",
-		"sqlite":        "not-implemented (E1-T4)",
+		"sqlite":        "schema-v1 (E1-T4 repositories)",
 		"hermeskanban":  "not-implemented (E4)",
 		"hermeswebhook": "not-implemented (E6)",
 	}

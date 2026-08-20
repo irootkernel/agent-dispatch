@@ -88,3 +88,14 @@ func TestXDGStateHomeGatedToLinux(t *testing.T) {
 		}
 	}
 }
+
+func TestTempFallbackPerUser(t *testing.T) {
+	// When home resolution is impossible the fallback must be per-uid,
+	// never a predictable shared location.
+	if !strings.Contains(tempFallbackDir(), "jjukkumi-") {
+		t.Errorf("fallback dir not per-app: %q", tempFallbackDir())
+	}
+	if !filepath.IsAbs(tempFallbackDir()) {
+		t.Errorf("fallback must be absolute: %q", tempFallbackDir())
+	}
+}

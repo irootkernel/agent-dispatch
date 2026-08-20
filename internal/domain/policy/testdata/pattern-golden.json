@@ -1,0 +1,206 @@
+{
+  "case_mode": "sensitive",
+  "include": [
+    "**/*.md"
+  ],
+  "exclude": [
+    ".obsidian/workspace*.json",
+    "templates/**"
+  ],
+  "protected": [
+    "raw/**",
+    "canon/**"
+  ],
+  "immutable": [
+    "**/SUMMARY.md"
+  ],
+  "cases": [
+    {
+      "path": "Inbox/new-note.md",
+      "status": "normal"
+    },
+    {
+      "path": "Inbox/notes/deep/nested.md",
+      "status": "normal"
+    },
+    {
+      "path": "root-note.md",
+      "status": "normal"
+    },
+    {
+      "path": "Inbox/image.png",
+      "status": "excluded"
+    },
+    {
+      "path": ".obsidian/workspace.json",
+      "status": "excluded"
+    },
+    {
+      "path": ".obsidian/workspace-mobile.json",
+      "status": "excluded"
+    },
+    {
+      "path": "templates/layout.md",
+      "status": "excluded"
+    },
+    {
+      "path": "templates/sub/layout.md",
+      "status": "excluded"
+    },
+    {
+      "path": "raw/diary.md",
+      "status": "protected"
+    },
+    {
+      "path": "canon/deep/epic.md",
+      "status": "protected"
+    },
+    {
+      "path": "Book/SUMMARY.md",
+      "status": "immutable"
+    },
+    {
+      "path": ".git/config",
+      "status": "excluded"
+    },
+    {
+      "path": "deep/.git/hooks/pre-commit",
+      "status": "excluded"
+    },
+    {
+      "path": ".watchman-cookie-host-123-4",
+      "status": "excluded"
+    },
+    {
+      "path": "a/b/.watchman-cookie-x-1",
+      "status": "excluded"
+    },
+    {
+      "path": ".DS_Store",
+      "status": "excluded"
+    },
+    {
+      "path": "Folder/.DS_Store",
+      "status": "excluded"
+    },
+    {
+      "path": "raw/README.txt",
+      "status": "excluded"
+    },
+    {
+      "path": "Empty Dir/readme.md",
+      "status": "normal"
+    },
+    {
+      "path": "sub/module/.git/HEAD",
+      "status": "excluded"
+    }
+  ],
+  "segment_matches": [
+    {
+      "pattern": "**/*.md",
+      "path": "a.md",
+      "match": true
+    },
+    {
+      "pattern": "**/*.md",
+      "path": "a/b/c.md",
+      "match": true
+    },
+    {
+      "pattern": "**/*.md",
+      "path": "a/b/c.txt",
+      "match": false
+    },
+    {
+      "pattern": ".git/**",
+      "path": ".git",
+      "match": true
+    },
+    {
+      "pattern": ".git/**",
+      "path": ".git/HEAD",
+      "match": true
+    },
+    {
+      "pattern": ".git/**",
+      "path": "x/.git/HEAD",
+      "match": false
+    },
+    {
+      "pattern": "a/*",
+      "path": "a",
+      "match": false
+    },
+    {
+      "pattern": "a/*",
+      "path": "a/b",
+      "match": true
+    },
+    {
+      "pattern": "a/*",
+      "path": "a/b/c",
+      "match": false
+    },
+    {
+      "pattern": "note?.md",
+      "path": "note1.md",
+      "match": true
+    },
+    {
+      "pattern": "note?.md",
+      "path": "note12.md",
+      "match": false
+    },
+    {
+      "pattern": "*.md",
+      "path": "a.md",
+      "match": true
+    },
+    {
+      "pattern": "*.md",
+      "path": "a/b.md",
+      "match": false
+    },
+    {
+      "pattern": "**",
+      "path": "anything/at/all",
+      "match": true
+    },
+    {
+      "pattern": "**",
+      "path": "single",
+      "match": true
+    },
+    {
+      "pattern": "a/**/b.md",
+      "path": "a/b.md",
+      "match": true
+    },
+    {
+      "pattern": "a/**/b.md",
+      "path": "a/x/y/b.md",
+      "match": true
+    },
+    {
+      "pattern": "a/**/b.md",
+      "path": "x/a/b.md",
+      "match": false
+    },
+    {
+      "pattern": "*/*.md",
+      "path": "Inbox/new note.md",
+      "match": true
+    },
+    {
+      "pattern": "exact.md",
+      "path": "exact.md",
+      "match": true
+    },
+    {
+      "pattern": "exact.md",
+      "path": "Exact.md",
+      "match": false
+    }
+  ]
+}

@@ -12,13 +12,13 @@
 |---|---|
 | Current epic | E2, Watchman Deterministic Dry-Run Pipeline |
 | Current active task | None |
-| Next task | **E2-T2, Safe Path Containment and Pattern Policy** |
-| Completed tasks | 10 / 33 |
-| Planned tasks | 23 / 33 |
+| Next task | **E2-T3, Meaningful-Change Confirmation and Batch Normalization** |
+| Completed tasks | 11 / 33 |
+| Planned tasks | 22 / 33 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
-The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). E2-T1 delivered the bounded Watchman input parser against the frozen E0-T5 fixture corpus. Implementation continues with E2-T2.
+The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). E2-T1 delivered the bounded Watchman input parser against the frozen E0-T5 fixture corpus. E2-T2 delivered the safe path containment resolver and the deterministic pattern policy engine. Implementation continues with E2-T3.
 
 ## 2. Epic Summary
 
@@ -46,7 +46,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 8 | E1-T3 | Completed | Domain primitives, IDs, digests, canonicalization |
 | 9 | E1-T4 | Completed | SQLite schema, migrations, and repositories |
 | 10 | E2-T1 | Completed | Bounded Watchman input parser |
-| 11 | E2-T2 | Planned | Safe path containment and pattern engine |
+| 11 | E2-T2 | Completed | Safe path containment and pattern engine |
 | 12 | E2-T3 | Planned | Meaningful-change, hashing, and batch normalization |
 | 13 | E2-T4 | Planned | Deterministic policy planner and dry-run CLI |
 | 14 | E2-T5 | Planned | Real Watchman trigger lifecycle and G1 fixtures |
@@ -498,7 +498,7 @@ E1-T4 Completed; E0-T5 Completed.
 
 ## E2-T2: Implement Safe Path Containment and Pattern Policy
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -528,6 +528,12 @@ E2-T1 Completed.
 - pattern behavior matches golden tests on macOS and Linux;
 - event content cannot affect route authority;
 - protected paths are classified but not read unnecessarily or dispatched.
+
+### Evidence
+
+- `internal/domain/policy`: pure deterministic pattern engine (PTH-003, configuration-spec §7) over normalized slash-separated relative paths with `**` recursive matching, single-segment `*`/`?`, fail-closed pattern validation (relative, no backslash/NUL/`.`/`..`, `**` only whole-segment), exclude precedence over include, protected/immutable evaluated after include/exclude, and built-in default exclusions (PTH-007: `.git/**` at any depth, Watchman cookie/state bookkeeping at any depth, `.DS_Store`). Case mode must be resolved by the caller (`filesystem` → sensitive/insensitive) so behavior is explicit, recorded, and identical on macOS and Linux for the same input; golden classification and segment-matching files under `internal/domain/policy/testdata/` pin the contract.
+- `internal/adapters/localfs`: safe root resolver (PTH-001, PTH-002, SEC-002) that resolves the trusted root's symlinks once, lexically validates untrusted event paths (UTF-8, relative, separators, traversal, NUL, SEC-009 length limit) before any filesystem access, resolves each path with full symlink evaluation under a canonical-prefix containment check, walks shallowest-first over every ancestor of not-currently-existing (deleted) paths, verifying each intermediate component before traversing it, so live or dangling symlinked directories cannot position a future path outside the root, and opens regular files only via `OpenRegular` with final-component `O_NOFOLLOW`, regular-file enforcement, and the configured size limit returning structural errors (`ErrEscape`/`ErrNotRegular`/`ErrTooLarge`) so a digest stays unknown rather than falsely unchanged. Deleted paths are never opened.
+- Security tests: lexical escape (traversal, absolute, NUL, backslash, empty) fails before access; file and directory symlink escapes (live and dangling) are refused while contained symlinks resolve; directories and non-regular files fail the type guard; over-limit files fail the size guard with exact-limit acceptance; hostile path names (`include=`, `profile=admin/**`, embedded traversal) cannot mutate compiled patterns or flip other paths' classification (PTH-004, SEC-003); protected and nonexistent paths classify purely through patterns with no filesystem access (PTH-008 classification-time behavior).
 
 ## E2-T3: Implement Meaningful-Change Confirmation and Batch Normalization
 

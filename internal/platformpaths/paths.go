@@ -6,6 +6,7 @@
 package platformpaths
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -29,7 +30,7 @@ func DefaultConfigPath() string {
 	if err != nil {
 		// Home resolution failing leaves no sane per-user location; use an
 		// absolute temporary fallback rather than a CWD-relative path.
-		return filepath.Join(os.TempDir(), AppName, "config.yaml")
+		return filepath.Join(tempFallbackDir(), "config.yaml")
 	}
 	return filepath.Join(home, ".config", AppName, "config.yaml")
 }
@@ -41,7 +42,7 @@ func DefaultStateDir() string {
 	if runtime.GOOS == "darwin" {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return filepath.Join(os.TempDir(), "JJUKKUMI")
+			return tempFallbackDir()
 		}
 		return filepath.Join(home, "Library", "Application Support", "JJUKKUMI")
 	}
@@ -52,7 +53,7 @@ func DefaultStateDir() string {
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return filepath.Join(os.TempDir(), AppName)
+		return tempFallbackDir()
 	}
 	return filepath.Join(home, ".local", "state", AppName)
 }
@@ -79,7 +80,14 @@ func DefaultCapabilityReportPath() string {
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return filepath.Join(os.TempDir(), AppName, "hermes-capabilities.json")
+		return filepath.Join(tempFallbackDir(), "hermes-capabilities.json")
 	}
 	return filepath.Join(home, ".config", AppName, "hermes-capabilities.json")
+}
+
+// tempFallbackDir is the last-resort per-user location when home
+// resolution fails: a per-uid directory under the system temp dir, so a
+// predictable shared world-writable path is never used.
+func tempFallbackDir() string {
+	return filepath.Join(os.TempDir(), fmt.Sprintf("%s-%d", AppName, os.Getuid()))
 }

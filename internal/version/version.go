@@ -16,9 +16,10 @@ var BuildTime = "unknown"
 // ConfigVersion is the operator configuration version this build supports.
 const ConfigVersion = "1"
 
-// SchemaRange is the range of persistence schema versions this build can
-// open, inclusive.
-const SchemaRange = "0-0"
+// SchemaRange is the range of SQLite migration versions this build
+// supports, inclusive; schema v1 is the initial durable schema delivered
+// by E1-T4.
+const SchemaRange = "1-1"
 
 // AdapterVersions returns the pinned adapter implementation versions the
 // build carries. E1-T1 ships no adapters, so the map names each planned

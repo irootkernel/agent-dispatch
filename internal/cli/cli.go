@@ -7,6 +7,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -99,14 +100,11 @@ func runVersion(args []string, stdout, stderr io.Writer) int {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--output", "-o":
-			if i+1 >= len(args) {
-				return usageError(stderr, "version", "--output requires a value: --output json")
+			v, err := parseOutputValue(stderr, "version", args, &i)
+			if err != nil {
+				return 2
 			}
-			i++
-			if args[i] != "json" && args[i] != "human" {
-				return usageError(stderr, "version", fmt.Sprintf("unsupported --output value %q (human or json)", args[i]))
-			}
-			jsonOutput = args[i] == "json"
+			jsonOutput = v
 		case "--output=json":
 			jsonOutput = true
 		case "--output=human":
@@ -190,3 +188,27 @@ func writeError(w io.Writer, command, code, category, message string) {
 		TraceID: "",
 	})
 }
+
+// parseOutputValue consumes the value after --output/-o and reports
+// whether JSON output was requested; both implemented commands share it
+// (cli-spec section 1: --output human|json).
+func parseOutputValue(stderr io.Writer, command string, args []string, i *int) (bool, error) {
+	if *i+1 >= len(args) {
+		return false, usageErrorAlreadyWritten(stderr, command, "--output requires a value: --output human|json")
+	}
+	*i++
+	switch args[*i] {
+	case "json":
+		return true, nil
+	case "human":
+		return false, nil
+	}
+	return false, usageErrorAlreadyWritten(stderr, command, fmt.Sprintf("unsupported --output value %q (human or json)", args[*i]))
+}
+
+func usageErrorAlreadyWritten(stderr io.Writer, command, message string) error {
+	writeError(stderr, command, "flag_invalid", "usage", message)
+	return errFlag
+}
+
+var errFlag = errors.New("flag error")

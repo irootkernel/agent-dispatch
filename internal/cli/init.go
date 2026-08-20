@@ -49,14 +49,11 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 			i++
 			resourceRoot = args[i]
 		case "--output", "-o":
-			if i+1 >= len(args) {
-				return usageError(stderr, "init", "--output requires a value: --output json")
+			v, err := parseOutputValue(stderr, "init", args, &i)
+			if err != nil {
+				return 2
 			}
-			i++
-			if args[i] != "json" && args[i] != "human" {
-				return usageError(stderr, "init", fmt.Sprintf("unsupported --output value %q (human or json)", args[i]))
-			}
-			jsonOutput = args[i] == "json"
+			jsonOutput = v
 		case "--output=json":
 			jsonOutput = true
 		case "--output=human":

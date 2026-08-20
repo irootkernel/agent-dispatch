@@ -144,6 +144,11 @@ type ExecutionProjection struct {
 // not support; it is never emulated (sink-adapter-contract.md §2).
 var ErrCapabilityUnsupported = errors.New("sink capability unsupported")
 
+// TaskRequestContractVersion is the logical hermes-task contract
+// version; the producer (request builder) and every target adapter
+// share this one declaration.
+const TaskRequestContractVersion = "jjukkumi.hermes-task/v1"
+
 // TaskRequest is the immutable logical dispatch request
 // (hermes-task-contract.md §2, schemas/hermes-task-request.schema.json).
 // The core constructs it and owns the idempotency key; the adapter

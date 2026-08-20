@@ -12,8 +12,9 @@ import (
 )
 
 // RequestContractVersion is the task request contract the runtime builds
-// (hermes-task-contract.md §2).
-const RequestContractVersion = "jjukkumi.hermes-task/v1"
+// (hermes-task-contract.md §2); the version vocabulary lives once on the
+// port so producer and adapters cannot drift.
+const RequestContractVersion = ports.TaskRequestContractVersion
 
 // RequestInput carries the plan-derived facts the immutable task request
 // is built from (E3-T2 dispatch-intent creation).

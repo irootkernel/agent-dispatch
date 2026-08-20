@@ -18,3 +18,6 @@ __pycache__/
 !.gaori/tester/rules/
 .gaori/tester/rules/*
 !.gaori/tester/rules/*.yaml
+
+# Go build output
+bin/

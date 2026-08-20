@@ -12,20 +12,20 @@
 |---|---|
 | Current epic | E1, Go Foundation, Configuration, and Persistence Schema |
 | Current active task | None |
-| Next task | **E1-T1, Bootstrap Repository, Toolchain, and Verification Pipeline** |
-| Completed tasks | 5 / 33 |
-| Planned tasks | 28 / 33 |
+| Next task | **E1-T2, Implement Configuration Loading, Validation, and Platform Paths** |
+| Completed tasks | 6 / 33 |
+| Planned tasks | 27 / 33 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
-The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. Implementation continues with E1-T1.
+The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Implementation continues with E1-T2.
 
 ## 2. Epic Summary
 
 | Epic | Title | Status | Tasks | Completion gate |
 |---|---|---:|---:|---|
 | E0 | SOT and External Contract Baseline | **Completed** | 5 | G0 |
-| E1 | Go Foundation, Configuration, and Persistence Schema | **Planned** | 4 | Foundation ready |
+| E1 | Go Foundation, Configuration, and Persistence Schema | **In Progress** | 4 | Foundation ready |
 | E2 | Watchman Deterministic Dry-Run Pipeline | **Planned** | 5 | G1 |
 | E3 | Durable Dispatch and Route Coordination Core | **Planned** | 5 | G2 |
 | E4 | Hermes Kanban Durable Integration | **Planned** | 5 | G3 |
@@ -41,7 +41,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 3 | E0-T3 | Completed | Roadmap, acceptance, and traceability frozen |
 | 4 | E0-T4 | Completed | Real Hermes public capability report |
 | 5 | E0-T5 | Completed | Watchman fixture baseline frozen |
-| 6 | E1-T1 | Planned | Buildable Go repository and verification pipeline |
+| 6 | E1-T1 | Completed | Buildable Go repository and verification pipeline |
 | 7 | E1-T2 | Planned | Validated YAML configuration and path layout |
 | 8 | E1-T3 | Planned | Domain primitives, IDs, digests, canonicalization |
 | 9 | E1-T4 | Planned | SQLite schema, migrations, and repositories |
@@ -264,12 +264,12 @@ E0-T3 Completed.
 
 # E1: Go Foundation, Configuration, and Persistence Schema
 
-**Epic status:** Planned  
+**Epic status:** In Progress  
 **Purpose:** Create a buildable, testable foundation with no source or target side effects.
 
 ## E1-T1: Bootstrap Repository, Toolchain, and Verification Pipeline
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -307,6 +307,14 @@ E0-T4 Completed; E0-T5 Completed.
 ### Out of Scope
 
 Config parsing, SQLite tables, Watchman, and Hermes invocation.
+
+### Evidence
+
+- `Makefile` (`make verify`) is the single verification entrypoint: format, vet, staticcheck, import-direction lint, unit tests, race tests, docs manifest checksums, Go Draft 2020-12 schema/example validation, and traceability regeneration.
+- `internal/schemavalid` with migrated self-tests (`internal/schemavalid/selftest_test.go`); the Python subset validator `docs/scripts/validate-json-schemas.py` is retired.
+- `.gaori/tester.yaml` invokes the Makefile targets; `gaori config check` passes.
+- `.github/workflows/ci.yml` runs `make verify` on macOS and Linux (SCP-008). GitHub-hosted runner execution is pending the first push; local `make verify` on macOS is the recorded evidence until then.
+- `jjukkumi version --output json` follows the CLI envelope (`internal/cli/cli_test.go`).
 
 ## E1-T2: Implement Configuration Loading, Validation, and Platform Paths
 

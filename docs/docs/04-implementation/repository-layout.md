@@ -67,13 +67,17 @@ jjukkumi/
 
 ## Package Rules
 
-- `internal/domain` cannot import `internal/app`, `config`, `cli`, or adapters.
+- `internal/domain` cannot import `internal/app`, `config`, `cli`, adapters, `observability`, or `platformpaths` (the full enforced set is listed below).
 - `internal/ports` contains behavior interfaces, not shared dumping-ground DTOs.
 - source-specific DTOs stay in `adapters/watchman`.
 - target-specific DTOs stay in `adapters/hermeskanban` or `hermeswebhook`.
 - SQL statements and row models stay in `adapters/sqlite`.
 - config structs are converted to immutable domain snapshots before application use.
 - generated JSON Schemas remain under top-level `schemas`; their source may be hand-maintained or generated, but drift tests are required.
+
+The import-direction rules are enforced by `internal/importlint` through `make check-imports` (part of `make verify`): `internal/domain` may not import `internal/{app,config,cli,adapters,observability,platformpaths}`, `internal/ports` may not import `internal/{app,adapters,config,cli,observability}`, and `internal/config` may not import `internal/{app,cli,adapters,observability}`, including each family's root package.
+
+Until generated schemas exist (E2 and later), the hand-maintained SOT schemas and examples remain under `docs/schemas` and `docs/examples` inside the checksummed docs package; the top-level `schemas/` directory appears with the first generated schema.
 
 ## Test Placement
 
@@ -90,7 +94,7 @@ This SOT directory layout should be preserved. Implementation-specific capabilit
 ```text
 docs/integrations/
   hermes-public-interface-report.md
-  watchman-interface-report.md
+  watchman-public-interface-report.md
 ```
 
 Task evidence may go under:

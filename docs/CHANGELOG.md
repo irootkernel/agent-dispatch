@@ -1,5 +1,12 @@
 # SOT Changelog
 
+## 1.0.4 - 2026-08-20
+
+Implementation bootstrap errata (E1-T1):
+
+- extended the closed error-code registry with the usage class (exit 2) required by the first real CLI surface: `command_unknown`, `command_not_implemented`, and `flag_invalid`, plus `internal_unclassified` (exit 40) for the panic-recovery path;
+- repository-layout now records the importlint-enforced dependency rules and that SOT schemas/examples remain under `docs/schemas` and `docs/examples` until generated schemas exist.
+
 ## 1.0.3 - 2026-08-19
 
 Design-review errata on 1.0.2 (see `docs/00-sot/decision-log.md`):

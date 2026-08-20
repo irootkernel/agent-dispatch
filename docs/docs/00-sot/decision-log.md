@@ -143,3 +143,11 @@ Post-baseline decisions and documented errata. Entries amend completed E0 output
 **Context.** The E0 audit remediation left a stdlib-only Python subset validator with accepted deferrals (subset-enumeration duplication, no static `$ref` target resolution, only the `date-time` and `uri` formats). The implementation language is Go (ADR-0004), and E1-T1 already required deterministic verification commands and schema/example validation in CI, so the replacement lands in the task that creates the Go module. The gaori configuration added during the E0 closeout wraps raw commands, which would silently drift from the documented verification commands once those become Makefile targets.
 
 **Consequences.** The Python dependency for document validation disappears at E1-T1, discharging the deferred standard-validator items in `VALIDATION.md`. Until E1-T1 completes, the current Python commands and gaori configuration remain the authoritative reproduction path.
+
+## D-016 - 2026-08-20 - Usage-class error codes registered for the E1-T1 CLI surface
+
+**Decision.** The closed v0.1 error-code registry gains its first usage-class (exit 2) codes: `command_unknown` for an unrecognized command, `command_not_implemented` for a command defined by the CLI contract but not yet built, and `flag_invalid` for argument errors. `internal_unclassified` (exit 40) gives the required panic-recovery path a legal code. The minimal E1-T1 CLI emits only these four codes plus success; the registry stays closed and future codes remain contract changes recorded here and in the changelog.
+
+**Context.** The registry predated any executable CLI and contained no usage-class codes, so the first real `jjukkumi` binary had no legal encoding for its failure modes; emitting unregistered codes would violate error-model §4 ("implementations emit only the codes below").
+
+**Consequences.** SOT 1.0.4. `version --output json` remains the only implemented command; every other tree entry fails closed with `command_not_implemented` instead of silently succeeding.

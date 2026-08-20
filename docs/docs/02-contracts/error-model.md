@@ -72,6 +72,10 @@ The v0.1 registry is closed: implementations emit only the codes below. Adding o
 
 | Code | Category | Exit |
 |---|---|---:|
+| `command_unknown` | `usage` | 2 |
+| `command_not_implemented` | `usage` | 2 |
+| `flag_invalid` | `usage` | 2 |
+| `internal_unclassified` | `internal` | 40 |
 | `config_invalid` | `configuration` | 3 |
 | `config_route_not_found` | `configuration` | 3 |
 | `config_capability_missing` | `configuration` | 3 |

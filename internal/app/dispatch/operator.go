@@ -17,6 +17,11 @@ type OperatorService struct {
 	Store OperatorStorePort
 	// Now renders the canonical audit timestamp.
 	Now func() string
+	// TargetScopeResolver supplies the currently configured target
+	// scope (the hermes-kanban board) for a route, so a rerun records
+	// the scope it will actually be submitted against rather than the
+	// predecessor's; nil disables the resolution.
+	TargetScopeResolver func(routeID string) string
 }
 
 // OperatorStorePort is the durable surface the operator actions need.

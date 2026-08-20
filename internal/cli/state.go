@@ -8,7 +8,6 @@ import (
 	"io"
 	"math/rand"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/rootkernel/jjukkumi/internal/adapters/hermeskanban"
@@ -23,13 +22,17 @@ import (
 // StateDBName is the durable database file inside the state directory.
 const StateDBName = "state.db"
 
+// errConfigurationClass marks store-opening failures caused by the
+// configuration document (the typed class behind the exit-3 mapping).
+var errConfigurationClass = errors.New("configuration")
+
 // openStateStore resolves the state directory with the shared precedence
 // (config instance.state_dir, then JJUKKUMI_STATE_DIR, then the platform
 // default), opens the SQLite store, and applies pending migrations.
 func openStateStore(configPath string) (*sqlite.Store, error) {
 	cfg, err := config.Load(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("configuration: %w", err)
+		return nil, fmt.Errorf("%w: %w", errConfigurationClass, err)
 	}
 	stateDir := platformpaths.ResolveStateDir(cfg.Instance.StateDir)
 	s, err := sqlite.Open(filepath.Join(stateDir, StateDBName))
@@ -70,7 +73,7 @@ func openOperatorStore(command string, configPath string, stderr io.Writer) (sto
 		// configuration class; the sentinel distinguishes a newer
 		// database; everything else is storage.
 		var tooNew *sqlite.ErrSchemaTooNewType
-		if strings.HasPrefix(err.Error(), "configuration:") {
+		if errors.Is(err, errConfigurationClass) {
 			writeError(stderr, command, "config_invalid", "configuration", err.Error())
 			return nil, nil, 3
 		}

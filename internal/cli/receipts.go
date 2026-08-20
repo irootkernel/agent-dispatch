@@ -144,6 +144,10 @@ func runDispatchesRefresh(command string, args []string, stdout, stderr io.Write
 			fmt.Sprintf("dispatch %s was accepted against target scope %q but the route now resolves to scope %q; restore the accepting board before refreshing", dispatchID, intent.TargetScope, scope))
 		return 3
 	}
+	warnings := []string{}
+	if intent.TargetScope == "" {
+		warnings = append(warnings, "dispatch "+dispatchID+" carries no recorded target scope (pre-v3 intent); its board identity cannot be verified")
+	}
 	service := &receipts.Service{Store: store, Sink: sink, Now: time.Now}
 	result, err := service.Refresh(context.Background(), dispatchID)
 	if err != nil {
@@ -168,7 +172,7 @@ func runDispatchesRefresh(command string, args []string, stdout, stderr io.Write
 			return 11
 		}
 	}
-	return writeEnvelope(stdout, command, result)
+	return writeEnvelopeWithWarnings(stdout, command, result, warnings)
 }
 
 // targetBoard resolves the configured board slug for one route.

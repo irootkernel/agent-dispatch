@@ -174,7 +174,20 @@ func runDispatchesRetry(command string, args []string, stdout, stderr io.Writer)
 		return exit
 	}
 	defer closer.Close()
-	op := &dispatch.OperatorService{Store: store, Now: func() string { return dispatch.Timestamp(time.Now()) }}
+	cfgRerun, cfgErr := config.Load(resolveConfigPath(flags.val("--config")))
+	var scopeResolver func(routeID string) string
+	if cfgErr == nil {
+		rerunCfg := cfgRerun
+		scopeResolver = func(routeID string) string {
+			if route, ok := rerunCfg.Routes[routeID]; ok {
+				if target, ok := rerunCfg.Targets[route.Dispatch.Target]; ok {
+					return target.Board
+				}
+			}
+			return ""
+		}
+	}
+	op := &dispatch.OperatorService{Store: store, Now: func() string { return dispatch.Timestamp(time.Now()) }, TargetScopeResolver: scopeResolver}
 	to, err := op.Retry(requestCtx(), flags.positional, "operator", flags.val("--reason"))
 	if err != nil {
 		if errors.Is(err, ports.ErrStateNotEligible) {
@@ -265,7 +278,20 @@ func runDispatchesRerun(command string, args []string, stdout, stderr io.Writer)
 		return exit
 	}
 	defer closer.Close()
-	op := &dispatch.OperatorService{Store: store, Now: func() string { return dispatch.Timestamp(time.Now()) }}
+	cfgRerun, cfgErr := config.Load(resolveConfigPath(flags.val("--config")))
+	var scopeResolver func(routeID string) string
+	if cfgErr == nil {
+		rerunCfg := cfgRerun
+		scopeResolver = func(routeID string) string {
+			if route, ok := rerunCfg.Routes[routeID]; ok {
+				if target, ok := rerunCfg.Targets[route.Dispatch.Target]; ok {
+					return target.Board
+				}
+			}
+			return ""
+		}
+	}
+	op := &dispatch.OperatorService{Store: store, Now: func() string { return dispatch.Timestamp(time.Now()) }, TargetScopeResolver: scopeResolver}
 	summary, err := op.Rerun(requestCtx(), flags.positional, "operator", flags.val("--reason"))
 	if err != nil {
 		return intentErr(stderr, command, err)

@@ -105,13 +105,28 @@ func (s *Store) CommitMergePending(ctx context.Context, lin ports.Lineage, actor
 // pending reconciliation remains, exactly one follow-up decision and
 // intent for latest state.
 func (s *Store) CompleteActive(ctx context.Context, req ports.ActiveCompletion) (ports.FollowupCreated, error) {
-	var out ports.FollowupCreated
 	now := normalizeTimestamp(req.Now)
 	tx, err := s.BeginTx(ctx, nil)
 	if err != nil {
-		return out, err
+		return ports.FollowupCreated{}, err
 	}
 	defer tx.Rollback()
+	req.Now = now
+	out, err := s.completeActiveTx(ctx, tx, req)
+	if err != nil {
+		return out, err
+	}
+	if err := tx.Commit(); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+// completeActiveTx applies the completion transaction inside the
+// caller's transaction so receipt persistence can join it atomically.
+func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.ActiveCompletion) (ports.FollowupCreated, error) {
+	var out ports.FollowupCreated
+	now := req.Now
 	snap, err := s.routeSnapshotInTx(tx, req.RouteID)
 	if err != nil {
 		return out, err
@@ -190,9 +205,6 @@ func (s *Store) CompleteActive(ctx context.Context, req ports.ActiveCompletion) 
 			}
 			out.FollowupDispatchID = req.FollowupRequest.DispatchID
 		}
-	}
-	if err := tx.Commit(); err != nil {
-		return out, err
 	}
 	out.RouteTo = to
 	return out, nil

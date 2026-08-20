@@ -96,6 +96,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runConfig(args[1:], stdout, stderr)
 	case "receipts":
 		return runReceipts(args[1:], stdout, stderr)
+	case "work":
+		return runWork(args[1:], stdout, stderr)
 	default:
 		if knownCommands[args[0]] {
 			writeError(stderr, args[0], "command_not_implemented", "usage",

@@ -139,6 +139,7 @@ type IntentSnapshot struct {
 	TargetID       string
 	TargetScope    string
 	TargetType     string
+	ResourceID     string
 	Generation     int64
 	IdempotencyKey string
 	State          records.IntentState

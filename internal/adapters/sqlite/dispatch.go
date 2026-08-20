@@ -113,9 +113,9 @@ func portsIntent(i ports.IntentInput) IntentRecord {
 func (s *Store) LoadIntent(ctx context.Context, dispatchID string) (ports.IntentSnapshot, error) {
 	var snap ports.IntentSnapshot
 	var leaseOwner, leaseExpires, nextAttempt, externalRef sql.NullString
-	err := s.QueryRowContext(ctx, `SELECT dispatch_id, route_id, target_id, target_type, target_scope, generation, idempotency_key, state, request_json, manifest_digest, external_ref, lease_owner, lease_expires_at, attempt_count, next_attempt_at
+	err := s.QueryRowContext(ctx, `SELECT dispatch_id, route_id, target_id, target_type, target_scope, resource_id, generation, idempotency_key, state, request_json, manifest_digest, external_ref, lease_owner, lease_expires_at, attempt_count, next_attempt_at
 		FROM dispatch_intents WHERE dispatch_id = ?`, dispatchID).Scan(
-		&snap.DispatchID, &snap.RouteID, &snap.TargetID, &snap.TargetType, &snap.TargetScope, &snap.Generation, &snap.IdempotencyKey,
+		&snap.DispatchID, &snap.RouteID, &snap.TargetID, &snap.TargetType, &snap.TargetScope, &snap.ResourceID, &snap.Generation, &snap.IdempotencyKey,
 		&snap.State, &snap.RequestJSON, &snap.ManifestDigest, &externalRef,
 		&leaseOwner, &leaseExpires, &snap.AttemptCount, &nextAttempt)
 	if errors.Is(err, sql.ErrNoRows) {

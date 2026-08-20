@@ -6,6 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/rootkernel/jjukkumi/internal/domain/records"
+	"github.com/rootkernel/jjukkumi/internal/domain/state"
 )
 
 // ErrOptimisticConcurrency is returned when a conditional update matched
@@ -353,27 +356,19 @@ type WorkReceiptRecord struct {
 	ValidationReasonsJSON string
 }
 
-// validIntentTransition enforces the dispatch state machine (§3).
+// validIntentTransition enforces the dispatch state machine (§3) by
+// delegating to the authoritative domain table (E3-T1); unknown strings
+// fail closed through the records parser.
 func validIntentTransition(from, to string) bool {
-	switch from {
-	case "ready":
-		return to == "submitting" || to == "superseded"
-	case "submitting":
-		return to == "accepted" || to == "rejected" || to == "unknown" || to == "retry_wait"
-	case "retry_wait":
-		return to == "submitting"
-	case "unknown":
-		return to == "reconciling"
-	case "reconciling":
-		return to == "accepted" || to == "retry_wait" || to == "dead_lettered"
-	case "rejected":
-		return to == "dead_lettered"
-	case "accepted":
-		return to == "completed" || to == "failed" || to == "canceled"
-	case "dead_lettered":
-		return to == "ready" || to == "superseded"
+	fromState, err := records.ParseIntentState(from)
+	if err != nil {
+		return false
 	}
-	return false
+	toState, err := records.ParseIntentState(to)
+	if err != nil {
+		return false
+	}
+	return state.CanTransitionIntent(fromState, toState)
 }
 
 type queryer interface {

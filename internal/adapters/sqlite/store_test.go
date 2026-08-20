@@ -9,6 +9,8 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+
+	"github.com/rootkernel/jjukkumi/internal/domain/state"
 )
 
 // openTestStore opens a real SQLite file under t.TempDir(), migrates it,
@@ -192,6 +194,47 @@ func TestStateTransitionsAppendOnlyAndValidated(t *testing.T) {
 	}
 	if _, err := s.Exec(`DELETE FROM state_transitions`); err == nil {
 		t.Fatal("audit history must reject deletes")
+	}
+}
+
+// TestDomainStateEnumsMatchSchemaChecks proves the domain state sets and
+// the schema CHECK constraints accept exactly the same values (E3-T1
+// acceptance: all state enums match contracts and schemas).
+func TestDomainStateEnumsMatchSchemaChecks(t *testing.T) {
+	s := openTestStore(t)
+	seedIntentChain(t, s, "dispatch-1")
+	for _, st := range state.AllIntentStates() {
+		if _, err := s.Exec(`UPDATE dispatch_intents SET state = ? WHERE dispatch_id = 'dispatch-1'`, string(st)); err != nil {
+			t.Errorf("intent state %q rejected by the schema CHECK: %v", st, err)
+		}
+	}
+	for _, st := range state.AllRouteStates() {
+		if _, err := s.Exec(`UPDATE route_runtime_state SET route_state = ? WHERE route_id = 'wiki-maintenance'`, string(st)); err != nil {
+			t.Errorf("route state %q rejected by the schema CHECK: %v", st, err)
+		}
+	}
+}
+
+// TestInvalidTransitionNoPartialPersistence verifies a rejected
+// transition leaves neither the intent row nor the audit history changed
+// (E3-T1 acceptance: invalid transitions fail without partial
+// persistence).
+func TestInvalidTransitionNoPartialPersistence(t *testing.T) {
+	s := openTestStore(t)
+	seedIntentChain(t, s, "dispatch-1")
+	if err := s.TransitionIntent(nil, "tr-bad", "dispatch-1", "ready", "completed", now(), "{}"); err == nil {
+		t.Fatal("ready -> completed must be rejected by the domain table")
+	}
+	var current string
+	if err := s.QueryRow(`SELECT state FROM dispatch_intents WHERE dispatch_id = 'dispatch-1'`).Scan(&current); err != nil || current != "ready" {
+		t.Fatalf("rejected transition must not change the intent state: %q %v", current, err)
+	}
+	var transitions int
+	if err := s.QueryRow(`SELECT COUNT(*) FROM state_transitions WHERE entity_id = 'dispatch-1'`).Scan(&transitions); err != nil || transitions != 0 {
+		t.Fatalf("rejected transition must not append audit history: %d %v", transitions, err)
+	}
+	if err := s.TransitionIntent(nil, "tr-ok", "dispatch-1", "ready", "submitting", now(), "{}"); err != nil {
+		t.Fatalf("valid transition after a rejected one: %v", err)
 	}
 }
 

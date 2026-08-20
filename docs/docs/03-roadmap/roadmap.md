@@ -12,13 +12,13 @@
 |---|---|
 | Current epic | E3, Durable Dispatch and Route Coordination Core |
 | Current active task | None |
-| Next task | **E3-T1, Dispatch and Route State Transition Services** |
-| Completed tasks | 14 / 33 |
-| Planned tasks | 19 / 33 |
+| Next task | **E3-T2, Durable Intent Commit and Attempt Leasing** |
+| Completed tasks | 15 / 33 |
+| Planned tasks | 18 / 33 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
-The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). E2-T1 delivered the bounded Watchman input parser against the frozen E0-T5 fixture corpus. E2-T2 delivered the safe path containment resolver and the deterministic pattern policy engine. E2-T3 delivered meaningful-change confirmation and batch normalization. E2-T4 delivered the structural policy planner and the side-effect-free `route plan` / `dispatch --dry-run` CLI. E2-T5 delivered the managed Watchman trigger lifecycle and closed gate G1. Epic E2 is complete: the bounded parser, safe path containment, pattern engine, batch normalization, structural policy planner, dry-run CLI, and the real Watchman trigger lifecycle were delivered, audited (one cross-task remediation commit), and validated. Implementation continues with E3-T1.
+The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). E2-T1 delivered the bounded Watchman input parser against the frozen E0-T5 fixture corpus. E2-T2 delivered the safe path containment resolver and the deterministic pattern policy engine. E2-T3 delivered meaningful-change confirmation and batch normalization. E2-T4 delivered the structural policy planner and the side-effect-free `route plan` / `dispatch --dry-run` CLI. E2-T5 delivered the managed Watchman trigger lifecycle and closed gate G1. Epic E2 is complete: the bounded parser, safe path containment, pattern engine, batch normalization, structural policy planner, dry-run CLI, and the real Watchman trigger lifecycle were delivered, audited (one cross-task remediation commit), and validated. E3-T1 delivered the validated dispatch and route state transition services as the authoritative domain table with typed reasons, guards, and the acceptance/execution projection separation. Implementation continues with E3-T2.
 
 ## 2. Epic Summary
 
@@ -50,7 +50,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 12 | E2-T3 | Completed | Meaningful-change, hashing, and batch normalization |
 | 13 | E2-T4 | Completed | Deterministic policy planner and dry-run CLI |
 | 14 | E2-T5 | Completed | Real Watchman trigger lifecycle and G1 fixtures |
-| 15 | E3-T1 | Planned | Validated dispatch and route state machines |
+| 15 | E3-T1 | Completed | Validated dispatch and route state machines |
 | 16 | E3-T2 | Planned | Durable intent transaction and attempt leases |
 | 17 | E3-T3 | Planned | Retry, unknown, reconciliation, and dead-letter core |
 | 18 | E3-T4 | Planned | One active route task and dirty generations |
@@ -670,7 +670,7 @@ E2-T4 Completed.
 
 ## E3-T1: Implement Dispatch and Route State Transition Services
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -699,6 +699,14 @@ E2-T5 Completed.
 - accepted does not imply succeeded;
 - one route cannot have two active dispatch IDs;
 - all state enums match contracts and schemas.
+
+### Evidence
+
+- `internal/domain/state`: the dispatch state machine (persistence-and-state-machines §3) as one authoritative table of exactly the documented edges with typed `IntentReason` values, `ValidateIntentTransition` guards demanding attempt-lease evidence for both edges entering `submitting`, receipt references for acceptance/rejection/execution projections, and reconciliation lookup proof matching the destination for every edge leaving `reconciling`; `dead_lettered -> ready` additionally requires an explicit operator retry with an actor. `unknown -> ready` is structurally absent and fails for every reason and evidence combination, so unknown work always passes through reconciliation (DUR-005 posture).
+- `internal/domain/state/route.go`: the route coordination machine (§6, ADR-0009) with the IDLE/ACTIVE_CLEAN/ACTIVE_DIRTY/FOLLOWUP_READY/UNCERTAIN/QUARANTINED model, typed `RouteReason` values, fail-closed `ParseRouteState`, and guards enforcing CON-001/CON-002/CON-003: activation requires an enabled route, the accepted dispatch, and an empty active slot (`CanActivateNormalDispatch` refuses a second active dispatch, follow-up-pending, uncertain, and quarantined routes); dirtying edges must strictly increase the durable dirty generation; completion to IDLE is refused while dirty state or pending reconciliation remains; failure edges preserve dirty state through FOLLOWUP_READY while the failure budget remains and budget exhaustion becomes UNCERTAIN; quarantine exits only through an explicit operator resolution.
+- `internal/domain/state/projection.go`: the acceptance and execution axes stay separate (§4): `AcceptanceTransition` maps the closed acceptance enum to exactly its documented transitions, `ExecutionTransition` maps terminal projections only, and `unavailable`/`queued`/`running` return `ErrExecutionNotTerminal` so an accepted dispatch never reports an execution outcome it does not have (accepted does not imply succeeded).
+- `internal/adapters/sqlite/store.go`: `validIntentTransition` now delegates to `state.CanTransitionIntent` (fail-closed through the records parser), making the domain table the single authority the transactional, audited `TransitionIntent` enforces (DUR-011).
+- Tests: exhaustive 12x12 intent and 6x6 route matrices against independently restated SOT tables (every allowed and forbidden transition, TST-001), per-edge reason validation over the full reason alphabets, guard suites for lease/reconciliation/receipt/dirty-retention/budget/quarantine evidence, the full acceptance x execution projection grid, contract lockstep against the `dispatch-intent` and `dispatch-receipt` schema enums, and SQLite-level tests that the CHECK constraints accept exactly the domain state sets and that a rejected transition leaves neither the intent row nor the audit history changed (no partial persistence). `make verify` green including race and import-direction checks.
 
 ## E3-T2: Implement Durable Intent Commit and Attempt Leasing
 

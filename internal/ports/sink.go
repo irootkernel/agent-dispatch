@@ -30,6 +30,52 @@ type Capabilities struct {
 	MaximumRequestBytes    int64
 }
 
+// CapabilityNames is the closed HER-004 declaration vocabulary in
+// canonical order; every capability name in reports, configuration, and
+// operator output is one of these.
+var CapabilityNames = []string{
+	"durable_acceptance",
+	"submit_idempotency_key",
+	"lookup_by_idempotency_key",
+	"lookup_by_external_ref",
+	"resource_mutex",
+	"execution_status",
+	"cancellation",
+	"result_receipt",
+}
+
+// BoolMap renders the eight HER-004 declarations by name. It is the
+// single name↔field mapping: report parsing, requirement validation,
+// and operator summaries all derive from it.
+func (c Capabilities) BoolMap() map[string]bool {
+	return map[string]bool{
+		"durable_acceptance":        c.DurableAcceptance,
+		"submit_idempotency_key":    c.SubmitIdempotencyKey,
+		"lookup_by_idempotency_key": c.LookupByIdempotencyKey,
+		"lookup_by_external_ref":    c.LookupByExternalRef,
+		"resource_mutex":            c.ResourceMutex,
+		"execution_status":          c.ExecutionStatus,
+		"cancellation":              c.Cancellation,
+		"result_receipt":            c.ResultReceipt,
+	}
+}
+
+// FromBoolMap reconstructs the struct from the authoritative mapping;
+// both directions of the vocabulary live here so every adapter (kanban,
+// webhook) shares them.
+func CapabilitiesFromBoolMap(m map[string]bool) Capabilities {
+	return Capabilities{
+		DurableAcceptance:      m["durable_acceptance"],
+		SubmitIdempotencyKey:   m["submit_idempotency_key"],
+		LookupByIdempotencyKey: m["lookup_by_idempotency_key"],
+		LookupByExternalRef:    m["lookup_by_external_ref"],
+		ResourceMutex:          m["resource_mutex"],
+		ExecutionStatus:        m["execution_status"],
+		Cancellation:           m["cancellation"],
+		ResultReceipt:          m["result_receipt"],
+	}
+}
+
 // SubmitClassification is the adapter's error-classified submit outcome
 // (sink-adapter-contract.md §4-§5). Only the adapter can distinguish
 // definite pre-submit failure from an ambiguous outcome; when proof is

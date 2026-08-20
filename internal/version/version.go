@@ -22,15 +22,14 @@ const ConfigVersion = "1"
 const SchemaRange = "1-1"
 
 // AdapterVersions returns the pinned adapter implementation versions the
-// build carries. E1-T1 ships no adapters, so the map names each planned
-// adapter with its "not yet implemented" marker instead of inventing a
-// version that does not exist.
+// build carries. Each entry names the delivered surface and its verified
+// interface baseline instead of inventing a version that does not exist.
 func AdapterVersions() map[string]string {
 	return map[string]string{
 		"watchman":      "not-implemented (E2)",
 		"localfs":       "not-implemented (E2)",
 		"sqlite":        "schema-v1 (E1-T4 repositories)",
-		"hermeskanban":  "not-implemented (E4)",
+		"hermeskanban":  "public-cli transport + capability probe, verified hermes 0.19.1 (E4-T1; durable submit arrives E4-T3)",
 		"hermeswebhook": "not-implemented (E6)",
 	}
 }

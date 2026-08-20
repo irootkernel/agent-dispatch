@@ -66,14 +66,15 @@ func openOperatorStore(command string, configPath string, stderr io.Writer) (sto
 	return s, s, 0
 }
 
-// resolveSink looks up the sink adapter for one target type. The Hermes
-// adapters arrive with E4; until then submit-touching paths report the
-// documented target-unavailable error with the remediation, and no
-// automatic fallback to any other target exists (DUR-008).
+// resolveSink looks up the sink adapter for one target type. The E4-T1
+// Hermes Kanban adapter delivers the version gate, capability probe, and
+// typed transport; its durable submit wiring arrives with E4-T3, so
+// submit-touching paths keep reporting the documented target-unavailable
+// error, and no automatic fallback to any other target exists (DUR-008).
 func resolveSink(targetType string) (ports.Sink, error) {
 	switch targetType {
 	case "hermes-kanban":
-		return nil, errors.New("no sink adapter is wired in this build: the Hermes Kanban adapter arrives with roadmap task E4-T1; configure it and rerun, or inspect with 'jjukkumi dispatches show'")
+		return nil, errors.New("the Hermes Kanban sink submit wiring arrives with roadmap task E4-T3; probe the target with 'jjukkumi config validate --probe-targets', or inspect with 'jjukkumi dispatches show'")
 	case "hermes-webhook":
 		return nil, errors.New("no sink adapter is wired in this build: the Hermes Webhook adapter arrives with roadmap task E6-T1; configure it and rerun, or inspect with 'jjukkumi dispatches show'")
 	default:

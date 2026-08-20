@@ -147,6 +147,14 @@ var unitNanos = map[string]int64{
 // parseDuration parses the schema duration form without loss (kept as an
 // exact integer of nanoseconds).
 func parseDuration(text string) (Duration, error) {
+	return ParseDuration(text)
+}
+
+// ParseDuration is the exported schema-exact duration parser; every
+// layer that must accept exactly the configuration schema's duration
+// syntax (positive integer with ms, s, m, h, or d unit) uses this one
+// parser instead of re-implementing the grammar.
+func ParseDuration(text string) (Duration, error) {
 	m := durationPattern.FindStringSubmatch(text)
 	if m == nil {
 		return Duration{}, fmt.Errorf("invalid duration %q (want positive integer with ms, s, m, h, or d unit)", text)

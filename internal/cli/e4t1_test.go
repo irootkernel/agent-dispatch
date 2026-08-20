@@ -36,6 +36,7 @@ resources:
 targets:
   hermes-main:
     type: hermes-kanban
+    board: jjukkumi
     executable: ` + executable + `
     capability_report: ` + report + `
     required_capabilities: [` + required + `]
@@ -304,11 +305,13 @@ resources:
 targets:
   a-target:
     type: hermes-kanban
+    board: jjukkumi
     executable: ` + bad + `
     capability_report: ` + frozen + `
     required_capabilities: [durable_acceptance]
   b-target:
     type: hermes-kanban
+    board: jjukkumi
     executable: ` + good + `
     capability_report: ` + frozen + `
     required_capabilities: [durable_acceptance]

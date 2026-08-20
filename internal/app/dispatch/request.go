@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"regexp"
 
 	"github.com/rootkernel/jjukkumi/internal/domain/fingerprint"
 	"github.com/rootkernel/jjukkumi/internal/domain/records"
@@ -36,6 +37,9 @@ type RequestInput struct {
 	ExecutionHints     *ports.TaskExecutionHints
 }
 
+// workspaceBindingForm is the contract workspace binding surface.
+var workspaceBindingForm = regexp.MustCompile(`^(scratch|worktree|worktree:.+|dir:.+)$`)
+
 // BuildRequest constructs the immutable logical task request and its
 // idempotency key. The key is derived from the target, route revision,
 // generation, contract version, and content fingerprint, so the same
@@ -47,6 +51,12 @@ func BuildRequest(in RequestInput) (ports.TaskRequest, string, error) {
 	}
 	if in.Resource.ID == "" || in.Resource.Workspace == "" {
 		return ports.TaskRequest{}, "", fmt.Errorf("request needs resource identity and workspace")
+	}
+	// The contract workspace binding form (hermes-task-contract §2):
+	// scratch | worktree | worktree:<path> | dir:<path>. Failing here
+	// prevents persisting an intent no target adapter can render.
+	if !workspaceBindingForm.MatchString(in.Resource.Workspace) {
+		return ports.TaskRequest{}, "", fmt.Errorf("workspace %q is not the contract binding form (scratch, worktree, worktree:<path>, or dir:<path>)", in.Resource.Workspace)
 	}
 	if in.TargetID == "" {
 		return ports.TaskRequest{}, "", fmt.Errorf("request needs the target ID")

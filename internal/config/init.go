@@ -30,9 +30,10 @@ func Example(instanceID, resourceRoot, capabilityReport string) *Config {
 		Targets: map[string]Target{
 			"hermes-kanban-main": {
 				Type:                 "hermes-kanban",
+				Board:                "jjukkumi",
 				Executable:           "hermes",
 				CapabilityReport:     capabilityReport,
-				RequiredCapabilities: []string{"durable_acceptance", "submit_idempotency_key", "lookup_by_idempotency_key"},
+				RequiredCapabilities: []string{"durable_acceptance", "submit_idempotency_key", "lookup_by_external_ref"},
 				SubmitTimeout:        "30s",
 				LookupTimeout:        "15s",
 				EnvironmentAllowlist: []string{"HOME", "PATH"},

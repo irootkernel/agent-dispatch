@@ -23,12 +23,13 @@ resources:
 targets:
   hermes-kanban-main:
     type: hermes-kanban
+    board: jjukkumi
     executable: hermes
     capability_report: /Users/example/.config/jjukkumi/hermes-capabilities.json
     required_capabilities:
       - durable_acceptance
       - submit_idempotency_key
-      - lookup_by_idempotency_key
+      - lookup_by_external_ref
     submit_timeout: 30s
     lookup_timeout: 15s
     environment_allowlist:

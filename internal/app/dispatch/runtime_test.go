@@ -97,7 +97,7 @@ func testRequest(dispatchID string) ports.TaskRequest {
 	req, _, err := BuildRequest(RequestInput{
 		DispatchID:  dispatchID,
 		Route:       ports.TaskRouteRef{ID: "wiki-maintenance", Revision: "route-rev-1"},
-		Resource:    ports.TaskResource{ID: "vault-main", Workspace: "/srv/vault"},
+		Resource:    ports.TaskResource{ID: "vault-main", Workspace: "dir:/srv/vault"},
 		TargetID:    "hermes-kanban-main",
 		Generation:  1,
 		Fingerprint: records.Digest("sha256:" + hex64('c')),
@@ -347,7 +347,7 @@ func TestBuildRequestDeterminism(t *testing.T) {
 	base := RequestInput{
 		DispatchID:  "dispatch-1",
 		Route:       ports.TaskRouteRef{ID: "wiki-maintenance", Revision: "route-rev-1"},
-		Resource:    ports.TaskResource{ID: "vault-main", Workspace: "/srv/vault"},
+		Resource:    ports.TaskResource{ID: "vault-main", Workspace: "dir:/srv/vault"},
 		TargetID:    "hermes-kanban-main",
 		Generation:  1,
 		Fingerprint: records.Digest("sha256:" + hex64('c')),
@@ -404,5 +404,26 @@ func TestRequestValidatesAgainstContractSchema(t *testing.T) {
 	}
 	if err := schema.Validate(doc); err != nil {
 		t.Fatalf("built request does not validate: %v\n%s", err, raw)
+	}
+}
+
+// TestBoundedPayloadAlwaysValidJSON proves the runtime evidence bound
+// marker-replaces oversized payloads so persisted evidence is always
+// parseable JSON for every adapter.
+func TestBoundedPayloadAlwaysValidJSON(t *testing.T) {
+	if boundedPayload(nil) != "{}" {
+		t.Fatalf("empty payload must persist {}: %q", boundedPayload(nil))
+	}
+	small := []byte(`{"id":"t_6253023d"}`)
+	if got := boundedPayload(small); string(got) != string(small) {
+		t.Fatalf("in-bound payload must persist verbatim: %q", got)
+	}
+	oversized := boundedPayload(make([]byte, 8192))
+	var marker struct {
+		Truncated bool `json:"truncated"`
+		Bytes     int  `json:"bytes"`
+	}
+	if err := json.Unmarshal([]byte(oversized), &marker); err != nil || !marker.Truncated || marker.Bytes != 8192 {
+		t.Fatalf("oversized payload must persist the truncation marker, got %q (err=%v)", oversized, err)
 	}
 }

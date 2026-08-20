@@ -51,7 +51,10 @@ type Git struct {
 
 // Target is a delivery target; exactly one variant applies (§5).
 type Target struct {
-	Type                 string   `yaml:"type"                   json:"type"`
+	Type string `yaml:"type" json:"type"`
+	// Board is the Hermes kanban board slug for hermes-kanban targets;
+	// the operator creates it with the public boards create command.
+	Board                string   `yaml:"board,omitempty"       json:"board,omitempty"`
 	Executable           string   `yaml:"executable,omitempty"   json:"executable,omitempty"`
 	CapabilityReport     string   `yaml:"capability_report,omitempty" json:"capability_report,omitempty"`
 	RequiredCapabilities []string `yaml:"required_capabilities,omitempty" json:"required_capabilities,omitempty"`

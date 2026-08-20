@@ -50,7 +50,7 @@ func seedReadyIntent(t *testing.T, s *sqlite.Store, dispatchID string) {
 	req, _, err := BuildRequest(RequestInput{
 		DispatchID: dispatchID,
 		Route:      ports.TaskRouteRef{ID: "wiki-maintenance", Revision: "route-rev-1"},
-		Resource:   ports.TaskResource{ID: "vault-main", Workspace: "/srv/vault"},
+		Resource:   ports.TaskResource{ID: "vault-main", Workspace: "dir:/srv/vault"},
 		TargetID:   "hermes-kanban-main", Generation: 1,
 		Fingerprint: records.Digest("sha256:" + hex64('c')),
 		Changes: []records.ChangeItem{{

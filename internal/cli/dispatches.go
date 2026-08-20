@@ -11,6 +11,7 @@ import (
 
 	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
 	"github.com/rootkernel/jjukkumi/internal/app/dispatch"
+	"github.com/rootkernel/jjukkumi/internal/app/reconcile"
 	"github.com/rootkernel/jjukkumi/internal/config"
 	"github.com/rootkernel/jjukkumi/internal/domain/records"
 	"github.com/rootkernel/jjukkumi/internal/ports"
@@ -310,21 +311,69 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 		return exit
 	}
 	defer closer.Close()
-	sink, err := resolveSink(target.Type)
+	sink, err := resolveSink(cfg, target, route)
 	if err != nil {
-		writeError(stderr, command, "target_definite_unavailable", "target_unavailable", err.Error())
-		return sinkUnavailableExit
+		return writeSinkError(stderr, command, err)
 	}
 	rt := &dispatch.Runtime{
 		Store: store, Sink: sink,
 		Now: time.Now, LeaseTTL: time.Minute, Actor: "drain",
 		Backoff: backoff, JitterUnit: jitterUnit,
 	}
-	report, err := rt.Drain(requestCtx(), routeID, max, store)
+	// Unknown dispatches are reconciled before due work is submitted
+	// (DUR-006). A failure to enumerate them fails closed: submitting
+	// more work without the required lookup ordering is never allowed.
+	// A per-dispatch reconciliation failure is isolated as a warning so
+	// one broken dispatch cannot block the route's due work.
+	reconciled, reconcileErrors, err := reconcileUnknownDispatches(store, sink, routeID, backoff)
 	if err != nil {
 		return intentErr(stderr, command, err)
 	}
-	return writeEnvelope(stdout, command, report)
+	report, err := rt.Drain(requestCtx(), routeID, max, store)
+	if err != nil {
+		// The reconciliation mutations already committed; surface them
+		// in the error message so the operator sees what changed.
+		if len(reconciled) > 0 {
+			writeError(stderr, command, "target_acceptance_unknown", "acceptance_unknown",
+				fmt.Sprintf("%d unknown dispatch(es) were reconciled before the drain failure; inspect with 'jjukkumi dispatches list --route %s'", len(reconciled), routeID))
+		}
+		return intentErr(stderr, command, err)
+	}
+	return writeEnvelopeWithWarnings(stdout, command, map[string]any{
+		"processed": report.Processed, "skipped": report.Skipped,
+		"reports": report.Reports, "reconciled": reconciled,
+	}, reconcileErrors)
+}
+
+// reconcileUnknownDispatches runs the DUR-006 resolution over the
+// route's unknown dispatches: lookup by idempotency key then external
+// reference, and resolution or dead-lettering through the E3-T1 guards.
+// On Hermes the by-key lookup is honestly unsupported, so
+// reconciliation runs by external reference and unresolved work
+// dead-letters for the operator, whose retry resubmits the same
+// idempotency key (the dedup-safe path). One dispatch's failure never
+// aborts the others; failures are returned as visible warnings.
+func reconcileUnknownDispatches(store storeOp, sink ports.Sink, routeID string, backoff dispatch.Backoff) ([]map[string]any, []string, error) {
+	recon := &reconcile.Service{Store: store, Sink: sink, Now: func() string { return dispatch.Timestamp(time.Now()) }}
+	intents, err := store.ListIntents(requestCtx(), ports.IntentFilter{RouteID: routeID, State: "unknown", Limit: 1000})
+	if err != nil {
+		// DUR-006 ordering: without enumeration the required lookup
+		// cannot run, so no further submission may start.
+		return nil, nil, fmt.Errorf("listing route %s unknown dispatches: %w", routeID, err)
+	}
+	var out []map[string]any
+	var failures []string
+	for _, sum := range intents {
+		res, err := recon.Reconcile(requestCtx(), sum.DispatchID, "drain", backoff.Exhausted(sum.AttemptCount))
+		if err != nil {
+			failures = append(failures, fmt.Sprintf("reconciling %s failed: %v", sum.DispatchID, err))
+			continue
+		}
+		out = append(out, map[string]any{
+			"dispatch_id": res.DispatchID, "lookup": string(res.Lookup), "state": string(res.To),
+		})
+	}
+	return out, failures, nil
 }
 
 // intentErr maps the typed port errors onto the stable exit codes

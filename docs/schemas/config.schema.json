@@ -160,6 +160,7 @@
       "required": [
         "type",
         "executable",
+        "board",
         "capability_report",
         "required_capabilities"
       ],
@@ -170,6 +171,12 @@
         "executable": {
           "type": "string",
           "minLength": 1
+        },
+        "board": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "description": "Hermes kanban board slug the route submits to; the operator creates it with the public boards create command."
         },
         "capability_report": {
           "type": "string",

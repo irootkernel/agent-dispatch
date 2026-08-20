@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/rootkernel/jjukkumi/internal/adapters/hermeskanban"
 	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
 	"github.com/rootkernel/jjukkumi/internal/app/dispatch"
 	"github.com/rootkernel/jjukkumi/internal/config"
@@ -66,19 +67,32 @@ func openOperatorStore(command string, configPath string, stderr io.Writer) (sto
 	return s, s, 0
 }
 
-// resolveSink looks up the sink adapter for one target type. The E4-T1
-// Hermes Kanban adapter delivers the version gate, capability probe, and
-// typed transport; its durable submit wiring arrives with E4-T3, so
-// submit-touching paths keep reporting the documented target-unavailable
-// error, and no automatic fallback to any other target exists (DUR-008).
-func resolveSink(targetType string) (ports.Sink, error) {
-	switch targetType {
+// resolveSink looks up and gates the sink adapter for one route target
+// (E4-T3). The hermes-kanban sink is constructed from the operator
+// configuration, its frozen capability report is validated against the
+// route's required capabilities, and the read-only Probe gates the
+// installed Hermes version — all before any submission (HER-002,
+// HER-005). No automatic fallback to any other target exists (DUR-008).
+func resolveSink(cfg *config.Config, target config.Target, route config.Route) (ports.Sink, error) {
+	switch target.Type {
 	case "hermes-kanban":
-		return nil, errors.New("the Hermes Kanban sink submit wiring arrives with roadmap task E4-T3; probe the target with 'jjukkumi config validate --probe-targets', or inspect with 'jjukkumi dispatches show'")
+		limits, err := hermesProcessLimits(cfg, target)
+		if err != nil {
+			return nil, fmt.Errorf("target %s: %w", route.Dispatch.Target, err)
+		}
+		sink, err := hermeskanban.NewSink(route.Dispatch.Target, target.Executable, target.CapabilityReport,
+			target.RequiredCapabilities, target.Board, limits, int64(route.Batching.MaxManifestBytes))
+		if err != nil {
+			return nil, err
+		}
+		if _, err := sink.Probe(context.Background()); err != nil {
+			return nil, fmt.Errorf("target %s: %w", route.Dispatch.Target, err)
+		}
+		return sink, nil
 	case "hermes-webhook":
 		return nil, errors.New("no sink adapter is wired in this build: the Hermes Webhook adapter arrives with roadmap task E6-T1; configure it and rerun, or inspect with 'jjukkumi dispatches show'")
 	default:
-		return nil, fmt.Errorf("unknown target type %q: no sink adapter exists and no fallback is permitted (DUR-008)", targetType)
+		return nil, fmt.Errorf("unknown target type %q: no sink adapter exists and no fallback is permitted (DUR-008)", target.Type)
 	}
 }
 
@@ -117,3 +131,32 @@ func jitterUnit() float64 {
 // sinkUnavailableExit is the stable exit for an unwired target adapter
 // (error-model: target_unavailable, 11).
 const sinkUnavailableExit = 11
+
+// writeSinkError renders one resolveSink failure with the stable
+// registry code: version and executable failures are target
+// unavailability (11), capability and report defects are configuration
+// failures (3, HER-005).
+func writeSinkError(stderr io.Writer, command string, err error) int {
+	var version *hermeskanban.VersionUnsupportedError
+	var executable *hermeskanban.ExecutableMissingError
+	var capability *hermeskanban.CapabilityError
+	var report *hermeskanban.ReportError
+	var requirement *hermeskanban.InvalidRequirementError
+	switch {
+	case errors.As(err, &version):
+		writeError(stderr, command, "hermes_version_unsupported", "target_unavailable", version.Error()+"; "+version.Remediation())
+		return sinkUnavailableExit
+	case errors.As(err, &executable):
+		writeError(stderr, command, "hermes_executable_missing", "target_unavailable", executable.Error()+"; "+executable.Remediation())
+		return sinkUnavailableExit
+	case errors.As(err, &capability):
+		writeError(stderr, command, "config_capability_missing", "configuration", capability.Error()+"; "+capability.Remediation())
+		return 3
+	case errors.As(err, &report), errors.As(err, &requirement):
+		writeError(stderr, command, "config_invalid", "configuration", err.Error())
+		return 3
+	default:
+		writeError(stderr, command, "target_definite_unavailable", "target_unavailable", err.Error())
+		return sinkUnavailableExit
+	}
+}

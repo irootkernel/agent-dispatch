@@ -78,12 +78,13 @@ A resource root is resolved to a canonical identity during validation. Symlinks 
 targets:
   hermes-kanban-main:
     type: hermes-kanban
+    board: jjukkumi
     executable: hermes
     capability_report: /path/to/hermes-capabilities.json
     required_capabilities:
       - durable_acceptance
       - submit_idempotency_key
-      - lookup_by_idempotency_key
+      - lookup_by_external_ref
     submit_timeout: 30s
     lookup_timeout: 15s
     environment_allowlist:
@@ -91,7 +92,7 @@ targets:
       - PATH
 ```
 
-`capability_report` is generated and verified by the E0-T4 compatibility task. It contains no secrets. Exact command mapping is compiled into or versioned with the adapter after verification; it is not supplied by untrusted route data.
+`board` names the Hermes kanban board the route submits to. The operator creates it once with the public `hermes kanban boards create <slug>` command; JJUKKUMI never creates, renames, or deletes boards. `capability_report` is generated and verified by the E0-T4 compatibility task. It contains no secrets. Exact command mapping is compiled into or versioned with the adapter after verification; it is not supplied by untrusted route data. `required_capabilities` names the sink capabilities the route depends on; key-based reconciliation on Hermes runs through the idempotent dedup submission (the capability report records `lookup_by_idempotency_key` as the dedup behavior), so routes that reconcile by reference require `lookup_by_external_ref`.
 
 ### Hermes Webhook
 

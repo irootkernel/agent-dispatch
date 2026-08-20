@@ -275,11 +275,10 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	}
 	// The submit phase needs the E4 sink adapter; the intent is durable
 	// and ready, and no automatic target fallback exists (DUR-008).
-	sink, err := resolveSink(artifacts.target.Type)
+	sink, err := resolveSink(artifacts.cfg, artifacts.target, artifacts.route)
 	if err != nil {
 		outcome.Close()
-		writeError(stderr, command, "target_definite_unavailable", "target_unavailable", err.Error())
-		return sinkUnavailableExit
+		return writeSinkError(stderr, command, err)
 	}
 	backoff, err := backoffFromConfig(artifacts.route.Dispatch.SubmissionRetry)
 	if err != nil {
@@ -409,9 +408,11 @@ func buildLineage(a *planArtifacts) (ports.Lineage, error) {
 		classification = a.plan.Classification[0]
 	}
 	req, key, err := dispatch.BuildRequest(dispatch.RequestInput{
-		DispatchID:         string(dispatchID),
-		Route:              ports.TaskRouteRef{ID: a.opts.routeID, Revision: a.plan.Route.Revision},
-		Resource:           ports.TaskResource{ID: a.route.Source.Resource, Workspace: a.resource.Root},
+		DispatchID: string(dispatchID),
+		Route:      ports.TaskRouteRef{ID: a.opts.routeID, Revision: a.plan.Route.Revision},
+		// The contract workspace binding form (hermes-task-contract §2):
+		// dir:<resolved root> for the v0.1 markdown vault resource.
+		Resource:           ports.TaskResource{ID: a.route.Source.Resource, Workspace: "dir:" + a.resource.Root},
 		TargetID:           a.targetID,
 		Generation:         1,
 		Fingerprint:        records.Digest(a.plan.ContentFingerprint),

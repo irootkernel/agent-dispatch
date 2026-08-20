@@ -155,7 +155,7 @@ Creates an intentional new work request with new dispatch ID and idempotency key
 jjukkumi dispatches drain --route <id> --max <N>
 ```
 
-Operator command for bounded ready/retry work. Not installed as a Watchman trigger.
+Operator command for bounded ready/retry work. First reconciles the route's `unknown` dispatches (lookup by idempotency key then external reference; on Hermes Kanban the by-key read does not exist, so unresolved ambiguity dead-letters for the operator, whose `dispatches retry` resubmits the same idempotency key through the dedup-safe path); the envelope reports each reconciliation under `reconciled` and per-dispatch failures as warnings without blocking the route's due work. Not installed as a Watchman trigger.
 
 ## 7. Receipt Commands
 

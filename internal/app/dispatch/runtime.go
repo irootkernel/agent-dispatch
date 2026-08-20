@@ -231,11 +231,13 @@ func boundedDiagnostic(d string) string {
 }
 
 // boundedPayload keeps the recorded structured evidence bounded; digests
-// and refs are stored as real columns.
+// and refs are stored as real columns. An oversized payload is replaced
+// by an explicit marker document so the persisted evidence is always
+// valid JSON, never a mid-document truncation.
 func boundedPayload(p []byte) string {
 	const max = 4096
 	if len(p) > max {
-		p = p[:max]
+		return fmt.Sprintf(`{"truncated":true,"bytes":%d}`, len(p))
 	}
 	if len(p) == 0 {
 		return "{}"

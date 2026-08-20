@@ -35,6 +35,7 @@ resources:
 targets:
   hermes-main:
     type: hermes-kanban
+    board: jjukkumi
     executable: hermes
     capability_report: "` + filepath.Join(dir, "cap.json") + `"
     required_capabilities: [durable_acceptance, submit_idempotency_key]

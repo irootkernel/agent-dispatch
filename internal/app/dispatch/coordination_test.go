@@ -73,7 +73,7 @@ func intentForN(t *testing.T, n int) ports.IntentInput {
 	req, key, err := BuildRequest(RequestInput{
 		DispatchID: fmt.Sprintf("dispatch-%d", n),
 		Route:      ports.TaskRouteRef{ID: "wiki", Revision: "route-rev-1"},
-		Resource:   ports.TaskResource{ID: "vault-main", Workspace: "/srv/vault"},
+		Resource:   ports.TaskResource{ID: "vault-main", Workspace: "dir:/srv/vault"},
 		TargetID:   "hermes-kanban-main", Generation: 1,
 		Fingerprint: records.Digest(fmt.Sprintf("sha256:%064d", n)),
 		Changes: []records.ChangeItem{{

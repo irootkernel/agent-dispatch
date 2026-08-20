@@ -240,6 +240,7 @@ resources:
 targets:
   hermes-kanban-main:
     type: hermes-kanban
+    board: jjukkumi
     executable: hermes
     capability_report: /etc/jjukkumi/caps.json
     required_capabilities:

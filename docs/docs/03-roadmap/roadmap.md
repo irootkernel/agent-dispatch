@@ -12,13 +12,13 @@
 |---|---|
 | Current epic | E1, Go Foundation, Configuration, and Persistence Schema |
 | Current active task | None |
-| Next task | **E1-T3, Implement Domain Primitives, Canonicalization, and Identity** |
-| Completed tasks | 7 / 33 |
-| Planned tasks | 26 / 33 |
+| Next task | **E1-T4, Implement SQLite Schema, Migrations, and Repositories** |
+| Completed tasks | 8 / 33 |
+| Planned tasks | 25 / 33 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
-The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Implementation continues with E1-T3.
+The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Implementation continues with E1-T4.
 
 ## 2. Epic Summary
 
@@ -43,7 +43,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 5 | E0-T5 | Completed | Watchman fixture baseline frozen |
 | 6 | E1-T1 | Completed | Buildable Go repository and verification pipeline |
 | 7 | E1-T2 | Completed | Validated YAML configuration and path layout |
-| 8 | E1-T3 | Planned | Domain primitives, IDs, digests, canonicalization |
+| 8 | E1-T3 | Completed | Domain primitives, IDs, digests, canonicalization |
 | 9 | E1-T4 | Planned | SQLite schema, migrations, and repositories |
 | 10 | E2-T1 | Planned | Bounded Watchman input parser |
 | 11 | E2-T2 | Planned | Safe path containment and pattern engine |
@@ -363,7 +363,7 @@ E1-T1 Completed.
 
 ## E1-T3: Implement Domain Primitives, Canonicalization, and Identity
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -395,6 +395,13 @@ E1-T2 Completed.
 - rerun generation changes the key;
 - invalid digest and unknown enum values fail closed;
 - cross-platform golden tests match.
+
+### Evidence
+
+- `internal/domain/ids`: UUIDv7 generator with injectable clock and deterministic test generator; UUIDv7 structural validation; IDs carry no prefix assumptions (DAT-002).
+- `internal/domain/records`: closed enums for every record vocabulary failing closed on unknown values; typed digest parser (`sha256:` + 64 lowercase hex); path normalization; canonical change ordering (normalized path, delete/create/modify, ordinal); source observation and projection value objects (DAT-001, DAT-009).
+- `internal/domain/fingerprint`: content fingerprint and idempotency key (`jjukkumi:v1:sha256:<hex>`) from dedicated RFC 8785-ordered canonical projections; caller-order-independent total sort; strict UTF-8 and safe-integer validation; retry-varying fields excluded by construction (DAT-004 through DAT-006).
+- Property and golden tests: byte-identical repeated projection, observation-identity exclusion, retry-invariance and rerun-generation sensitivity, fail-closed digest/enum parsing, cross-platform golden fingerprint and key files under `internal/domain/fingerprint/testdata/` (TST-001).
 
 ## E1-T4: Implement SQLite Schema, Migrations, and Repositories
 

@@ -13,7 +13,7 @@
 9. Install the Watchman trigger while the route remains disabled or no-submit according to implementation policy.
 10. Run an initial full reconciliation in dry-run/no-submit mode.
 11. Use a disposable vault and Hermes task space to pass the automatic-write gate.
-12. Set config `enabled: true`, then explicitly activate the computed route revision with `jjukkumi route enable --route wiki-maintenance --acknowledge-production-gate --yes`.
+12. Set config `enabled: true`, then explicitly activate the computed route revision with `jjukkumi route enable --route wiki-maintenance --acknowledge-production-gate <computed-route-revision> --yes` (the acknowledgement must equal the revision `route show` computes; any other value is refused).
 13. Install daily scheduled reconciliation.
 
 ## 2. Routine Inspection

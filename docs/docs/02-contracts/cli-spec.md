@@ -71,7 +71,7 @@ Prints normalized redacted configuration and computed revisions.
 ### `route enable|disable`
 
 ```text
-jjukkumi route enable --route <id> --acknowledge-production-gate --yes
+jjukkumi route enable --route <id> --acknowledge-production-gate <computed-route-revision> --yes
 jjukkumi route disable --route <id> [--reason <text>]
 ```
 

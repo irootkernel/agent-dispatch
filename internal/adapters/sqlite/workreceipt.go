@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -164,15 +165,18 @@ func receiptAuditState(status, validation string) string {
 }
 
 func workReceiptAuditContext(w ports.WorkReceiptInput, actor string) string {
-	ctx := fmt.Sprintf(`{"receipt_id":%q,"run_id":%q,"status":%q,"validation_state":%q,"reasons":%s`,
-		w.ReceiptID, w.RunID, w.Status, w.ValidationState, reasonsOrArray(w.ValidationReasonsJSON))
+	doc := map[string]any{
+		"receipt_id": w.ReceiptID, "run_id": w.RunID, "status": w.Status,
+		"validation_state": w.ValidationState, "reasons": json.RawMessage(reasonsOrArray(w.ValidationReasonsJSON)),
+	}
 	if w.FailureCode != "" {
-		ctx += fmt.Sprintf(`,"failure_code":%q`, w.FailureCode)
+		doc["failure_code"] = w.FailureCode
 	}
 	if actor != "" {
-		ctx += fmt.Sprintf(`,"actor":%q`, actor)
+		doc["actor"] = actor
 	}
-	return ctx + "}"
+	raw, _ := json.Marshal(doc)
+	return string(raw)
 }
 
 func reasonsOrArray(reasons string) string {

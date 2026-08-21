@@ -91,7 +91,7 @@ func (s *Store) CommitReconcileLineage(ctx context.Context, lin ports.Lineage, s
 		return err
 	}
 	if err := s.AppendTransition(tx, lin.Decision.DecisionID+":reconcile", "route", lin.Decision.RouteID, "", "reconcile_pending", lin.Decision.CreatedAt,
-		fmt.Sprintf(`{"decision_id":%q,"reason_codes":%s,"pending_reconcile":1}`, lin.Decision.DecisionID, lin.Decision.ReasonCodesJSON)); err != nil {
+		auditJSON("decision_id", lin.Decision.DecisionID, "reason_codes", json.RawMessage(lin.Decision.ReasonCodesJSON), "pending_reconcile", 1)); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -353,7 +353,7 @@ func (s *Store) CommitReconcileIntent(ctx context.Context, intent ports.IntentIn
 		return mapIntentConstraint(err)
 	}
 	if err := s.AppendTransition(tx, intent.DispatchID+":created", "dispatch_intent", intent.DispatchID, "", "ready", now,
-		fmt.Sprintf(`{"reason":"reconcile","route_id":%q,"latest_state":true}`, intent.RouteID)); err != nil {
+		auditJSON("reason", "reconcile", "route_id", intent.RouteID, "latest_state", true)); err != nil {
 		return err
 	}
 	snap, err := s.routeSnapshotInTx(tx, intent.RouteID)
@@ -362,7 +362,7 @@ func (s *Store) CommitReconcileIntent(ctx context.Context, intent ports.IntentIn
 	}
 	if err := applyRouteTransition(tx, snap, state.RouteActiveClean, state.ReasonDispatchAccepted,
 		state.RouteEvidence{Actor: actor, ActivatingDispatchID: intent.DispatchID}, now,
-		fmt.Sprintf(`{"reason":"dispatch_accepted","dispatch_id":%q,"origin":"reconcile"}`, intent.DispatchID)); err != nil {
+		auditJSON("reason", "dispatch_accepted", "dispatch_id", intent.DispatchID, "origin", "reconcile")); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`UPDATE route_runtime_state SET active_dispatch_id = ? WHERE route_id = ? AND (active_dispatch_id IS NULL OR active_dispatch_id = ?)`,

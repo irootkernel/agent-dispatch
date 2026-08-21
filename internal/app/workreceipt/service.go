@@ -473,8 +473,9 @@ func (s *Service) validateManifest(raw, dispatchID, runID, resourceID string) ([
 func (s *Service) auditInvalid(ctx context.Context, dispatchID, runID string, invalid *InvalidError) {
 	reasons, _ := json.Marshal(invalid.Reasons)
 	now := s.timestamp()
+	auditDoc, _ := json.Marshal(map[string]any{"run_id": runID, "reasons": json.RawMessage(string(reasons))})
 	_ = s.Store.AuditWorkReceipt(ctx, "wr-"+dispatchID+"-"+runID+"-invalid-"+now+"-"+randomSuffix(),
-		dispatchID, "", "invalid", now, fmt.Sprintf(`{"run_id":%q,"reasons":%s}`, runID, reasons))
+		dispatchID, "", "invalid", now, string(auditDoc))
 }
 
 func (s *Service) receiptID(dispatchID string) string {

@@ -110,6 +110,20 @@ func g3Hermes(t *testing.T, argv ...string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
+// g3RouteRevision computes the revision the production gate demands.
+func g3RouteRevision(t *testing.T, configPath string) string {
+	t.Helper()
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision, ok := config.RouteRevision(cfg, "wiki")
+	if !ok {
+		t.Fatal("route revision could not be computed")
+	}
+	return revision
+}
+
 // g3 is the gate harness state.
 type g3 struct {
 	bin, configPath, vault, board, stateDir, report string
@@ -239,7 +253,8 @@ routes:
 // operator flow rather than direct store seeding.
 func (h *g3) g3Register(t *testing.T) {
 	t.Helper()
-	_, _, errb, code := g3Run(t, h.bin, "route", "enable", "--route", "wiki", "--config", h.configPath, "--acknowledge-production-gate", "--yes")
+	g3Revision := g3RouteRevision(t, h.configPath)
+	_, _, errb, code := g3Run(t, h.bin, "route", "enable", "--route", "wiki", "--config", h.configPath, "--acknowledge-production-gate", g3Revision, "--yes")
 	if code != 0 {
 		t.Fatalf("production route enable: %s", errb)
 	}

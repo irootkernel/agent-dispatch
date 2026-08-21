@@ -39,11 +39,11 @@ func (f dispatchesFlags) val(name string) string { return f.values[name] }
 // bare positional operand.
 func parseDispatchesFlags(command string, args []string, stderr io.Writer, allowed map[string]bool) (dispatchesFlags, int) {
 	out := dispatchesFlags{values: map[string]string{}}
-	valueFlags := map[string]bool{"--config": true, "--route": true, "--state": true, "--target": true, "--reason": true, "--max": true, "--limit": true, "--dispatch": true, "--kind": true}
+	valueFlags := map[string]bool{"--config": true, "--route": true, "--state": true, "--target": true, "--reason": true, "--max": true, "--limit": true, "--dispatch": true, "--kind": true, "--acknowledge-production-gate": true}
 	for name := range allowed {
 		valueFlags[name] = true
 	}
-	boolFlags := map[string]bool{"--yes": true, "--acknowledge-production-gate": true, "--submit": true}
+	boolFlags := map[string]bool{"--yes": true, "--submit": true}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		name, value := arg, ""

@@ -169,6 +169,12 @@ func runRouteEnable(command string, args []string, stdout, stderr io.Writer) int
 	if !ok {
 		return planErr(stderr, command, "internal_unclassified", "internal", "route revision could not be computed", 40)
 	}
+	// The production gate is explicit: the operator must acknowledge the
+	// exact computed route revision, never an assumed one (E5-T5).
+	if flags.val("--acknowledge-production-gate") != revision {
+		return planErr(stderr, command, "config_invalid", "configuration",
+			fmt.Sprintf("acknowledged revision %q does not match the computed route revision %q; review the route and acknowledge the computed value", flags.val("--acknowledge-production-gate"), revision), 3)
+	}
 	store, closer, exit := openOperatorStore(command, flags.val("--config"), stderr)
 	if exit != 0 {
 		return exit

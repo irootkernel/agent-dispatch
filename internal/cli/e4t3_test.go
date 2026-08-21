@@ -507,7 +507,7 @@ func TestFirstUseRegistrationFlow(t *testing.T) {
 
 	// route enable succeeds on first use and registers the route.
 	var out, errb bytes.Buffer
-	code := Run([]string{"route", "enable", "--route", "wiki", "--config", configPath, "--acknowledge-production-gate", "--yes"}, &out, &errb)
+	code := enableRouteAck(t, configPath, "wiki")
 	if code != 0 {
 		t.Fatalf("first-use route enable must register and succeed: %s", errb.String())
 	}

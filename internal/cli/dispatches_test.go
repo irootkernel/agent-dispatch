@@ -136,7 +136,7 @@ func TestRouteEnableListShowDisable(t *testing.T) {
 		t.Fatalf("enable without gate flags must be usage: %d", code)
 	}
 	out.Reset()
-	code := Run([]string{"route", "enable", "--config", cfgPath, "--route", "wiki", "--acknowledge-production-gate", "--yes"}, &out, &errb)
+	code := enableRouteAck(t, cfgPath, "wiki")
 	if code != 0 {
 		t.Fatalf("enable: %d %s", code, errb.String())
 	}

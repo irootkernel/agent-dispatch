@@ -37,6 +37,20 @@ type FullStore interface {
 	ports.QuarantineStore
 }
 
+// StoreError wraps one durable-store failure so the CLI boundary
+// classifies it as storage instead of string-matching (E5 audit).
+type StoreError struct{ Err error }
+
+func (e *StoreError) Error() string { return "durable store: " + e.Err.Error() }
+func (e *StoreError) Unwrap() error { return e.Err }
+
+func wrapStore(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &StoreError{Err: err}
+}
+
 // FullResult reports one reconciliation outcome.
 type FullResult struct {
 	RouteID           string   `json:"route_id"`
@@ -87,7 +101,7 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 	}
 	stored, err := s.Store.LoadPathFacts(ctx, s.ResourceID)
 	if err != nil {
-		return FullResult{}, err
+		return FullResult{}, wrapStore(err)
 	}
 	out := FullResult{RouteID: routeID, Reason: reason, Enumerated: len(current), Compared: len(stored)}
 	currentMap := map[string]ports.PathFact{}
@@ -121,7 +135,7 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 
 	snap, err := s.Store.LoadRouteState(ctx, routeID)
 	if err != nil {
-		return FullResult{}, err
+		return FullResult{}, wrapStore(err)
 	}
 	workDue := len(out.Added)+len(out.Changed)+len(out.Removed) > 0
 
@@ -152,7 +166,7 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 		intent.DecisionID = out.DecisionID
 		intent.CreatedAt = now
 		if err := s.Store.CommitReconcileIntent(ctx, intent, "reconcile", now); err != nil {
-			return FullResult{}, err
+			return FullResult{}, wrapStore(err)
 		}
 		out.ReconcileDispatch = intent.DispatchID
 	}
@@ -165,12 +179,12 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 	// to clear it (E5 audit remediation).
 	if !workDue && snap.State == state.RouteIdle {
 		if err := s.Store.ClearPendingReconcile(ctx, routeID, now); err != nil {
-			return FullResult{}, err
+			return FullResult{}, wrapStore(err)
 		}
 		out.PendingReconcile = false
 	}
 	if err := s.Store.ReplacePathFacts(ctx, s.ResourceID, current, now); err != nil {
-		return FullResult{}, err
+		return FullResult{}, wrapStore(err)
 	}
 	out.SnapshotStored = true
 	return out, nil

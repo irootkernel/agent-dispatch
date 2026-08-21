@@ -134,6 +134,10 @@ func quarantineErr(stderr io.Writer, command string, err error) int {
 		writeError(stderr, command, "quarantine_not_found", "usage", err.Error())
 		return 4
 	case errors.Is(err, ports.ErrQuarantineNotHeld):
+		if strings.HasSuffix(command, "release") {
+			writeError(stderr, command, "quarantine_release_denied", "conflict", err.Error())
+			return 14
+		}
 		writeError(stderr, command, "transition_invalid", "conflict", err.Error())
 		return 14
 	case errors.Is(err, ports.ErrReasonRequired):
@@ -182,16 +186,14 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 	}
 	result, err := service.Run(requestCtx(), routeID, reason)
 	if err != nil {
-		// Store-surface failures are storage; anything else from the
-		// service (enumeration, configuration-derived setup) is an
-		// internal-class defect, never a silent storage relabel
-		// (E5 audit F004/F007).
-		if isStoreError(err) {
-			writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
+		// Typed classification: store-surface failures are storage;
+		// anything else from the service (enumeration, bugs) is an
+		// internal-class defect, never a silent storage relabel (E5
+		// audit).
+		var storeErr *reconcile.StoreError
+		if errors.As(err, &storeErr) {
+			writeError(stderr, command, "sqlite_query_failed", "storage", storeErr.Err.Error())
 			return 20
-		}
-		if strings.Contains(err.Error(), "unknown reconcile reason") {
-			return usageError(stderr, command, err.Error())
 		}
 		writeError(stderr, command, "internal_unclassified", "internal", err.Error())
 		return 40
@@ -215,13 +217,4 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 		})
 	}
 	return writeEnvelope(stdout, command, result)
-}
-
-// isStoreError reports whether a reconcile failure came from the
-// durable store rather than the service's own logic.
-func isStoreError(err error) bool {
-	return strings.Contains(err.Error(), "sqlite") ||
-		strings.Contains(err.Error(), "constraint failed") ||
-		errors.Is(err, ports.ErrStateNotEligible) ||
-		strings.Contains(err.Error(), "route_runtime_state")
 }

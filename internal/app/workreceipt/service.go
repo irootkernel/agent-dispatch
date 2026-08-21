@@ -214,19 +214,23 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 		Changes: changes,
 	}, dirty, w.SubmittedAt)
 	_ = dirty // the matcher owns the vacuous-window refusal
-	_ = s.Store.AuditAttribution(ctx, "attr-"+w.ReceiptID, in.DispatchID, w.SubmittedAt, decision.ContextJSON())
 	out, err := s.applyCompletion(ctx, intent, snap, w, ports.ActiveCompletion{
 		RouteID: intent.RouteID, DispatchID: in.DispatchID, Failed: false,
 		ReceiptRef: w.ReceiptID, Actor: "hermes-task", DirtySuppressed: decision.FullySuppressed,
 		ExpectedDirtyGeneration: snap.DirtyGeneration,
 	})
-	if err == nil {
-		out.SuppressedPaths = decision.SuppressedPaths
-		// Report suppression only when a dirty generation actually
-		// cleared (a clean route suppresses nothing, E5 audit F010).
-		out.SelfChangeSuppressed = decision.FullySuppressed && snap.DirtyGeneration > 0
+	if err != nil {
+		return out, err
 	}
-	return out, err
+	// The decision evidence is recorded only after its receipt
+	// committed: the audit never references an unpersisted receipt
+	// (E5 audit F002).
+	_ = s.Store.AuditAttribution(ctx, "attr-"+w.ReceiptID, in.DispatchID, w.SubmittedAt, decision.ContextJSON())
+	out.SuppressedPaths = decision.SuppressedPaths
+	// Report suppression only when a dirty generation actually
+	// cleared (a clean route suppresses nothing, E5 audit F010).
+	out.SelfChangeSuppressed = decision.FullySuppressed && snap.DirtyGeneration > 0
+	return out, nil
 }
 
 // Fail validates one cooperative failure and applies the completion

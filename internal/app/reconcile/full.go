@@ -159,6 +159,7 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 	if err := s.Store.MarkPendingReconcile(ctx, routeID, "", now); err != nil {
 		return FullResult{}, err
 	}
+	out.PendingReconcile = true
 	// An idle route whose full reconciliation proved no work remains
 	// resolves its pending generation: no dispatch completion is needed
 	// to clear it (E5 audit remediation).

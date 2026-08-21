@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"time"
 
 	"github.com/rootkernel/jjukkumi/internal/app/dispatch"
@@ -43,6 +44,13 @@ func runQuarantineList(command string, args []string, stdout, stderr io.Writer) 
 	filter := ports.QuarantineFilter{RouteID: flags.val("--route"), State: flags.val("--state")}
 	if filter.State != "" && filter.State != "held" && filter.State != "released" && filter.State != "discarded" && filter.State != "superseded" {
 		return usageError(stderr, command, "--state must be held, released, discarded, or superseded")
+	}
+	if raw := flags.val("--limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > 500 {
+			return usageError(stderr, command, "--limit must be 1..500")
+		}
+		filter.Limit = n
 	}
 	store, closer, exit := openOperatorStore(command, flags.val("--config"), stderr)
 	if exit != 0 {

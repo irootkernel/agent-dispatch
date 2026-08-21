@@ -275,7 +275,10 @@ func (s *Service) Fail(ctx context.Context, in FailInput) (Result, error) {
 // and applies the atomic receipt-plus-completion transaction.
 func (s *Service) applyCompletion(ctx context.Context, intent ports.IntentSnapshot, snap state.RouteSnapshot, w ports.WorkReceiptInput, base ports.ActiveCompletion) (Result, error) {
 	base.FollowupRequest = nil
-	if (snap.DirtyGeneration > 0 && !base.DirtySuppressed) || snap.PendingReconcile {
+	// A failure with remaining budget always warrants its one
+	// follow-up, even on a clean generation (the route would otherwise
+	// sit in FOLLOWUP_READY with nothing following).
+	if (snap.DirtyGeneration > 0 && !base.DirtySuppressed) || snap.PendingReconcile || base.Failed {
 		followup, err := s.buildFollowup(intent)
 		if err != nil {
 			return Result{}, fmt.Errorf("building the follow-up request: %w", err)

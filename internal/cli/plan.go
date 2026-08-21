@@ -273,6 +273,13 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 		return persistReconcileArrival(command, artifacts, stdout, stderr)
 	case "drop":
 		return persistDrop(command, artifacts, stdout, stderr)
+	case "dispatch", "merge_pending":
+		// The coordinator owns these dispositions.
+	default:
+		// The disposition set is closed (POL-006): an unknown value
+		// fails closed instead of silently dispatching (E5 audit).
+		return planErr(stderr, command, "internal_unclassified", "internal",
+			fmt.Sprintf("plan carried the unknown disposition %q", artifacts.plan.Disposition), 40)
 	}
 	outcome, exit := persistThroughCoordinator(command, artifacts, stderr)
 	if exit != 0 {

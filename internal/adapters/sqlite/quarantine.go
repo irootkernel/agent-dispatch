@@ -40,7 +40,7 @@ func (s *Store) CommitQuarantineLineage(ctx context.Context, lin ports.Lineage, 
 		return err
 	}
 	if err := s.AppendTransition(tx, item.QuarantineID+":held", "quarantine", item.QuarantineID, "", "held", item.CreatedAt,
-		fmt.Sprintf(`{"reason_codes":%s,"decision_id":%q,"batch_id":%q}`, reasons, item.DecisionID, item.BatchID)); err != nil {
+		auditJSON("reason_codes", item.ReasonCodes, "decision_id", item.DecisionID, "batch_id", item.BatchID)); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -235,7 +235,7 @@ func (s *Store) resolveQuarantine(ctx context.Context, quarantineID, action, act
 		return ports.QuarantineRecord{}, fmt.Errorf("%w: %s was resolved concurrently", ports.ErrQuarantineNotHeld, quarantineID)
 	}
 	if err := s.AppendTransition(tx, quarantineID+":"+action, "quarantine", quarantineID, "held", action, now,
-		fmt.Sprintf(`{"actor":%q,"reason":%q,"replacement_decision_id":%q,"previous_decision_id":%q}`, actor, reason, replacementID, rec.DecisionID)); err != nil {
+		auditJSON("actor", actor, "reason", reason, "replacement_decision_id", replacementID, "previous_decision_id", rec.DecisionID)); err != nil {
 		return ports.QuarantineRecord{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -258,6 +258,17 @@ func (s *Store) MarkPendingReconcile(ctx context.Context, routeID, sourcePositio
 		return err
 	}
 	return tx.Commit()
+}
+
+// auditJSON encodes one bounded audit context document through the
+// JSON encoder (never hand-assembled quoting; E5 audit).
+func auditJSON(kv ...any) string {
+	doc := map[string]any{}
+	for i := 0; i+1 < len(kv); i += 2 {
+		doc[fmt.Sprint(kv[i])] = kv[i+1]
+	}
+	raw, _ := json.Marshal(doc)
+	return string(raw)
 }
 
 // ClearPendingReconcile resolves the pending generation after an idle

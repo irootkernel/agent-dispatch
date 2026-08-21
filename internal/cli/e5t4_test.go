@@ -425,3 +425,42 @@ func TestDropDispositionPersistsEvidence(t *testing.T) {
 		t.Fatalf("the drop decision must be persisted as evidence: %q %v", disposition, err)
 	}
 }
+
+// TestReconcileSubmitSkippedWarning proves --submit on a reconciliation
+// with no eligible intent reports the skip as a warning instead of
+// silently passing (E5 audit round 5, F008).
+func TestReconcileSubmitSkippedWarning(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	e4t3RegisterRoute(t, configPath)
+	// A first reconciliation stores the snapshot and schedules the
+	// intent, activating the route; a second, unchanged reconciliation
+	// has no eligible intent for --submit.
+	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "initial"}, &bytes.Buffer{}, &bytes.Buffer{}); code != 0 {
+		t.Fatal("initial reconcile failed")
+	}
+	store := e5t1Store(t, configPath)
+	var dispatchID string
+	if err := store.QueryRow(`SELECT dispatch_id FROM dispatch_intents ORDER BY created_at DESC LIMIT 1`).Scan(&dispatchID); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "r1"}, &out, &errb); code != 0 {
+		t.Fatalf("begin: %s", errb.String())
+	}
+	out.Reset()
+	errb.Reset()
+	withStdin(t, `[]`, func() {
+		Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "r1", "--manifest", "-"}, &out, &errb)
+	})
+	_ = decodeEnvelope(t, &out)
+	// Route is now FOLLOWUP_READY: --submit has no eligible intent.
+	var out2, errb2 bytes.Buffer
+	code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "scheduled", "--submit"}, &out2, &errb2)
+	if code != 0 {
+		t.Fatalf("skipped submit must still succeed: %s", errb2.String())
+	}
+	if !strings.Contains(out2.String(), "skipped") {
+		t.Fatalf("the skipped submission must be warned: %s", out2.String())
+	}
+	_ = vault
+}

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/rootkernel/jjukkumi/internal/ports"
 )
 
 // e5t3Digest renders the canonical content digest of a byte string.
@@ -410,5 +412,107 @@ func TestConcurrentCompletionSingleWinner(t *testing.T) {
 	var completed int
 	if err := store.QueryRow(`SELECT COUNT(*) FROM work_receipts WHERE dispatch_id = ? AND run_id = 'run-1' AND status = 'completed'`, dispatchID).Scan(&completed); err != nil || completed != 1 {
 		t.Fatalf("one terminal receipt row: %d %v", completed, err)
+	}
+}
+
+// TestCompletionGenerationFence proves the expected-dirty-generation
+// fence: a completion whose receipt matched a different generation than
+// the one being completed refuses with optimistic concurrency (E5 audit
+// round 5, F002).
+func TestCompletionGenerationFence(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	res, _ := e4t3Dispatch(t, configPath, vault)
+	dispatchID, _ := res["dispatch_id"].(string)
+	var out, errb bytes.Buffer
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1"}, &out, &errb); code != 0 {
+		t.Fatalf("begin: %s", errb.String())
+	}
+	// A stale completion request (the generation moved after its
+	// attribution was computed) is refused by the store fence.
+	store := e5t1Store(t, configPath)
+	_, err := store.CompleteWork(context.Background(), ports.WorkReceiptInput{
+		ReceiptID: "rcpt-work-fence", DispatchID: dispatchID, RunID: "run-1",
+		Status: "completed", ChangesJSON: "[]", SubmittedAt: "2026-08-21T00:00:00Z", ValidationState: "valid",
+	}, ports.ActiveCompletion{
+		RouteID: "wiki", DispatchID: dispatchID, ReceiptRef: "rcpt-work-fence", Actor: "test",
+		ExpectedDirtyGeneration: 42, Now: "2026-08-21T00:00:00Z",
+	})
+	if err == nil || !strings.Contains(err.Error(), "dirty generation moved") {
+		t.Fatalf("a stale generation fence must refuse: %v", err)
+	}
+	// The route and the begun receipt are unchanged by the refusal.
+	var status string
+	if err := store.QueryRow(`SELECT status FROM work_receipts WHERE dispatch_id = ? AND run_id = 'run-1'`, dispatchID).Scan(&status); err != nil || status != "begun" {
+		t.Fatalf("the refused completion must leave the begun receipt intact: %q %v", status, err)
+	}
+}
+
+// TestFailureBudgetResetsAfterValidCompletion proves the streak resets
+// on a valid completion: a later failure gets a fresh budget (E5 audit
+// round 5, F005).
+func TestFailureBudgetResetsAfterValidCompletion(t *testing.T) {
+	configPath, vault := e5t1FixtureBudget(t, 1)
+	res, _ := e4t3Dispatch(t, configPath, vault)
+	dispatchID, _ := res["dispatch_id"].(string)
+	var out, errb bytes.Buffer
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "r1"}, &out, &errb); code != 0 {
+		t.Fatalf("begin: %s", errb.String())
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"work", "fail", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "r1", "--failure-code", "timeout"}, &out, &errb); code != 0 {
+		t.Fatalf("fail: %s", errb.String())
+	}
+	failed := decodeEnvelope(t, &out)
+	followup, _ := failed["followup_dispatch_id"].(string)
+	if followup == "" {
+		t.Fatalf("a budgeted failure must create its one follow-up: %v", failed)
+	}
+	// The follow-up completes VALIDLY, resetting the streak...
+	store := e5t1Store(t, configPath)
+	if err := store.ActivateFollowup(context.Background(), followup, "test", "2026-08-21T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", followup, "--run-id", "r2"}, &out, &errb); code != 0 {
+		t.Fatalf("begin 2: %s", errb.String())
+	}
+	time.Sleep(1100 * time.Millisecond)
+	out.Reset()
+	errb.Reset()
+	withStdin(t, `[]`, func() {
+		Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", followup, "--run-id", "r2", "--manifest", "-"}, &out, &errb)
+	})
+	if errb.Len() != 0 {
+		t.Fatalf("complete: %s", errb.String())
+	}
+	// The route is idle again; a fresh generation's failure gets the
+	// reset budget (FOLLOWUP_READY, not UNCERTAIN). A distinct burst
+	// avoids the source retransmission key.
+	if err := os.WriteFile(filepath.Join(vault, "Inbox", "fresh-generation.md"), []byte("fresh"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	setPlanEnv(t, vault, false)
+	var nextOut, nextErrb bytes.Buffer
+	withStdin(t, `[{"name":"Inbox/fresh-generation.md","exists":true,"new":true,"size":5,"type":"f"}]`, func() {
+		Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman"}, &nextOut, &nextErrb)
+	})
+	if nextErrb.Len() != 0 {
+		t.Fatalf("fresh dispatch: %s", nextErrb.String())
+	}
+	nextEnv := decodeEnvelope(t, &nextOut)
+	next, _ := nextEnv["dispatch_id"].(string)
+	_ = next
+	nextID := next
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", nextID, "--run-id", "r3"}, &out, &errb); code != 0 {
+		t.Fatalf("begin 3: %s", errb.String())
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"work", "fail", "--config", configPath, "--dispatch-id", nextID, "--run-id", "r3", "--failure-code", "agent_error"}, &out, &errb); code != 0 {
+		t.Fatalf("fail after reset: %s", errb.String())
+	}
+	after := decodeEnvelope(t, &out)
+	if after["route_state"] != "FOLLOWUP_READY" {
+		t.Fatalf("a valid completion must reset the failure budget: %v", after)
 	}
 }

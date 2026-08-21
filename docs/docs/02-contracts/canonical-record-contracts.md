@@ -124,7 +124,8 @@ batch: a reconciliation generation may span many batches or none.
 `reason` (one of `initial|scheduled|overflow|fresh-instance|lost-cursor|manual|delivery|stale-active`),
 `enumerated`, `compared`, sorted `added`/`removed`/`changed` path lists,
 `pending_reconcile`, `decision_id`, optional `reconcile_dispatch_id`
-(exactly one latest-state intent when the route was idle with due work),
+(exactly one latest-state intent when the route was idle with due work,
+or when an uncertain route was resolved with due work),
 and `snapshot_stored`. The enumeration obeys the containment and size
 rules of the resource resolver; an unverifiable path is reported with an
 absent digest, never silently truncated (SRC-005).

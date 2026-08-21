@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/rootkernel/jjukkumi/internal/domain/ids"
 	"github.com/rootkernel/jjukkumi/internal/domain/state"
 	"github.com/rootkernel/jjukkumi/internal/ports"
 )
@@ -246,6 +247,79 @@ func (s *Store) resolveQuarantine(ctx context.Context, quarantineID, action, act
 	return rec, nil
 }
 
+// ResolveUncertainReconciliation applies the operator resolution of one
+// UNCERTAIN route through full reconciliation (feedback-loop §10): the
+// uncertain dispatch releases its slot, the retained dirty generation
+// collapses, and exactly one latest-state intent is created when the
+// comparison found work — its pending generation is marked inside the
+// same transaction. With no work due the route lands IDLE through the
+// follow-up-dropped edge with the pending flag cleared. The expected
+// dirty generation and pending flag fence the reconciliation's own
+// read: a merge or release that landed during the enumeration window
+// refuses as an optimistic-concurrency conflict instead of being
+// silently absorbed. One transaction, all or nothing.
+func (s *Store) ResolveUncertainReconciliation(ctx context.Context, routeID string, intent *ports.IntentInput, expectedDirty int, expectedPending bool, actor, now string) error {
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	snap, err := s.routeSnapshotInTx(tx, routeID)
+	if err != nil {
+		return err
+	}
+	if snap.State != state.RouteUncertain {
+		return fmt.Errorf("%w: route %s is %s, not uncertain", ports.ErrStateNotEligible, routeID, snap.State)
+	}
+	if snap.DirtyGeneration != expectedDirty || snap.PendingReconcile != expectedPending {
+		return fmt.Errorf("%w: route %s changed during reconciliation (dirty %d, expected %d; pending %v, expected %v)",
+			ErrOptimisticConcurrency, routeID, snap.DirtyGeneration, expectedDirty, snap.PendingReconcile, expectedPending)
+	}
+	if err := applyRouteTransition(tx, snap, state.RouteFollowupReady, state.ReasonReconciliationResolved,
+		state.RouteEvidence{Actor: actor}, now,
+		auditJSON("reason", "reconciliation_resolved", "actor", actor, "dirty_generation", snap.DirtyGeneration, "pending_reconcile", snap.PendingReconcile)); err != nil {
+		return err
+	}
+	// The operator resolution is a route-entity audit event (the same
+	// visible-lineage posture as reconcile_pending and quarantine
+	// resolutions).
+	if err := s.AppendTransition(tx, "route-uncertain-resolved-"+routeID+"-"+now+"-"+ids.RandomSuffix(), "route", routeID,
+		string(snap.State), string(state.RouteFollowupReady), now,
+		auditJSON("reason", "reconciliation_resolved", "actor", actor, "dirty_generation", snap.DirtyGeneration)); err != nil {
+		return err
+	}
+	// The resolved dispatch releases the active slot; its record and audit
+	// history remain inspectable, and the reconciliation absorbs the
+	// retained generation. A created intent keeps its pending generation
+	// (marked atomically here) so its completion schedules the one
+	// documented follow-up; a no-work resolution clears it.
+	pendingAfter := 0
+	if intent != nil {
+		pendingAfter = 1
+	}
+	if _, err := tx.Exec(`UPDATE route_runtime_state SET active_dispatch_id = NULL, active_generation = 0,
+		dirty_generation = 0, dirty_since = NULL, pending_reconcile = ?, last_reconciled_at = ? WHERE route_id = ?`,
+		pendingAfter, now, routeID); err != nil {
+		return err
+	}
+	if intent != nil {
+		intent.CreatedAt = now
+		if err := s.SaveIntent(tx, portsIntent(*intent)); err != nil {
+			return mapIntentConstraint(err)
+		}
+		if err := s.AppendTransition(tx, intent.DispatchID+":created", "dispatch_intent", intent.DispatchID, "", "ready", now,
+			auditJSON("reason", "reconcile", "route_id", routeID, "latest_state", true, "resolved_from", "uncertain")); err != nil {
+			return err
+		}
+	} else if err := applyRouteTransition(tx, state.RouteSnapshot{RouteID: routeID, State: state.RouteFollowupReady},
+		state.RouteIdle, state.ReasonFollowupDropped,
+		state.RouteEvidence{Actor: actor, ReconciledNoWork: true}, now,
+		auditJSON("reason", "followup_dropped_after_reconciliation", "actor", actor)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // MarkPendingReconcile idempotently marks the pending generation.
 func (s *Store) MarkPendingReconcile(ctx context.Context, routeID, sourcePosition, now string) error {
 	tx, err := s.BeginTx(ctx, nil)
@@ -280,17 +354,28 @@ func auditJSON(kv ...any) string {
 }
 
 // ClearPendingReconcile resolves the pending generation after an idle
-// full reconciliation proved no work remains.
-func (s *Store) ClearPendingReconcile(ctx context.Context, routeID, now string) error {
+// full reconciliation proved no work remains. The clear is conditional
+// on the flag the reconciliation observed (expected): an UPDATE matched
+// by the durable flag either clears it (cleared true) or — when another
+// actor moved the flag inside the window — matches nothing and reports
+// the miss without wiping the fresh signal.
+func (s *Store) ClearPendingReconcile(ctx context.Context, routeID string, expected bool, now string) (bool, error) {
 	tx, err := s.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`UPDATE route_runtime_state SET pending_reconcile = 0, last_reconciled_at = ? WHERE route_id = ?`, now, routeID); err != nil {
-		return err
+	res, err := tx.Exec(`UPDATE route_runtime_state SET pending_reconcile = 0, last_reconciled_at = ? WHERE route_id = ? AND pending_reconcile = ?`, now, routeID, boolInt(expected))
+	if err != nil {
+		return false, err
 	}
-	return tx.Commit()
+	if n, _ := res.RowsAffected(); n == 0 {
+		// The durable flag no longer matches the reconciliation's own
+		// read; a concurrent actor owns it now. Commit the no-op (the
+		// conditional UPDATE changed nothing) and report the miss.
+		return false, tx.Commit()
+	}
+	return true, tx.Commit()
 }
 
 // ReplacePathFacts stores one full-scope snapshot (previous facts for

@@ -2,6 +2,7 @@ package workreceipt
 
 import (
 	"encoding/json"
+	"sort"
 	"time"
 
 	"github.com/rootkernel/jjukkumi/internal/ports"
@@ -18,6 +19,7 @@ import (
 const (
 	OutcomeSuppressed = "verified_self_generated"
 	OutcomeMissing    = "receipt_missing_path"
+	OutcomeExtra      = "receipt_extra_path"
 	OutcomeMismatch   = "digest_mismatch"
 	OutcomeNoDigest   = "digest_unverified"
 	OutcomeBeforeRun  = "observed_before_run"
@@ -62,9 +64,10 @@ type ReceiptEvidence struct {
 // Match applies the exact-suppression algorithm (feedback-loop §5) over
 // the dirty generation's observed changes. Multiple observations of one
 // path collapse to the latest (the last write wins; an earlier matching
-// digest never suppresses a later divergent one). Receipt paths never
-// observed are recorded as suppressed evidence only when observed set is
-// covered — they cannot unlock suppression by themselves.
+// digest never suppresses a later divergent one). A receipt path never
+// observed is unproven extra provenance: it cannot verify anything and
+// blocks full suppression (AC-404 — missing, extra, or mismatched
+// provenance never suppresses).
 func Match(receipt ReceiptEvidence, observed []ports.DirtyChange) AttributionDecision {
 	decision := AttributionDecision{
 		ReceiptID:   receipt.ReceiptID,
@@ -86,7 +89,8 @@ func Match(receipt ReceiptEvidence, observed []ports.DirtyChange) AttributionDec
 		receiptByPath[e.Path] = e
 	}
 	fully := true
-	for path, obs := range latest {
+	for _, path := range sortedPaths(latest) {
+		obs := latest[path]
 		d := PathDecision{Path: path, ObservedDigest: obs.AfterDigest, ObservedAt: obs.ObservedAt}
 		entry, ok := receiptByPath[path]
 		if !ok {
@@ -117,6 +121,21 @@ func Match(receipt ReceiptEvidence, observed []ports.DirtyChange) AttributionDec
 			fully = false
 		}
 	}
+	// Receipt paths the generation never observed stay unresolved: the
+	// receipt claims work with no durable observation behind it, so the
+	// batch is not exactly matched and must not clear the route.
+	for _, path := range sortedChangePaths(receipt.Changes) {
+		if _, ok := latest[path]; ok {
+			continue
+		}
+		entry := receiptByPath[path]
+		d := PathDecision{Path: path, Outcome: OutcomeExtra}
+		if entry.AfterDigest != nil {
+			d.ReceiptDigest = *entry.AfterDigest
+		}
+		decision.Unresolved = append(decision.Unresolved, d)
+		fully = false
+	}
 	// An empty observed window is unproven, never cleared: the matcher
 	// itself refuses vacuous suppression (E5 audit).
 	if len(latest) == 0 {
@@ -124,6 +143,31 @@ func Match(receipt ReceiptEvidence, observed []ports.DirtyChange) AttributionDec
 	}
 	decision.FullySuppressed = fully
 	return decision
+}
+
+// sortedPaths returns the observed map's paths in canonical order so the
+// audited decision document is deterministic.
+func sortedPaths(m map[string]ports.DirtyChange) []string {
+	paths := make([]string, 0, len(m))
+	for p := range m {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+func sortedChangePaths(entries []changeEntry) []string {
+	paths := make([]string, 0, len(entries))
+	seen := map[string]bool{}
+	for _, e := range entries {
+		if seen[e.Path] {
+			continue
+		}
+		seen[e.Path] = true
+		paths = append(paths, e.Path)
+	}
+	sort.Strings(paths)
+	return paths
 }
 
 // ContextJSON renders the bounded audit document for the decision.

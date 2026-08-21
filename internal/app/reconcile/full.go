@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -36,6 +37,12 @@ var Reasons = map[string]bool{
 type FullStore interface {
 	ports.RouteCoordinationStore
 	ports.QuarantineStore
+	// ResolveUncertainReconciliation applies the operator resolution of
+	// one UNCERTAIN route (feedback-loop §10): slot release, generation
+	// collapse, the pending generation kept or cleared atomically with
+	// the optional one latest-state intent, and the pre-enumeration
+	// fence on the dirty generation and pending flag.
+	ResolveUncertainReconciliation(ctx context.Context, routeID string, intent *ports.IntentInput, expectedDirty int, expectedPending bool, actor, now string) error
 }
 
 // FullResult reports one reconciliation outcome.
@@ -84,6 +91,15 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 		return FullResult{}, fmt.Errorf("unknown reconcile reason %q", reason)
 	}
 	now := ids.CanonicalTimestamp(s.Now())
+	// The route snapshot is read before the enumeration walk: the dirty
+	// generation and pending flag observed here fence the resolution
+	// transaction, so a merge or release landing inside the (potentially
+	// long) enumeration window refuses as a conflict instead of being
+	// silently absorbed.
+	snap, err := s.Store.LoadRouteState(ctx, routeID)
+	if err != nil {
+		return FullResult{}, ports.WrapStore(err)
+	}
 	current, skipped, err := s.enumerate()
 	if err != nil {
 		return FullResult{}, err
@@ -110,14 +126,7 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 		}
 		// A path under an unreadable subtree was not enumerated — its
 		// stored fact stands (an access failure is not a removal).
-		skippedTree := false
-		for _, prefix := range skipped {
-			if strings.HasPrefix(path, prefix) {
-				skippedTree = true
-				break
-			}
-		}
-		if !skippedTree {
+		if !underSkippedPrefix(skipped, path) {
 			out.Removed = append(out.Removed, path)
 		}
 	}
@@ -134,10 +143,6 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 		out.Removed = []string{}
 	}
 
-	snap, err := s.Store.LoadRouteState(ctx, routeID)
-	if err != nil {
-		return FullResult{}, ports.WrapStore(err)
-	}
 	workDue := len(out.Added)+len(out.Changed)+len(out.Removed) > 0
 
 	// The decision is batch-less: its lineage is the generation it
@@ -152,15 +157,45 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 		CreatedAt:       now, Actor: "reconcile",
 		GenerationLineageJSON: generationLineage(routeID, reason),
 	}); err != nil {
-		return FullResult{}, err
+		return FullResult{}, ports.WrapStore(err)
 	}
 	// The durable work is ordered so the snapshot only advances after
 	// the decision and any intent exist (E5 audit F006): an idle route
 	// with due work schedules exactly one latest-state reconciliation
 	// intent; an active or pending route merges into the single pending
-	// generation instead (SRC-005, CON-003).
-	if workDue && snap.State == state.RouteIdle && s.IntentBuilder != nil {
-		intent, err := s.IntentBuilder(routeID, reason, out.DecisionID, s.diffChanges(currentMap, stored))
+	// generation instead (SRC-005, CON-003). An uncertain route is
+	// resolved by this same operator reconciliation (feedback-loop §10).
+	// Due work demands an intent builder on every eligible state: the
+	// same misconfiguration must fail loudly everywhere, never silently
+	// drop due work.
+	resolved := false
+	if snap.State == state.RouteUncertain {
+		var intentPtr *ports.IntentInput
+		if workDue {
+			if err := intentBuilderRequired(routeID, snap.State, s.IntentBuilder); err != nil {
+				return FullResult{}, err
+			}
+			intent, err := s.IntentBuilder(routeID, reason, out.DecisionID, s.diffChanges(currentMap, stored, skipped))
+			if err != nil {
+				return FullResult{}, err
+			}
+			intent.DecisionID = out.DecisionID
+			intent.CreatedAt = now
+			intentPtr = &intent
+			out.ReconcileDispatch = intent.DispatchID
+		}
+		if err := s.Store.ResolveUncertainReconciliation(ctx, routeID, intentPtr, snap.DirtyGeneration, snap.PendingReconcile, "reconcile", now); err != nil {
+			return FullResult{}, classifyResolutionError(err)
+		}
+		resolved = true
+		// The resolution marked (work due) or cleared (no work) its own
+		// pending generation atomically.
+		out.PendingReconcile = intentPtr != nil
+	} else if workDue && snap.State == state.RouteIdle {
+		if err := intentBuilderRequired(routeID, snap.State, s.IntentBuilder); err != nil {
+			return FullResult{}, err
+		}
+		intent, err := s.IntentBuilder(routeID, reason, out.DecisionID, s.diffChanges(currentMap, stored, skipped))
 		if err != nil {
 			return FullResult{}, err
 		}
@@ -171,29 +206,78 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 		}
 		out.ReconcileDispatch = intent.DispatchID
 	}
-	if err := s.Store.MarkPendingReconcile(ctx, routeID, "", now); err != nil {
-		return FullResult{}, err
-	}
-	out.PendingReconcile = true
-	// An idle route whose full reconciliation proved no work remains
-	// resolves its pending generation: no dispatch completion is needed
-	// to clear it (E5 audit remediation).
-	if !workDue && snap.State == state.RouteIdle {
-		if err := s.Store.ClearPendingReconcile(ctx, routeID, now); err != nil {
-			return FullResult{}, ports.WrapStore(err)
+	// A resolution marks or clears its own pending generation atomically
+	// in the resolution transaction. A non-resolving reconciliation
+	// marks the pending generation for the work it scheduled or left
+	// open — except the idle no-work case, which resolves the pending
+	// generation directly in one transaction (no dispatch completion is
+	// needed to clear it, E5 audit remediation): no path re-marks a flag
+	// only to clear it again, so no second actor's fresh signal can be
+	// stomped by this run's own churn.
+	if !resolved {
+		if !workDue && snap.State == state.RouteIdle {
+			cleared, err := s.Store.ClearPendingReconcile(ctx, routeID, snap.PendingReconcile, now)
+			if err != nil {
+				return FullResult{}, ports.WrapStore(err)
+			}
+			// A miss means the durable flag moved inside this run's
+			// window: a fresh mark by another actor stands (reported
+			// pending), an already-cleared flag stays cleared.
+			out.PendingReconcile = !cleared && !snap.PendingReconcile
+		} else {
+			if err := s.Store.MarkPendingReconcile(ctx, routeID, "", now); err != nil {
+				return FullResult{}, ports.WrapStore(err)
+			}
+			out.PendingReconcile = true
 		}
-		out.PendingReconcile = false
 	}
-	if err := s.Store.ReplacePathFacts(ctx, s.ResourceID, current, now); err != nil {
+	// The snapshot keeps the stored facts of unreadable subtrees: their
+	// last observed truth stands until a readable reconciliation can
+	// verify it (forgetting them would silently drop the subtree from
+	// the durable scope).
+	snapshot := current
+	if len(skipped) > 0 {
+		for path, fact := range stored {
+			if _, ok := currentMap[path]; !ok && underSkippedPrefix(skipped, path) {
+				snapshot = append(snapshot, fact)
+			}
+		}
+	}
+	if err := s.Store.ReplacePathFacts(ctx, s.ResourceID, snapshot, now); err != nil {
 		return FullResult{}, ports.WrapStore(err)
 	}
 	out.SnapshotStored = true
 	return out, nil
 }
 
+// underSkippedPrefix reports whether path falls inside one of the
+// enumeration's unreadable subtrees.
+func underSkippedPrefix(skipped []string, path string) bool {
+	for _, prefix := range skipped {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// classifyResolutionError keeps a lost resolution race (another operator
+// or scheduled recipe resolved the uncertain route first) a typed state
+// conflict, never a storage failure: the eligibility refusal passes
+// through unwrapped while durable-store failures wrap.
+func classifyResolutionError(err error) error {
+	if errors.Is(err, ports.ErrStateNotEligible) || errors.Is(err, ports.ErrGenerationConflict) {
+		return err
+	}
+	return ports.WrapStore(err)
+}
+
 // diffChanges projects the comparison diff onto canonical change items
-// (the reconciliation intent's bounded evidence manifest).
-func (s *FullService) diffChanges(current map[string]ports.PathFact, stored map[string]ports.PathFact) []records.ChangeItem {
+// (the reconciliation intent's bounded evidence manifest). Paths under
+// an unreadable subtree are never projected as deletes: their stored
+// facts stand, and an access failure is not a removal an intent may
+// assert.
+func (s *FullService) diffChanges(current map[string]ports.PathFact, stored map[string]ports.PathFact, skipped []string) []records.ChangeItem {
 	items := []records.ChangeItem{}
 	for _, path := range sortedKeys(current) {
 		fact := current[path]
@@ -211,15 +295,30 @@ func (s *FullService) diffChanges(current map[string]ports.PathFact, stored map[
 		})
 	}
 	for _, path := range sortedKeys(stored) {
-		if _, still := current[path]; !still {
-			prev := stored[path]
-			items = append(items, records.ChangeItem{
-				Path: path, Operation: records.OpDelete, ExistsAfter: false, FileType: records.FileRegular,
-				BeforeDigest: records.Digest(prev.Digest), DigestStatus: digestStatusOf(prev.Digest),
-			})
+		if _, still := current[path]; still {
+			continue
 		}
+		if underSkippedPrefix(skipped, path) {
+			continue
+		}
+		prev := stored[path]
+		items = append(items, records.ChangeItem{
+			Path: path, Operation: records.OpDelete, ExistsAfter: false, FileType: records.FileRegular,
+			BeforeDigest: records.Digest(prev.Digest), DigestStatus: digestStatusOf(prev.Digest),
+		})
 	}
 	return items
+}
+
+// intentBuilderRequired enforces the uniform intent-builder contract:
+// due work on any eligible route state demands a builder — the same
+// misconfiguration fails loudly everywhere, never silently drops due
+// work.
+func intentBuilderRequired(routeID string, snapState state.RouteState, builder func(routeID, reason, decisionID string, changes []records.ChangeItem) (ports.IntentInput, error)) error {
+	if builder == nil {
+		return fmt.Errorf("reconciliation with due work requires an intent builder (route %s is %s)", routeID, snapState)
+	}
+	return nil
 }
 
 func sortedKeys(m map[string]ports.PathFact) []string {

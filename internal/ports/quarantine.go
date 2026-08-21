@@ -32,6 +32,14 @@ var ErrQuarantineNotFound = errors.New("quarantine item not found")
 // is no longer held.
 var ErrQuarantineNotHeld = errors.New("quarantine item is not held")
 
+// IsQuarantineDomainOutcome reports whether err is one of the typed
+// quarantine domain outcomes — the single classification every layer
+// shares, so a future domain refusal cannot be silently relabeled as
+// storage by missing one layer's enumeration.
+func IsQuarantineDomainOutcome(err error) bool {
+	return errors.Is(err, ErrQuarantineNotFound) || errors.Is(err, ErrQuarantineNotHeld)
+}
+
 // QuarantineInput is one durable hold created with its policy decision.
 type QuarantineInput struct {
 	QuarantineID string
@@ -89,8 +97,11 @@ type QuarantineStore interface {
 	// reconciliation generation (repeated reconciliations collapse).
 	MarkPendingReconcile(ctx context.Context, routeID, sourcePosition, now string) error
 	// ClearPendingReconcile resolves the pending generation when a full
-	// reconciliation on an idle route proved no work remains.
-	ClearPendingReconcile(ctx context.Context, routeID, now string) error
+	// reconciliation on an idle route proved no work remains. The clear
+	// is conditional on the flag the reconciliation observed: a signal
+	// another actor marked inside the window is never wiped (cleared
+	// reports the miss).
+	ClearPendingReconcile(ctx context.Context, routeID string, expected bool, now string) (cleared bool, err error)
 	// ReplacePathFacts stores one full-scope path-fact snapshot.
 	ReplacePathFacts(ctx context.Context, resourceID string, facts []PathFact, observedAt string) error
 	// LoadPathFacts returns the stored full-scope snapshot.

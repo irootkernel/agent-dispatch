@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -313,4 +314,31 @@ func latestManifest(t *testing.T) []records.ChangeItem {
 		Path: "Inbox/n1.md", Operation: records.OpCreate, FileType: records.FileRegular,
 		AfterDigest: records.Digest(fmt.Sprintf("sha256:%064d", 1)), DigestStatus: records.DigestKnown,
 	}}
+}
+
+// TestCompletionRefusesUnpreparedFollowupTyped proves the coordinator's
+// pre-check refuses a completion that needs a follow-up none was
+// prepared for, as the typed state conflict the boundary maps to
+// transition_invalid — and that its snapshot read failure classifies as
+// storage, never a plain defect.
+func TestCompletionRefusesUnpreparedFollowupTyped(t *testing.T) {
+	s := openCoordStore(t)
+	c := newCoordinator(s)
+	ctx := context.Background()
+	if _, err := c.Arrival(ctx, coordLineage(t, 1, "dispatch")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Arrival(ctx, coordLineage(t, 2, "merge_pending")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := c.Completion(ctx, ports.ActiveCompletion{
+		RouteID: "wiki", DispatchID: "dispatch-1", ReceiptRef: "wr-1",
+	})
+	if !errors.Is(err, ports.ErrStateNotEligible) {
+		t.Fatalf("the unprepared-followup refusal must be the typed state conflict, got %v", err)
+	}
+	var storeErr *ports.StoreError
+	if errors.As(err, &storeErr) {
+		t.Fatalf("a state conflict must not classify as storage: %v", err)
+	}
 }

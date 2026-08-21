@@ -1,5 +1,44 @@
 # SOT Changelog
 
+## 1.0.7 - 2026-08-21
+
+E5 post-closeout review remediations (no contract surface changes; behavior corrections under the existing contracts):
+
+- attribution: a receipt path the generation never observed is recorded as unresolved `receipt_extra_path` and blocks full suppression — AC-404's extra-paths clause is enforced (`feedback-loop-and-reconciliation.md` §5 vocabulary updated);
+- route machine: the declared UNCERTAIN exits are now reachable — full reconciliation is the operator resolution (`UNCERTAIN -> FOLLOWUP_READY` under `reconciliation_resolved`, landing IDLE through `followup_dropped_after_reconciliation` when no work is due; budget exhaustion previously left the route permanently wedged);
+- completion transaction: an in-transaction follow-up need the caller never prepared refuses as an optimistic-concurrency conflict instead of dropping the pending reconciliation signal into a follow-up-less FOLLOWUP_READY;
+- receipt validation: the document form enforces every schema-required field (`docs/schemas/work-receipt.schema.json`), and durable-store failures during lineage or replay validation classify as storage (exit 20) instead of being written as invalid-receipt audit evidence;
+- reconciliation: stored path facts under an unreadable subtree are retained in the replaced snapshot (not merely excluded from the removal diff), completing the round-20 phantom-removal fix;
+- records: the follow-up decision records the planned route revision as its policy revision with encoder-produced reason codes (the `"current"` placeholder is gone); the quarantine error boundary classifies store failures as storage and defects as internal instead of relabeling everything storage;
+- docs: `processing-pipeline.md` §5 rule 1 no longer carries the refuted class-5 exit wording (error-model §4 boundary notes are authoritative).
+
+Second review round (same date, advisory findings adopted):
+
+- the lost UNCERTAIN-resolution race reports `transition_invalid` (exit 14) instead of a storage failure (`classifyResolutionError`, `TestClassifyResolutionError`), and `quarantine show` wraps durable-read failures as storage instead of internal defects;
+- the intent-builder contract is uniform (due work without a builder fails loudly on every eligible route state, never silently drops);
+- a no-work UNCERTAIN resolution no longer resurrects its pending generation between two transactions;
+- the quarantine domain-outcome classification is shared through `ports.IsQuarantineDomainOutcome`;
+- tests pin the quarantine/receipt error-boundary arms (`TestResolutionErrorClassification`, `TestQuarantineErrClassification`, `TestWorkReceiptErrClassification`), the attribution decision document's input-order determinism (`TestMatchDecisionDocumentDeterministic`), the follow-up decision's recorded revisions and reason content, and the single-winner concurrent resolution (`TestConcurrentUncertainResolutionSingleWinner`);
+- feedback-loop §10 names `reconcile` as the operator exit from UNCERTAIN, and the full-reconciliation result contract's `reconcile_dispatch_id` condition covers the uncertain-resolution case.
+
+Third review round (same date, convergence):
+
+- the UNCERTAIN resolution is fenced like the completion path: the dirty generation and pending flag observed before the enumeration window must still hold inside the resolution transaction, so a merge or release landing mid-reconciliation refuses as `transition_invalid` instead of being silently absorbed;
+- the resolution marks (work due) or clears (no work) its pending generation atomically in the same transaction, removing the second-transaction window; every lost-race arm of the reconcile surface — eligibility, the fence, a held slot — reports `transition_invalid` (exit 14), and `MarkPendingReconcile`/`CommitReconcileDecision` failures classify as storage;
+- the reconciliation intent's evidence manifest no longer asserts deletes under unreadable subtrees (matching the removal-diff and snapshot posture);
+- `quarantine show` reads share `ports.IsQuarantineDomainOutcome`, the unused resolution method is dropped from the CLI `storeOp` interface, and `Coordinator.Completion`'s unprepared-followup refusal is a typed conflict;
+- new coverage: the fence (`TestResolveUncertainReconciliation`), the no-work CLI resolution (`TestUncertainNoWorkResolutionLandsIdle`), the manifest exclusion (`TestReconcileUnreadableSubtreeKeepsStoredFacts`), the builder contract (`TestIntentBuilderRequired`), and the reconcile/read error arms (`TestReconcileErrClassification`, `TestWrapQuarantineReadError`).
+
+Fourth review round (convergence; the logic and security roles returned zero findings):
+
+- the generation-conflict sentinel is shared (`ports.ErrGenerationConflict`, aliased by the adapter) and adopted at every boundary, the idempotency conflict joins the reconcile conflict arms, and the conditional `ClearPendingReconcile` never wipes a pending signal another actor marked inside the window (`TestClearPendingReconcileConditional`) while the idle no-work reconciliation resolves its own observed flag in one transaction;
+- the coordinator's typed unprepared-followup refusal is pinned (`TestCompletionRefusesUnpreparedFollowupTyped`) together with the work-command conflict arms, and the document form rejects unknown top-level keys exactly as the published schema does (`doc unknown top field`).
+
+Fifth review round (closure; security clean, logic clean except the residual below):
+
+- receipt validation is exact against the published schema: exact key spellings at the document and change levels (Go's case-insensitive tag matching can no longer absorb a `Dispatch_ID`), and exactly one JSON value — trailing content is malformed input, never silently ignored (`doc case-variant key`, `item case-variant key`, `trailing json value`); the resolution fence's pending-only arm is pinned;
+- accepted residual, recorded honestly: `pending_reconcile` is a bare boolean, so a mark folded into an already-true flag inside one enumeration window (an ABA interleaving) can be cleared with the stale signal — bounded to one delayed follow-up, self-healing on the next reconciliation; fully closing it needs a versioned pending signal (a schema change deferred with the finding).
+
 ## 1.0.6 - 2026-08-21
 
 E5 contract changes:

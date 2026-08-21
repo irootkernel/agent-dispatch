@@ -161,6 +161,16 @@ func TestWorkCompleteValidatesManifest(t *testing.T) {
 		"full doc wrong run":      `{"schema_version":"jjukkumi.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"other-run","status":"completed","changes":[]}`,
 		"full doc bad schema":     `{"schema_version":"jjukkumi.work-receipt/v2","dispatch_id":"` + dispatchID + `","run_id":"run-1","status":"completed","changes":[]}`,
 		"full doc wrong resource": `{"schema_version":"jjukkumi.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"run-1","resource_id":"wrong-vault","status":"completed","changes":[]}`,
+		"doc missing dispatch_id": `{"schema_version":"jjukkumi.work-receipt/v1","run_id":"run-1","resource_id":"vault-main","status":"completed","submitted_at":"2026-08-21T00:00:00Z","changes":[]}`,
+		"doc missing run_id":      `{"schema_version":"jjukkumi.work-receipt/v1","dispatch_id":"` + dispatchID + `","resource_id":"vault-main","status":"completed","submitted_at":"2026-08-21T00:00:00Z","changes":[]}`,
+		"doc missing resource_id": `{"schema_version":"jjukkumi.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"run-1","status":"completed","submitted_at":"2026-08-21T00:00:00Z","changes":[]}`,
+		"doc missing status":      `{"schema_version":"jjukkumi.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"run-1","resource_id":"vault-main","submitted_at":"2026-08-21T00:00:00Z","changes":[]}`,
+		"doc missing submitted":   `{"schema_version":"jjukkumi.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"run-1","resource_id":"vault-main","status":"completed","changes":[]}`,
+		"doc missing changes":     `{"schema_version":"jjukkumi.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"run-1","resource_id":"vault-main","status":"completed","submitted_at":"2026-08-21T00:00:00Z"}`,
+		"doc unknown top field":   `{"schema_version":"jjukkumi.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"run-1","resource_id":"vault-main","status":"completed","submitted_at":"2026-08-21T00:00:00Z","changes":[],"submittd_at":"typo"}`,
+		"doc case-variant key":    `{"schema_version":"jjukkumi.work-receipt/v1","Dispatch_ID":"` + dispatchID + `","run_id":"run-1","resource_id":"vault-main","status":"completed","submitted_at":"2026-08-21T00:00:00Z","changes":[]}`,
+		"trailing json value":     `{"schema_version":"jjukkumi.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"run-1","resource_id":"vault-main","status":"completed","submitted_at":"2026-08-21T00:00:00Z","changes":[]} {"extra":1}`,
+		"item case-variant key":   `[{"Path":"Inbox/new.md"}]`,
 	}
 	// A symlink inside the vault pointing outside exercises the SEC-002
 	// containment defense through the configured resource root.
@@ -288,6 +298,23 @@ func TestWorkCompleteDirtySchedulesOneFollowup(t *testing.T) {
 		t.Fatalf("dirty generation must collapse: %d %v", dirty, err)
 	}
 
+	// The follow-up decision records the real revisions and
+	// encoder-produced reason codes — no placeholder policy revision.
+	var policyRevision, routeRevision, reasonsJSON string
+	if err := store.QueryRow(`SELECT policy_revision, route_revision, reason_codes_json FROM policy_decisions WHERE decision_id = ?`, "dec-"+followup).Scan(&policyRevision, &routeRevision, &reasonsJSON); err != nil {
+		t.Fatalf("the follow-up decision must exist: %v", err)
+	}
+	if policyRevision != routeRevision || policyRevision == "" {
+		t.Fatalf("the follow-up decision must record the planned route revision, got policy %q route %q", policyRevision, routeRevision)
+	}
+	var reasonCodes []string
+	if err := json.Unmarshal([]byte(reasonsJSON), &reasonCodes); err != nil || len(reasonCodes) != 1 {
+		t.Fatalf("the follow-up reason codes must be encoder-produced JSON: %q %v", reasonsJSON, err)
+	}
+	if !strings.HasPrefix(reasonCodes[0], "followup:") {
+		t.Fatalf("the follow-up reason code must carry the followup prefix: %v", reasonCodes)
+	}
+
 	// A completion without a begin receipt is rejected (no completion-only
 	// mode in v0.1).
 	out.Reset()
@@ -382,6 +409,7 @@ func TestWorkCompleteFullDocumentReceipt(t *testing.T) {
 		"dispatch_id":     dispatchID,
 		"run_id":          "run-1",
 		"resource_id":     "vault-main",
+		"submitted_at":    "2026-08-21T00:05:00Z",
 		"status":          "completed",
 		"result_revision": "git:def456",
 		"changes":         []map[string]any{{"path": "Inbox/new.md", "after_digest": e5t1GoodDigest}},

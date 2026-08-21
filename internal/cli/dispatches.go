@@ -222,15 +222,13 @@ func runDispatchesReprocess(command string, args []string, stdout, stderr io.Wri
 	if err != nil {
 		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
 	}
-	route, ok := cfg.Routes[batch.RouteID]
-	if !ok {
+	if _, ok := cfg.Routes[batch.RouteID]; !ok {
 		return planErr(stderr, command, "config_route_not_found", "configuration", fmt.Sprintf("route %q is not defined", batch.RouteID), 3)
 	}
 	revision, ok := config.RouteRevision(cfg, batch.RouteID)
 	if !ok {
 		return planErr(stderr, command, "internal_unclassified", "internal", "route revision could not be computed", 40)
 	}
-	_ = route
 	disposition := "dispatch"
 	if len(batch.Changes) == 0 {
 		disposition = "drop"

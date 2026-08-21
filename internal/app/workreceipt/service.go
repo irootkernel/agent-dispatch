@@ -38,6 +38,18 @@ const (
 // failureCodes is the closed v0.1 failure-code set.
 var failureCodes = map[string]bool{"agent_error": true, "canceled": true, "timeout": true, "environment_error": true}
 
+// docKeys and changeKeys are the exact key spellings the published
+// schema admits (additionalProperties false at the document and change
+// levels both): Go's decoder matches struct tags case-insensitively, so
+// exact-key comparison is done here, never by the decoder alone.
+var docKeys = map[string]bool{
+	"schema_version": true, "dispatch_id": true, "external_task_id": true, "run_id": true,
+	"resource_id": true, "status": true, "base_revision": true, "result_revision": true,
+	"submitted_at": true, "changes": true, "failure_code": true,
+}
+
+var changeKeys = map[string]bool{"path": true, "before_digest": true, "after_digest": true}
+
 // receiptDoc is the full work-receipt document shape; decoding is strict
 // so a note body or any unknown field is rejected, never absorbed.
 type receiptDoc struct {
@@ -80,13 +92,6 @@ type Service struct {
 	// FailureBudget is the route's configured consecutive-failure budget.
 	FailureBudget int
 }
-
-// StoreError wraps one durable-store failure so the CLI boundary
-// classifies it as storage instead of relabeling service defects.
-type StoreError struct{ Err error }
-
-func (e *StoreError) Error() string { return "durable store: " + e.Err.Error() }
-func (e *StoreError) Unwrap() error { return e.Err }
 
 // InvalidError reports a receipt rejected by validation; Reasons are the
 // bounded audit reasons persisted with the rejected evidence.
@@ -145,8 +150,15 @@ type Result struct {
 
 // Begin validates and records one begun run (FBK-005).
 func (s *Service) Begin(ctx context.Context, in BeginInput) (Result, error) {
-	intent, snap, reasons := s.validateLineage(ctx, in.DispatchID, in.RunID, in.ExternalTaskID)
-	reasons = append(reasons, s.validateNewRun(ctx, in.DispatchID, in.RunID)...)
+	intent, snap, reasons, err := s.validateLineage(ctx, in.DispatchID, in.RunID, in.ExternalTaskID)
+	if err != nil {
+		return Result{}, err
+	}
+	replayReasons, err := s.validateNewRun(ctx, in.DispatchID, in.RunID)
+	if err != nil {
+		return Result{}, err
+	}
+	reasons = append(reasons, replayReasons...)
 	if len(reasons) > 0 {
 		s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: reasons})
 		return Result{}, &InvalidError{Reasons: reasons}
@@ -174,7 +186,10 @@ func (s *Service) Begin(ctx context.Context, in BeginInput) (Result, error) {
 // pending reconciliation remains, exactly one latest-state follow-up is
 // scheduled atomically with the receipt update (CON-003).
 func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error) {
-	intent, snap, reasons := s.validateLineage(ctx, in.DispatchID, in.RunID, "")
+	intent, snap, reasons, err := s.validateLineage(ctx, in.DispatchID, in.RunID, "")
+	if err != nil {
+		return Result{}, err
+	}
 	if len(reasons) > 0 {
 		s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: reasons})
 		return Result{}, &InvalidError{Reasons: reasons}
@@ -222,7 +237,6 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 		ResourceID: intent.ResourceID, BegunAt: begun.BegunAt, CompletedAt: w.SubmittedAt,
 		Changes: changes,
 	}, dirty)
-	_ = dirty // the matcher owns the vacuous-window refusal
 	var auditErr error
 	out, err := s.applyCompletion(ctx, intent, snap, w, ports.ActiveCompletion{
 		RouteID: intent.RouteID, DispatchID: in.DispatchID, Failed: false,
@@ -258,7 +272,10 @@ func (s *Service) Fail(ctx context.Context, in FailInput) (Result, error) {
 	if len(in.Detail) > MaxDetailBytes {
 		reasons = append(reasons, fmt.Sprintf("detail exceeds %d bytes", MaxDetailBytes))
 	}
-	intent, snap, lineageReasons := s.validateLineage(ctx, in.DispatchID, in.RunID, "")
+	intent, snap, lineageReasons, err := s.validateLineage(ctx, in.DispatchID, in.RunID, "")
+	if err != nil {
+		return Result{}, err
+	}
 	reasons = append(reasons, lineageReasons...)
 	if len(reasons) > 0 {
 		s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: reasons})
@@ -332,25 +349,27 @@ func (s *Service) buildFollowup(original ports.IntentSnapshot) (ports.IntentInpu
 
 // validateLineage checks the dispatch/resource/task/run lineage rules
 // (feedback-loop §4). It returns the intent and route snapshot when every
-// check passes, and the rejection reasons otherwise.
-func (s *Service) validateLineage(ctx context.Context, dispatchID, runID, externalTaskID string) (ports.IntentSnapshot, state.RouteSnapshot, []string) {
+// check passes, and the rejection reasons otherwise. A non-nil error is a
+// durable-store failure: it is never a rejection reason, because a
+// transient read failure is not evidence against the receipt.
+func (s *Service) validateLineage(ctx context.Context, dispatchID, runID, externalTaskID string) (ports.IntentSnapshot, state.RouteSnapshot, []string, error) {
 	var reasons []string
 	if len(dispatchID) == 0 || len(dispatchID) > MaxIDBytes {
-		return ports.IntentSnapshot{}, state.RouteSnapshot{}, []string{"dispatch_id is required and bounded"}
+		return ports.IntentSnapshot{}, state.RouteSnapshot{}, []string{"dispatch_id is required and bounded"}, nil
 	}
 	if len(runID) == 0 || len(runID) > MaxIDBytes {
-		return ports.IntentSnapshot{}, state.RouteSnapshot{}, []string{"run_id is required and bounded"}
+		return ports.IntentSnapshot{}, state.RouteSnapshot{}, []string{"run_id is required and bounded"}, nil
 	}
 	intent, err := s.Store.LoadIntent(ctx, dispatchID)
 	if err != nil {
 		if errors.Is(err, ports.ErrIntentNotFound) {
-			return ports.IntentSnapshot{}, state.RouteSnapshot{}, []string{fmt.Sprintf("dispatch %s does not exist", dispatchID)}
+			return ports.IntentSnapshot{}, state.RouteSnapshot{}, []string{fmt.Sprintf("dispatch %s does not exist", dispatchID)}, nil
 		}
-		return ports.IntentSnapshot{}, state.RouteSnapshot{}, []string{fmt.Sprintf("dispatch %s could not be read: %v", dispatchID, err)}
+		return ports.IntentSnapshot{}, state.RouteSnapshot{}, nil, ports.WrapStore(err)
 	}
 	snap, err := s.Store.LoadRouteState(ctx, intent.RouteID)
 	if err != nil {
-		return ports.IntentSnapshot{}, state.RouteSnapshot{}, []string{fmt.Sprintf("route %s state could not be read: %v", intent.RouteID, err)}
+		return ports.IntentSnapshot{}, state.RouteSnapshot{}, nil, ports.WrapStore(err)
 	}
 	if !snap.State.IsActive() || snap.ActiveDispatchID != dispatchID {
 		reasons = append(reasons, fmt.Sprintf("dispatch %s is not the active dispatch of route %s (state %s, active %q)", dispatchID, intent.RouteID, snap.State, snap.ActiveDispatchID))
@@ -362,21 +381,22 @@ func (s *Service) validateLineage(ctx context.Context, dispatchID, runID, extern
 		reasons = append(reasons, fmt.Sprintf("external task %q does not match the accepted task %q", externalTaskID, intent.ExternalRef))
 	}
 	if len(reasons) > 0 {
-		return ports.IntentSnapshot{}, state.RouteSnapshot{}, reasons
+		return ports.IntentSnapshot{}, state.RouteSnapshot{}, reasons, nil
 	}
-	return intent, snap, nil
+	return intent, snap, nil, nil
 }
 
 // validateNewRun additionally rejects a run identifier that already
 // recorded a receipt; it gates `work begin` (the terminal commands expect
-// the begun row and update it atomically).
-func (s *Service) validateNewRun(ctx context.Context, dispatchID, runID string) []string {
+// the begun row and update it atomically). A non-nil error is a
+// durable-store failure, never rejection evidence.
+func (s *Service) validateNewRun(ctx context.Context, dispatchID, runID string) ([]string, error) {
 	if _, err := s.Store.LoadWorkReceipt(ctx, dispatchID, runID); err == nil {
-		return []string{fmt.Sprintf("run %s is already recorded for dispatch %s", runID, dispatchID)}
+		return []string{fmt.Sprintf("run %s is already recorded for dispatch %s", runID, dispatchID)}, nil
 	} else if !errors.Is(err, ports.ErrWorkReceiptNotFound) {
-		return []string{fmt.Sprintf("run %s could not be checked: %v", runID, err)}
+		return nil, ports.WrapStore(err)
 	}
-	return nil
+	return nil, nil
 }
 
 // validateManifest validates the raw manifest document against the
@@ -388,24 +408,78 @@ func (s *Service) validateManifest(raw, dispatchID, runID, resourceID, externalR
 		return nil, "", []string{fmt.Sprintf("manifest exceeds %d bytes", MaxManifestBytes)}
 	}
 	trimmed := strings.TrimSpace(raw)
+	// Exactly one JSON value, with exact key spellings: the decoder
+	// stops at the first value and matches tags case-insensitively, so
+	// schema equivalence needs an explicit trailing check and exact-key
+	// comparison at both levels.
+	dec := json.NewDecoder(strings.NewReader(raw))
+	var top json.RawMessage
+	if err := dec.Decode(&top); err != nil {
+		return nil, "", []string{fmt.Sprintf("manifest is not one JSON value: %v", err)}
+	}
+	if dec.More() {
+		return nil, "", []string{"manifest must carry exactly one JSON value"}
+	}
 	var entries []changeEntry
 	var resultRevision string
 	var reasons []string
 	if strings.HasPrefix(trimmed, "[") {
-		dec := json.NewDecoder(strings.NewReader(raw))
-		dec.DisallowUnknownFields()
-		if err := dec.Decode(&entries); err != nil {
+		var rawItems []map[string]json.RawMessage
+		if err := json.Unmarshal(top, &rawItems); err != nil {
 			return nil, "", []string{fmt.Sprintf("manifest is not a change array: %v", err)}
 		}
+		for _, item := range rawItems {
+			for k := range item {
+				if !changeKeys[k] {
+					reasons = append(reasons, fmt.Sprintf("change key %q is not part of the schema", k))
+				}
+			}
+		}
+		if len(reasons) == 0 {
+			if err := json.Unmarshal(top, &entries); err != nil {
+				return nil, "", []string{fmt.Sprintf("manifest is not a change array: %v", err)}
+			}
+		}
 	} else {
+		var rawDoc map[string]json.RawMessage
+		if err := json.Unmarshal(top, &rawDoc); err != nil {
+			return nil, "", []string{fmt.Sprintf("manifest is not a work-receipt document: %v", err)}
+		}
+		for k := range rawDoc {
+			if !docKeys[k] {
+				reasons = append(reasons, fmt.Sprintf("document key %q is not part of the schema", k))
+			}
+		}
+		if len(reasons) > 0 {
+			return nil, "", reasons
+		}
 		var doc receiptDoc
-		dec := json.NewDecoder(strings.NewReader(raw))
-		dec.DisallowUnknownFields()
-		if err := dec.Decode(&doc); err != nil {
+		if err := json.Unmarshal(top, &doc); err != nil {
 			return nil, "", []string{fmt.Sprintf("manifest is not a work-receipt document: %v", err)}
 		}
 		if doc.SchemaVersion == nil || *doc.SchemaVersion != SchemaVersion {
 			reasons = append(reasons, "schema_version must be "+SchemaVersion)
+		}
+		// The document form is schema-equivalent (docs/schemas/
+		// work-receipt.schema.json): its required fields must be present,
+		// with the values cross-checked against the invoked lineage.
+		if doc.DispatchID == nil {
+			reasons = append(reasons, "dispatch_id is required in the document form")
+		}
+		if doc.RunID == nil {
+			reasons = append(reasons, "run_id is required in the document form")
+		}
+		if doc.ResourceID == nil {
+			reasons = append(reasons, "resource_id is required in the document form")
+		}
+		if doc.Status == nil {
+			reasons = append(reasons, "status is required in the document form")
+		}
+		if doc.SubmittedAt == nil {
+			reasons = append(reasons, "submitted_at is required in the document form")
+		}
+		if doc.Changes == nil {
+			reasons = append(reasons, "changes is required in the document form")
 		}
 		if doc.DispatchID != nil && *doc.DispatchID != dispatchID {
 			reasons = append(reasons, fmt.Sprintf("dispatch_id %q does not match the invoked dispatch %q", *doc.DispatchID, dispatchID))

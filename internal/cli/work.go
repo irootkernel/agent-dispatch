@@ -7,7 +7,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
 	"github.com/rootkernel/jjukkumi/internal/app/workreceipt"
 	"github.com/rootkernel/jjukkumi/internal/config"
 	"github.com/rootkernel/jjukkumi/internal/ports"
@@ -60,7 +59,7 @@ func workReceiptErr(stderr io.Writer, command string, err error) int {
 	case errors.Is(err, ports.ErrRunNotBegun), errors.Is(err, ports.ErrRunAlreadyRecorded):
 		writeError(stderr, command, "work_receipt_invalid", "input_rejected", err.Error())
 		return 4
-	case errors.Is(err, ports.ErrStateNotEligible), errors.Is(err, sqlite.ErrOptimisticConcurrency):
+	case errors.Is(err, ports.ErrStateNotEligible), errors.Is(err, ports.ErrGenerationConflict):
 		// The generation fence surfaces as a conflict: the receipt
 		// matched a different generation than the one completed.
 		writeError(stderr, command, "transition_invalid", "conflict", err.Error())

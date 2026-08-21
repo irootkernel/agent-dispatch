@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -111,11 +112,18 @@ func TestProtectedPathQuarantined(t *testing.T) {
 		t.Fatalf("release must mark the pending reconciliation generation: %d %v", pending, err)
 	}
 	// A second release of the resolved hold is a conflict, never a
-	// second decision.
+	// second decision, under its registered code.
 	out.Reset()
 	errb.Reset()
-	if code := Run([]string{"quarantine", "release", "--config", configPath, "--yes", "--reason", "again", quarantineID}, &out, &errb); code != 14 {
-		t.Fatalf("re-release must conflict, got %d", code)
+	if code := Run([]string{"quarantine", "release", "--config", configPath, "--yes", "--reason", "again", quarantineID}, &out, &errb); code != 14 || !strings.Contains(errb.String(), "quarantine_release_denied") {
+		t.Fatalf("re-release must report quarantine_release_denied exit 14, got %d: %s", code, errb.String())
+	}
+	// Discarding the resolved hold is the same conflict class under the
+	// transition code.
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"quarantine", "discard", "--config", configPath, "--yes", "--reason", "again", quarantineID}, &out, &errb); code != 14 || !strings.Contains(errb.String(), "transition_invalid") {
+		t.Fatalf("re-discard must report transition_invalid exit 14, got %d: %s", code, errb.String())
 	}
 }
 
@@ -629,4 +637,316 @@ func TestReconcileReasonCodesSorted(t *testing.T) {
 		}
 	}
 	_ = vault
+}
+
+// TestUncertainResolvedByReconcile proves the operator exit from
+// UNCERTAIN: full reconciliation resolves the uncertain route, collapses
+// the retained generation, schedules exactly one latest-state intent,
+// and the loop closes back to IDLE (feedback-loop §10, E5-T1's
+// operator-required UNCERTAIN resolution).
+func TestUncertainResolvedByReconcile(t *testing.T) {
+	configPath, vault := e5t1FixtureBudget(t, 1)
+	res, _ := e4t3Dispatch(t, configPath, vault)
+	dispatchID, _ := res["dispatch_id"].(string)
+
+	var out, errb bytes.Buffer
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1"}, &out, &errb); code != 0 {
+		t.Fatalf("begin: %s", errb.String())
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"work", "fail", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1", "--failure-code", "agent_error"}, &out, &errb); code != 0 {
+		t.Fatalf("first fail: %s", errb.String())
+	}
+	failed := decodeEnvelope(t, &out)
+	followup, _ := failed["followup_dispatch_id"].(string)
+	if followup == "" {
+		t.Fatalf("failure with budget must create one follow-up: %v", failed)
+	}
+	store := e5t1Store(t, configPath)
+	if err := store.ActivateFollowup(context.Background(), followup, "test", "2026-08-21T00:00:00Z"); err != nil {
+		t.Fatalf("activate follow-up: %v", err)
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", followup, "--run-id", "run-2"}, &out, &errb); code != 0 {
+		t.Fatalf("begin follow-up: %s", errb.String())
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"work", "fail", "--config", configPath, "--dispatch-id", followup, "--run-id", "run-2", "--failure-code", "timeout"}, &out, &errb); code != 0 {
+		t.Fatalf("second fail: %s", errb.String())
+	}
+	if exhausted := decodeEnvelope(t, &out); exhausted["route_state"] != "UNCERTAIN" {
+		t.Fatalf("budget exhaustion must reach UNCERTAIN: %v", exhausted)
+	}
+
+	// The operator resolution: one reconciliation resolves the uncertain
+	// route with due work (the stored snapshot is empty, so the whole
+	// scope is due) and schedules exactly one latest-state intent.
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "manual"}, &out, &errb); code != 0 {
+		t.Fatalf("reconcile the uncertain route: %s", errb.String())
+	}
+	resolvedRun := decodeEnvelope(t, &out)
+	resolvedDispatch, _ := resolvedRun["reconcile_dispatch_id"].(string)
+	if resolvedRun["pending_reconcile"] != true || resolvedDispatch == "" {
+		t.Fatalf("the uncertain resolution must schedule one intent: %v", resolvedRun)
+	}
+	var routeState, activeDispatch string
+	var dirty int
+	if err := store.QueryRow(`SELECT route_state, COALESCE(active_dispatch_id, ''), dirty_generation FROM route_runtime_state WHERE route_id = 'wiki'`).Scan(&routeState, &activeDispatch, &dirty); err != nil ||
+		routeState != "FOLLOWUP_READY" || activeDispatch != resolvedDispatch || dirty != 0 {
+		t.Fatalf("resolution must leave FOLLOWUP_READY with the reserved intent and no retained generation: %q %q %d %v", routeState, activeDispatch, dirty, err)
+	}
+	var resolved int
+	if err := store.QueryRow(`SELECT COUNT(*) FROM state_transitions WHERE entity_type = 'route' AND to_state = 'FOLLOWUP_READY' AND context_json LIKE '%reconciliation_resolved%'`).Scan(&resolved); err != nil || resolved != 1 {
+		t.Fatalf("the resolution must be audited: %d %v", resolved, err)
+	}
+
+	// The loop closes: the resolved dispatch completes (the pending
+	// generation forces its one follow-up), and that follow-up completes
+	// clean back to IDLE — the route never re-enters UNCERTAIN.
+	if err := store.ActivateFollowup(context.Background(), resolvedDispatch, "test", "2026-08-21T00:01:00Z"); err != nil {
+		t.Fatalf("activate resolved dispatch: %v", err)
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", resolvedDispatch, "--run-id", "run-r"}, &out, &errb); code != 0 {
+		t.Fatalf("begin resolved dispatch: %s", errb.String())
+	}
+	out.Reset()
+	errb.Reset()
+	withStdin(t, `[]`, func() {
+		Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", resolvedDispatch, "--run-id", "run-r", "--manifest", "-"}, &out, &errb)
+	})
+	if errb.Len() != 0 {
+		t.Fatalf("complete resolved dispatch: %s", errb.String())
+	}
+	resolvedDone := decodeEnvelope(t, &out)
+	secondFollowup, _ := resolvedDone["followup_dispatch_id"].(string)
+	if secondFollowup == "" {
+		t.Fatalf("the pending generation must force one follow-up: %v", resolvedDone)
+	}
+	if err := store.ActivateFollowup(context.Background(), secondFollowup, "test", "2026-08-21T00:02:00Z"); err != nil {
+		t.Fatalf("activate second follow-up: %v", err)
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", secondFollowup, "--run-id", "run-r2"}, &out, &errb); code != 0 {
+		t.Fatalf("begin second follow-up: %s", errb.String())
+	}
+	out.Reset()
+	errb.Reset()
+	withStdin(t, `[]`, func() {
+		Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", secondFollowup, "--run-id", "run-r2", "--manifest", "-"}, &out, &errb)
+	})
+	if errb.Len() != 0 {
+		t.Fatalf("complete second follow-up: %s", errb.String())
+	}
+	if err := store.QueryRow(`SELECT route_state FROM route_runtime_state WHERE route_id = 'wiki'`).Scan(&routeState); err != nil || routeState != "IDLE" {
+		t.Fatalf("the resolved loop must close back to IDLE: %q %v", routeState, err)
+	}
+}
+
+// TestReconcileUnreadableSubtreeKeepsStoredFacts is the round-20
+// regression: a path under an unreadable subtree keeps its stored path
+// fact — an access failure is never reported as a removal (which would
+// build a data-destroying reconcile intent).
+func TestReconcileUnreadableSubtreeKeepsStoredFacts(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission-based unreadability is not available on windows")
+	}
+	configPath, vault := e4t3Fixture(t)
+	e4t3RegisterRoute(t, configPath)
+	priv := filepath.Join(vault, "Priv")
+	if err := os.MkdirAll(priv, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(priv, "a.md"), []byte("private"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "initial"}, &out, &errb); code != 0 {
+		t.Fatalf("first reconcile: %s", errb.String())
+	}
+	first := decodeEnvelope(t, &out)
+	firstDispatch, _ := first["reconcile_dispatch_id"].(string)
+	if firstDispatch == "" {
+		t.Fatalf("the idle route with due work must schedule its intent: %v", first)
+	}
+	// The snapshot now covers the private subtree.
+	store := e5t1Store(t, configPath)
+	var facts int
+	if err := store.QueryRow(`SELECT COUNT(*) FROM path_facts WHERE path = 'Priv/a.md'`).Scan(&facts); err != nil || facts != 1 {
+		t.Fatalf("the private file must be snapshotted: %d %v", facts, err)
+	}
+	if err := os.Chmod(priv, 0o000); err != nil {
+		t.Skipf("cannot make the subtree unreadable: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(priv, 0o755) })
+	// Prove the subtree is genuinely unreadable for this process.
+	if _, err := os.ReadDir(priv); err == nil {
+		t.Skip("the subtree stayed readable; permission semantics unavailable")
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "manual"}, &out, &errb); code != 0 {
+		t.Fatalf("reconcile over the unreadable subtree: %s", errb.String())
+	}
+	third := decodeEnvelope(t, &out)
+	if removed, _ := third["removed"].([]any); len(removed) != 0 {
+		t.Fatalf("an unreadable subtree must never surface as removals: %v", third["removed"])
+	}
+	if changed, _ := third["changed"].([]any); len(changed) != 0 {
+		t.Fatalf("an unreadable subtree must never surface as changes: %v", third["changed"])
+	}
+	// The stored fact stands so a later readable reconciliation compares
+	// against the truth.
+	if err := store.QueryRow(`SELECT COUNT(*) FROM path_facts WHERE path = 'Priv/a.md'`).Scan(&facts); err != nil || facts != 1 {
+		t.Fatalf("the stored fact must stand: %d %v", facts, err)
+	}
+
+	// Bring the route back to IDLE (complete the first intent's bounded
+	// chain), add one readable change, and reconcile again: the scheduled
+	// intent must carry the verified change and must not assert deletes
+	// under the unreadable subtree (an access failure is not a removal an
+	// intent may claim either).
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", firstDispatch, "--run-id", "run-1"}, &out, &errb); code != 0 {
+		t.Fatalf("begin first intent: %s", errb.String())
+	}
+	out.Reset()
+	errb.Reset()
+	withStdin(t, `[]`, func() {
+		Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", firstDispatch, "--run-id", "run-1", "--manifest", "-"}, &out, &errb)
+	})
+	if errb.Len() != 0 {
+		t.Fatalf("complete first intent: %s", errb.String())
+	}
+	secondDispatch, _ := decodeEnvelope(t, &out)["followup_dispatch_id"].(string)
+	if secondDispatch == "" {
+		t.Fatal("the pending generation must force one follow-up")
+	}
+	if err := store.ActivateFollowup(context.Background(), secondDispatch, "test", "2026-08-21T00:01:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", secondDispatch, "--run-id", "run-2"}, &out, &errb); code != 0 {
+		t.Fatalf("begin follow-up: %s", errb.String())
+	}
+	out.Reset()
+	errb.Reset()
+	withStdin(t, `[]`, func() {
+		Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", secondDispatch, "--run-id", "run-2", "--manifest", "-"}, &out, &errb)
+	})
+	if errb.Len() != 0 {
+		t.Fatalf("complete follow-up: %s", errb.String())
+	}
+	if err := os.WriteFile(filepath.Join(vault, "Inbox", "added.md"), []byte("added"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "manual"}, &out, &errb); code != 0 {
+		t.Fatalf("reconcile with due work: %s", errb.String())
+	}
+	fourth := decodeEnvelope(t, &out)
+	newDispatch, _ := fourth["reconcile_dispatch_id"].(string)
+	if newDispatch == "" {
+		t.Fatalf("the idle route with due work must schedule an intent: %v", fourth)
+	}
+	var requestJSON string
+	if err := store.QueryRow(`SELECT request_json FROM dispatch_intents WHERE dispatch_id = ?`, newDispatch).Scan(&requestJSON); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(requestJSON, "Inbox/added.md") {
+		t.Fatalf("the verified change must be the intent's evidence: %s", requestJSON)
+	}
+	if strings.Contains(requestJSON, "Priv/a.md") {
+		t.Fatalf("an unverifiable path under an unreadable subtree must never enter an intent manifest: %s", requestJSON)
+	}
+	if removed, _ := fourth["removed"].([]any); len(removed) != 0 {
+		t.Fatalf("the unreadable subtree still must not surface as removals: %v", fourth["removed"])
+	}
+}
+
+// TestUncertainNoWorkResolutionLandsIdle proves the no-work arm of the
+// operator exit: an uncertain route whose full reconciliation proves no
+// remaining work lands IDLE with the pending generation cleared and
+// nothing scheduled (the store-level nil-intent edge driven through the
+// real CLI surface and Run's flag logic).
+func TestUncertainNoWorkResolutionLandsIdle(t *testing.T) {
+	configPath, _ := e5t1FixtureBudget(t, 1)
+	e4t3RegisterRoute(t, configPath)
+
+	var out, errb bytes.Buffer
+	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "initial"}, &out, &errb); code != 0 {
+		t.Fatalf("first reconcile: %s", errb.String())
+	}
+	first := decodeEnvelope(t, &out)
+	d1, _ := first["reconcile_dispatch_id"].(string)
+	if d1 == "" {
+		t.Fatalf("the idle route with due work must schedule its intent: %v", first)
+	}
+	store := e5t1Store(t, configPath)
+
+	// Two consecutive failures (budget 1) exhaust the route into
+	// UNCERTAIN without touching the vault: the stored snapshot still
+	// matches the scope.
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", d1, "--run-id", "run-1"}, &out, &errb); code != 0 {
+		t.Fatalf("begin: %s", errb.String())
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"work", "fail", "--config", configPath, "--dispatch-id", d1, "--run-id", "run-1", "--failure-code", "agent_error"}, &out, &errb); code != 0 {
+		t.Fatalf("first fail: %s", errb.String())
+	}
+	failed := decodeEnvelope(t, &out)
+	d2, _ := failed["followup_dispatch_id"].(string)
+	if d2 == "" {
+		t.Fatalf("the budgeted failure must schedule its follow-up: %v", failed)
+	}
+	if err := store.ActivateFollowup(context.Background(), d2, "test", "2026-08-21T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", d2, "--run-id", "run-2"}, &out, &errb); code != 0 {
+		t.Fatalf("begin follow-up: %s", errb.String())
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"work", "fail", "--config", configPath, "--dispatch-id", d2, "--run-id", "run-2", "--failure-code", "timeout"}, &out, &errb); code != 0 {
+		t.Fatalf("second fail: %s", errb.String())
+	}
+	if exhausted := decodeEnvelope(t, &out); exhausted["route_state"] != "UNCERTAIN" {
+		t.Fatalf("budget exhaustion must reach UNCERTAIN: %v", exhausted)
+	}
+
+	// No vault change since the stored snapshot: the resolution lands
+	// IDLE with the pending generation cleared and nothing scheduled.
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "manual"}, &out, &errb); code != 0 {
+		t.Fatalf("no-work resolution: %s", errb.String())
+	}
+	resolved := decodeEnvelope(t, &out)
+	if resolved["pending_reconcile"] != false {
+		t.Fatalf("a no-work resolution must clear the pending generation: %v", resolved)
+	}
+	if dispatch, _ := resolved["reconcile_dispatch_id"].(string); dispatch != "" {
+		t.Fatalf("no due work must schedule nothing: %v", resolved)
+	}
+	var routeState string
+	var dirty, pending int
+	if err := store.QueryRow(`SELECT route_state, dirty_generation, pending_reconcile FROM route_runtime_state WHERE route_id = 'wiki'`).Scan(&routeState, &dirty, &pending); err != nil ||
+		routeState != "IDLE" || dirty != 0 || pending != 0 {
+		t.Fatalf("the uncertain route must land idle and clean: %q %d %d %v", routeState, dirty, pending, err)
+	}
 }

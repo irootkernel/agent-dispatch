@@ -67,6 +67,8 @@ else:
     retain change as unresolved
 ```
 
+A receipt path with no corresponding observed change is recorded as unresolved `receipt_extra_path`: claimed provenance without a durable observation is not an exact match and blocks full suppression. The remaining unresolved outcomes are `receipt_missing_path` (an observed path the receipt does not cover), `digest_mismatch`, `digest_unverified` (either side lacks a known digest), and `observed_before_run` (a temporal-window demotion: an observation before the run began cannot be the run's output). Multiple observations of one path collapse to the latest before matching.
+
 A batch is fully suppressible only when every meaningful change is verified self-generated and there is no pending reconciliation flag.
 
 If even one path is unresolved, route remains dirty. The follow-up task may include only unresolved evidence or may request a full latest-state check, depending on policy. The default is a full latest-state check with a bounded manifest of unresolved paths.
@@ -128,7 +130,7 @@ The `reconcile --reason` CLI values map to these types: `initial`, `scheduled`, 
 - `retry <dispatch-id>`: same request and idempotency key.
 - `reprocess <batch-id>`: new decision under current policy.
 - `rerun <dispatch-id>`: new intentional work request and key.
-- `reconcile --route <id>`: new current-state assessment.
+- `reconcile --route <id>`: new current-state assessment. This is also the operator exit from UNCERTAIN: a reconciliation of an uncertain route applies the `UNCERTAIN -> FOLLOWUP_READY` transition under `reconciliation_resolved` (or lands IDLE through the follow-up-dropped edge when no work is due), releasing the stale dispatch's slot and collapsing its retained generation (persistence §6).
 - `quarantine release <id>`: explicit operator decision creating new lineage.
 
 No generic `replay` command exists.

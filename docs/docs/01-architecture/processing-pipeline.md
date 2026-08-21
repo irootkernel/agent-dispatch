@@ -96,7 +96,7 @@ Do not claim rename correctness. A delete and create may be included together an
 
 Evaluate in this precedence order:
 
-1. **Malformed or unsafe path:** `quarantine` (durable hold; exit class 5, e.g. `unsafe_path_quarantined`) or reject the invocation before observation commit if no safe evidence can be stored (`source_malformed_json` or `source_unsafe_path`).
+1. **Malformed or unsafe path:** `quarantine` (durable hold) or reject the invocation before observation commit if no safe evidence can be stored (`source_malformed_json` exit 4, `source_unsafe_path` exit 30). A delivered durable hold is a successful trigger outcome — exit 0 with an explicit `disposition: quarantine` envelope; the reserved class-5 code `unsafe_path_quarantined` belongs to a future policy (error-model §4 boundary notes).
 2. **Overflow, fresh instance, lost position:** `reconcile`.
 3. **No meaningful changes:** `drop`.
 4. **Protected or immutable path:** `quarantine`.

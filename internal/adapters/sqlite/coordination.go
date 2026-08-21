@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -150,6 +151,14 @@ func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.Acti
 		return out, fmt.Errorf("%w: dirty generation moved to %d while the receipt was being evaluated (expected %d)", ErrOptimisticConcurrency, snap.DirtyGeneration, req.ExpectedDirtyGeneration)
 	}
 	needsFollowup := (snap.DirtyGeneration > 0 && !req.DirtySuppressed) || snap.PendingReconcile
+	// The caller built the follow-up from an earlier read. If the
+	// transaction now sees work the caller did not (a reconciliation
+	// arrival or release flipped pending_reconcile without moving the
+	// fenced dirty generation), refusing beats silently dropping the
+	// signal into a follow-up-less FOLLOWUP_READY.
+	if needsFollowup && req.FollowupRequest == nil {
+		return out, fmt.Errorf("%w: route %s needs a follow-up (dirty %d, pending reconciliation %v) but none was prepared", ErrOptimisticConcurrency, req.RouteID, snap.DirtyGeneration, snap.PendingReconcile)
+	}
 	var to state.RouteState
 	var reason state.RouteReason
 	if needsFollowup {
@@ -199,11 +208,16 @@ func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.Acti
 		}
 		if req.FollowupRequest != nil {
 			decisionID := "dec-" + req.FollowupRequest.DispatchID
+			// The follow-up inherits the revisions the completed dispatch
+			// was planned under; the policy derives from route
+			// configuration, so its revision is the route revision (the
+			// same convention plan, reprocess, and reconcile record).
+			reasonCodes, _ := json.Marshal([]string{fmt.Sprintf("followup:%s", reason)})
 			if err := s.SaveDecision(tx, DecisionRecord{
 				DecisionID: decisionID, RouteID: req.RouteID, RouteRevision: req.FollowupRequest.RouteRevision,
-				PolicyRevision: "current", GenerationLineageJSON: lineageOr(req.DirtyLineageJSON),
+				PolicyRevision: req.FollowupRequest.RouteRevision, GenerationLineageJSON: lineageOr(req.DirtyLineageJSON),
 				Disposition: "dispatch", Classification: "normal",
-				ReasonCodesJSON: fmt.Sprintf(`["followup:%s"]`, reason), CreatedAt: now, Actor: req.Actor,
+				ReasonCodesJSON: string(reasonCodes), CreatedAt: now, Actor: req.Actor,
 			}); err != nil {
 				return out, err
 			}

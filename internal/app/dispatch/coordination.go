@@ -74,10 +74,11 @@ func (c *Coordinator) Completion(ctx context.Context, req ports.ActiveCompletion
 	if req.FollowupRequest == nil {
 		snap, err := c.Store.LoadRouteState(ctx, req.RouteID)
 		if err != nil {
-			return ports.FollowupCreated{}, err
+			return ports.FollowupCreated{}, ports.WrapStore(err)
 		}
 		if snap.DirtyGeneration > 0 || snap.PendingReconcile {
-			return ports.FollowupCreated{}, fmt.Errorf("completion of %s needs a follow-up request: dirty generation %d, pending reconcile %v", req.RouteID, snap.DirtyGeneration, snap.PendingReconcile)
+			return ports.FollowupCreated{}, fmt.Errorf("%w: completion of %s needs a follow-up request: dirty generation %d, pending reconcile %v",
+				ports.ErrStateNotEligible, req.RouteID, snap.DirtyGeneration, snap.PendingReconcile)
 		}
 	}
 	req.Actor = c.Actor

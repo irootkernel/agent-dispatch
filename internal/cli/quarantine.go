@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/rootkernel/jjukkumi/internal/app/dispatch"
@@ -84,7 +83,7 @@ func runQuarantineShow(command string, args []string, stdout, stderr io.Writer) 
 	defer closer.Close()
 	rec, err := store.LoadQuarantine(requestCtx(), flags.positional)
 	if err != nil {
-		return quarantineErr(stderr, command, err)
+		return quarantineErr(stderr, command, "show", wrapQuarantineReadError(err))
 	}
 	return writeEnvelope(stdout, command, rec)
 }
@@ -123,18 +122,18 @@ func runQuarantineResolve(command, sub string, args []string, stdout, stderr io.
 		rec, err = service.Discard(requestCtx(), flags.positional, "operator", reason)
 	}
 	if err != nil {
-		return quarantineErr(stderr, command, err)
+		return quarantineErr(stderr, command, sub, err)
 	}
 	return writeEnvelope(stdout, command, rec)
 }
 
-func quarantineErr(stderr io.Writer, command string, err error) int {
+func quarantineErr(stderr io.Writer, command, sub string, err error) int {
 	switch {
 	case errors.Is(err, ports.ErrQuarantineNotFound):
 		writeError(stderr, command, "quarantine_not_found", "usage", err.Error())
 		return 4
 	case errors.Is(err, ports.ErrQuarantineNotHeld):
-		if strings.HasSuffix(command, "release") {
+		if sub == "release" {
 			writeError(stderr, command, "quarantine_release_denied", "conflict", err.Error())
 			return 14
 		}
@@ -144,8 +143,16 @@ func quarantineErr(stderr io.Writer, command string, err error) int {
 		writeError(stderr, command, "flag_invalid", "usage", err.Error())
 		return 2
 	default:
-		writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
-		return 20
+		// Typed classification: store surfaces are storage; anything
+		// else is an internal-class defect, never a storage relabel
+		// (E5 audit).
+		var storeErr *ports.StoreError
+		if errors.As(err, &storeErr) {
+			writeError(stderr, command, "sqlite_query_failed", "storage", storeErr.Err.Error())
+			return 20
+		}
+		writeError(stderr, command, "internal_unclassified", "internal", err.Error())
+		return 40
 	}
 }
 
@@ -188,7 +195,7 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 	}
 	defer closer.Close()
 	service := &reconcile.FullService{
-		Store: store, Resolver: artifacts.resolver, Engine: artifacts.engine,
+		Store: closer, Resolver: artifacts.resolver, Engine: artifacts.engine,
 		ResourceID: artifacts.resourceID, FileScope: artifacts.fileScope,
 		RouteRevision: artifacts.revision, PolicyRevision: artifacts.revision,
 		MaxHash: artifacts.maxHash, Now: time.Now,
@@ -196,17 +203,7 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 	}
 	result, err := service.Run(requestCtx(), routeID, reason)
 	if err != nil {
-		// Typed classification: store-surface failures are storage;
-		// anything else from the service (enumeration, bugs) is an
-		// internal-class defect, never a silent storage relabel (E5
-		// audit).
-		var storeErr *ports.StoreError
-		if errors.As(err, &storeErr) {
-			writeError(stderr, command, "sqlite_query_failed", "storage", storeErr.Err.Error())
-			return 20
-		}
-		writeError(stderr, command, "internal_unclassified", "internal", err.Error())
-		return 40
+		return reconcileErr(stderr, command, err)
 	}
 	if submit && result.ReconcileDispatch == "" {
 		warnings := []string{"--submit skipped: no eligible reconciliation intent (the route was not idle or no work was due); the pending generation is recorded"}
@@ -227,4 +224,39 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 		})
 	}
 	return writeEnvelope(stdout, command, result)
+}
+
+// reconcileErr maps one full-reconciliation failure onto the stable exit
+// codes (error-model): every lost-race arm — the eligibility refusal, a
+// generation/pending fence conflict, or a slot held by the resolution's
+// own reservation — is a state conflict (14); typed store failures are
+// storage (20); anything else from the service (enumeration, bugs) is
+// an internal-class defect, never a silent storage relabel.
+func reconcileErr(stderr io.Writer, command string, err error) int {
+	switch {
+	case errors.Is(err, ports.ErrStateNotEligible),
+		errors.Is(err, ports.ErrGenerationConflict),
+		errors.Is(err, ports.ErrRouteSlotHeld),
+		errors.Is(err, ports.ErrIdempotencyConflict):
+		writeError(stderr, command, "transition_invalid", "conflict", err.Error())
+		return 14
+	default:
+		var storeErr *ports.StoreError
+		if errors.As(err, &storeErr) {
+			writeError(stderr, command, "sqlite_query_failed", "storage", storeErr.Err.Error())
+			return 20
+		}
+		writeError(stderr, command, "internal_unclassified", "internal", err.Error())
+		return 40
+	}
+}
+
+// wrapQuarantineReadError applies the typed wrap for the read path: the
+// shared domain-outcome classification passes through, everything else
+// is a durable-store failure, never an internal defect.
+func wrapQuarantineReadError(err error) error {
+	if ports.IsQuarantineDomainOutcome(err) {
+		return err
+	}
+	return ports.WrapStore(err)
 }

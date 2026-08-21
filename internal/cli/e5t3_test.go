@@ -150,6 +150,49 @@ func TestMismatchStaysDirty(t *testing.T) {
 	}
 }
 
+// TestExtraReceiptPathStaysDirty proves a receipt claiming a path the
+// dirty generation never observed never fully suppresses (AC-404): the
+// extra provenance is recorded unresolved and the completion schedules
+// exactly one follow-up.
+func TestExtraReceiptPathStaysDirty(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	res, _ := e4t3Dispatch(t, configPath, vault)
+	dispatchID, _ := res["dispatch_id"].(string)
+
+	var out, errb bytes.Buffer
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1", "--external-task-id", "t_00000001"}, &out, &errb); code != 0 {
+		t.Fatalf("begin: %s", errb.String())
+	}
+	e5t3Merge(t, configPath, vault, "Indexes/inbox-index.md", "index update v2")
+	// The manifest verifies the observed path but also claims an edit no
+	// observation backs: exact matching fails on the extra path.
+	manifest := `[{"path":"Indexes/inbox-index.md","after_digest":"` + e5t3Digest("index update v2") + `"},` +
+		`{"path":"Notes/never-observed.md","after_digest":"` + e5t3Digest("phantom edit") + `"}]`
+	out.Reset()
+	errb.Reset()
+	withStdin(t, manifest, func() {
+		Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1", "--manifest", "-"}, &out, &errb)
+	})
+	if errb.Len() != 0 {
+		t.Fatalf("complete: %s", errb.String())
+	}
+	completed := decodeEnvelope(t, &out)
+	if completed["self_change_suppressed"] == true || completed["route_state"] != "FOLLOWUP_READY" {
+		t.Fatalf("an extra receipt path must stay dirty: %v", completed)
+	}
+	if followup, _ := completed["followup_dispatch_id"].(string); followup == "" {
+		t.Fatal("one follow-up must be scheduled for the unproven batch")
+	}
+	if audit := e5t3Attribution(t, configPath, dispatchID); !strings.Contains(audit, "receipt_extra_path") {
+		t.Fatalf("the extra path must be audited unresolved: %s", audit)
+	}
+	store := e5t1Store(t, configPath)
+	var ready int
+	if err := store.QueryRow(`SELECT COUNT(*) FROM dispatch_intents WHERE state = 'ready'`).Scan(&ready); err != nil || ready != 1 {
+		t.Fatalf("exactly one follow-up: %d %v", ready, err)
+	}
+}
+
 // TestMixedBatchNotFullySuppressed proves a mixed human/agent batch never
 // fully suppresses (FBK-004, AC-405): one verified path plus one unknown
 // path keeps the route dirty with one bounded follow-up.

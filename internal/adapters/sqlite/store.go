@@ -14,7 +14,9 @@ import (
 
 // ErrOptimisticConcurrency is returned when a conditional update matched
 // no row (stale version or expired conditions).
-var ErrOptimisticConcurrency = errors.New("conditional update matched no row")
+// ErrOptimisticConcurrency is the adapter's alias of the shared
+// ports-level generation-conflict sentinel.
+var ErrOptimisticConcurrency = ports.ErrGenerationConflict
 
 // ErrConflict is returned when a unique constraint rejects a duplicate.
 var ErrConflict = errors.New("uniqueness conflict")

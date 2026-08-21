@@ -3,11 +3,13 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 
@@ -945,5 +947,242 @@ func TestConcurrentQuarantineResolutionSingleWinner(t *testing.T) {
 	}
 	if _, err := s.DiscardQuarantine(context.Background(), "q-1", "operator", "reviewed", now()); err == nil {
 		t.Fatal("a second resolution must fail against the resolved hold")
+	}
+}
+
+func TestCompleteActiveRefusesUnpreparedFollowup(t *testing.T) {
+	s := openTestStore(t)
+	seedIntentChain(t, s, "dispatch-1")
+	rec0, err := s.LoadRouteRuntimeState("wiki-maintenance")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpdateRouteRuntimeState(nil, "wiki-maintenance", rec0.Version, func(r *RouteRuntimeStateRecord) {
+		r.ActivationState = "enabled"
+		r.RouteState = "ACTIVE_CLEAN"
+		r.ActiveDispatchID = "dispatch-1"
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// A reconciliation arrival or quarantine release flips pending_reconcile
+	// without moving the fenced dirty generation: the caller that read the
+	// earlier snapshot decided no follow-up was needed. The completion must
+	// refuse rather than drop the pending signal into a follow-up-less
+	// FOLLOWUP_READY.
+	if err := s.MarkPendingReconcile(context.Background(), "wiki-maintenance", "", now()); err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.CompleteActive(context.Background(), ports.ActiveCompletion{
+		RouteID: "wiki-maintenance", DispatchID: "dispatch-1",
+		ReceiptRef: "rcpt-work-1", Actor: "hermes-task", Now: now(),
+	})
+	if !errors.Is(err, ErrOptimisticConcurrency) {
+		t.Fatalf("completion without the follow-up the route now needs must conflict, got %v", err)
+	}
+	rec, loadErr := s.LoadRouteRuntimeState("wiki-maintenance")
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	if rec.RouteState != "ACTIVE_CLEAN" || !rec.PendingReconcile || rec.ActiveDispatchID != "dispatch-1" {
+		t.Fatalf("the refusal must leave the route and its pending signal intact: %+v", rec)
+	}
+}
+
+func TestResolveUncertainReconciliation(t *testing.T) {
+	s := openTestStore(t)
+	seedIntentChain(t, s, "dispatch-u")
+	forceRoute := func(t *testing.T, routeState, active string) {
+		rec, err := s.LoadRouteRuntimeState("wiki-maintenance")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.UpdateRouteRuntimeState(nil, "wiki-maintenance", rec.Version, func(r *RouteRuntimeStateRecord) {
+			r.ActivationState = "enabled"
+			r.RouteState = routeState
+			r.ActiveDispatchID = active
+			r.DirtyGeneration = 2
+			r.DirtySince = now()
+			r.PendingReconcile = true
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	intent := &ports.IntentInput{
+		DispatchID: "disp-u-resolved", DecisionID: "decision-r", RouteID: "wiki-maintenance",
+		RouteRevision: "route-rev-1", TargetID: "hermes-kanban-main", TargetType: "hermes-kanban",
+		ResourceID: "vault-main", Generation: 3,
+		IdempotencyKey:     "jjukkumi:v1:sha256:" + strings.Repeat("9", 64),
+		ContentFingerprint: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		ManifestDigest:     "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		RequestVersion:     "jjukkumi.dispatch-intent/v1", RequestJSON: "{}",
+	}
+
+	// With due work: the resolution releases the stale slot, collapses the
+	// retained generation, and leaves exactly one ready intent behind a
+	// FOLLOWUP_READY route with its pending generation marked atomically.
+	if err := s.SaveDecision(nil, DecisionRecord{DecisionID: "decision-r", RouteID: "wiki-maintenance",
+		RouteRevision: "route-rev-1", PolicyRevision: "route-rev-1", Disposition: "reconcile", Classification: "normal",
+		GenerationLineageJSON: `{"route_id":"wiki-maintenance"}`, CreatedAt: now(), Actor: "reconcile"}); err != nil {
+		t.Fatal(err)
+	}
+	forceRoute(t, "UNCERTAIN", "dispatch-u")
+	if err := s.ResolveUncertainReconciliation(context.Background(), "wiki-maintenance", intent, 2, true, "reconcile", now()); err != nil {
+		t.Fatalf("resolve with work: %v", err)
+	}
+	rec, err := s.LoadRouteRuntimeState("wiki-maintenance")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The resolved intent holds the slot as its creation reservation, the
+	// same shape a completion's follow-up leaves behind, and keeps its
+	// pending generation for the documented completion follow-up.
+	if rec.RouteState != "FOLLOWUP_READY" || rec.ActiveDispatchID != "disp-u-resolved" || rec.DirtyGeneration != 0 || !rec.PendingReconcile {
+		t.Fatalf("resolution must collapse the generation behind the reserved intent with its pending flag: %+v", rec)
+	}
+	var ready int
+	if err := s.QueryRow(`SELECT COUNT(*) FROM dispatch_intents WHERE dispatch_id = 'disp-u-resolved' AND state = 'ready'`).Scan(&ready); err != nil || ready != 1 {
+		t.Fatalf("exactly one resolved intent: %d %v", ready, err)
+	}
+
+	// Without due work: the route lands IDLE through the declared
+	// follow-up-dropped edge.
+	forceRoute(t, "UNCERTAIN", "dispatch-u")
+	if err := s.ResolveUncertainReconciliation(context.Background(), "wiki-maintenance", nil, 2, true, "reconcile", now()); err != nil {
+		t.Fatalf("resolve without work: %v", err)
+	}
+	rec, err = s.LoadRouteRuntimeState("wiki-maintenance")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.RouteState != "IDLE" || rec.ActiveDispatchID != "" || rec.DirtyGeneration != 0 || rec.PendingReconcile {
+		t.Fatalf("a no-work resolution must land idle: %+v", rec)
+	}
+
+	// The reconciliation's own read is fenced: a merge or release that
+	// landed inside the enumeration window refuses instead of being
+	// silently absorbed by the resolution.
+	forceRoute(t, "UNCERTAIN", "dispatch-u")
+	if err := s.ResolveUncertainReconciliation(context.Background(), "wiki-maintenance", nil, 0, false, "reconcile", now()); !errors.Is(err, ErrOptimisticConcurrency) {
+		t.Fatalf("a moved generation must fence the resolution, got %v", err)
+	}
+	after, err := s.LoadRouteRuntimeState("wiki-maintenance")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.RouteState != "UNCERTAIN" || after.DirtyGeneration != 2 || !after.PendingReconcile {
+		t.Fatalf("the fenced refusal must leave the uncertain route intact: %+v", after)
+	}
+
+	// The pending-only fence arm: a release that marked the pending
+	// generation inside the window refuses exactly like a moved dirty
+	// count.
+	forceRoute(t, "UNCERTAIN", "dispatch-u")
+	if err := s.ResolveUncertainReconciliation(context.Background(), "wiki-maintenance", nil, 2, false, "reconcile", now()); !errors.Is(err, ErrOptimisticConcurrency) {
+		t.Fatalf("a moved pending flag must fence the resolution, got %v", err)
+	}
+
+	// Any other state refuses: the resolution is the uncertain route's
+	// operator exit, not a general transition.
+	forceRoute(t, "ACTIVE_CLEAN", "dispatch-u")
+	if err := s.ResolveUncertainReconciliation(context.Background(), "wiki-maintenance", nil, 2, true, "reconcile", now()); !errors.Is(err, ports.ErrStateNotEligible) {
+		t.Fatalf("non-uncertain resolution must refuse, got %v", err)
+	}
+}
+
+func TestConcurrentUncertainResolutionSingleWinner(t *testing.T) {
+	s := openTestStore(t)
+	seedIntentChain(t, s, "dispatch-u2")
+	rec, err := s.LoadRouteRuntimeState("wiki-maintenance")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpdateRouteRuntimeState(nil, "wiki-maintenance", rec.Version, func(r *RouteRuntimeStateRecord) {
+		r.ActivationState = "enabled"
+		r.RouteState = "UNCERTAIN"
+		r.ActiveDispatchID = "dispatch-u2"
+		r.DirtyGeneration = 1
+		r.PendingReconcile = true
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveDecision(nil, DecisionRecord{DecisionID: "decision-rr", RouteID: "wiki-maintenance",
+		RouteRevision: "route-rev-1", PolicyRevision: "route-rev-1", Disposition: "reconcile", Classification: "normal",
+		GenerationLineageJSON: `{"route_id":"wiki-maintenance"}`, CreatedAt: now(), Actor: "reconcile"}); err != nil {
+		t.Fatal(err)
+	}
+	intent := &ports.IntentInput{
+		DispatchID: "disp-u2-resolved", DecisionID: "decision-rr", RouteID: "wiki-maintenance",
+		RouteRevision: "route-rev-1", TargetID: "hermes-kanban-main", TargetType: "hermes-kanban",
+		ResourceID: "vault-main", Generation: 2,
+		IdempotencyKey:     "jjukkumi:v1:sha256:" + strings.Repeat("7", 64),
+		ContentFingerprint: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		ManifestDigest:     "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		RequestVersion:     "jjukkumi.dispatch-intent/v1", RequestJSON: "{}",
+	}
+	var wg sync.WaitGroup
+	results := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results <- s.ResolveUncertainReconciliation(context.Background(), "wiki-maintenance", intent, 1, true, "reconcile", now())
+		}()
+	}
+	wg.Wait()
+	close(results)
+	successes, refusals := 0, 0
+	for err := range results {
+		switch {
+		case err == nil:
+			successes++
+		case errors.Is(err, ports.ErrStateNotEligible), errors.Is(err, ErrOptimisticConcurrency), errors.Is(err, ports.ErrRouteSlotHeld):
+			// Every lost-race arm is a typed conflict.
+			refusals++
+		default:
+			t.Fatalf("concurrent resolution must succeed or refuse on a typed conflict, got %v", err)
+		}
+	}
+	if successes != 1 || refusals != 1 {
+		t.Fatalf("exactly one resolution may win, got %d successes and %d refusals", successes, refusals)
+	}
+	var intents int
+	if err := s.QueryRow(`SELECT COUNT(*) FROM dispatch_intents WHERE dispatch_id = 'disp-u2-resolved'`).Scan(&intents); err != nil || intents != 1 {
+		t.Fatalf("the winner creates exactly one intent: %d %v", intents, err)
+	}
+}
+
+func TestClearPendingReconcileConditional(t *testing.T) {
+	s := openTestStore(t)
+	setPending := func(pending bool) {
+		rec, err := s.LoadRouteRuntimeState("wiki-maintenance")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.UpdateRouteRuntimeState(nil, "wiki-maintenance", rec.Version, func(r *RouteRuntimeStateRecord) {
+			r.PendingReconcile = pending
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The observed flag clears.
+	setPending(true)
+	cleared, err := s.ClearPendingReconcile(context.Background(), "wiki-maintenance", true, now())
+	if err != nil || !cleared {
+		t.Fatalf("the observed pending flag must clear: %v %v", cleared, err)
+	}
+	// A fresh mark by another actor inside the window survives.
+	setPending(true)
+	cleared, err = s.ClearPendingReconcile(context.Background(), "wiki-maintenance", false, now())
+	if err != nil || cleared {
+		t.Fatalf("an unobserved fresh mark must survive, got cleared=%v err=%v", cleared, err)
+	}
+	if rec, _ := s.LoadRouteRuntimeState("wiki-maintenance"); !rec.PendingReconcile {
+		t.Fatal("the fresh pending signal must stand")
+	}
+	// A flag another actor already cleared is an idempotent miss.
+	setPending(false)
+	cleared, err = s.ClearPendingReconcile(context.Background(), "wiki-maintenance", true, now())
+	if err != nil || cleared {
+		t.Fatalf("an already-cleared flag is a miss, got cleared=%v err=%v", cleared, err)
 	}
 }

@@ -88,6 +88,34 @@ func TestMatchOutcomes(t *testing.T) {
 	if d := Match(only, []ports.DirtyChange{dirty("match.md", digestA, "2026-08-21T01:30:00Z")}); !d.FullySuppressed {
 		t.Fatalf("the exact single match must fully suppress: %+v", d)
 	}
+
+	// A receipt claiming a path the generation never observed is extra
+	// provenance: it blocks full suppression even when every observed
+	// path verifies (AC-404).
+	extra := ReceiptEvidence{
+		ReceiptID: "r4", DispatchID: "d1", RunID: "run4",
+		BegunAt: "2026-08-21T01:00:00Z", CompletedAt: "2026-08-21T02:00:00Z",
+		Changes: []changeEntry{
+			{Path: "match.md", AfterDigest: ptr(digestA)},
+			{Path: "claimed-but-unobserved.md", AfterDigest: ptr(digestB)},
+		},
+	}
+	d := Match(extra, []ports.DirtyChange{dirty("match.md", digestA, "2026-08-21T01:30:00Z")})
+	if d.FullySuppressed {
+		t.Fatal("an extra receipt path must block full suppression")
+	}
+	extraOutcome := ""
+	for _, u := range d.Unresolved {
+		if u.Path == "claimed-but-unobserved.md" {
+			extraOutcome = u.Outcome
+		}
+	}
+	if extraOutcome != OutcomeExtra {
+		t.Fatalf("the extra receipt path must be recorded as %q, got %q (unresolved %+v)", OutcomeExtra, extraOutcome, d.Unresolved)
+	}
+	if len(d.SuppressedPaths) != 1 {
+		t.Fatalf("the verified observed path still suppresses individually: %+v", d)
+	}
 }
 
 func repeatHex(seed byte) string {
@@ -96,4 +124,40 @@ func repeatHex(seed byte) string {
 		buf[i] = "0123456789abcdef"[(int(seed)+i)%16]
 	}
 	return string(buf)
+}
+
+// TestMatchDecisionDocumentDeterministic proves the audited decision
+// document is identical for permuted input orders: map iteration must
+// never leak into the evidence (repeated matches produce identical
+// attribution audits).
+func TestMatchDecisionDocumentDeterministic(t *testing.T) {
+	digestA := "sha256:" + repeatHex(1)
+	digestB := "sha256:" + repeatHex(2)
+	build := func(order int) (ReceiptEvidence, []ports.DirtyChange) {
+		changes := []changeEntry{
+			{Path: "match.md", AfterDigest: ptr(digestA)},
+			{Path: "extra.md", AfterDigest: ptr(digestB)},
+		}
+		observed := []ports.DirtyChange{
+			dirty("match.md", digestA, "2026-08-21T01:30:00Z"),
+			dirty("other.md", digestA, "2026-08-21T01:40:00Z"),
+		}
+		if order == 1 {
+			changes = []changeEntry{{Path: "extra.md", AfterDigest: ptr(digestB)}, {Path: "match.md", AfterDigest: ptr(digestA)}}
+			observed = []ports.DirtyChange{
+				dirty("other.md", digestA, "2026-08-21T01:40:00Z"),
+				dirty("match.md", digestA, "2026-08-21T01:30:00Z"),
+			}
+		}
+		return ReceiptEvidence{
+			ReceiptID: "r1", DispatchID: "d1", RunID: "run1",
+			BegunAt: "2026-08-21T01:00:00Z", CompletedAt: "2026-08-21T02:00:00Z",
+			Changes: changes,
+		}, observed
+	}
+	firstReceipt, firstObserved := build(0)
+	secondReceipt, secondObserved := build(1)
+	if a, b := Match(firstReceipt, firstObserved).ContextJSON(), Match(secondReceipt, secondObserved).ContextJSON(); a != b {
+		t.Fatalf("permuted inputs must produce identical decision documents:\n%s\n%s", a, b)
+	}
 }

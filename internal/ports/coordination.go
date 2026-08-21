@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 
 	"github.com/rootkernel/jjukkumi/internal/domain/state"
 )
@@ -85,6 +86,12 @@ type StoreError struct{ Err error }
 
 func (e *StoreError) Error() string { return "durable store: " + e.Err.Error() }
 func (e *StoreError) Unwrap() error { return e.Err }
+
+// ErrGenerationConflict reports a conditional durable update that no
+// longer matched the state it was prepared against (the shared
+// optimistic-concurrency sentinel; the sqlite adapter's
+// ErrOptimisticConcurrency aliases it).
+var ErrGenerationConflict = errors.New("conditional update matched no row")
 
 // WrapStore wraps one store failure (nil passes through).
 func WrapStore(err error) error {

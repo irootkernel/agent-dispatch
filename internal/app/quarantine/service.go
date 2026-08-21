@@ -27,11 +27,17 @@ type Service struct {
 
 // Release resolves one held item into a replacement reconciliation
 // decision; the route's pending reconciliation generation absorbs it.
+// Typed domain outcomes pass through; durable-store failures surface as
+// the typed store error so the CLI boundary never relabels them.
 func (s *Service) Release(ctx context.Context, quarantineID, actor, reason string) (ports.QuarantineRecord, error) {
 	if strings.TrimSpace(reason) == "" {
 		return ports.QuarantineRecord{}, ports.ErrReasonRequired
 	}
-	return s.Store.ReleaseQuarantine(ctx, quarantineID, actor, reason, s.Now())
+	rec, err := s.Store.ReleaseQuarantine(ctx, quarantineID, actor, reason, s.Now())
+	if ports.IsQuarantineDomainOutcome(err) {
+		return rec, err
+	}
+	return rec, ports.WrapStore(err)
 }
 
 // Discard resolves one held item without task creation.
@@ -39,5 +45,9 @@ func (s *Service) Discard(ctx context.Context, quarantineID, actor, reason strin
 	if strings.TrimSpace(reason) == "" {
 		return ports.QuarantineRecord{}, ports.ErrReasonRequired
 	}
-	return s.Store.DiscardQuarantine(ctx, quarantineID, actor, reason, s.Now())
+	rec, err := s.Store.DiscardQuarantine(ctx, quarantineID, actor, reason, s.Now())
+	if ports.IsQuarantineDomainOutcome(err) {
+		return rec, err
+	}
+	return rec, ports.WrapStore(err)
 }

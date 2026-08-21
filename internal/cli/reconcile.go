@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"time"
@@ -11,6 +9,7 @@ import (
 	"github.com/rootkernel/jjukkumi/internal/app/dispatch"
 	"github.com/rootkernel/jjukkumi/internal/config"
 	"github.com/rootkernel/jjukkumi/internal/domain/fingerprint"
+	"github.com/rootkernel/jjukkumi/internal/domain/ids"
 	"github.com/rootkernel/jjukkumi/internal/domain/policy"
 	"github.com/rootkernel/jjukkumi/internal/domain/records"
 	"github.com/rootkernel/jjukkumi/internal/ports"
@@ -65,27 +64,10 @@ func planConfigOnly(command, configPath, routeID string, stderr io.Writer) (*rec
 		writeError(stderr, command, "internal_unclassified", "internal", "route revision could not be computed")
 		return nil, 40
 	}
-	engine, err := newPatternEngine(route)
+	runtime, err := newRouteRuntime(cfg, route, resource)
 	if err != nil {
 		writeError(stderr, command, "config_invalid", "configuration", err.Error())
 		return nil, 3
-	}
-	resolver, err := localfs.NewResolver(resource.Root)
-	if err != nil {
-		writeError(stderr, command, "config_invalid", "configuration", err.Error())
-		return nil, 3
-	}
-	if cfg.Limits.MaxPathBytes != nil {
-		engine.SetMaxPathBytes(int(*cfg.Limits.MaxPathBytes))
-		resolver.SetLimits(*cfg.Limits.MaxPathBytes)
-	}
-	maxHash := DefaultMaxHashFileBytes
-	if cfg.Limits.MaxHashFileBytes != nil {
-		if *cfg.Limits.MaxHashFileBytes <= 0 {
-			writeError(stderr, command, "config_invalid", "configuration", "limits.max_hash_file_bytes must be positive when set")
-			return nil, 3
-		}
-		maxHash = *cfg.Limits.MaxHashFileBytes
 	}
 	hints, err := hintsOf(route)
 	if err != nil {
@@ -95,10 +77,43 @@ func planConfigOnly(command, configPath, routeID string, stderr io.Writer) (*rec
 	return &reconcileArtifacts{
 		cfg: cfg, route: route, resource: resource, target: target,
 		targetID: route.Dispatch.Target, revision: revision,
-		resolver: resolver, engine: engine,
+		resolver: runtime.resolver, engine: runtime.engine,
 		resourceID: route.Source.Resource, fileScope: resource.FileScope,
-		maxHash: maxHash, hints: hints,
+		maxHash: runtime.maxHash, hints: hints,
 	}, 0
+}
+
+// routeRuntime is the shared resolver, pattern-engine, and hash bound
+// every CLI entry path derives from one route configuration.
+type routeRuntime struct {
+	resolver *localfs.Resolver
+	engine   *policy.Engine
+	maxHash  int64
+}
+
+// newRouteRuntime builds the runtime surface identically for the plan,
+// reconcile, and work paths (E5 audit: one wiring, not three).
+func newRouteRuntime(cfg *config.Config, route config.Route, resource config.Resource) (*routeRuntime, error) {
+	engine, err := newPatternEngine(route)
+	if err != nil {
+		return nil, err
+	}
+	resolver, err := localfs.NewResolver(resource.Root)
+	if err != nil {
+		return nil, err
+	}
+	maxHash := DefaultMaxHashFileBytes
+	if cfg.Limits.MaxPathBytes != nil {
+		engine.SetMaxPathBytes(int(*cfg.Limits.MaxPathBytes))
+		resolver.SetLimits(*cfg.Limits.MaxPathBytes)
+	}
+	if cfg.Limits.MaxHashFileBytes != nil {
+		if *cfg.Limits.MaxHashFileBytes <= 0 {
+			return nil, fmt.Errorf("limits.max_hash_file_bytes must be positive when set")
+		}
+		maxHash = *cfg.Limits.MaxHashFileBytes
+	}
+	return &routeRuntime{resolver: resolver, engine: engine, maxHash: maxHash}, nil
 }
 
 // reconcileIntentBuilder builds the one latest-state reconciliation
@@ -107,7 +122,7 @@ func planConfigOnly(command, configPath, routeID string, stderr io.Writer) (*rec
 func (a *reconcileArtifacts) reconcileIntentBuilder() func(routeID, reason, decisionID string, changes []records.ChangeItem) (ports.IntentInput, error) {
 	return func(routeID, reason, decisionID string, changes []records.ChangeItem) (ports.IntentInput, error) {
 		now := dispatch.Timestamp(time.Now())
-		dispatchID := fmt.Sprintf("disp-reconcile-%s-%s", routeID, reason) + "-" + replaceAllClock(now) + "-" + randomSuffixHex()
+		dispatchID := fmt.Sprintf("disp-reconcile-%s-%s", routeID, reason) + "-" + ids.CompactTimestamp(now) + "-" + ids.RandomSuffix()
 		// The fingerprint derives from the reconciliation diff, so
 		// distinct generations produce distinct idempotency keys (a
 		// constant fingerprint would collide on the target's dedup).
@@ -169,23 +184,4 @@ func (a *reconcileArtifacts) submitRuntime(store storeOp) (*dispatch.Runtime, er
 		Store: store, Sink: sink, Now: time.Now,
 		LeaseTTL: time.Minute, Backoff: backoff, JitterUnit: jitterUnit, Actor: "reconcile",
 	}, nil
-}
-
-// randomSuffixHex keeps same-second reconciliation intents distinct.
-func randomSuffixHex() string {
-	var b [4]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "00000000"
-	}
-	return hex.EncodeToString(b[:])
-}
-
-func replaceAllClock(now string) string {
-	out := make([]byte, 0, len(now))
-	for _, c := range now {
-		if c != ':' && c != '-' && c != 'T' && c != 'Z' && c != '.' {
-			out = append(out, byte(c))
-		}
-	}
-	return string(out)
 }

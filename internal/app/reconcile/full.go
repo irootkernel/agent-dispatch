@@ -7,7 +7,6 @@ package reconcile
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -19,6 +18,7 @@ import (
 	"time"
 
 	"github.com/rootkernel/jjukkumi/internal/adapters/localfs"
+	"github.com/rootkernel/jjukkumi/internal/domain/ids"
 	"github.com/rootkernel/jjukkumi/internal/domain/policy"
 	"github.com/rootkernel/jjukkumi/internal/domain/records"
 	"github.com/rootkernel/jjukkumi/internal/domain/state"
@@ -142,7 +142,7 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 	// The decision is batch-less: its lineage is the generation it
 	// reconciles (POL-006 disposition "reconcile", machine reasons). A
 	// random suffix keeps repeated same-second reconciliations distinct.
-	out.DecisionID = "dec-reconcile-" + routeID + "-" + compactTimestamp(now) + "-" + randomSuffix()
+	out.DecisionID = "dec-reconcile-" + routeID + "-" + ids.CompactTimestamp(now) + "-" + ids.RandomSuffix()
 	if err := s.Store.CommitReconcileDecision(ctx, ports.DecisionInput{
 		DecisionID: out.DecisionID, RouteID: routeID, RouteRevision: s.routeRevision(),
 		PolicyRevision: s.policyRevision(),
@@ -324,18 +324,6 @@ func (s *FullService) hash(rel string) (string, bool) {
 // lexicographically.
 func timestamp(t time.Time) string {
 	return t.UTC().Truncate(time.Second).Format(time.RFC3339)
-}
-
-func compactTimestamp(now string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(now, ":", ""), "-", "")
-}
-
-func randomSuffix() string {
-	var b [4]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "00000000"
-	}
-	return hex.EncodeToString(b[:])
 }
 
 func (s *FullService) routeRevision() string {

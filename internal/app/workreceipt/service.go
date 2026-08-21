@@ -7,8 +7,6 @@ package workreceipt
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +15,7 @@ import (
 
 	"github.com/rootkernel/jjukkumi/internal/adapters/localfs"
 	"github.com/rootkernel/jjukkumi/internal/app/dispatch"
+	"github.com/rootkernel/jjukkumi/internal/domain/ids"
 	"github.com/rootkernel/jjukkumi/internal/domain/records"
 	"github.com/rootkernel/jjukkumi/internal/domain/state"
 	"github.com/rootkernel/jjukkumi/internal/ports"
@@ -173,7 +172,7 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 		s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: reasons})
 		return Result{}, &InvalidError{Reasons: reasons}
 	}
-	changes, resultRevision, manifestReasons := s.validateManifest(in.ManifestJSON, in.DispatchID, in.RunID, intent.ResourceID)
+	changes, resultRevision, manifestReasons := s.validateManifest(in.ManifestJSON, in.DispatchID, in.RunID, intent.ResourceID, intent.ExternalRef)
 	if len(manifestReasons) > 0 {
 		s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: manifestReasons})
 		return Result{}, &InvalidError{Reasons: manifestReasons}
@@ -376,7 +375,7 @@ func (s *Service) validateNewRun(ctx context.Context, dispatchID, runID string) 
 // work-receipt rules: full-document receipts re-verify their identity
 // fields, and every change entry carries a normalized contained relative
 // path and well-formed digests (SEC-002, SEC-009).
-func (s *Service) validateManifest(raw, dispatchID, runID, resourceID string) ([]changeEntry, string, []string) {
+func (s *Service) validateManifest(raw, dispatchID, runID, resourceID, externalRef string) ([]changeEntry, string, []string) {
 	if len(raw) > MaxManifestBytes {
 		return nil, "", []string{fmt.Sprintf("manifest exceeds %d bytes", MaxManifestBytes)}
 	}
@@ -408,6 +407,9 @@ func (s *Service) validateManifest(raw, dispatchID, runID, resourceID string) ([
 		}
 		if doc.ResourceID != nil && resourceID != "" && *doc.ResourceID != resourceID {
 			reasons = append(reasons, fmt.Sprintf("resource_id %q does not match the dispatch resource %q", *doc.ResourceID, resourceID))
+		}
+		if doc.ExternalTaskID != nil && *doc.ExternalTaskID != "" && externalRef != "" && *doc.ExternalTaskID != externalRef {
+			reasons = append(reasons, fmt.Sprintf("external task %q does not match the accepted task %q", *doc.ExternalTaskID, externalRef))
 		}
 		if doc.Status != nil && *doc.Status != "completed" {
 			reasons = append(reasons, fmt.Sprintf("a completion manifest must carry status completed, got %q", *doc.Status))
@@ -474,22 +476,14 @@ func (s *Service) auditInvalid(ctx context.Context, dispatchID, runID string, in
 	reasons, _ := json.Marshal(invalid.Reasons)
 	now := s.timestamp()
 	auditDoc, _ := json.Marshal(map[string]any{"run_id": runID, "reasons": json.RawMessage(string(reasons))})
-	_ = s.Store.AuditWorkReceipt(ctx, "wr-"+dispatchID+"-"+runID+"-invalid-"+now+"-"+randomSuffix(),
+	_ = s.Store.AuditWorkReceipt(ctx, "wr-"+dispatchID+"-"+runID+"-invalid-"+now+"-"+ids.RandomSuffix(),
 		dispatchID, "", "invalid", now, string(auditDoc))
 }
 
 func (s *Service) receiptID(dispatchID string) string {
-	return "rcpt-work-" + dispatchID + "-" + s.Now().UTC().Format("20060102T150405.000000000") + "-" + randomSuffix()
+	return "rcpt-work-" + dispatchID + "-" + s.Now().UTC().Format("20060102T150405.000000000") + "-" + ids.RandomSuffix()
 }
 
 func (s *Service) timestamp() string {
 	return s.Now().UTC().Truncate(time.Second).Format(time.RFC3339)
-}
-
-func randomSuffix() string {
-	var b [4]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "00000000"
-	}
-	return hex.EncodeToString(b[:])
 }

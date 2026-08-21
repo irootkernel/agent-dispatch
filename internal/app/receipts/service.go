@@ -7,12 +7,11 @@ package receipts
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
 
+	"github.com/rootkernel/jjukkumi/internal/domain/ids"
 	"github.com/rootkernel/jjukkumi/internal/domain/records"
 	"github.com/rootkernel/jjukkumi/internal/ports"
 )
@@ -83,7 +82,7 @@ func (s *Service) Refresh(ctx context.Context, dispatchID string) (RefreshResult
 	// carries the nanosecond clock plus a random suffix so refreshes
 	// stay unique even across a backward clock step; the stored
 	// received_at keeps the canonical second precision.
-	out.ReceiptID = "rcpt-exec-" + dispatchID + "-" + receivedAt.UTC().Format("20060102T150405.000000000") + "-" + randomSuffix()
+	out.ReceiptID = "rcpt-exec-" + dispatchID + "-" + receivedAt.UTC().Format("20060102T150405.000000000") + "-" + ids.RandomSuffix()
 	payload, _ := json.Marshal(map[string]string{
 		"external_ref": projection.ExternalRef,
 		"projection":   string(projection.State),
@@ -144,14 +143,6 @@ func StaleActive(activeSince, now string, staleAfter time.Duration) bool {
 
 // randomSuffix renders four random bytes as hex, making receipt ids
 // unique by construction rather than by wall-clock trust.
-func randomSuffix() string {
-	var b [4]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "00000000"
-	}
-	return hex.EncodeToString(b[:])
-}
-
 // Timestamp renders the canonical UTC RFC 3339 second-precision form.
 func Timestamp(t time.Time) string {
 	return t.UTC().Truncate(time.Second).Format(time.RFC3339)

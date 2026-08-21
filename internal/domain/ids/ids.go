@@ -117,3 +117,29 @@ func (s *Sequential) NewID() (ID, error) {
 	s.next++
 	return ID(fmt.Sprintf("id-%08d", s.next)), nil
 }
+
+// RandomSuffix renders four random bytes as eight hex characters,
+// making same-second identifiers distinct by construction. A
+// randomness failure degrades to a fixed suffix rather than an error:
+// callers treat it as uniqueness best-effort, never as proof.
+func RandomSuffix() string {
+	var b [4]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "00000000"
+	}
+	return hex.EncodeToString(b[:])
+}
+
+// CompactTimestamp strips the separators from a canonical RFC 3339
+// timestamp for use inside identifiers.
+func CompactTimestamp(now string) string {
+	out := make([]byte, 0, len(now))
+	for i := 0; i < len(now); i++ {
+		switch c := now[i]; c {
+		case ':', '-', 'T', 'Z', '.':
+		default:
+			out = append(out, c)
+		}
+	}
+	return string(out)
+}

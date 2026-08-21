@@ -7,7 +7,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/localfs"
 	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
 	"github.com/rootkernel/jjukkumi/internal/app/workreceipt"
 	"github.com/rootkernel/jjukkumi/internal/config"
@@ -208,18 +207,15 @@ func workService(command, configPath string, store storeOp, routeID string, stde
 		writeError(stderr, command, "config_invalid", "configuration", fmt.Sprintf("resource %q is not defined", route.Source.Resource))
 		return nil, 3
 	}
-	resolver, err := localfs.NewResolver(resource.Root)
+	runtime, err := newRouteRuntime(cfg, route, resource)
 	if err != nil {
 		writeError(stderr, command, "config_invalid", "configuration", err.Error())
 		return nil, 3
 	}
-	if cfg.Limits.MaxPathBytes != nil {
-		resolver.SetLimits(*cfg.Limits.MaxPathBytes)
-	}
 	return &workreceipt.Service{
 		Store:         store,
 		Now:           time.Now,
-		Resolver:      resolver,
+		Resolver:      runtime.resolver,
 		FailureBudget: route.Dispatch.FailureBudget,
 	}, 0
 }

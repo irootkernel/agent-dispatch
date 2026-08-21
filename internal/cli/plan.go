@@ -8,7 +8,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/localfs"
 	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
 	"github.com/rootkernel/jjukkumi/internal/adapters/watchman"
 	"github.com/rootkernel/jjukkumi/internal/app/dispatch"
@@ -159,25 +158,11 @@ func planPipeline(command string, args []string, stderr io.Writer) (*planArtifac
 		return nil, planErr(stderr, command, "source_malformed_json", "input_rejected", err.Error(), 4)
 	}
 
-	engine, err := newPatternEngine(route)
+	runtime, err := newRouteRuntime(cfg, route, resource)
 	if err != nil {
 		return nil, planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
 	}
-	resolver, err := localfs.NewResolver(resource.Root)
-	if err != nil {
-		return nil, planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
-	}
-	if cfg.Limits.MaxPathBytes != nil {
-		engine.SetMaxPathBytes(int(*cfg.Limits.MaxPathBytes))
-		resolver.SetLimits(*cfg.Limits.MaxPathBytes)
-	}
-	maxHash := DefaultMaxHashFileBytes
-	if cfg.Limits.MaxHashFileBytes != nil {
-		if *cfg.Limits.MaxHashFileBytes <= 0 {
-			return nil, planErr(stderr, command, "config_invalid", "configuration", "limits.max_hash_file_bytes must be positive when set", 3)
-		}
-		maxHash = *cfg.Limits.MaxHashFileBytes
-	}
+	engine, resolver, maxHash := runtime.engine, runtime.resolver, runtime.maxHash
 
 	batch, err := ingest.BuildBatch(input.Entries, engine, resolver, ingest.NoFacts{}, env.Flags(), route.Source.Resource, ingest.Options{MaxHashBytes: maxHash})
 	if err != nil {

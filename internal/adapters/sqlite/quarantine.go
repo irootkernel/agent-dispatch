@@ -217,7 +217,7 @@ func (s *Store) resolveQuarantine(ctx context.Context, quarantineID, action, act
 			SELECT ?, route_id, route_revision, policy_revision, ?, 'reconcile', 'normal', ?, ?, ?, decision_id
 			FROM policy_decisions WHERE decision_id = ?`,
 			replacementID,
-			fmt.Sprintf(`{"route_id":%q,"origin":"quarantine_release","quarantine_id":%q}`, routeID, quarantineID),
+			auditJSON("route_id", routeID, "origin", "quarantine_release", "quarantine_id", quarantineID),
 			fmt.Sprintf(`["operator_release","quarantine:%s"]`, quarantineID),
 			now, actor, rec.DecisionID); err != nil {
 			return ports.QuarantineRecord{}, err

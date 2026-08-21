@@ -916,3 +916,34 @@ func TestMigrationV4BackfillsBegunAt(t *testing.T) {
 		t.Fatalf("v4 backfill must preserve the begin timestamp, got %q", view.BegunAt)
 	}
 }
+
+// TestConcurrentQuarantineResolutionSingleWinner proves the held-row
+// conditional update: a second resolution of the same hold fails (E5
+// audit round 11, F007).
+func TestConcurrentQuarantineResolutionSingleWinner(t *testing.T) {
+	s := openTestStore(t)
+	seedIntentChain(t, s, "dispatch-q")
+	lin := ports.Lineage{
+		Observation: ports.ObservationInput{ObservationID: "obs-q", SchemaVersion: "jjukkumi.source-observation/v1",
+			SourceType: "watchman", SourceID: "src", ResourceID: "vault-main", ObservedAt: now(), ReceivedAt: now(),
+			IngestStatus: "accepted"},
+		Batch: ports.BatchInput{BatchID: "batch-q", RouteID: "wiki-maintenance", RouteRevision: "route-rev-1",
+			ResourceID: "vault-main", CreatedAt: now(),
+			ContentFingerprint: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+		Decision: ports.DecisionInput{DecisionID: "decision-q", BatchID: "batch-q", RouteID: "wiki-maintenance",
+			RouteRevision: "route-rev-1", PolicyRevision: "policy-rev-1", Disposition: "quarantine",
+			Classification: "protected", CreatedAt: now(), Actor: "planner"},
+	}
+	if err := s.CommitQuarantineLineage(context.Background(), lin, ports.QuarantineInput{
+		QuarantineID: "q-1", BatchID: "batch-q", DecisionID: "decision-q",
+		ReasonCodes: []string{"protected_path_present"}, CreatedAt: now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ReleaseQuarantine(context.Background(), "q-1", "operator", "reviewed", now()); err != nil {
+		t.Fatalf("first release: %v", err)
+	}
+	if _, err := s.DiscardQuarantine(context.Background(), "q-1", "operator", "reviewed", now()); err == nil {
+		t.Fatal("a second resolution must fail against the resolved hold")
+	}
+}

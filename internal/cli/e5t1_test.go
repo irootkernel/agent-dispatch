@@ -418,3 +418,28 @@ func e5t1FixtureBudget(t *testing.T, budget int) (string, string) {
 	}
 	return configPath, vault
 }
+
+// TestWorkFailDetailBound proves the --detail byte bound (E5 audit
+// round 11, F008).
+func TestWorkFailDetailBound(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	res, _ := e4t3Dispatch(t, configPath, vault)
+	dispatchID, _ := res["dispatch_id"].(string)
+	var out, errb bytes.Buffer
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1"}, &out, &errb); code != 0 {
+		t.Fatalf("begin: %s", errb.String())
+	}
+	long := strings.Repeat("x", 300)
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"work", "fail", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1", "--failure-code", "agent_error", "--detail", long}, &out, &errb); code != 4 || !strings.Contains(errb.String(), "work_receipt_invalid") {
+		t.Fatalf("an over-bound detail must be rejected exit 4, got %d: %s", code, errb.String())
+	}
+	// A bounded detail is accepted.
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"work", "fail", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1", "--failure-code", "agent_error", "--detail", "bounded"}, &out, &errb); code != 0 {
+		t.Fatalf("a bounded detail must pass: %s", errb.String())
+	}
+	_ = vault
+}

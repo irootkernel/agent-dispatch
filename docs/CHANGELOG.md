@@ -1,5 +1,15 @@
 # SOT Changelog
 
+## 1.0.6 - 2026-08-21
+
+E5 contract changes:
+
+- route state machine: the new edges `ACTIVE_DIRTY -> IDLE` (exact suppression, receipt-evidence guarded) and `ACTIVE_CLEAN -> FOLLOWUP_READY` (completion with a pending reconciliation generation) with their documented reasons (`persistence-and-state-machines.md` §6);
+- canonical records: the quarantine record, batch record, decision record, and full-reconciliation result JSON shapes are defined (`canonical-record-contracts.md` §7);
+- error registry: `work_receipt_invalid` is emitted by the receipt CLI, `quarantine_not_found` joins the usage class (exit 4), and `quarantine_release_denied` documents the denied re-release; the structural holds are successful trigger outcomes (exit 0 with an explicit disposition envelope) and `unsafe_path_quarantined` (class 5) is reserved for a future durable-evidence policy;
+- cli-spec: `route enable` requires the computed route revision acknowledgement value; the quarantine command surface (state filter, non-interactive requirements, release semantics) and the reconcile command match the shipped behavior;
+- work-receipt schema: the persisted run keeps its begin timestamp (migration v4) so attribution windows survive terminal updates.
+
 ## 1.0.5 - 2026-08-20
 
 E2 errata:

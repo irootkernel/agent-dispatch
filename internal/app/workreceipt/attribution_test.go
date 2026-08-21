@@ -61,6 +61,24 @@ func TestMatchOutcomes(t *testing.T) {
 		t.Fatal("an empty observed window must refuse suppression")
 	}
 
+	// An unverified observed digest (unknown status or absent) never
+	// suppresses even with a matching receipt value.
+	unverified := ReceiptEvidence{
+		ReceiptID: "r3", DispatchID: "d1", RunID: "run3",
+		BegunAt: "2026-08-21T01:00:00Z", CompletedAt: "2026-08-21T02:00:00Z",
+		Changes: []changeEntry{{Path: "u.md", AfterDigest: ptr(digestA)}},
+	}
+	unknownStatus := dirty("u.md", digestA, "2026-08-21T01:30:00Z")
+	unknownStatus.DigestStatus = "unavailable"
+	for _, obs := range [][]ports.DirtyChange{
+		{unknownStatus},
+		{{Path: "u.md", DigestStatus: "known", ObservedAt: "2026-08-21T01:30:00Z"}},
+	} {
+		if d := Match(unverified, obs, "now"); d.FullySuppressed {
+			t.Fatalf("an unverified observed digest must never suppress: %+v", d.Unresolved)
+		}
+	}
+
 	// A single exact match with nothing unresolved fully suppresses.
 	only := ReceiptEvidence{
 		ReceiptID: "r2", DispatchID: "d1", RunID: "run2",

@@ -516,3 +516,20 @@ func TestQuarantineListFiltersAndBounds(t *testing.T) {
 		t.Fatalf("limit 0 must be a usage error, got %d", code)
 	}
 }
+
+// TestReconcileSubmitReachesAccepted proves the --submit success path
+// against the gated stub target: the reconciliation intent is submitted
+// and reaches acceptance (E5 audit round 11, F002).
+func TestReconcileSubmitReachesAccepted(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	e4t3RegisterRoute(t, configPath)
+	os.WriteFile(filepath.Join(vault, "Inbox", "extra.md"), []byte("extra"), 0o644)
+	var out, errb bytes.Buffer
+	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "initial", "--submit"}, &out, &errb); code != 0 {
+		t.Fatalf("reconcile --submit: %s", errb.String())
+	}
+	submitted := decodeEnvelope(t, &out)
+	if submitted["submitted"] != true || submitted["submitted_state"] != "accepted" {
+		t.Fatalf("the reconciliation intent must reach acceptance: %v", submitted)
+	}
+}

@@ -13,7 +13,6 @@
 | Current epic | E5, Feedback Loop, Quarantine, and Reconciliation |
 | Current active task | None |
 | Next task | **E6-T1, Explicit Hermes Webhook Adapter** |
-| Current active task | None |
 | Completed tasks | 29 / 33 |
 | Planned tasks | 4 / 33 |
 | Blocked tasks | 0 |
@@ -30,7 +29,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | E2 | Watchman Deterministic Dry-Run Pipeline | **Completed** | 5 | G1 |
 | E3 | Durable Dispatch and Route Coordination Core | **Completed** | 5 | G2 |
 | E4 | Hermes Kanban Durable Integration | **Completed** | 5 | G3 |
-| E5 | Feedback Loop, Quarantine, and Reconciliation | **Planned** | 5 | G4 |
+| E5 | Feedback Loop, Quarantine, and Reconciliation | **Completed** | 5 | G4 |
 | E6 | Hermes Webhook, Operations, Packaging, and v0.1 Release | **Planned** | 4 | G5 |
 
 ## 3. Task Status Index
@@ -1213,6 +1212,7 @@ E5-T2 Completed.
 - `internal/domain/state`: the route state machine gains the ACTIVE_DIRTY to IDLE edge for exact suppression, guarded by the completion-receipt evidence and the pending-reconciliation refusal, with the SOT diagram (`persistence-and-state-machines.md` §6), the documented-edge table, and the dirty-never-erased guard test updated together — plain dirty completion still routes to FOLLOWUP_READY and an evidence-less suppression claim is rejected.
 - CLI (`work complete`): the result reports `self_change_suppressed` and the suppressed paths; a fully suppressed generation clears the route with no follow-up while any mismatch keeps the conservative follow-up path unchanged.
 - Tests (`internal/cli/e5t3_test.go`): exact match clears the route with one audited verified path, collapsed dirty generation, and zero follow-up intents; a wrong digest stays dirty with exactly one follow-up and an audited digest_mismatch; a mixed agent-plus-human batch records both outcomes and never fully suppresses; ten bursts without receipt coverage collapse into exactly one ready follow-up with the generation collapsed and every burst recorded unresolved (AC-402, AC-404, AC-405, AC-406 posture). `make verify` green.
+- Audit remediation (E5 validation): the matcher's vacuous-suppression case is guarded — an empty observed window while a dirty generation exists is treated as unproven, never as cleared (the audit's S1/S3 combination).
 
 ## E5-T4: Implement Protected/Bulk Quarantine and Full Reconciliation
 
@@ -1254,6 +1254,7 @@ E5-T3 Completed.
 - CLI (`internal/cli/quarantine.go`, `reconcile.go`): `quarantine list|show` with state filters, `quarantine release|discard` requiring `--reason` and `--yes` (exit-code mapping: `quarantine_not_found` 4, `transition_invalid` 14 on double resolution), and `reconcile --route --reason <eight documented reasons> [--submit]` — default persists the decision, enumeration, comparison, and snapshot; `--submit` additionally submits the eligible intent through the gated sink. The real dispatch path (`internal/cli/plan.go`) now branches on the plan disposition, so protected and bulk batches hold, overflow and fresh-instance reconcile, and drops persist evidence only.
 - `internal/app/reconcile/full.go` + `internal/app/quarantine/service.go`: the full-scope enumeration (resolver containment, include/exclude and protected/immutable patterns, markdown file scope, bounded hashing; unverifiable paths reported with absent digests instead of truncating), the path-fact comparison with sorted added/removed/changed diff projected as the intent's bounded evidence manifest, and the operator resolution semantics.
 - Contracts: `canonical-record-contracts.md` §7 defines the quarantine record, batch record, decision record, and full-reconciliation result JSON shapes.
+- Audit remediation (E5 validation): a full reconciliation on an idle route whose comparison proves no work remains now resolves the pending generation (`ClearPendingReconcile`, `TestIdleNoDiffReconcileClearsPending`) instead of waiting indefinitely for a dispatch completion.
 - Tests (`internal/cli/e5t4_test.go`): a protected path held with zero intents and full release lineage (replacement reconciliation decision, pending generation, double-release conflict); fresh-instance signals while active never dispatching the partial batch, repeated signals collapsing into one generation, and completion clearing it into exactly one follow-up (AC-407, AC-408); a bulk batch over the rewritten threshold quarantined and discarded without task creation (POL-005); full reconciliation enumerating the markdown scope plus a reported escape symlink while excluding out-of-scope files, scheduling exactly one intent, an unchanged repeat scheduling nothing, and unknown reasons rejected (OPS-006, SRC-005). The G3 gate flow now drives the documented fresh-instance reconciliation before its accepted-task assertions. `make verify` green.
 
 ## E5-T5: Complete Production-Capable Test-Vault Gate G4
@@ -1293,6 +1294,7 @@ E5-T4 Completed.
 
 - `internal/cli/g4_test.go`: the gate harness — `TestG4FeedbackLoopGate` (the three-generation loop: active-task merging, ten-burst collapse, no-receipt bounded fallback, mismatch retention, exact suppression with audit, and the final idle state with the loop bounds asserted), `TestG4StructuralScenarios` (the protected-path hold with release lineage and the fresh-instance pending generation under active work), `TestG4DistinctOperatorOperations` (the distinct retry/reprocess/rerun/reconcile lineage semantics), and `TestG4ProductionGateReviewed` (the production gate: enabling requires the exact computed route revision; a wrong acknowledgement is refused with exit 3, and the acknowledged revision is recorded).
 - Product remediation found by the gate: `--acknowledge-production-gate` was parsed as a boolean flag, so the acknowledged revision value was never checked — it is now a value flag and `route enable` refuses any acknowledgement that does not equal the computed route revision; the earlier enable tests were updated to acknowledge the computed revision.
+- Audit remediation (E5 validation): the cli-spec and runbook route-enable examples now carry the computed-revision acknowledgement value (`--acknowledge-production-gate <computed-route-revision>`), matching the remediated value-flag behavior.
 - `docs/VALIDATION.md` Gate G4: the per-criterion evidence table (AC-401..409), the loop-bound stress statement, the explicit production-write gate review, and the seven-step production-enable checklist (route revision review, quarantine resolution, reconciliation snapshot, frozen capability report and board confirmation, computed-revision enablement, the platform-scheduled reconciliation recipe per OPS-007, and the post-gate `--submit` decision). `make verify` green.
 
 ---
@@ -1357,7 +1359,7 @@ Complete inspection, health, audit, pruning, integrity, and maintenance behavior
 
 ### Requirements
 
-`OPS-001` through `OPS-005`, `OPS-008`, `CLI-007`, `SEC-007`
+`OPS-001` through `OPS-005`, `OPS-008`, `CLI-004` (doctor, status, retention maintenance), `CLI-007`, `SEC-007`
 
 ### Dependencies
 

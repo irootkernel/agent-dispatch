@@ -74,6 +74,9 @@ type QuarantineStore interface {
 	// MarkPendingReconcile idempotently marks the route's pending
 	// reconciliation generation (repeated reconciliations collapse).
 	MarkPendingReconcile(ctx context.Context, routeID, sourcePosition, now string) error
+	// ClearPendingReconcile resolves the pending generation when a full
+	// reconciliation on an idle route proved no work remains.
+	ClearPendingReconcile(ctx context.Context, routeID, now string) error
 	// ReplacePathFacts stores one full-scope path-fact snapshot.
 	ReplacePathFacts(ctx context.Context, resourceID string, facts []PathFact, observedAt string) error
 	// LoadPathFacts returns the stored full-scope snapshot.

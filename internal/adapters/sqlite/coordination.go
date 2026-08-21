@@ -144,8 +144,9 @@ func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.Acti
 	out.DirtyGeneration = snap.DirtyGeneration
 	// The attribution decision was derived from an earlier read: if the
 	// generation moved since, the receipt matched a different
-	// generation than the one being completed — refuse (E5 audit).
-	if req.ExpectedDirtyGeneration != 0 && req.ExpectedDirtyGeneration != snap.DirtyGeneration {
+	// generation than the one being completed — refuse (E5 audit). The
+	// fence is explicit so generation zero is fenced like any other.
+	if req.FenceGeneration && req.ExpectedDirtyGeneration != snap.DirtyGeneration {
 		return out, fmt.Errorf("%w: dirty generation moved to %d while the receipt was being evaluated (expected %d)", ErrOptimisticConcurrency, snap.DirtyGeneration, req.ExpectedDirtyGeneration)
 	}
 	needsFollowup := (snap.DirtyGeneration > 0 && !req.DirtySuppressed) || snap.PendingReconcile

@@ -218,7 +218,7 @@ func (s *Store) resolveQuarantine(ctx context.Context, quarantineID, action, act
 			FROM policy_decisions WHERE decision_id = ?`,
 			replacementID,
 			auditJSON("route_id", routeID, "origin", "quarantine_release", "quarantine_id", quarantineID),
-			fmt.Sprintf(`["operator_release","quarantine:%s"]`, quarantineID),
+			releaseReasonCodes(quarantineID),
 			now, actor, rec.DecisionID); err != nil {
 			return ports.QuarantineRecord{}, err
 		}
@@ -258,6 +258,13 @@ func (s *Store) MarkPendingReconcile(ctx context.Context, routeID, sourcePositio
 		return err
 	}
 	return tx.Commit()
+}
+
+// releaseReasonCodes builds the release decision's machine reasons
+// through the JSON encoder (never hand-assembled quoting).
+func releaseReasonCodes(quarantineID string) string {
+	raw, _ := json.Marshal([]string{"operator_release", "quarantine:" + quarantineID})
+	return string(raw)
 }
 
 // auditJSON encodes one bounded audit context document through the

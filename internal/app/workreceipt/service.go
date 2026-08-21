@@ -234,7 +234,7 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 	out, err := s.applyCompletion(ctx, intent, snap, w, ports.ActiveCompletion{
 		RouteID: intent.RouteID, DispatchID: in.DispatchID, Failed: false,
 		ReceiptRef: w.ReceiptID, Actor: "hermes-task", DirtySuppressed: decision.FullySuppressed,
-		ExpectedDirtyGeneration: snap.DirtyGeneration,
+		FenceGeneration: true, ExpectedDirtyGeneration: snap.DirtyGeneration,
 	})
 	if err != nil {
 		return out, err

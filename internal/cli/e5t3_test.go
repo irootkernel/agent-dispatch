@@ -435,7 +435,7 @@ func TestCompletionGenerationFence(t *testing.T) {
 		Status: "completed", ChangesJSON: "[]", SubmittedAt: "2026-08-21T00:00:00Z", ValidationState: "valid",
 	}, ports.ActiveCompletion{
 		RouteID: "wiki", DispatchID: dispatchID, ReceiptRef: "rcpt-work-fence", Actor: "test",
-		ExpectedDirtyGeneration: 42, Now: "2026-08-21T00:00:00Z",
+		FenceGeneration: true, ExpectedDirtyGeneration: 42, Now: "2026-08-21T00:00:00Z",
 	})
 	if err == nil || !strings.Contains(err.Error(), "dirty generation moved") {
 		t.Fatalf("a stale generation fence must refuse: %v", err)
@@ -606,7 +606,7 @@ func TestGenerationFenceMapsToConflict(t *testing.T) {
 		Status: "completed", ChangesJSON: "[]", SubmittedAt: "2026-08-21T00:00:00Z", ValidationState: "valid",
 	}, ports.ActiveCompletion{
 		RouteID: "wiki", DispatchID: dispatchID, ReceiptRef: "rcpt-fence", Actor: "test",
-		ExpectedDirtyGeneration: 7, Now: "2026-08-21T00:00:00Z",
+		FenceGeneration: true, ExpectedDirtyGeneration: 7, Now: "2026-08-21T00:00:00Z",
 	})
 	if err == nil || !errors.Is(err, sqlite.ErrOptimisticConcurrency) {
 		t.Fatalf("the fence must carry the optimistic-concurrency sentinel: %v", err)

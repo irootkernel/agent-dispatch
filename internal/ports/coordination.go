@@ -58,10 +58,12 @@ type ActiveCompletion struct {
 	// completion may clear the route instead of scheduling a follow-up
 	// (E5-T3; a pending reconciliation still forces one).
 	DirtySuppressed bool
-	// ExpectedDirtyGeneration fences the suppression decision against a
-	// concurrent merge: when set and the in-transaction generation
-	// differs, the completion refuses instead of clearing a generation
-	// the receipt never matched (E5 audit).
+	// FenceGeneration opts this completion into the dirty-generation
+	// fence; ExpectedDirtyGeneration is the generation the attribution
+	// decision was derived from (including zero): when the
+	// in-transaction generation differs, the completion refuses instead
+	// of clearing a generation the receipt never matched (E5 audit).
+	FenceGeneration         bool
 	ExpectedDirtyGeneration int
 	Now                     string
 }

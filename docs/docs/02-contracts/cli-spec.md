@@ -212,15 +212,20 @@ Records a cooperative failed execution projection with a bounded reason code. It
 
 ### `quarantine list|show`
 
-Lists held structural cases.
+```text
+jjukkumi quarantine list [--route <id>] [--state held|released|discarded|superseded] [--limit <N>]
+jjukkumi quarantine show <quarantine-id>
+```
+
+Lists structural holds; the default covers every state, `--state held` narrows to open cases.
 
 ### `quarantine release <id>`
 
-Creates a new operator decision. Requires `--reason` and `--yes`. It revalidates current policy and may create a new dispatch or reconciliation intent.
+Requires `--reason` and `--yes` in non-interactive mode. Records the actor, reason, and previous-decision lineage and creates one replacement reconciliation decision marking the pending reconciliation generation; the reconciliation path (the `reconcile` command or the next completion) schedules the actual work — release itself never dispatches directly.
 
 ### `quarantine discard <id>`
 
-Marks the hold resolved without task creation. Requires a reason and preserves audit lineage.
+Marks the hold resolved without task creation. Requires `--reason` and `--yes` and preserves audit lineage.
 
 ## 9. Reconciliation
 

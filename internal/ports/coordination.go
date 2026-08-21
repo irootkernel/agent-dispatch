@@ -58,7 +58,12 @@ type ActiveCompletion struct {
 	// completion may clear the route instead of scheduling a follow-up
 	// (E5-T3; a pending reconciliation still forces one).
 	DirtySuppressed bool
-	Now             string
+	// ExpectedDirtyGeneration fences the suppression decision against a
+	// concurrent merge: when set and the in-transaction generation
+	// differs, the completion refuses instead of clearing a generation
+	// the receipt never matched (E5 audit).
+	ExpectedDirtyGeneration int
+	Now                     string
 }
 
 // FollowupCreated reports the completion outcome.

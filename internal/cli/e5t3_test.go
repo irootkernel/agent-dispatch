@@ -2,13 +2,16 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // e5t3Digest renders the canonical content digest of a byte string.
@@ -219,5 +222,193 @@ func TestTenBurstsCollapseIntoOneFollowup(t *testing.T) {
 	audit := e5t3Attribution(t, configPath, dispatchID)
 	if !strings.Contains(audit, "receipt_missing_path") {
 		t.Fatalf("uncovered bursts must be recorded unresolved: %s", audit)
+	}
+}
+
+// TestTemporalWindowAndLatestObservation proves the matcher's temporal
+// and collapse rules (E5 audit F003/F004): a change observed before the
+// run began is never the run's output, and a later divergent write to
+// the same path is never suppressed through an earlier matching digest.
+func TestTemporalWindowAndLatestObservation(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	res, _ := e4t3Dispatch(t, configPath, vault)
+	dispatchID, _ := res["dispatch_id"].(string)
+
+	// A pre-begin change (the generation exists before the run starts).
+	e5t3Merge(t, configPath, vault, "Indexes/pre-begin.md", "pre-begin content")
+	time.Sleep(1100 * time.Millisecond)
+	var out, errb bytes.Buffer
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1", "--external-task-id", "t_00000001"}, &out, &errb); code != 0 {
+		t.Fatalf("begin: %s", errb.String())
+	}
+	// The run then writes the same path twice; only the latest digest
+	// can verify (F004), and the pre-begin path can never verify (F003).
+	e5t3Merge(t, configPath, vault, "Indexes/pre-begin.md", "agent revision")
+	e5t3Merge(t, configPath, vault, "Indexes/pre-begin.md", "agent revision 2")
+	manifest := `[{"path":"Indexes/pre-begin.md","after_digest":"` + e5t3Digest("pre-begin content") + `"}]`
+	// Separate the follow-up generation's creation window from the
+	// pre-begin and mid-run batches (second-precision timestamps).
+	time.Sleep(1100 * time.Millisecond)
+	out.Reset()
+	errb.Reset()
+	withStdin(t, manifest, func() {
+		Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1", "--manifest", "-"}, &out, &errb)
+	})
+	if errb.Len() != 0 {
+		t.Fatalf("complete: %s", errb.String())
+	}
+	// The receipt's digest matches the FIRST observation only: the
+	// latest observation differs, so nothing suppresses and the
+	// conservative follow-up path runs.
+	completed := decodeEnvelope(t, &out)
+	if completed["self_change_suppressed"] == true || completed["route_state"] != "FOLLOWUP_READY" {
+		t.Fatalf("a stale digest must never suppress: %v", completed)
+	}
+	audit := e5t3Attribution(t, configPath, dispatchID)
+	if !strings.Contains(audit, "digest_mismatch") {
+		t.Fatalf("the latest observation must decide: %s", audit)
+	}
+
+	// A receipt matching the LATEST digest on a fresh generation
+	// verifies; the same path's earlier observations are irrelevant.
+	followup, _ := completed["followup_dispatch_id"].(string)
+	store := e5t1Store(t, configPath)
+	if err := store.ActivateFollowup(context.Background(), followup, "test", "2026-08-21T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", followup, "--run-id", "run-2"}, &out, &errb); code != 0 {
+		t.Fatalf("begin 2: %s", errb.String())
+	}
+	e5t3Merge(t, configPath, vault, "Indexes/fresh.md", "fresh agent edit")
+	out.Reset()
+	errb.Reset()
+	manifest2 := `[{"path":"Indexes/fresh.md","after_digest":"` + e5t3Digest("fresh agent edit") + `"}]`
+	withStdin(t, manifest2, func() {
+		Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", followup, "--run-id", "run-2", "--manifest", "-"}, &out, &errb)
+	})
+	if errb.Len() != 0 {
+		t.Fatalf("complete 2: %s", errb.String())
+	}
+	second := decodeEnvelope(t, &out)
+	if second["self_change_suppressed"] != true || second["route_state"] != "IDLE" {
+		t.Fatalf("the latest exact digest must verify: %v", second)
+	}
+}
+
+// TestSuppressedDirtyWithPendingReconcile proves a fully suppressed
+// dirty generation still schedules the follow-up when a reconciliation
+// is pending (E5 audit F008): suppression never drops a pending
+// generation.
+func TestSuppressedDirtyWithPendingReconcile(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	res, _ := e4t3Dispatch(t, configPath, vault)
+	dispatchID, _ := res["dispatch_id"].(string)
+	var out, errb bytes.Buffer
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1", "--external-task-id", "t_00000001"}, &out, &errb); code != 0 {
+		t.Fatalf("begin: %s", errb.String())
+	}
+	e5t3Merge(t, configPath, vault, "Indexes/suppressed.md", "agent edit")
+	// A pending reconciliation generation coexists with the dirty one.
+	store := e5t1Store(t, configPath)
+	if err := store.MarkPendingReconcile(context.Background(), "wiki", "", "2026-08-21T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errb.Reset()
+	manifest := `[{"path":"Indexes/suppressed.md","after_digest":"` + e5t3Digest("agent edit") + `"}]`
+	withStdin(t, manifest, func() {
+		Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1", "--manifest", "-"}, &out, &errb)
+	})
+	if errb.Len() != 0 {
+		t.Fatalf("complete: %s", errb.String())
+	}
+	completed := decodeEnvelope(t, &out)
+	if completed["route_state"] != "FOLLOWUP_READY" {
+		t.Fatalf("a pending reconciliation must force the follow-up even when fully suppressed: %v", completed)
+	}
+	if followup, _ := completed["followup_dispatch_id"].(string); followup == "" {
+		t.Fatal("the pending generation must collapse into the follow-up")
+	}
+	var pending int
+	if err := store.QueryRow(`SELECT pending_reconcile FROM route_runtime_state WHERE route_id = 'wiki'`).Scan(&pending); err != nil || pending != 0 {
+		t.Fatalf("the pending generation must clear into the follow-up: %d %v", pending, err)
+	}
+}
+
+// TestOversizedManifestRefused proves the manifest byte bound is
+// enforced before parsing (E5 audit F010).
+func TestOversizedManifestRefused(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	res, _ := e4t3Dispatch(t, configPath, vault)
+	dispatchID, _ := res["dispatch_id"].(string)
+	var out, errb bytes.Buffer
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1"}, &out, &errb); code != 0 {
+		t.Fatalf("begin: %s", errb.String())
+	}
+	oversized := "[" + strings.Repeat(`{"path":"Inbox/x.md"},`, 30000) + `{"path":"Inbox/y.md"}]`
+	out.Reset()
+	errb.Reset()
+	withStdin(t, oversized, func() {
+		Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1", "--manifest", "-"}, &out, &errb)
+	})
+	if code := 0; true {
+		var dummy bytes.Buffer
+		code = Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1", "--manifest", "-"}, &dummy, &dummy)
+		_ = code
+	}
+	if !strings.Contains(errb.String(), "work_receipt_invalid") && !strings.Contains(errb.String(), "manifest exceeds") {
+		t.Fatalf("an oversized manifest must be rejected: %s", errb.String())
+	}
+}
+
+// TestConcurrentCompletionSingleWinner proves the atomic completion
+// under concurrency: two concurrent completions of the same run resolve
+// to exactly one winner (the begun-row guard), never two route
+// transitions (E5 audit F002).
+func TestConcurrentCompletionSingleWinner(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	res, _ := e4t3Dispatch(t, configPath, vault)
+	dispatchID, _ := res["dispatch_id"].(string)
+	var out, errb bytes.Buffer
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1"}, &out, &errb); code != 0 {
+		t.Fatalf("begin: %s", errb.String())
+	}
+	// Each goroutine uses its own manifest file: the shared stdin
+	// helper is not concurrency-safe (and neither is process stdin).
+	manifestFiles := make([]string, 2)
+	for i := range manifestFiles {
+		p := filepath.Join(t.TempDir(), fmt.Sprintf("m%d.json", i))
+		if err := os.WriteFile(p, []byte(`[]`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		manifestFiles[i] = p
+	}
+	results := make(chan int, 2)
+	for i := 0; i < 2; i++ {
+		go func(manifest string) {
+			var o, e bytes.Buffer
+			results <- Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1", "--manifest", manifest}, &o, &e)
+		}(manifestFiles[i])
+	}
+	wins, conflicts := 0, 0
+	for i := 0; i < 2; i++ {
+		switch code := <-results; code {
+		case 0:
+			wins++
+		case 4, 14, 20:
+			conflicts++
+		default:
+			t.Fatalf("unexpected exit code %d", code)
+		}
+	}
+	if wins != 1 || conflicts != 1 {
+		t.Fatalf("exactly one completion may win, got %d wins / %d conflicts", wins, conflicts)
+	}
+	store := e5t1Store(t, configPath)
+	var completed int
+	if err := store.QueryRow(`SELECT COUNT(*) FROM work_receipts WHERE dispatch_id = ? AND run_id = 'run-1' AND status = 'completed'`, dispatchID).Scan(&completed); err != nil || completed != 1 {
+		t.Fatalf("one terminal receipt row: %d %v", completed, err)
 	}
 }

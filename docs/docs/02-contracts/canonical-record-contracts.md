@@ -93,11 +93,7 @@ of §1 (snake_case, RFC 3339 timestamps, relative slash paths,
   "decision_id": "<originating policy decision>",
   "reason_codes": ["protected_path_present"],
   "state": "held",
-  "created_at": "<RFC3339>",
-  "resolved_at": null,
-  "resolved_by": null,
-  "resolution_reason": null,
-  "replacement_decision_id": null
+  "created_at": "<RFC3339>"
 }
 ```
 

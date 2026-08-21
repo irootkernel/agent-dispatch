@@ -107,7 +107,7 @@ func (s *Store) FailureBudgetRemaining(ctx context.Context, routeID string, budg
 	err := s.QueryRowContext(ctx, `SELECT COUNT(*) FROM work_receipts w
 		JOIN dispatch_intents d ON d.dispatch_id = w.dispatch_id
 		WHERE d.route_id = ? AND w.status = 'failed' AND w.validation_state = 'valid'
-		AND w.submitted_at > COALESCE((
+		AND w.submitted_at >= COALESCE((
 			SELECT MAX(w2.submitted_at) FROM work_receipts w2
 			JOIN dispatch_intents d2 ON d2.dispatch_id = w2.dispatch_id
 			WHERE d2.route_id = ? AND w2.status = 'completed' AND w2.validation_state = 'valid'

@@ -218,6 +218,7 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 	out, err := s.applyCompletion(ctx, intent, snap, w, ports.ActiveCompletion{
 		RouteID: intent.RouteID, DispatchID: in.DispatchID, Failed: false,
 		ReceiptRef: w.ReceiptID, Actor: "hermes-task", DirtySuppressed: decision.FullySuppressed,
+		ExpectedDirtyGeneration: snap.DirtyGeneration,
 	})
 	if err == nil {
 		out.SuppressedPaths = decision.SuppressedPaths
@@ -332,6 +333,9 @@ func (s *Service) validateLineage(dispatchID, runID, externalTaskID string) (por
 	}
 	if !snap.State.IsActive() || snap.ActiveDispatchID != dispatchID {
 		reasons = append(reasons, fmt.Sprintf("dispatch %s is not the active dispatch of route %s (state %s, active %q)", dispatchID, intent.RouteID, snap.State, snap.ActiveDispatchID))
+	}
+	if externalTaskID != "" && intent.ExternalRef == "" {
+		reasons = append(reasons, fmt.Sprintf("dispatch %s has no accepted task reference, so task %q cannot be verified", dispatchID, externalTaskID))
 	}
 	if externalTaskID != "" && intent.ExternalRef != "" && externalTaskID != intent.ExternalRef {
 		reasons = append(reasons, fmt.Sprintf("external task %q does not match the accepted task %q", externalTaskID, intent.ExternalRef))

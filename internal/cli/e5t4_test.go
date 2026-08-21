@@ -391,3 +391,37 @@ func TestIdleNoDiffReconcileClearsPending(t *testing.T) {
 	}
 	_ = vault
 }
+
+// TestDropDispositionPersistsEvidence proves a batch with no meaningful
+// changes persists its drop decision without any intent or hold (E5
+// audit F012).
+func TestDropDispositionPersistsEvidence(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	e4t3RegisterRoute(t, configPath)
+	setPlanEnv(t, vault, false)
+	// The fixture excludes .obsidian/workspace.json: the burst carries
+	// no meaningful change, so the plan drops it.
+	var out, errb bytes.Buffer
+	withStdin(t, `[{"name":".obsidian/workspace.json","exists":true,"new":true,"size":9,"type":"f"}]`, func() {
+		Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman", "--no-submit"}, &out, &errb)
+	})
+	if errb.Len() != 0 {
+		t.Fatalf("drop dispatch: %s", errb.String())
+	}
+	dropped := decodeEnvelope(t, &out)
+	if dropped["disposition"] != "drop" {
+		t.Fatalf("an excluded-only burst must drop: %v", dropped)
+	}
+	store := e5t1Store(t, configPath)
+	var intents, holds int
+	if err := store.QueryRow(`SELECT COUNT(*) FROM dispatch_intents`).Scan(&intents); err != nil || intents != 0 {
+		t.Fatalf("a drop must not create an intent: %d %v", intents, err)
+	}
+	if err := store.QueryRow(`SELECT COUNT(*) FROM quarantine_items`).Scan(&holds); err != nil || holds != 0 {
+		t.Fatalf("a drop must not hold: %d %v", holds, err)
+	}
+	var disposition string
+	if err := store.QueryRow(`SELECT disposition FROM policy_decisions ORDER BY created_at DESC LIMIT 1`).Scan(&disposition); err != nil || disposition != "drop" {
+		t.Fatalf("the drop decision must be persisted as evidence: %q %v", disposition, err)
+	}
+}

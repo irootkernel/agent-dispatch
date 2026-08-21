@@ -143,3 +143,11 @@ func CompactTimestamp(now string) string {
 	}
 	return string(out)
 }
+
+// CanonicalTimestamp renders the canonical UTC RFC 3339 second-precision
+// form. The truncated-UTC ordering is load-bearing: dirty-window and
+// streak comparisons sort these strings lexicographically, so every copy
+// must render byte-identically.
+func CanonicalTimestamp(t time.Time) string {
+	return t.UTC().Truncate(time.Second).Format(time.RFC3339)
+}

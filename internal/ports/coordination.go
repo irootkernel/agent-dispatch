@@ -77,3 +77,19 @@ type FollowupCreated struct {
 	// DirtyGeneration is the dirty count before the collapse (evidence).
 	DirtyGeneration int
 }
+
+// StoreError wraps one durable-store failure so CLI boundaries
+// classify store surfaces as storage instead of relabeling service
+// defects (the typed boundary both app services share).
+type StoreError struct{ Err error }
+
+func (e *StoreError) Error() string { return "durable store: " + e.Err.Error() }
+func (e *StoreError) Unwrap() error { return e.Err }
+
+// WrapStore wraps one store failure (nil passes through).
+func WrapStore(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &StoreError{Err: err}
+}

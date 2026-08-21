@@ -1090,7 +1090,7 @@ E4-T4 Completed.
 
 # E5: Feedback Loop, Quarantine, and Reconciliation
 
-**Epic status:** Planned  
+**Epic status:** Completed  
 **Purpose:** Make recursive vault maintenance bounded and conservative, then pass the production-capable gate.  
 **Gate:** G4
 

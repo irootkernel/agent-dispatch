@@ -37,20 +37,6 @@ type FullStore interface {
 	ports.QuarantineStore
 }
 
-// StoreError wraps one durable-store failure so the CLI boundary
-// classifies it as storage instead of string-matching (E5 audit).
-type StoreError struct{ Err error }
-
-func (e *StoreError) Error() string { return "durable store: " + e.Err.Error() }
-func (e *StoreError) Unwrap() error { return e.Err }
-
-func wrapStore(err error) error {
-	if err == nil {
-		return nil
-	}
-	return &StoreError{Err: err}
-}
-
 // FullResult reports one reconciliation outcome.
 type FullResult struct {
 	RouteID           string   `json:"route_id"`
@@ -94,14 +80,14 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 	if !Reasons[reason] {
 		return FullResult{}, fmt.Errorf("unknown reconcile reason %q", reason)
 	}
-	now := timestamp(s.Now())
+	now := ids.CanonicalTimestamp(s.Now())
 	current, err := s.enumerate()
 	if err != nil {
 		return FullResult{}, err
 	}
 	stored, err := s.Store.LoadPathFacts(ctx, s.ResourceID)
 	if err != nil {
-		return FullResult{}, wrapStore(err)
+		return FullResult{}, ports.WrapStore(err)
 	}
 	out := FullResult{RouteID: routeID, Reason: reason, Enumerated: len(current), Compared: len(stored)}
 	currentMap := map[string]ports.PathFact{}
@@ -135,7 +121,7 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 
 	snap, err := s.Store.LoadRouteState(ctx, routeID)
 	if err != nil {
-		return FullResult{}, wrapStore(err)
+		return FullResult{}, ports.WrapStore(err)
 	}
 	workDue := len(out.Added)+len(out.Changed)+len(out.Removed) > 0
 
@@ -166,7 +152,7 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 		intent.DecisionID = out.DecisionID
 		intent.CreatedAt = now
 		if err := s.Store.CommitReconcileIntent(ctx, intent, "reconcile", now); err != nil {
-			return FullResult{}, wrapStore(err)
+			return FullResult{}, ports.WrapStore(err)
 		}
 		out.ReconcileDispatch = intent.DispatchID
 	}
@@ -179,12 +165,12 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 	// to clear it (E5 audit remediation).
 	if !workDue && snap.State == state.RouteIdle {
 		if err := s.Store.ClearPendingReconcile(ctx, routeID, now); err != nil {
-			return FullResult{}, wrapStore(err)
+			return FullResult{}, ports.WrapStore(err)
 		}
 		out.PendingReconcile = false
 	}
 	if err := s.Store.ReplacePathFacts(ctx, s.ResourceID, current, now); err != nil {
-		return FullResult{}, wrapStore(err)
+		return FullResult{}, ports.WrapStore(err)
 	}
 	out.SnapshotStored = true
 	return out, nil
@@ -315,15 +301,6 @@ func (s *FullService) hash(rel string) (string, bool) {
 		return "", false
 	}
 	return "sha256:" + hex.EncodeToString(h.Sum(nil)), true
-}
-
-// timestamp renders the canonical UTC RFC 3339 second-precision form.
-// It stays local because dispatch's own tests import this package (a
-// test-binary import cycle), and because the truncated-UTC ordering is
-// load-bearing: dirty-window comparisons sort these strings
-// lexicographically.
-func timestamp(t time.Time) string {
-	return t.UTC().Truncate(time.Second).Format(time.RFC3339)
 }
 
 func (s *FullService) routeRevision() string {

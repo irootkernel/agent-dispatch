@@ -200,7 +200,7 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 		// anything else from the service (enumeration, bugs) is an
 		// internal-class defect, never a silent storage relabel (E5
 		// audit).
-		var storeErr *reconcile.StoreError
+		var storeErr *ports.StoreError
 		if errors.As(err, &storeErr) {
 			writeError(stderr, command, "sqlite_query_failed", "storage", storeErr.Err.Error())
 			return 20

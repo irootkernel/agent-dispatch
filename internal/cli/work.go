@@ -68,7 +68,7 @@ func workReceiptErr(stderr io.Writer, command string, err error) int {
 	default:
 		// Typed classification: store surfaces are storage; anything
 		// else is an internal-class defect, never a storage relabel.
-		var storeErr *workreceipt.StoreError
+		var storeErr *ports.StoreError
 		if errors.As(err, &storeErr) {
 			writeError(stderr, command, "sqlite_query_failed", "storage", storeErr.Err.Error())
 			return 20

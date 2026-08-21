@@ -444,13 +444,17 @@ type RouteRow struct {
 	RouteState           string `json:"route_state"`
 	ActiveDispatchID     string `json:"active_dispatch_id"`
 	DirtyGeneration      int    `json:"dirty_generation"`
+	PendingReconcile     int    `json:"pending_reconcile"`
+	LastSourcePosition   string `json:"last_source_position,omitempty"`
+	LastReconciledAt     string `json:"last_reconciled_at,omitempty"`
 }
 
 // ListRoutes returns every materialized route with its runtime state.
 func (s *Store) ListRoutes(ctx context.Context) ([]RouteRow, error) {
 	rows, err := s.QueryContext(ctx, `SELECT r.route_id, r.revision, r.resource_id, r.target_id,
 			COALESCE(rr.activation_state, 'disabled'), COALESCE(rr.acknowledged_revision, ''), COALESCE(rr.route_state, 'IDLE'),
-			COALESCE(rr.active_dispatch_id, ''), COALESCE(rr.dirty_generation, 0)
+			COALESCE(rr.active_dispatch_id, ''), COALESCE(rr.dirty_generation, 0),
+			COALESCE(rr.pending_reconcile, 0), COALESCE(rr.last_source_position, ''), COALESCE(rr.last_reconciled_at, '')
 		FROM routes r LEFT JOIN route_runtime_state rr ON rr.route_id = r.route_id
 		ORDER BY r.route_id`)
 	if err != nil {
@@ -461,7 +465,8 @@ func (s *Store) ListRoutes(ctx context.Context) ([]RouteRow, error) {
 	for rows.Next() {
 		var row RouteRow
 		if err := rows.Scan(&row.RouteID, &row.Revision, &row.ResourceID, &row.TargetID,
-			&row.ActivationState, &row.AcknowledgedRevision, &row.RouteState, &row.ActiveDispatchID, &row.DirtyGeneration); err != nil {
+			&row.ActivationState, &row.AcknowledgedRevision, &row.RouteState, &row.ActiveDispatchID, &row.DirtyGeneration,
+			&row.PendingReconcile, &row.LastSourcePosition, &row.LastReconciledAt); err != nil {
 			return nil, err
 		}
 		out = append(out, row)

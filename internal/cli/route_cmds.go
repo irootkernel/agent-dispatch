@@ -86,8 +86,13 @@ func runRouteShow(command string, args []string, stdout, stderr io.Writer) int {
 			"target_id": row.TargetID, "activation_state": row.ActivationState,
 			"acknowledged_revision": row.AcknowledgedRevision, "route_state": row.RouteState,
 			"active_dispatch_id": row.ActiveDispatchID, "dirty_generation": row.DirtyGeneration,
+			"pending_reconcile":    row.PendingReconcile == 1,
+			"last_source_position": row.LastSourcePosition, "last_reconciled_at": row.LastReconciledAt,
 		}
 		var warnings []string
+		if row.PendingReconcile == 1 {
+			warnings = append(warnings, "a reconciliation generation is pending; run 'jjukkumi reconcile --route "+row.RouteID+"' or complete the active work to collapse it")
+		}
 		if row.ActiveDispatchID != "" {
 			intent, err := store.LoadIntent(requestCtx(), row.ActiveDispatchID)
 			if err != nil {

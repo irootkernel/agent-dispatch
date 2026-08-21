@@ -76,13 +76,15 @@ type FullService struct {
 
 // Run enumerates, compares, persists the decision and the snapshot, and
 // collapses into the single pending generation (or one intent when the
-// route is idle and work is due).
+// route is idle and work is due). Paths under an unreadable subtree
+// keep their stored facts: an access failure is never reported as a
+// removal.
 func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResult, error) {
 	if !Reasons[reason] {
 		return FullResult{}, fmt.Errorf("unknown reconcile reason %q", reason)
 	}
 	now := ids.CanonicalTimestamp(s.Now())
-	current, err := s.enumerate()
+	current, skipped, err := s.enumerate()
 	if err != nil {
 		return FullResult{}, err
 	}
@@ -103,7 +105,19 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 		}
 	}
 	for path := range stored {
-		if _, ok := currentMap[path]; !ok {
+		if _, ok := currentMap[path]; ok {
+			continue
+		}
+		// A path under an unreadable subtree was not enumerated — its
+		// stored fact stands (an access failure is not a removal).
+		skippedTree := false
+		for _, prefix := range skipped {
+			if strings.HasPrefix(path, prefix) {
+				skippedTree = true
+				break
+			}
+		}
+		if !skippedTree {
 			out.Removed = append(out.Removed, path)
 		}
 	}
@@ -234,8 +248,9 @@ func digestStatusOf(digest string) records.DigestStatus {
 // enumerate walks the resource root under the resolver's containment
 // defense, the route's include/exclude patterns, and the file scope,
 // hashing every in-scope regular file with the configured bound.
-func (s *FullService) enumerate() ([]ports.PathFact, error) {
+func (s *FullService) enumerate() ([]ports.PathFact, []string, error) {
 	var facts []ports.PathFact
+	var skippedPrefixes []string
 	root := s.Resolver.Root()
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -245,6 +260,9 @@ func (s *FullService) enumerate() ([]ports.PathFact, error) {
 			// collapses conservatively).
 			if path == root {
 				return err
+			}
+			if rel, relErr := filepath.Rel(root, path); relErr == nil {
+				skippedPrefixes = append(skippedPrefixes, filepath.ToSlash(rel)+"/")
 			}
 			return fs.SkipDir
 		}
@@ -285,10 +303,10 @@ func (s *FullService) enumerate() ([]ports.PathFact, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	sort.Slice(facts, func(i, j int) bool { return facts[i].Path < facts[j].Path })
-	return facts, nil
+	return facts, skippedPrefixes, nil
 }
 
 func (s *FullService) hash(rel string) (string, bool) {

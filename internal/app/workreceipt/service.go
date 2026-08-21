@@ -298,7 +298,8 @@ func (s *Service) applyCompletion(ctx context.Context, intent ports.IntentSnapsh
 		}
 		base.FollowupRequest = &followup
 	}
-	base.DirtyLineageJSON = fmt.Sprintf(`{"route_id":%q,"dirty_generation":%d}`, intent.RouteID, snap.DirtyGeneration)
+	dirtyLineage, _ := json.Marshal(map[string]any{"route_id": intent.RouteID, "dirty_generation": snap.DirtyGeneration})
+	base.DirtyLineageJSON = string(dirtyLineage)
 	base.Now = s.timestamp()
 	created, err := s.Store.CompleteWork(ctx, w, base)
 	if err != nil {

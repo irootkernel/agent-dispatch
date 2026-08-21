@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -135,7 +136,7 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 		Disposition:    "reconcile", Classification: "normal",
 		ReasonCodesJSON: fmt.Sprintf(`["reconcile:%s","files:%d"]`, reason, len(out.Added)+len(out.Changed)+len(out.Removed)),
 		CreatedAt:       now, Actor: "reconcile",
-		GenerationLineageJSON: fmt.Sprintf(`{"route_id":%q,"reason":%q,"origin":"full-reconciliation"}`, routeID, reason),
+		GenerationLineageJSON: generationLineage(routeID, reason),
 	}); err != nil {
 		return FullResult{}, err
 	}
@@ -315,4 +316,10 @@ func (s *FullService) policyRevision() string {
 		return s.PolicyRevision
 	}
 	return "unknown"
+}
+
+// generationLineage encodes the batch-less decision's lineage document.
+func generationLineage(routeID, reason string) string {
+	raw, _ := json.Marshal(map[string]any{"route_id": routeID, "reason": reason, "origin": "full-reconciliation"})
+	return string(raw)
 }

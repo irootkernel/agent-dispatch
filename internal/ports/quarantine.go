@@ -11,6 +11,20 @@ import (
 // partial ordinary work, and full reconciliation collapses into one
 // pending generation.
 
+// The closed policy vocabulary (POL-002/POL-006) as typed constants so
+// no layer re-embeds it in ad-hoc strings.
+const (
+	DispositionDrop         = "drop"
+	DispositionDispatch     = "dispatch"
+	DispositionMerge        = "merge_pending"
+	DispositionQuarantine   = "quarantine"
+	DispositionReconcile    = "reconcile"
+	ClassificationNormal    = "normal"
+	ClassificationProtected = "protected"
+	ClassificationBulk      = "bulk"
+	ClassificationOverflow  = "overflow"
+)
+
 // ErrQuarantineNotFound reports no quarantine item for the ID.
 var ErrQuarantineNotFound = errors.New("quarantine item not found")
 

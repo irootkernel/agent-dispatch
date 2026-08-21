@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
@@ -481,7 +482,10 @@ func buildHeldLineage(a *planArtifacts) (ports.Lineage, ports.QuarantineInput, e
 	if err != nil {
 		return ports.Lineage{}, ports.QuarantineInput{}, err
 	}
-	reasons, err := json.Marshal(a.plan.ReasonCodes)
+	// The record contract sorts decision reason codes.
+	sorted := append([]string(nil), a.plan.ReasonCodes...)
+	sort.Strings(sorted)
+	reasons, err := json.Marshal(sorted)
 	if err != nil {
 		return ports.Lineage{}, ports.QuarantineInput{}, err
 	}

@@ -214,10 +214,11 @@ func (s *Store) resolveQuarantine(ctx context.Context, quarantineID, action, act
 	if createReplacement {
 		replacementID = "dec-release-" + quarantineID
 		if _, err := tx.Exec(`INSERT INTO policy_decisions (decision_id, route_id, route_revision, policy_revision, generation_lineage_json, disposition, classification, reason_codes_json, created_at, actor, supersedes_decision_id)
-			SELECT ?, route_id, route_revision, policy_revision, ?, 'reconcile', 'normal', ?, ?, ?, decision_id
+			SELECT ?, route_id, route_revision, policy_revision, ?, ?, ?, ?, ?, ?, decision_id
 			FROM policy_decisions WHERE decision_id = ?`,
 			replacementID,
 			auditJSON("route_id", routeID, "origin", "quarantine_release", "quarantine_id", quarantineID),
+			ports.DispositionReconcile, ports.ClassificationNormal,
 			releaseReasonCodes(quarantineID),
 			now, actor, rec.DecisionID); err != nil {
 			return ports.QuarantineRecord{}, err

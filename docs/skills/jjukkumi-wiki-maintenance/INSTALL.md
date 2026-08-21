@@ -37,6 +37,12 @@ hermes skills install https://<host>/jjukkumi-wiki-maintenance/SKILL.md \
   --category productivity --name jjukkumi-wiki-maintenance
 ```
 
+Pin integrity: publish the SKILL.md alongside its SHA-256 digest and
+verify the downloaded file against it before installing (`shasum -a
+256` and the `docs/MANIFEST.sha256` entry for the packaged copy) — a
+skill is executable guidance, so an unpinned URL must not be trusted
+blindly.
+
 ## Uninstall
 
 ```bash

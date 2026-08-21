@@ -102,8 +102,9 @@ of §1 (snake_case, RFC 3339 timestamps, relative slash paths,
 ```
 
 `state` is `held`, `released`, or `discarded` (`superseded` is reserved
-for a future supersession flow and is not emitted in v0.1). A release
-resolves with `resolved_by` (actor), `resolution_reason`, and a
+for a future supersession flow and is not emitted in v0.1). While held,
+the resolution fields are absent from the JSON; a release resolves with
+`resolved_by` (actor), `resolution_reason`, and a
 `replacement_decision_id` referencing the new reconciliation decision
 that supersedes the originating decision (CLI-006). A discard resolves
 without a replacement.

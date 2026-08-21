@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/rootkernel/jjukkumi/internal/domain/state"
 	"github.com/rootkernel/jjukkumi/internal/ports"
 )
 
@@ -327,8 +328,10 @@ func (s *Store) CommitReconcileDecision(ctx context.Context, d ports.DecisionInp
 	return tx.Commit()
 }
 
-// CommitReconcileIntent persists one latest-state reconciliation intent
-// and activates it on the idle route.
+// CommitReconcileIntent persists and activates one latest-state
+// reconciliation intent for an idle route in a single transaction: the
+// intent, its audit transition, and the IDLE to ACTIVE_CLEAN activation
+// commit together or not at all.
 func (s *Store) CommitReconcileIntent(ctx context.Context, intent ports.IntentInput, actor, now string) error {
 	tx, err := s.BeginTx(ctx, nil)
 	if err != nil {
@@ -342,8 +345,18 @@ func (s *Store) CommitReconcileIntent(ctx context.Context, intent ports.IntentIn
 		fmt.Sprintf(`{"reason":"reconcile","route_id":%q,"latest_state":true}`, intent.RouteID)); err != nil {
 		return err
 	}
-	if err := tx.Commit(); err != nil {
+	snap, err := s.routeSnapshotInTx(tx, intent.RouteID)
+	if err != nil {
 		return err
 	}
-	return s.ActivateDispatch(ctx, intent.DispatchID, actor, now)
+	if err := applyRouteTransition(tx, snap, state.RouteActiveClean, state.ReasonDispatchAccepted,
+		state.RouteEvidence{Actor: actor, ActivatingDispatchID: intent.DispatchID}, now,
+		fmt.Sprintf(`{"reason":"dispatch_accepted","dispatch_id":%q,"origin":"reconcile"}`, intent.DispatchID)); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE route_runtime_state SET active_dispatch_id = ? WHERE route_id = ? AND (active_dispatch_id IS NULL OR active_dispatch_id = ?)`,
+		intent.DispatchID, intent.RouteID, intent.DispatchID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

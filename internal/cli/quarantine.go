@@ -167,6 +167,7 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 	service := &reconcile.FullService{
 		Store: store, Resolver: artifacts.resolver, Engine: artifacts.engine,
 		ResourceID: artifacts.resourceID, FileScope: artifacts.fileScope,
+		RouteRevision: artifacts.revision, PolicyRevision: artifacts.revision,
 		MaxHash: artifacts.maxHash, Now: time.Now,
 		IntentBuilder: artifacts.reconcileIntentBuilder(),
 	}
@@ -174,6 +175,10 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
 		return 20
+	}
+	if submit && result.ReconcileDispatch == "" {
+		warnings := []string{"--submit skipped: no eligible reconciliation intent (the route was not idle or no work was due); the pending generation is recorded"}
+		return writeEnvelopeWithWarnings(stdout, command, result, warnings)
 	}
 	if submit && result.ReconcileDispatch != "" {
 		rt, rtErr := artifacts.submitRuntime(store)

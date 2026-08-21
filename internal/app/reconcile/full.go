@@ -58,6 +58,10 @@ type FullService struct {
 	Resolver   *localfs.Resolver
 	Engine     *policy.Engine
 	ResourceID string
+	// RouteRevision and PolicyRevision are the real revisions the
+	// decision records (no placeholders; E5 audit).
+	RouteRevision  string
+	PolicyRevision string
 	// FileScope "markdown" restricts enumeration to Markdown files.
 	FileScope string
 	MaxHash   int64
@@ -126,8 +130,8 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 	// random suffix keeps repeated same-second reconciliations distinct.
 	out.DecisionID = "dec-reconcile-" + routeID + "-" + compactTimestamp(now) + "-" + randomSuffix()
 	if err := s.Store.CommitReconcileDecision(ctx, ports.DecisionInput{
-		DecisionID: out.DecisionID, RouteID: routeID, RouteRevision: snapRevision(snap),
-		PolicyRevision: "current",
+		DecisionID: out.DecisionID, RouteID: routeID, RouteRevision: s.routeRevision(),
+		PolicyRevision: s.policyRevision(),
 		Disposition:    "reconcile", Classification: "normal",
 		ReasonCodesJSON: fmt.Sprintf(`["reconcile:%s","files:%d"]`, reason, len(out.Added)+len(out.Changed)+len(out.Removed)),
 		CreatedAt:       now, Actor: "reconcile",
@@ -135,27 +139,11 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 	}); err != nil {
 		return FullResult{}, err
 	}
-	if err := s.Store.MarkPendingReconcile(ctx, routeID, "", now); err != nil {
-		return FullResult{}, err
-	}
-	if err := s.Store.ReplacePathFacts(ctx, s.ResourceID, current, now); err != nil {
-		return FullResult{}, err
-	}
-	out.SnapshotStored = true
-	out.PendingReconcile = true
-	// An idle route whose full reconciliation proved no work remains
-	// resolves its pending generation: no dispatch completion is needed
-	// to clear it (E5 audit remediation).
-	if !workDue && snap.State == state.RouteIdle {
-		if err := s.Store.ClearPendingReconcile(ctx, routeID, now); err != nil {
-			return FullResult{}, err
-		}
-		out.PendingReconcile = false
-	}
-
-	// An idle route with due work schedules exactly one latest-state
-	// reconciliation intent; an active or pending route merges into the
-	// single pending generation instead (SRC-005, CON-003).
+	// The durable work is ordered so the snapshot only advances after
+	// the decision and any intent exist (E5 audit F006): an idle route
+	// with due work schedules exactly one latest-state reconciliation
+	// intent; an active or pending route merges into the single pending
+	// generation instead (SRC-005, CON-003).
 	if workDue && snap.State == state.RouteIdle && s.IntentBuilder != nil {
 		intent, err := s.IntentBuilder(routeID, reason, out.DecisionID, s.diffChanges(currentMap, stored))
 		if err != nil {
@@ -168,6 +156,22 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 		}
 		out.ReconcileDispatch = intent.DispatchID
 	}
+	if err := s.Store.MarkPendingReconcile(ctx, routeID, "", now); err != nil {
+		return FullResult{}, err
+	}
+	// An idle route whose full reconciliation proved no work remains
+	// resolves its pending generation: no dispatch completion is needed
+	// to clear it (E5 audit remediation).
+	if !workDue && snap.State == state.RouteIdle {
+		if err := s.Store.ClearPendingReconcile(ctx, routeID, now); err != nil {
+			return FullResult{}, err
+		}
+		out.PendingReconcile = false
+	}
+	if err := s.Store.ReplacePathFacts(ctx, s.ResourceID, current, now); err != nil {
+		return FullResult{}, err
+	}
+	out.SnapshotStored = true
 	return out, nil
 }
 
@@ -309,4 +313,16 @@ func randomSuffix() string {
 	return hex.EncodeToString(b[:])
 }
 
-func snapRevision(snap state.RouteSnapshot) string { return "current" }
+func (s *FullService) routeRevision() string {
+	if s.RouteRevision != "" {
+		return s.RouteRevision
+	}
+	return "unknown"
+}
+
+func (s *FullService) policyRevision() string {
+	if s.PolicyRevision != "" {
+		return s.PolicyRevision
+	}
+	return "unknown"
+}

@@ -868,3 +868,51 @@ func seedRouteForAttempts(t *testing.T, s *Store) {
 		t.Fatal(err)
 	}
 }
+
+// TestMigrationV4BackfillsBegunAt proves the v4 backfill preserves the
+// begin timestamp of rows created at schema v3 (E5 audit round 10).
+func TestMigrationV4BackfillsBegunAt(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.db")
+	partial := []Migration{Migrations[0], Migrations[1], Migrations[2]}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.migrations = partial
+	if err := s.Migrate(t.TempDir()); err != nil {
+		t.Fatalf("migrate to v3: %v", err)
+	}
+	if err := s.RegisterResource(nil, "vault-main", "res-rev-1", "/srv/vault", "/srv/vault", "markdown", "disabled"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RegisterRoute(nil, "wiki-maintenance", "route-rev-1", "policy-rev-1", "vault-main", "hermes-main", "{}", now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InitializeRouteState(nil, "wiki-maintenance"); err != nil {
+		t.Fatal(err)
+	}
+	seedIntentChain(t, s, "dispatch-v4")
+	// A v3-era row: the begun_at column does not exist yet.
+	if _, err := s.Exec(`INSERT INTO work_receipts
+		(receipt_id, dispatch_id, run_id, resource_id, status, changes_json, submitted_at, validation_state, validation_reasons_json)
+		VALUES ('wr-v4', 'dispatch-v4', 'run-v4', 'vault-main', 'begun', '[]', '2026-08-01T00:00:00Z', 'valid', '[]')`); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+
+	upgraded, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer upgraded.Close()
+	if err := upgraded.Migrate(t.TempDir()); err != nil {
+		t.Fatalf("migrate to v4: %v", err)
+	}
+	view, err := upgraded.LoadWorkReceipt(context.Background(), "dispatch-v4", "run-v4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.BegunAt != "2026-08-01T00:00:00Z" {
+		t.Fatalf("v4 backfill must preserve the begin timestamp, got %q", view.BegunAt)
+	}
+}

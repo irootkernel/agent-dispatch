@@ -308,6 +308,34 @@ func TestRouteGuardDirtyNeverErasedByFailure(t *testing.T) {
 		s.ActiveDispatchID = "d-1"
 		s.DirtyGeneration = 2
 	})
+	// Negative branches for the E5 edges: a pending reconciliation
+	// completion without the flag, and a pending flag dropped by a clean
+	// completion, are both refused.
+	pendingCompletion := routeSnap(func(s *RouteSnapshot) {
+		s.State = RouteActiveClean
+		s.ActiveDispatchID = "d-1"
+	})
+	if err := ValidateRouteTransition(pendingCompletion, RouteFollowupReady, ReasonWorkCompletedDirty, RouteEvidence{ReceiptRef: "wr-1"}); err == nil {
+		t.Fatal("a completion follow-up without a pending reconciliation must be rejected")
+	}
+	cleanDrop := routeSnap(func(s *RouteSnapshot) {
+		s.State = RouteActiveClean
+		s.ActiveDispatchID = "d-1"
+		s.PendingReconcile = true
+	})
+	if err := ValidateRouteTransition(cleanDrop, RouteIdle, ReasonWorkCompletedClean, RouteEvidence{ReceiptRef: "wr-1"}); err == nil {
+		t.Fatal("a clean completion must not silently drop a pending reconciliation")
+	}
+	suppressPending := routeSnap(func(s *RouteSnapshot) {
+		s.State = RouteActiveDirty
+		s.ActiveDispatchID = "d-1"
+		s.DirtyGeneration = 1
+		s.PendingReconcile = true
+	})
+	if err := ValidateRouteTransition(suppressPending, RouteIdle, ReasonWorkSuppressed, RouteEvidence{ReceiptRef: "wr-1"}); err == nil {
+		t.Fatal("exact suppression must not silently drop a pending reconciliation")
+	}
+
 	// Only an exact-suppression decision with receipt evidence may clear
 	// a dirty generation to IDLE (E5-T3); plain dirty completion still
 	// routes to FOLLOWUP_READY and evidence-less suppression is refused.

@@ -349,19 +349,17 @@ func TestOversizedManifestRefused(t *testing.T) {
 	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1"}, &out, &errb); code != 0 {
 		t.Fatalf("begin: %s", errb.String())
 	}
-	oversized := "[" + strings.Repeat(`{"path":"Inbox/x.md"},`, 30000) + `{"path":"Inbox/y.md"}]`
-	out.Reset()
-	errb.Reset()
+	oversized := "[" + strings.Repeat(`{"path":"Inbox/x.md"},`, 60000) + `{"path":"Inbox/y.md"}]`
+	var dErrb bytes.Buffer
+	code := 0
 	withStdin(t, oversized, func() {
-		Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1", "--manifest", "-"}, &out, &errb)
+		code = Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1", "--manifest", "-"}, &out, &dErrb)
 	})
-	if code := 0; true {
-		var dummy bytes.Buffer
-		code = Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1", "--manifest", "-"}, &dummy, &dummy)
-		_ = code
+	if code != 4 {
+		t.Fatalf("an oversized manifest must be rejected exit 4, got %d: %s", code, dErrb.String())
 	}
-	if !strings.Contains(errb.String(), "work_receipt_invalid") && !strings.Contains(errb.String(), "manifest exceeds") {
-		t.Fatalf("an oversized manifest must be rejected: %s", errb.String())
+	if !strings.Contains(dErrb.String(), "manifest exceeds") {
+		t.Fatalf("the bound must be named: %s", dErrb.String())
 	}
 }
 
@@ -514,5 +512,37 @@ func TestFailureBudgetResetsAfterValidCompletion(t *testing.T) {
 	after := decodeEnvelope(t, &out)
 	if after["route_state"] != "FOLLOWUP_READY" {
 		t.Fatalf("a valid completion must reset the failure budget: %v", after)
+	}
+}
+
+// TestObservedBeforeRunNeverSuppresses proves a change whose latest
+// observation strictly predates the run's begin is never attributed to
+// the run, even with an exact digest (E5 audit round 10, F003).
+func TestObservedBeforeRunNeverSuppresses(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	res, _ := e4t3Dispatch(t, configPath, vault)
+	dispatchID, _ := res["dispatch_id"].(string)
+	// A pre-begin change; the receipt will match its digest exactly.
+	e5t3Merge(t, configPath, vault, "Indexes/early.md", "early content")
+	time.Sleep(1100 * time.Millisecond)
+	var out, errb bytes.Buffer
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1"}, &out, &errb); code != 0 {
+		t.Fatalf("begin: %s", errb.String())
+	}
+	out.Reset()
+	errb.Reset()
+	manifest := `[{"path":"Indexes/early.md","after_digest":"` + e5t3Digest("early content") + `"}]`
+	withStdin(t, manifest, func() {
+		Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1", "--manifest", "-"}, &out, &errb)
+	})
+	if errb.Len() != 0 {
+		t.Fatalf("complete: %s", errb.String())
+	}
+	completed := decodeEnvelope(t, &out)
+	if completed["self_change_suppressed"] == true || completed["route_state"] != "FOLLOWUP_READY" {
+		t.Fatalf("a pre-begin change must never suppress: %v", completed)
+	}
+	if audit := e5t3Attribution(t, configPath, dispatchID); !strings.Contains(audit, "observed_before_run") {
+		t.Fatalf("the temporal demotion must be audited: %s", audit)
 	}
 }

@@ -464,3 +464,55 @@ func TestReconcileSubmitSkippedWarning(t *testing.T) {
 	}
 	_ = vault
 }
+
+// TestQuarantineListFiltersAndBounds proves the state filter, the limit
+// bound, and the usage rejection of an out-of-range limit (E5 audit
+// round 10, F005).
+func TestQuarantineListFiltersAndBounds(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	e5t4Rewrite(t, configPath, `      protected: []`, `      protected: ["Secrets/**"]`)
+	os.MkdirAll(filepath.Join(vault, "Secrets"), 0o755)
+	os.WriteFile(filepath.Join(vault, "Secrets", "a.md"), []byte("a"), 0o644)
+	os.WriteFile(filepath.Join(vault, "Secrets", "b.md"), []byte("b"), 0o644)
+	e4t3RegisterRoute(t, configPath)
+	setPlanEnv(t, vault, false)
+	var out, errb bytes.Buffer
+	withStdin(t, `[{"name":"Secrets/a.md","exists":true,"new":true,"size":1,"type":"f"}]`, func() {
+		Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman", "--no-submit"}, &out, &errb)
+	})
+	if errb.Len() != 0 {
+		t.Fatalf("first hold: %s", errb.String())
+	}
+	// A second hold on the other protected file.
+	os.WriteFile(filepath.Join(vault, "Secrets", "b.md"), []byte("bb"), 0o644)
+	out.Reset()
+	errb.Reset()
+	withStdin(t, `[{"name":"Secrets/b.md","exists":true,"new":true,"size":2,"type":"f"}]`, func() {
+		Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman", "--no-submit"}, &out, &errb)
+	})
+	if errb.Len() != 0 {
+		t.Fatalf("second hold: %s", errb.String())
+	}
+	// The state filter and the route filter narrow, the limit bounds.
+	var o, e bytes.Buffer
+	if code := Run([]string{"quarantine", "list", "--config", configPath, "--state", "held", "--limit", "1"}, &o, &e); code != 0 {
+		t.Fatalf("bounded list: %s", e.String())
+	}
+	listing := decodeEnvelope(t, &o)
+	if listing["count"].(float64) != 1 {
+		t.Fatalf("the limit must bound the listing: %v", listing)
+	}
+	o.Reset()
+	e.Reset()
+	if code := Run([]string{"quarantine", "list", "--config", configPath, "--route", "absent"}, &o, &e); code != 0 {
+		t.Fatalf("route filter: %s", e.String())
+	}
+	if decodeEnvelope(t, &o)["count"].(float64) != 0 {
+		t.Fatal("an absent route must list nothing")
+	}
+	o.Reset()
+	e.Reset()
+	if code := Run([]string{"quarantine", "list", "--config", configPath, "--limit", "0"}, &o, &e); code != 2 {
+		t.Fatalf("limit 0 must be a usage error, got %d", code)
+	}
+}

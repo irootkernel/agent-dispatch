@@ -29,7 +29,7 @@ func AdapterVersions() map[string]string {
 	return map[string]string{
 		"watchman":      "bounded parser and managed trigger lifecycle, verified watchman 2026.07.27.00 (E2)",
 		"localfs":       "containment resolver (E2-T2)",
-		"sqlite":        "schema-v1..v3 (E1-T4 repositories; v2 attempts uniqueness, v3 target scope)",
+		"sqlite":        "schema-v1..v4 (v2 attempts uniqueness, v3 target scope, v4 work-receipt begin windows)",
 		"hermeskanban":  "public-cli transport, capability probe, and durable sink, verified hermes 0.19.1 (E4-T1..T4)",
 		"hermeswebhook": "not-implemented (E6)",
 	}

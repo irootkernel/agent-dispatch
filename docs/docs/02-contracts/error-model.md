@@ -128,7 +128,7 @@ The v0.1 registry is closed: implementations emit only the codes below. Adding o
 Boundary notes:
 
 - `path_absolute_rejected` is malformed input (class 4); an absolute path is structurally invalid. `path_traversal_rejected`, `path_symlink_escape`, and `source_unsafe_path` are containment violations (class 30) even though no side effect occurred.
-- `source_unsafe_path` is the non-durable containment rejection used when no safe evidence can be stored. When structural policy durably quarantines an unsafe path (the configured default), the code is `unsafe_path_quarantined` (class 5).
+- `source_unsafe_path` is the containment rejection used today: the invocation is refused before observation commit (exit 30) because no safe evidence can be stored. `unsafe_path_quarantined` (class 5) is reserved for a future policy that durably stores unsafe-path evidence before holding it; the delivered structural holds (protected, bulk) are successful trigger outcomes — exit 0 with an explicit `disposition: quarantine` envelope — so a Watchman trigger never retries a durably held case.
 - `target_response_invalid` maps to `acceptance_unknown` because DUR-005 requires an invalid response after possible submission to enter `unknown`, never `failed`.
 - `source_overflow_reconciliation` applies only when a command context cannot perform the overflow-to-reconciliation conversion; a successful conversion is exit 0 with reason codes.
 

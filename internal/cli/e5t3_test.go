@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
 	"github.com/rootkernel/jjukkumi/internal/ports"
 )
 
@@ -545,4 +547,57 @@ func TestObservedBeforeRunNeverSuppresses(t *testing.T) {
 	if audit := e5t3Attribution(t, configPath, dispatchID); !strings.Contains(audit, "observed_before_run") {
 		t.Fatalf("the temporal demotion must be audited: %s", audit)
 	}
+}
+
+// TestSameSecondWindowIsInclusive documents and pins the inclusive
+// second-precision boundary: a change merged in the same second as the
+// run's begin stays attributable (E5 audit round 12, F001).
+func TestSameSecondWindowIsInclusive(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	res, _ := e4t3Dispatch(t, configPath, vault)
+	dispatchID, _ := res["dispatch_id"].(string)
+	// No sleep: the merge and the begin share the second deliberately.
+	var out, errb bytes.Buffer
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1"}, &out, &errb); code != 0 {
+		t.Fatalf("begin: %s", errb.String())
+	}
+	e5t3Merge(t, configPath, vault, "Indexes/same-second.md", "same second content")
+	out.Reset()
+	errb.Reset()
+	manifest := `[{"path":"Indexes/same-second.md","after_digest":"` + e5t3Digest("same second content") + `"}]`
+	withStdin(t, manifest, func() {
+		Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1", "--manifest", "-"}, &out, &errb)
+	})
+	if errb.Len() != 0 {
+		t.Fatalf("complete: %s", errb.String())
+	}
+	completed := decodeEnvelope(t, &out)
+	if completed["self_change_suppressed"] != true || completed["route_state"] != "IDLE" {
+		t.Fatalf("the same-second boundary must be inclusive: %v", completed)
+	}
+}
+
+// TestGenerationFenceMapsToConflict pins the fence's CLI class: the
+// stale-generation refusal is a conflict (exit 14), not storage (E5
+// audit round 12, F002).
+func TestGenerationFenceMapsToConflict(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	res, _ := e4t3Dispatch(t, configPath, vault)
+	dispatchID, _ := res["dispatch_id"].(string)
+	var out, errb bytes.Buffer
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1"}, &out, &errb); code != 0 {
+		t.Fatalf("begin: %s", errb.String())
+	}
+	store := e5t1Store(t, configPath)
+	_, err := store.CompleteWork(context.Background(), ports.WorkReceiptInput{
+		ReceiptID: "rcpt-fence", DispatchID: dispatchID, RunID: "run-1",
+		Status: "completed", ChangesJSON: "[]", SubmittedAt: "2026-08-21T00:00:00Z", ValidationState: "valid",
+	}, ports.ActiveCompletion{
+		RouteID: "wiki", DispatchID: dispatchID, ReceiptRef: "rcpt-fence", Actor: "test",
+		ExpectedDirtyGeneration: 7, Now: "2026-08-21T00:00:00Z",
+	})
+	if err == nil || !errors.Is(err, sqlite.ErrOptimisticConcurrency) {
+		t.Fatalf("the fence must carry the optimistic-concurrency sentinel: %v", err)
+	}
+	_ = vault
 }

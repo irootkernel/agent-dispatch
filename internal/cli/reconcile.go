@@ -106,7 +106,19 @@ func (a *reconcileArtifacts) reconcileIntentBuilder() func(routeID, reason, deci
 	return func(routeID, reason, decisionID string, changes []records.ChangeItem) (ports.IntentInput, error) {
 		now := dispatch.Timestamp(time.Now())
 		dispatchID := fmt.Sprintf("disp-reconcile-%s-%s", routeID, reason) + "-" + replaceAllClock(now)
-		contentDigest, err := fingerprint.Content(records.ContentFingerprintInput{ResourceID: a.resourceID, RelativeRoot: a.resource.Root})
+		// The fingerprint derives from the reconciliation diff, so
+		// distinct generations produce distinct idempotency keys (a
+		// constant fingerprint would collide on the target's dedup).
+		fpChanges := make([]records.FingerprintChange, 0, len(changes))
+		for _, c := range changes {
+			fpChanges = append(fpChanges, records.FingerprintChange{
+				AfterDigest: string(c.AfterDigest), BeforeDigest: string(c.BeforeDigest),
+				ExistsAfter: c.ExistsAfter, Operation: string(c.Operation), Path: c.Path,
+			})
+		}
+		contentDigest, err := fingerprint.Content(records.ContentFingerprintInput{
+			Changes: fpChanges, ResourceID: a.resourceID, RelativeRoot: a.resource.Root,
+		})
 		if err != nil {
 			return ports.IntentInput{}, err
 		}

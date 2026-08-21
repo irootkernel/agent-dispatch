@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // e5t4Rewrite rewrites one line of the fixture configuration.
@@ -531,5 +532,77 @@ func TestReconcileSubmitReachesAccepted(t *testing.T) {
 	submitted := decodeEnvelope(t, &out)
 	if submitted["submitted"] != true || submitted["submitted_state"] != "accepted" {
 		t.Fatalf("the reconciliation intent must reach acceptance: %v", submitted)
+	}
+}
+
+// TestReconcileRemovedDiffAndDeleteItems proves a removal enters the
+// diff and the intent's evidence as delete items (E5 audit round 12,
+// F003), and quarantine show of an unknown id is the registered
+// not-found code (F004).
+func TestReconcileRemovedDiffAndQuarantineNotFound(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	e4t3RegisterRoute(t, configPath)
+	// Baseline snapshot; complete the reconciliation generation's
+	// intents so the route returns to idle before the removal.
+	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "initial"}, &bytes.Buffer{}, &bytes.Buffer{}); code != 0 {
+		t.Fatal("initial reconcile failed")
+	}
+	store := e5t1Store(t, configPath)
+	var dispatchID string
+	if err := store.QueryRow(`SELECT dispatch_id FROM dispatch_intents ORDER BY created_at DESC LIMIT 1`).Scan(&dispatchID); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "r1"}, &out, &errb); code != 0 {
+		t.Fatalf("begin: %s", errb.String())
+	}
+	out.Reset()
+	errb.Reset()
+	withStdin(t, `[]`, func() {
+		Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "r1", "--manifest", "-"}, &out, &errb)
+	})
+	first := decodeEnvelope(t, &out)
+	followup, _ := first["followup_dispatch_id"].(string)
+	if followup == "" {
+		t.Fatalf("the pending generation must collapse into a follow-up: %v", first)
+	}
+	if err := store.ActivateFollowup(context.Background(), followup, "test", "2026-08-21T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", followup, "--run-id", "r2"}, &out, &errb); code != 0 {
+		t.Fatalf("follow-up begin: %s", errb.String())
+	}
+	time.Sleep(1100 * time.Millisecond)
+	out.Reset()
+	errb.Reset()
+	withStdin(t, `[]`, func() {
+		Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", followup, "--run-id", "r2", "--manifest", "-"}, &out, &errb)
+	})
+	if err := os.Remove(filepath.Join(vault, "Inbox", "new.md")); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "manual"}, &out, &errb); code != 0 {
+		t.Fatalf("reconcile after removal: %s", errb.String())
+	}
+	res := decodeEnvelope(t, &out)
+	removed, _ := res["removed"].([]any)
+	if len(removed) != 1 || removed[0] != "Inbox/new.md" {
+		t.Fatalf("the removal must enter the diff: %v", res)
+	}
+	// The intent's evidence carries the deletion.
+	var requestJSON string
+	if err := store.QueryRow(`SELECT request_json FROM dispatch_intents ORDER BY created_at DESC LIMIT 1`).Scan(&requestJSON); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(requestJSON, `"operation":"delete"`) || !strings.Contains(requestJSON, "Inbox/new.md") {
+		t.Fatalf("the deletion must be the intent's bounded evidence: %s", requestJSON)
+	}
+	// An unknown quarantine id reports the registered code.
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"quarantine", "show", "--config", configPath, "q-absent"}, &out, &errb); code != 4 || !strings.Contains(errb.String(), "quarantine_not_found") {
+		t.Fatalf("unknown quarantine must report quarantine_not_found exit 4, got %d: %s", code, errb.String())
 	}
 }

@@ -132,12 +132,15 @@ type Result struct {
 	// SelfChangeSuppressed reports the whole generation cleared (E5-T3).
 	SuppressedPaths      []string `json:"suppressed_paths,omitempty"`
 	SelfChangeSuppressed bool     `json:"self_change_suppressed,omitempty"`
+	// AuditWarning reports a failed post-commit attribution audit
+	// append (the completion stands; the evidence gap is visible).
+	AuditWarning error `json:"-"`
 }
 
 // Begin validates and records one begun run (FBK-005).
 func (s *Service) Begin(ctx context.Context, in BeginInput) (Result, error) {
-	intent, snap, reasons := s.validateLineage(in.DispatchID, in.RunID, in.ExternalTaskID)
-	reasons = append(reasons, s.validateNewRun(in.DispatchID, in.RunID)...)
+	intent, snap, reasons := s.validateLineage(ctx, in.DispatchID, in.RunID, in.ExternalTaskID)
+	reasons = append(reasons, s.validateNewRun(ctx, in.DispatchID, in.RunID)...)
 	if len(reasons) > 0 {
 		s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: reasons})
 		return Result{}, &InvalidError{Reasons: reasons}
@@ -165,7 +168,7 @@ func (s *Service) Begin(ctx context.Context, in BeginInput) (Result, error) {
 // pending reconciliation remains, exactly one latest-state follow-up is
 // scheduled atomically with the receipt update (CON-003).
 func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error) {
-	intent, snap, reasons := s.validateLineage(in.DispatchID, in.RunID, "")
+	intent, snap, reasons := s.validateLineage(ctx, in.DispatchID, in.RunID, "")
 	if len(reasons) > 0 {
 		s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: reasons})
 		return Result{}, &InvalidError{Reasons: reasons}
@@ -214,6 +217,7 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 		Changes: changes,
 	}, dirty, w.SubmittedAt)
 	_ = dirty // the matcher owns the vacuous-window refusal
+	var auditErr error
 	out, err := s.applyCompletion(ctx, intent, snap, w, ports.ActiveCompletion{
 		RouteID: intent.RouteID, DispatchID: in.DispatchID, Failed: false,
 		ReceiptRef: w.ReceiptID, Actor: "hermes-task", DirtySuppressed: decision.FullySuppressed,
@@ -225,11 +229,14 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 	// The decision evidence is recorded only after its receipt
 	// committed: the audit never references an unpersisted receipt
 	// (E5 audit F002).
-	_ = s.Store.AuditAttribution(ctx, "attr-"+w.ReceiptID, in.DispatchID, w.SubmittedAt, decision.ContextJSON())
+	auditErr = s.Store.AuditAttribution(ctx, "attr-"+w.ReceiptID, in.DispatchID, w.SubmittedAt, decision.ContextJSON())
 	out.SuppressedPaths = decision.SuppressedPaths
 	// Report suppression only when a dirty generation actually
 	// cleared (a clean route suppresses nothing, E5 audit F010).
 	out.SelfChangeSuppressed = decision.FullySuppressed && snap.DirtyGeneration > 0
+	// The completion already committed: a failed audit append is
+	// surfaced, never silently discarded (E5 audit round 7).
+	out.AuditWarning = auditErr
 	return out, nil
 }
 
@@ -245,7 +252,7 @@ func (s *Service) Fail(ctx context.Context, in FailInput) (Result, error) {
 	if len(in.Detail) > MaxDetailBytes {
 		reasons = append(reasons, fmt.Sprintf("detail exceeds %d bytes", MaxDetailBytes))
 	}
-	intent, snap, lineageReasons := s.validateLineage(in.DispatchID, in.RunID, "")
+	intent, snap, lineageReasons := s.validateLineage(ctx, in.DispatchID, in.RunID, "")
 	reasons = append(reasons, lineageReasons...)
 	if len(reasons) > 0 {
 		s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: reasons})
@@ -319,7 +326,7 @@ func (s *Service) buildFollowup(original ports.IntentSnapshot) (ports.IntentInpu
 // validateLineage checks the dispatch/resource/task/run lineage rules
 // (feedback-loop §4). It returns the intent and route snapshot when every
 // check passes, and the rejection reasons otherwise.
-func (s *Service) validateLineage(dispatchID, runID, externalTaskID string) (ports.IntentSnapshot, state.RouteSnapshot, []string) {
+func (s *Service) validateLineage(ctx context.Context, dispatchID, runID, externalTaskID string) (ports.IntentSnapshot, state.RouteSnapshot, []string) {
 	var reasons []string
 	if len(dispatchID) == 0 || len(dispatchID) > MaxIDBytes {
 		return ports.IntentSnapshot{}, state.RouteSnapshot{}, []string{"dispatch_id is required and bounded"}
@@ -327,14 +334,14 @@ func (s *Service) validateLineage(dispatchID, runID, externalTaskID string) (por
 	if len(runID) == 0 || len(runID) > MaxIDBytes {
 		return ports.IntentSnapshot{}, state.RouteSnapshot{}, []string{"run_id is required and bounded"}
 	}
-	intent, err := s.Store.LoadIntent(context.Background(), dispatchID)
+	intent, err := s.Store.LoadIntent(ctx, dispatchID)
 	if err != nil {
 		if errors.Is(err, ports.ErrIntentNotFound) {
 			return ports.IntentSnapshot{}, state.RouteSnapshot{}, []string{fmt.Sprintf("dispatch %s does not exist", dispatchID)}
 		}
 		return ports.IntentSnapshot{}, state.RouteSnapshot{}, []string{fmt.Sprintf("dispatch %s could not be read: %v", dispatchID, err)}
 	}
-	snap, err := s.Store.LoadRouteState(context.Background(), intent.RouteID)
+	snap, err := s.Store.LoadRouteState(ctx, intent.RouteID)
 	if err != nil {
 		return ports.IntentSnapshot{}, state.RouteSnapshot{}, []string{fmt.Sprintf("route %s state could not be read: %v", intent.RouteID, err)}
 	}
@@ -356,8 +363,8 @@ func (s *Service) validateLineage(dispatchID, runID, externalTaskID string) (por
 // validateNewRun additionally rejects a run identifier that already
 // recorded a receipt; it gates `work begin` (the terminal commands expect
 // the begun row and update it atomically).
-func (s *Service) validateNewRun(dispatchID, runID string) []string {
-	if _, err := s.Store.LoadWorkReceipt(context.Background(), dispatchID, runID); err == nil {
+func (s *Service) validateNewRun(ctx context.Context, dispatchID, runID string) []string {
+	if _, err := s.Store.LoadWorkReceipt(ctx, dispatchID, runID); err == nil {
 		return []string{fmt.Sprintf("run %s is already recorded for dispatch %s", runID, dispatchID)}
 	} else if !errors.Is(err, ports.ErrWorkReceiptNotFound) {
 		return []string{fmt.Sprintf("run %s could not be checked: %v", runID, err)}

@@ -129,6 +129,11 @@ func runWorkComplete(command string, args []string, stdout, stderr io.Writer) in
 	if err != nil {
 		return workReceiptErr(stderr, command, err)
 	}
+	if result.AuditWarning != nil {
+		return writeEnvelopeWithWarnings(stdout, command, result, []string{
+			"the completion committed but its attribution audit append failed: " + result.AuditWarning.Error(),
+		})
+	}
 	return writeEnvelope(stdout, command, result)
 }
 

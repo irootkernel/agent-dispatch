@@ -148,7 +148,7 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 		DecisionID: out.DecisionID, RouteID: routeID, RouteRevision: s.routeRevision(),
 		PolicyRevision: s.policyRevision(),
 		Disposition:    "reconcile", Classification: "normal",
-		ReasonCodesJSON: fmt.Sprintf(`["reconcile:%s","files:%d"]`, reason, len(out.Added)+len(out.Changed)+len(out.Removed)),
+		ReasonCodesJSON: reconcileReasonCodes(reason, len(out.Added)+len(out.Changed)+len(out.Removed)),
 		CreatedAt:       now, Actor: "reconcile",
 		GenerationLineageJSON: generationLineage(routeID, reason),
 	}); err != nil {
@@ -334,6 +334,15 @@ func (s *FullService) policyRevision() string {
 		return s.PolicyRevision
 	}
 	return "unknown"
+}
+
+// reconcileReasonCodes builds the sorted, encoder-produced reason array
+// (the record contract orders decision reason codes).
+func reconcileReasonCodes(reason string, files int) string {
+	codes := []string{fmt.Sprintf("reconcile:%s", reason), fmt.Sprintf("files:%d", files)}
+	sort.Strings(codes)
+	raw, _ := json.Marshal(codes)
+	return string(raw)
 }
 
 // generationLineage encodes the batch-less decision's lineage document.

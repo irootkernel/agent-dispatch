@@ -29,7 +29,7 @@ Messages are safe for humans. Machine behavior uses `code`, `category`, and pers
 | 2 | usage | Invalid command or flags. |
 | 3 | configuration | Config/schema/route/capability validation failed. |
 | 4 | input rejected | Malformed or unsafe source input; no ambiguous side effect. |
-| 5 | quarantined | Input was durably quarantined; operator action required. |
+| 5 | quarantined | Reserved for a future policy that durably stores structural evidence before holding it; the delivered structural holds are successful exit-0 outcomes with a disposition envelope. |
 | 10 | transient local | Local lock, temporary filesystem, or definite pre-submit transient failure. |
 | 11 | target unavailable | Target definitely unavailable before possible acceptance; retry scheduled or possible. |
 | 12 | target rejected | Target definitely rejected the request. |

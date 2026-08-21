@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -605,4 +606,27 @@ func TestReconcileRemovedDiffAndQuarantineNotFound(t *testing.T) {
 	if code := Run([]string{"quarantine", "show", "--config", configPath, "q-absent"}, &out, &errb); code != 4 || !strings.Contains(errb.String(), "quarantine_not_found") {
 		t.Fatalf("unknown quarantine must report quarantine_not_found exit 4, got %d: %s", code, errb.String())
 	}
+}
+
+func TestReconcileReasonCodesSorted(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	e4t3RegisterRoute(t, configPath)
+	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "initial"}, &bytes.Buffer{}, &bytes.Buffer{}); code != 0 {
+		t.Fatal("reconcile failed")
+	}
+	store := e5t1Store(t, configPath)
+	var codesJSON string
+	if err := store.QueryRow(`SELECT reason_codes_json FROM policy_decisions WHERE disposition = 'reconcile' ORDER BY created_at DESC LIMIT 1`).Scan(&codesJSON); err != nil {
+		t.Fatal(err)
+	}
+	var codes []string
+	if err := json.Unmarshal([]byte(codesJSON), &codes); err != nil {
+		t.Fatalf("not JSON: %s", codesJSON)
+	}
+	for i := 1; i < len(codes); i++ {
+		if codes[i-1] > codes[i] {
+			t.Fatalf("reason codes must be sorted: %v", codes)
+		}
+	}
+	_ = vault
 }

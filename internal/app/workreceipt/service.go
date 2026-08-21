@@ -81,6 +81,20 @@ type Service struct {
 	FailureBudget int
 }
 
+// StoreError wraps one durable-store failure so the CLI boundary
+// classifies it as storage instead of relabeling service defects.
+type StoreError struct{ Err error }
+
+func (e *StoreError) Error() string { return "durable store: " + e.Err.Error() }
+func (e *StoreError) Unwrap() error { return e.Err }
+
+func wrapStore(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &StoreError{Err: err}
+}
+
 // InvalidError reports a receipt rejected by validation; Reasons are the
 // bounded audit reasons persisted with the rejected evidence.
 type InvalidError struct {
@@ -157,7 +171,7 @@ func (s *Service) Begin(ctx context.Context, in BeginInput) (Result, error) {
 		BegunAt:         s.timestamp(),
 	}
 	if err := s.Store.InsertWorkReceipt(ctx, w); err != nil {
-		return Result{}, err
+		return Result{}, wrapStore(err)
 	}
 	return Result{ReceiptID: w.ReceiptID, DispatchID: in.DispatchID, RunID: in.RunID, Status: "begun", RouteState: string(snap.State)}, nil
 }
@@ -189,7 +203,7 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 		return Result{}, &InvalidError{Reasons: []string{fmt.Sprintf("run %s has no begun receipt for dispatch %s", in.RunID, in.DispatchID)}}
 	}
 	if err != nil {
-		return Result{}, err
+		return Result{}, wrapStore(err)
 	}
 	changesJSON, _ := json.Marshal(changes)
 	w := ports.WorkReceiptInput{
@@ -208,7 +222,7 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 	// the route without a follow-up, and the decision is always audited.
 	dirty, err := s.Store.LoadActiveGenerationChanges(ctx, intent.RouteID, in.DispatchID)
 	if err != nil {
-		return Result{}, err
+		return Result{}, wrapStore(err)
 	}
 	decision := Match(ReceiptEvidence{
 		ReceiptID: w.ReceiptID, DispatchID: in.DispatchID, RunID: in.RunID,
@@ -269,7 +283,7 @@ func (s *Service) Fail(ctx context.Context, in FailInput) (Result, error) {
 	}
 	budget, err := s.Store.FailureBudgetRemaining(ctx, intent.RouteID, s.FailureBudget)
 	if err != nil {
-		return Result{}, err
+		return Result{}, wrapStore(err)
 	}
 	return s.applyCompletion(ctx, intent, snap, w, ports.ActiveCompletion{
 		RouteID: intent.RouteID, DispatchID: in.DispatchID, Failed: true,

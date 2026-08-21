@@ -66,8 +66,15 @@ func workReceiptErr(stderr io.Writer, command string, err error) int {
 		writeError(stderr, command, "transition_invalid", "conflict", err.Error())
 		return 14
 	default:
-		writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
-		return 20
+		// Typed classification: store surfaces are storage; anything
+		// else is an internal-class defect, never a storage relabel.
+		var storeErr *workreceipt.StoreError
+		if errors.As(err, &storeErr) {
+			writeError(stderr, command, "sqlite_query_failed", "storage", storeErr.Err.Error())
+			return 20
+		}
+		writeError(stderr, command, "internal_unclassified", "internal", err.Error())
+		return 40
 	}
 }
 

@@ -213,6 +213,12 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 		ResourceID: intent.ResourceID, BegunAt: begun.BegunAt, CompletedAt: w.SubmittedAt,
 		Changes: changes,
 	}, dirty, w.SubmittedAt)
+	// Guard against vacuous suppression (E5 audit): an empty observed
+	// set while a dirty generation exists means the window failed to
+	// load the generation's changes — never proof that it cleared.
+	if snap.DirtyGeneration > 0 && len(dirty) == 0 {
+		decision.FullySuppressed = false
+	}
 	_ = s.Store.AuditAttribution(ctx, "attr-"+w.ReceiptID, in.DispatchID, w.SubmittedAt, decision.ContextJSON())
 	out, err := s.applyCompletion(ctx, intent, snap, w, ports.ActiveCompletion{
 		RouteID: intent.RouteID, DispatchID: in.DispatchID, Failed: false,

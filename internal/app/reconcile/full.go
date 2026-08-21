@@ -252,7 +252,14 @@ func (s *FullService) enumerate() ([]ports.PathFact, error) {
 	root := s.Resolver.Root()
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return err
+			// An unreadable subtree is reported by absence, never a
+			// whole-command abort: one blocked directory must not stop
+			// the scope's reconciliation (the pending generation still
+			// collapses conservatively).
+			if path == root {
+				return err
+			}
+			return fs.SkipDir
 		}
 		if path == root {
 			return nil

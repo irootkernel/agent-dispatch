@@ -154,7 +154,18 @@ func quarantineErr(stderr io.Writer, command string, err error) int {
 // and the single pending reconciliation generation.
 func runReconcile(args []string, stdout, stderr io.Writer) int {
 	command := "reconcile"
-	flags, code := parseDispatchesFlags(command, args, stderr, nil)
+	// --submit is reconcile-only: it is stripped here so the shared
+	// parser rejects it on every other command.
+	submit := false
+	filtered := make([]string, 0, len(args))
+	for _, arg := range args {
+		if arg == "--submit" {
+			submit = true
+			continue
+		}
+		filtered = append(filtered, arg)
+	}
+	flags, code := parseDispatchesFlags(command, filtered, stderr, nil)
 	if code != 0 {
 		return code
 	}
@@ -166,7 +177,6 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 	if !reconcile.Reasons[reason] {
 		return usageError(stderr, command, "--reason must be one of initial, scheduled, overflow, fresh-instance, lost-cursor, manual, delivery, or stale-active")
 	}
-	submit := flags.val("--submit") == "true"
 	artifacts, exit := planConfigOnly(command, flags.val("--config"), routeID, stderr)
 	if exit != 0 {
 		return exit

@@ -533,47 +533,17 @@ func buildHeldLineage(a *planArtifacts) (ports.Lineage, ports.QuarantineInput, e
 }
 
 // buildLineage assembles the durable persistence unit from the planned
-// artifacts: one observation with its normalized changes, the canonical
-// batch, the immutable decision, and the intent with its self-contained
-// request.
+// artifacts: the shared observation, batch, and decision from
+// buildHeldLineage plus the intent with its self-contained request.
 func buildLineage(a *planArtifacts) (ports.Lineage, error) {
+	lin, _, err := buildHeldLineage(a)
+	if err != nil {
+		return ports.Lineage{}, err
+	}
 	gen := ids.NewUUIDv7(time.Now)
-	observationID, err := gen.NewID()
-	if err != nil {
-		return ports.Lineage{}, err
-	}
-	batchID, err := gen.NewID()
-	if err != nil {
-		return ports.Lineage{}, err
-	}
-	decisionID, err := gen.NewID()
-	if err != nil {
-		return ports.Lineage{}, err
-	}
 	dispatchID, err := gen.NewID()
 	if err != nil {
 		return ports.Lineage{}, err
-	}
-	now := dispatch.Timestamp(time.Now())
-	changes := make([]ports.ObservationChange, 0, len(a.batch.Changes))
-	for i, c := range a.batch.Changes {
-		changes = append(changes, ports.ObservationChange{
-			Ordinal: i, Path: c.Path, Operation: string(c.Operation), ExistsAfter: c.ExistsAfter,
-			FileType: string(c.FileType), BeforeDigest: string(c.BeforeDigest), AfterDigest: string(c.AfterDigest),
-			DigestStatus: string(c.DigestStatus),
-		})
-	}
-	flagsJSON, err := json.Marshal(a.env.Flags())
-	if err != nil {
-		return ports.Lineage{}, err
-	}
-	reasons, err := json.Marshal(a.plan.ReasonCodes)
-	if err != nil {
-		return ports.Lineage{}, err
-	}
-	classification := "normal"
-	if len(a.plan.Classification) > 0 {
-		classification = a.plan.Classification[0]
 	}
 	req, key, err := dispatch.BuildRequest(dispatch.RequestInput{
 		DispatchID: string(dispatchID),
@@ -597,37 +567,15 @@ func buildLineage(a *planArtifacts) (ports.Lineage, error) {
 	if err != nil {
 		return ports.Lineage{}, err
 	}
-	return ports.Lineage{
-		Observation: ports.ObservationInput{
-			ObservationID: string(observationID), SchemaVersion: "jjukkumi.source-observation/v1",
-			SourceType: "watchman", SourceID: a.route.Source.SourceID,
-			SourceEventKey: a.input.SourceEventKey(a.route.Source.SourceID),
-			TriggerName:    a.env.Trigger, ResourceID: a.route.Source.Resource,
-			ObservedAt: now, ReceivedAt: now,
-			RawPayloadDigest: string(a.input.RawDigest), IngestStatus: "accepted",
-			FlagsJSON: string(flagsJSON), Changes: changes,
-		},
-		Batch: ports.BatchInput{
-			BatchID: string(batchID), RouteID: a.opts.routeID, RouteRevision: a.plan.Route.Revision,
-			ResourceID: a.route.Source.Resource, CreatedAt: now,
-			ContentFingerprint: a.plan.ContentFingerprint,
-			ObservationIDs:     []string{string(observationID)},
-		},
-		Decision: ports.DecisionInput{
-			DecisionID: string(decisionID), BatchID: string(batchID), RouteID: a.opts.routeID,
-			RouteRevision: a.plan.Route.Revision, PolicyRevision: a.revision,
-			Disposition: a.plan.Disposition, Classification: classification,
-			ReasonCodesJSON: string(reasons), CreatedAt: now, Actor: "planner",
-		},
-		Intent: ports.IntentInput{
-			DispatchID: string(dispatchID), DecisionID: string(decisionID), RouteID: a.opts.routeID,
-			RouteRevision: a.plan.Route.Revision, TargetID: a.targetID, TargetType: a.target.Type,
-			TargetScope: a.target.Board,
-			ResourceID:  a.route.Source.Resource, Generation: 1, IdempotencyKey: key,
-			ContentFingerprint: a.plan.ContentFingerprint, ManifestDigest: dispatch.ManifestDigest(a.batch.Changes),
-			RequestVersion: dispatch.RequestContractVersion, RequestJSON: requestJSON, CreatedAt: now,
-		},
-	}, nil
+	lin.Intent = ports.IntentInput{
+		DispatchID: string(dispatchID), DecisionID: lin.Decision.DecisionID, RouteID: a.opts.routeID,
+		RouteRevision: a.plan.Route.Revision, TargetID: a.targetID, TargetType: a.target.Type,
+		TargetScope: a.target.Board,
+		ResourceID:  a.route.Source.Resource, Generation: 1, IdempotencyKey: key,
+		ContentFingerprint: a.plan.ContentFingerprint, ManifestDigest: dispatch.ManifestDigest(a.batch.Changes),
+		RequestVersion: dispatch.RequestContractVersion, RequestJSON: requestJSON, CreatedAt: lin.Decision.CreatedAt,
+	}
+	return lin, nil
 }
 
 // flagsOf projects the trusted source flags onto the request flag list.

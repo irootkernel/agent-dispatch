@@ -43,7 +43,7 @@ func parseDispatchesFlags(command string, args []string, stderr io.Writer, allow
 	for name := range allowed {
 		valueFlags[name] = true
 	}
-	boolFlags := map[string]bool{"--yes": true, "--submit": true}
+	boolFlags := map[string]bool{"--yes": true}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		name, value := arg, ""

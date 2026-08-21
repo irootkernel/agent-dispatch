@@ -138,7 +138,7 @@ Attempt result, receipt, intent state, route active state, and audit transition 
 
 ### Work completion transaction
 
-Validated work receipt, active dispatch execution projection, exact suppression decision and, when a follow-up is required, the follow-up policy decision (referencing the dirty generation lineage) and follow-up intent creation commit together.
+The validated work receipt update, the route transition, and — when a follow-up is required — the follow-up policy decision (referencing the dirty generation lineage) and follow-up intent creation commit together; the exact-suppression audit appends immediately after the commit and surfaces any append failure as a visible warning.
 
 No SQLite transaction may remain open while calling Watchman, hashing a large file, invoking Hermes, or waiting on a network response.
 

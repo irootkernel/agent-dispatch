@@ -151,15 +151,16 @@ func TestWorkCompleteValidatesManifest(t *testing.T) {
 	dispatchID, _ := res["dispatch_id"].(string)
 
 	manifests := map[string]string{
-		"absolute path":       `[{"path":"/etc/passwd"}]`,
-		"traversal":           `[{"path":"../escape.md"}]`,
-		"non-canonical":       `[{"path":"./Inbox/new.md"}]`,
-		"bad digest":          `[{"path":"Inbox/new.md","after_digest":"md5:zz"}]`,
-		"note body":           `[{"path":"Inbox/new.md","note":"agent thoughts"}]`,
-		"symlink escape":      `[{"path":"link-out.md"}]`,
-		"over change limit":   `[` + strings.TrimRight(strings.Repeat(`{"path":"Inbox/new.md"},`, 1001), ",") + `]`,
-		"full doc wrong run":  `{"schema_version":"jjukkumi.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"other-run","status":"completed","changes":[]}`,
-		"full doc bad schema": `{"schema_version":"jjukkumi.work-receipt/v2","dispatch_id":"` + dispatchID + `","run_id":"run-1","status":"completed","changes":[]}`,
+		"absolute path":           `[{"path":"/etc/passwd"}]`,
+		"traversal":               `[{"path":"../escape.md"}]`,
+		"non-canonical":           `[{"path":"./Inbox/new.md"}]`,
+		"bad digest":              `[{"path":"Inbox/new.md","after_digest":"md5:zz"}]`,
+		"note body":               `[{"path":"Inbox/new.md","note":"agent thoughts"}]`,
+		"symlink escape":          `[{"path":"link-out.md"}]`,
+		"over change limit":       `[` + strings.TrimRight(strings.Repeat(`{"path":"Inbox/new.md"},`, 1001), ",") + `]`,
+		"full doc wrong run":      `{"schema_version":"jjukkumi.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"other-run","status":"completed","changes":[]}`,
+		"full doc bad schema":     `{"schema_version":"jjukkumi.work-receipt/v2","dispatch_id":"` + dispatchID + `","run_id":"run-1","status":"completed","changes":[]}`,
+		"full doc wrong resource": `{"schema_version":"jjukkumi.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"run-1","resource_id":"wrong-vault","status":"completed","changes":[]}`,
 	}
 	// A symlink inside the vault pointing outside exercises the SEC-002
 	// containment defense through the configured resource root.
@@ -222,11 +223,15 @@ func TestWorkCompleteCleanSchedulesNothing(t *testing.T) {
 		t.Fatalf("clean completion result wrong: %v", completed)
 	}
 
-	// The begun row became the completed receipt (one row per run).
+	// The begun row became the completed receipt (one row per run),
+	// and the begin timestamp survived the terminal update (v4).
 	store := e5t1Store(t, configPath)
-	var status string
-	if err := store.QueryRow(`SELECT status FROM work_receipts WHERE dispatch_id = ? AND run_id = 'run-1'`, dispatchID).Scan(&status); err != nil || status != "completed" {
+	var status, begunAt, submittedAt string
+	if err := store.QueryRow(`SELECT status, begun_at, submitted_at FROM work_receipts WHERE dispatch_id = ? AND run_id = 'run-1'`, dispatchID).Scan(&status, &begunAt, &submittedAt); err != nil || status != "completed" {
 		t.Fatalf("receipt row must be updated in place: %q %v", status, err)
+	}
+	if begunAt == "" || begunAt > submittedAt {
+		t.Fatalf("the begin window must persist across the terminal update: begun %q submitted %q", begunAt, submittedAt)
 	}
 	if e5t1RouteState(t, store) != "IDLE" {
 		t.Fatal("route must return to IDLE after a clean completion")

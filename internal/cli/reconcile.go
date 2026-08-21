@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"time"
@@ -105,7 +107,7 @@ func planConfigOnly(command, configPath, routeID string, stderr io.Writer) (*rec
 func (a *reconcileArtifacts) reconcileIntentBuilder() func(routeID, reason, decisionID string, changes []records.ChangeItem) (ports.IntentInput, error) {
 	return func(routeID, reason, decisionID string, changes []records.ChangeItem) (ports.IntentInput, error) {
 		now := dispatch.Timestamp(time.Now())
-		dispatchID := fmt.Sprintf("disp-reconcile-%s-%s", routeID, reason) + "-" + replaceAllClock(now)
+		dispatchID := fmt.Sprintf("disp-reconcile-%s-%s", routeID, reason) + "-" + replaceAllClock(now) + "-" + randomSuffixHex()
 		// The fingerprint derives from the reconciliation diff, so
 		// distinct generations produce distinct idempotency keys (a
 		// constant fingerprint would collide on the target's dedup).
@@ -167,6 +169,15 @@ func (a *reconcileArtifacts) submitRuntime(store storeOp) (*dispatch.Runtime, er
 		Store: store, Sink: sink, Now: time.Now,
 		LeaseTTL: time.Minute, Backoff: backoff, JitterUnit: jitterUnit, Actor: "reconcile",
 	}, nil
+}
+
+// randomSuffixHex keeps same-second reconciliation intents distinct.
+func randomSuffixHex() string {
+	var b [4]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "00000000"
+	}
+	return hex.EncodeToString(b[:])
 }
 
 func replaceAllClock(now string) string {

@@ -575,6 +575,18 @@ func TestSameSecondWindowIsInclusive(t *testing.T) {
 	if completed["self_change_suppressed"] != true || completed["route_state"] != "IDLE" {
 		t.Fatalf("the same-second boundary must be inclusive: %v", completed)
 	}
+	// The dirty-generation window is inclusive on the same second too:
+	// the merge created in the dispatch's second entered the generation.
+	if n := g4StoreInt(t, configPath, `SELECT dirty_generation FROM route_runtime_state WHERE route_id='wiki'`); n != 0 {
+		t.Fatalf("the suppressed generation must have collapsed: %d", n)
+	}
+	store := e5t1Store(t, configPath)
+	var dirtyBatches int
+	if err := store.QueryRow(`SELECT COUNT(*) FROM change_batches cb
+		JOIN dispatch_intents d ON d.dispatch_id = ?
+		WHERE cb.created_at >= d.created_at AND cb.batch_id != (SELECT COALESCE(batch_id,'') FROM policy_decisions WHERE decision_id = d.decision_id)`, dispatchID).Scan(&dirtyBatches); err != nil || dirtyBatches < 1 {
+		t.Fatalf("the same-second merge must be inside the window: %d %v", dirtyBatches, err)
+	}
 }
 
 // TestGenerationFenceMapsToConflict pins the fence's CLI class: the

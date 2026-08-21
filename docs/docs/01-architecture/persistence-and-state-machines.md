@@ -106,6 +106,7 @@ stateDiagram-v2
     ACTIVE_DIRTY --> IDLE: work completes with every change exact-suppressed by a validated receipt
     ACTIVE_DIRTY --> FOLLOWUP_READY: work completes
     ACTIVE_CLEAN --> FOLLOWUP_READY: work failed or canceled, retry budget remains
+    ACTIVE_CLEAN --> FOLLOWUP_READY: work completes with a pending reconciliation generation
     ACTIVE_DIRTY --> FOLLOWUP_READY: work failed or canceled, retry budget remains
     ACTIVE_CLEAN --> UNCERTAIN: work failed, retry budget exhausted
     ACTIVE_DIRTY --> UNCERTAIN: work failed, retry budget exhausted

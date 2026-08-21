@@ -185,7 +185,9 @@ func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.Acti
 	} else if to == state.RouteFollowupReady {
 		// The completed dispatch no longer holds the slot; the follow-up
 		// takes it at activation.
-		if _, err := tx.Exec(`UPDATE route_runtime_state SET active_dispatch_id = NULL, dirty_generation = 0, dirty_since = NULL WHERE route_id = ? AND active_dispatch_id = ?`, req.RouteID, req.DispatchID); err != nil {
+		// The pending reconciliation generation collapses into this one
+		// follow-up (repeated reconciliations never stack generations).
+		if _, err := tx.Exec(`UPDATE route_runtime_state SET active_dispatch_id = NULL, dirty_generation = 0, dirty_since = NULL, pending_reconcile = 0 WHERE route_id = ? AND active_dispatch_id = ?`, req.RouteID, req.DispatchID); err != nil {
 			return out, err
 		}
 		if req.FollowupRequest != nil {

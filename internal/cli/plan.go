@@ -262,6 +262,18 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	if code != 0 {
 		return code
 	}
+	// Structural dispositions never reach the coordinator's dispatch
+	// path: quarantine holds durably (PTH-008), reconcile marks the
+	// single pending generation (SRC-005), and drop persists only the
+	// evidence (POL-006).
+	switch artifacts.plan.Disposition {
+	case "quarantine":
+		return persistQuarantine(command, artifacts, stdout, stderr)
+	case "reconcile":
+		return persistReconcileArrival(command, artifacts, stdout, stderr)
+	case "drop":
+		return persistDrop(command, artifacts, stdout, stderr)
+	}
 	outcome, exit := persistThroughCoordinator(command, artifacts, stderr)
 	if exit != 0 {
 		return exit
@@ -370,6 +382,147 @@ func persistThroughCoordinator(command string, artifacts *planArtifacts, stderr 
 		return persistOutcome{merged: true, dirty: snap.DirtyGeneration}, 0
 	}
 	return persistOutcome{dispatchID: lin.Intent.DispatchID, store: store, closer: closer}, 0
+}
+
+// persistQuarantine commits the quarantine-classified arrival with its
+// durable hold and reports the operator-visible case (PTH-008: the
+// protected or bulk paths never enter a task manifest).
+func persistQuarantine(command string, a *planArtifacts, stdout, stderr io.Writer) int {
+	store, closer, exit := openOperatorStore(command, a.opts.configPath, stderr)
+	if exit != 0 {
+		return exit
+	}
+	defer closer.Close()
+	lin, item, err := buildHeldLineage(a)
+	if err != nil {
+		writeError(stderr, command, "internal_unclassified", "internal", err.Error())
+		return 40
+	}
+	if err := store.CommitQuarantineLineage(requestCtx(), lin, item); err != nil {
+		writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
+		return 20
+	}
+	return writeEnvelope(stdout, command, map[string]any{
+		"route_id": a.opts.routeID, "disposition": "quarantine",
+		"quarantine_id": item.QuarantineID, "reason_codes": a.plan.ReasonCodes,
+		"submitted": false,
+	})
+}
+
+// persistReconcileArrival commits the reconcile-classified arrival and
+// marks the single pending reconciliation generation (SRC-005: overflow
+// and fresh instance never dispatch partial ordinary changes).
+func persistReconcileArrival(command string, a *planArtifacts, stdout, stderr io.Writer) int {
+	store, closer, exit := openOperatorStore(command, a.opts.configPath, stderr)
+	if exit != 0 {
+		return exit
+	}
+	defer closer.Close()
+	lin, _, err := buildHeldLineage(a)
+	if err != nil {
+		writeError(stderr, command, "internal_unclassified", "internal", err.Error())
+		return 40
+	}
+	if err := store.CommitReconcileLineage(requestCtx(), lin, a.env.Clock); err != nil {
+		writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
+		return 20
+	}
+	return writeEnvelope(stdout, command, map[string]any{
+		"route_id": a.opts.routeID, "disposition": "reconcile",
+		"reason_codes": a.plan.ReasonCodes, "pending_reconcile": true,
+		"submitted": false,
+	})
+}
+
+// persistDrop commits the dropped arrival's evidence only.
+func persistDrop(command string, a *planArtifacts, stdout, stderr io.Writer) int {
+	store, closer, exit := openOperatorStore(command, a.opts.configPath, stderr)
+	if exit != 0 {
+		return exit
+	}
+	defer closer.Close()
+	lin, _, err := buildHeldLineage(a)
+	if err != nil {
+		writeError(stderr, command, "internal_unclassified", "internal", err.Error())
+		return 40
+	}
+	if err := store.CommitDropLineage(requestCtx(), lin); err != nil {
+		writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
+		return 20
+	}
+	return writeEnvelope(stdout, command, map[string]any{
+		"route_id": a.opts.routeID, "disposition": "drop",
+		"reason_codes": a.plan.ReasonCodes,
+	})
+}
+
+// buildHeldLineage assembles the observation, batch, and decision of a
+// non-dispatching arrival plus, when requested, its quarantine hold.
+func buildHeldLineage(a *planArtifacts) (ports.Lineage, ports.QuarantineInput, error) {
+	gen := ids.NewUUIDv7(time.Now)
+	observationID, err := gen.NewID()
+	if err != nil {
+		return ports.Lineage{}, ports.QuarantineInput{}, err
+	}
+	batchID, err := gen.NewID()
+	if err != nil {
+		return ports.Lineage{}, ports.QuarantineInput{}, err
+	}
+	decisionID, err := gen.NewID()
+	if err != nil {
+		return ports.Lineage{}, ports.QuarantineInput{}, err
+	}
+	quarantineID, err := gen.NewID()
+	if err != nil {
+		return ports.Lineage{}, ports.QuarantineInput{}, err
+	}
+	now := dispatch.Timestamp(time.Now())
+	changes := make([]ports.ObservationChange, 0, len(a.batch.Changes))
+	for i, c := range a.batch.Changes {
+		changes = append(changes, ports.ObservationChange{
+			Ordinal: i, Path: c.Path, Operation: string(c.Operation), ExistsAfter: c.ExistsAfter,
+			FileType: string(c.FileType), BeforeDigest: string(c.BeforeDigest), AfterDigest: string(c.AfterDigest),
+			DigestStatus: string(c.DigestStatus),
+		})
+	}
+	flagsJSON, err := json.Marshal(a.env.Flags())
+	if err != nil {
+		return ports.Lineage{}, ports.QuarantineInput{}, err
+	}
+	reasons, err := json.Marshal(a.plan.ReasonCodes)
+	if err != nil {
+		return ports.Lineage{}, ports.QuarantineInput{}, err
+	}
+	classification := "normal"
+	if len(a.plan.Classification) > 0 {
+		classification = a.plan.Classification[0]
+	}
+	return ports.Lineage{
+			Observation: ports.ObservationInput{
+				ObservationID: string(observationID), SchemaVersion: "jjukkumi.source-observation/v1",
+				SourceType: "watchman", SourceID: a.route.Source.SourceID,
+				SourceEventKey: a.input.SourceEventKey(a.route.Source.SourceID),
+				TriggerName:    a.env.Trigger, ResourceID: a.route.Source.Resource,
+				ObservedAt: now, ReceivedAt: now,
+				RawPayloadDigest: string(a.input.RawDigest), IngestStatus: "accepted",
+				FlagsJSON: string(flagsJSON), Changes: changes,
+			},
+			Batch: ports.BatchInput{
+				BatchID: string(batchID), RouteID: a.opts.routeID, RouteRevision: a.plan.Route.Revision,
+				ResourceID: a.route.Source.Resource, CreatedAt: now,
+				ContentFingerprint: a.plan.ContentFingerprint,
+				ObservationIDs:     []string{string(observationID)},
+			},
+			Decision: ports.DecisionInput{
+				DecisionID: string(decisionID), BatchID: string(batchID), RouteID: a.opts.routeID,
+				RouteRevision: a.plan.Route.Revision, PolicyRevision: a.revision,
+				Disposition: a.plan.Disposition, Classification: classification,
+				ReasonCodesJSON: string(reasons), CreatedAt: now, Actor: "planner",
+			},
+		}, ports.QuarantineInput{
+			QuarantineID: "q-" + string(quarantineID), BatchID: string(batchID), DecisionID: string(decisionID),
+			ReasonCodes: a.plan.ReasonCodes, CreatedAt: now,
+		}, nil
 }
 
 // buildLineage assembles the durable persistence unit from the planned

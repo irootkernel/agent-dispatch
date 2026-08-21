@@ -100,7 +100,7 @@ var routeTable = map[routeEdge][]RouteReason{
 	{RouteActiveClean, RouteIdle}:          {ReasonWorkCompletedClean},
 	{RouteActiveDirty, RouteIdle}:          {ReasonWorkSuppressed},
 	{RouteActiveDirty, RouteFollowupReady}: {ReasonWorkCompletedDirty, ReasonWorkRetryBudgetRemains},
-	{RouteActiveClean, RouteFollowupReady}: {ReasonWorkRetryBudgetRemains},
+	{RouteActiveClean, RouteFollowupReady}: {ReasonWorkCompletedDirty, ReasonWorkRetryBudgetRemains},
 	{RouteActiveClean, RouteUncertain}:     {ReasonRetryBudgetExhausted, ReasonExecutionEvidenceStale},
 	{RouteActiveDirty, RouteUncertain}:     {ReasonRetryBudgetExhausted, ReasonExecutionEvidenceStale},
 	{RouteFollowupReady, RouteActiveClean}: {ReasonFollowupAccepted},
@@ -233,8 +233,11 @@ func ValidateRouteTransition(snap RouteSnapshot, to RouteState, reason RouteReas
 			return routeRejected(from, to, reason, "failure follow-up requires remaining failure budget")
 		}
 	case (routeEdge{RouteActiveClean, RouteFollowupReady}):
-		if snap.FailureBudget <= 0 {
+		if reason == ReasonWorkRetryBudgetRemains && snap.FailureBudget <= 0 {
 			return routeRejected(from, to, reason, "failure follow-up requires remaining failure budget")
+		}
+		if reason == ReasonWorkCompletedDirty && !snap.PendingReconcile {
+			return routeRejected(from, to, reason, "follow-up after completion requires a pending reconciliation")
 		}
 	case (routeEdge{RouteActiveClean, RouteUncertain}), (routeEdge{RouteActiveDirty, RouteUncertain}):
 		if reason == ReasonRetryBudgetExhausted && snap.FailureBudget > 0 {

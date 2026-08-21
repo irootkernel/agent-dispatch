@@ -302,6 +302,16 @@ func TestG3AC301And305RealTriggerEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// The first delivery after trigger installation carries a fresh
+	// instance (empty since): per SRC-005 it reconciles instead of
+	// dispatching, so the gate drives the reconciliation path and then
+	// waits for the accepted task.
+	res, _, _, code := g3Run(t, h.bin, "reconcile", "--route", "wiki", "--config", h.configPath, "--reason", "fresh-instance", "--submit")
+	if code != 0 {
+		t.Fatalf("post-fresh-instance reconcile failed (exit %d)", code)
+	}
+	_ = res
+
 	// AC-301: one durable accepted task with the external id stored.
 	row := h.g3WaitAccepted(t, "accepted")
 	dispatchID, _ := row["dispatch_id"].(string)

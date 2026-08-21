@@ -130,6 +130,11 @@ func TestRouteReasonsMatchEdges(t *testing.T) {
 			s.ActiveDispatchID = "d-1"
 			s.DirtyGeneration = 1
 		}), RouteFollowupReady, RouteEvidence{ReceiptRef: "wr-1"}},
+		{RouteActiveClean, RouteFollowupReady, ReasonWorkCompletedDirty}: {routeSnap(func(s *RouteSnapshot) {
+			s.State = RouteActiveClean
+			s.ActiveDispatchID = "d-1"
+			s.PendingReconcile = true
+		}), RouteFollowupReady, RouteEvidence{ReceiptRef: "wr-1"}},
 		{RouteActiveClean, RouteFollowupReady, ReasonWorkRetryBudgetRemains}: {routeSnap(func(s *RouteSnapshot) {
 			s.State = RouteActiveClean
 			s.ActiveDispatchID = "d-1"

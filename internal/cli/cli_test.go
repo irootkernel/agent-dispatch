@@ -89,7 +89,7 @@ func TestUnknownCommandFailsClosed(t *testing.T) {
 
 func TestEveryKnownCommandClassifiesAsNotImplemented(t *testing.T) {
 	for name := range knownCommands {
-		if name == "version" || name == "init" || name == "route" || name == "dispatch" || name == "dispatches" || name == "watchman" || name == "config" || name == "receipts" || name == "work" {
+		if name == "version" || name == "init" || name == "route" || name == "dispatch" || name == "dispatches" || name == "watchman" || name == "config" || name == "receipts" || name == "work" || name == "quarantine" || name == "reconcile" {
 			continue // the implemented commands
 		}
 		var out, errb bytes.Buffer

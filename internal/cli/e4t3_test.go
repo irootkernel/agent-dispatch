@@ -42,8 +42,14 @@ func e4t3RegisterRoute(t *testing.T, configPath string) {
 	if err := store.RegisterRoute(nil, "wiki", "route-rev-1", "policy-rev-1", "vault-main", "hermes-main", "{}", "2026-08-20T00:00:00Z"); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.InitializeRouteState(nil, "wiki"); err != nil {
-		t.Fatal(err)
+	var exists int
+	if err := store.QueryRowContext(context.Background(), `SELECT 1 FROM route_runtime_state WHERE route_id = 'wiki'`).Scan(&exists); err == nil {
+		// Already initialized: registration is idempotent for repeated
+		// fixture seeding.
+	} else {
+		if err := store.InitializeRouteState(nil, "wiki"); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := store.SetRouteActivation(context.Background(), "wiki", "enabled", "route-rev-1", "2026-08-20T00:00:00Z"); err != nil {
 		t.Fatal(err)

@@ -54,6 +54,7 @@ type storeOp interface {
 	ports.ReconcileStore
 	ports.ReceiptStore
 	ports.WorkReceiptStore
+	ports.QuarantineStore
 	io.Closer
 	ListRoutes(ctx context.Context) ([]sqlite.RouteRow, error)
 	SetRouteActivation(ctx context.Context, routeID, activation, acknowledgeRevision, now string) error

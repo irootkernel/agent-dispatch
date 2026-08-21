@@ -118,6 +118,11 @@ func Match(receipt ReceiptEvidence, observed []ports.DirtyChange, now string) At
 			fully = false
 		}
 	}
+	// An empty observed window is unproven, never cleared: the matcher
+	// itself refuses vacuous suppression (E5 audit).
+	if len(latest) == 0 {
+		fully = false
+	}
 	decision.FullySuppressed = fully
 	return decision
 }

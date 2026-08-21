@@ -213,12 +213,7 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 		ResourceID: intent.ResourceID, BegunAt: begun.BegunAt, CompletedAt: w.SubmittedAt,
 		Changes: changes,
 	}, dirty, w.SubmittedAt)
-	// Guard against vacuous suppression (E5 audit): an empty observed
-	// set while a dirty generation exists means the window failed to
-	// load the generation's changes — never proof that it cleared.
-	if snap.DirtyGeneration > 0 && len(dirty) == 0 {
-		decision.FullySuppressed = false
-	}
+	_ = dirty // the matcher owns the vacuous-window refusal
 	_ = s.Store.AuditAttribution(ctx, "attr-"+w.ReceiptID, in.DispatchID, w.SubmittedAt, decision.ContextJSON())
 	out, err := s.applyCompletion(ctx, intent, snap, w, ports.ActiveCompletion{
 		RouteID: intent.RouteID, DispatchID: in.DispatchID, Failed: false,
@@ -226,7 +221,9 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 	})
 	if err == nil {
 		out.SuppressedPaths = decision.SuppressedPaths
-		out.SelfChangeSuppressed = decision.FullySuppressed
+		// Report suppression only when a dirty generation actually
+		// cleared (a clean route suppresses nothing, E5 audit F010).
+		out.SelfChangeSuppressed = decision.FullySuppressed && snap.DirtyGeneration > 0
 	}
 	return out, err
 }

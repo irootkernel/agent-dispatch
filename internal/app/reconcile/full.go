@@ -310,8 +310,11 @@ func (s *FullService) hash(rel string) (string, bool) {
 	return "sha256:" + hex.EncodeToString(h.Sum(nil)), true
 }
 
-// timestamp renders the canonical UTC RFC 3339 second-precision form
-// (kept local to avoid an app-internal import cycle).
+// timestamp renders the canonical UTC RFC 3339 second-precision form.
+// It stays local because dispatch's own tests import this package (a
+// test-binary import cycle), and because the truncated-UTC ordering is
+// load-bearing: dirty-window comparisons sort these strings
+// lexicographically.
 func timestamp(t time.Time) string {
 	return t.UTC().Truncate(time.Second).Format(time.RFC3339)
 }

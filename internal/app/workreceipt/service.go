@@ -215,7 +215,7 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 		ReceiptID: w.ReceiptID, DispatchID: in.DispatchID, RunID: in.RunID,
 		ResourceID: intent.ResourceID, BegunAt: begun.BegunAt, CompletedAt: w.SubmittedAt,
 		Changes: changes,
-	}, dirty, w.SubmittedAt)
+	}, dirty)
 	_ = dirty // the matcher owns the vacuous-window refusal
 	var auditErr error
 	out, err := s.applyCompletion(ctx, intent, snap, w, ports.ActiveCompletion{

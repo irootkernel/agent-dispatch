@@ -65,7 +65,7 @@ type ReceiptEvidence struct {
 // digest never suppresses a later divergent one). Receipt paths never
 // observed are recorded as suppressed evidence only when observed set is
 // covered — they cannot unlock suppression by themselves.
-func Match(receipt ReceiptEvidence, observed []ports.DirtyChange, now string) AttributionDecision {
+func Match(receipt ReceiptEvidence, observed []ports.DirtyChange) AttributionDecision {
 	decision := AttributionDecision{
 		ReceiptID:   receipt.ReceiptID,
 		DispatchID:  receipt.DispatchID,
@@ -73,7 +73,6 @@ func Match(receipt ReceiptEvidence, observed []ports.DirtyChange, now string) At
 		BegunAt:     receipt.BegunAt,
 		CompletedAt: receipt.CompletedAt,
 	}
-	_ = now
 	// Latest observation per path.
 	latest := map[string]ports.DirtyChange{}
 	for _, c := range observed {

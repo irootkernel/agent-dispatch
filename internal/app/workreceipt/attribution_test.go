@@ -35,7 +35,7 @@ func TestMatchOutcomes(t *testing.T) {
 		dirty("early.md", digestA, "2026-08-21T00:30:00Z"),
 	}
 	receipt.Changes = append(receipt.Changes, changeEntry{Path: "early.md", AfterDigest: ptr(digestA)})
-	decision := Match(receipt, observed, "2026-08-21T02:00:00Z")
+	decision := Match(receipt, observed)
 	outcomes := map[string]string{}
 	for _, u := range decision.Unresolved {
 		outcomes[u.Path] = u.Outcome
@@ -57,7 +57,7 @@ func TestMatchOutcomes(t *testing.T) {
 	}
 
 	// An empty observed window is never proof of clearing.
-	if empty := Match(receipt, nil, "2026-08-21T02:00:00Z"); empty.FullySuppressed {
+	if empty := Match(receipt, nil); empty.FullySuppressed {
 		t.Fatal("an empty observed window must refuse suppression")
 	}
 
@@ -74,7 +74,7 @@ func TestMatchOutcomes(t *testing.T) {
 		{unknownStatus},
 		{{Path: "u.md", DigestStatus: "known", ObservedAt: "2026-08-21T01:30:00Z"}},
 	} {
-		if d := Match(unverified, obs, "now"); d.FullySuppressed {
+		if d := Match(unverified, obs); d.FullySuppressed {
 			t.Fatalf("an unverified observed digest must never suppress: %+v", d.Unresolved)
 		}
 	}
@@ -85,7 +85,7 @@ func TestMatchOutcomes(t *testing.T) {
 		BegunAt: "2026-08-21T01:00:00Z", CompletedAt: "2026-08-21T02:00:00Z",
 		Changes: []changeEntry{{Path: "match.md", AfterDigest: ptr(digestA)}},
 	}
-	if d := Match(only, []ports.DirtyChange{dirty("match.md", digestA, "2026-08-21T01:30:00Z")}, "now"); !d.FullySuppressed {
+	if d := Match(only, []ports.DirtyChange{dirty("match.md", digestA, "2026-08-21T01:30:00Z")}); !d.FullySuppressed {
 		t.Fatalf("the exact single match must fully suppress: %+v", d)
 	}
 }

@@ -11,7 +11,7 @@ import (
 var documentRouteTable = map[RouteState][]RouteState{
 	RouteIdle:          {RouteActiveClean},
 	RouteActiveClean:   {RouteActiveDirty, RouteIdle, RouteFollowupReady, RouteUncertain},
-	RouteActiveDirty:   {RouteActiveDirty, RouteFollowupReady, RouteUncertain},
+	RouteActiveDirty:   {RouteActiveDirty, RouteFollowupReady, RouteUncertain, RouteIdle},
 	RouteFollowupReady: {RouteActiveClean, RouteIdle},
 	RouteUncertain:     {RouteActiveClean, RouteFollowupReady, RouteQuarantined},
 	RouteQuarantined:   {RouteIdle},
@@ -143,6 +143,11 @@ func TestRouteReasonsMatchEdges(t *testing.T) {
 			s.State = RouteActiveClean
 			s.ActiveDispatchID = "d-1"
 		}), RouteUncertain, RouteEvidence{}},
+		{RouteActiveDirty, RouteIdle, ReasonWorkSuppressed}: {routeSnap(func(s *RouteSnapshot) {
+			s.State = RouteActiveDirty
+			s.ActiveDispatchID = "d-1"
+			s.DirtyGeneration = 2
+		}), RouteIdle, RouteEvidence{ReceiptRef: "rcpt-work-1"}},
 		{RouteActiveDirty, RouteUncertain, ReasonRetryBudgetExhausted}: {routeSnap(func(s *RouteSnapshot) {
 			s.State = RouteActiveDirty
 			s.ActiveDispatchID = "d-1"
@@ -298,8 +303,14 @@ func TestRouteGuardDirtyNeverErasedByFailure(t *testing.T) {
 		s.ActiveDispatchID = "d-1"
 		s.DirtyGeneration = 2
 	})
-	if CanTransitionRoute(RouteActiveDirty, RouteIdle) {
-		t.Fatal("SOT §6 must not declare ACTIVE_DIRTY -> IDLE")
+	// Only an exact-suppression decision with receipt evidence may clear
+	// a dirty generation to IDLE (E5-T3); plain dirty completion still
+	// routes to FOLLOWUP_READY and evidence-less suppression is refused.
+	if !CanTransitionRoute(RouteActiveDirty, RouteIdle) {
+		t.Fatal("SOT §6 must declare ACTIVE_DIRTY -> IDLE for exact suppression")
+	}
+	if err := ValidateRouteTransition(dirtyActive, RouteIdle, ReasonWorkSuppressed, RouteEvidence{}); err == nil {
+		t.Fatal("exact suppression without receipt evidence must be rejected")
 	}
 	if err := ValidateRouteTransition(dirtyActive, RouteFollowupReady, ReasonWorkCompletedDirty, RouteEvidence{ReceiptRef: "wr-1"}); err != nil {
 		t.Fatalf("dirty completion must create a follow-up: %v", err)

@@ -53,6 +53,7 @@ const (
 	ReasonMoreChangesMerged       RouteReason = "more_changes_merged"
 	ReasonWorkCompletedClean      RouteReason = "work_completed_no_dirty_generation"
 	ReasonWorkCompletedDirty      RouteReason = "work_completed_dirty_generation"
+	ReasonWorkSuppressed          RouteReason = "work_completed_exact_suppression"
 	ReasonWorkRetryBudgetRemains  RouteReason = "work_retry_budget_remains"
 	ReasonRetryBudgetExhausted    RouteReason = "retry_budget_exhausted"
 	ReasonExecutionEvidenceStale  RouteReason = "execution_evidence_stale_or_missing"
@@ -72,6 +73,7 @@ func AllRouteReasons() []RouteReason {
 		ReasonMoreChangesMerged,
 		ReasonWorkCompletedClean,
 		ReasonWorkCompletedDirty,
+		ReasonWorkSuppressed,
 		ReasonWorkRetryBudgetRemains,
 		ReasonRetryBudgetExhausted,
 		ReasonExecutionEvidenceStale,
@@ -96,6 +98,7 @@ var routeTable = map[routeEdge][]RouteReason{
 	{RouteActiveClean, RouteActiveDirty}:   {ReasonLaterRelevantChange},
 	{RouteActiveDirty, RouteActiveDirty}:   {ReasonMoreChangesMerged},
 	{RouteActiveClean, RouteIdle}:          {ReasonWorkCompletedClean},
+	{RouteActiveDirty, RouteIdle}:          {ReasonWorkSuppressed},
 	{RouteActiveDirty, RouteFollowupReady}: {ReasonWorkCompletedDirty, ReasonWorkRetryBudgetRemains},
 	{RouteActiveClean, RouteFollowupReady}: {ReasonWorkRetryBudgetRemains},
 	{RouteActiveClean, RouteUncertain}:     {ReasonRetryBudgetExhausted, ReasonExecutionEvidenceStale},
@@ -211,6 +214,16 @@ func ValidateRouteTransition(snap RouteSnapshot, to RouteState, reason RouteReas
 		}
 		if ev.ReceiptRef == "" {
 			return routeRejected(from, to, reason, "clean completion requires completion evidence")
+		}
+	case (routeEdge{RouteActiveDirty, RouteIdle}):
+		// Clearing a dirty generation by completion requires the exact
+		// suppression decision's receipt evidence (E5-T3, FBK-002); a
+		// pending reconciliation still forces a follow-up instead.
+		if ev.ReceiptRef == "" {
+			return routeRejected(from, to, reason, "exact suppression requires the completion receipt evidence")
+		}
+		if snap.PendingReconcile {
+			return routeRejected(from, to, reason, "pending reconciliation must not be silently dropped")
 		}
 	case (routeEdge{RouteActiveDirty, RouteFollowupReady}):
 		if reason == ReasonWorkCompletedDirty && snap.DirtyGeneration == 0 && !snap.PendingReconcile {

@@ -37,6 +37,9 @@ type WorkReceiptInput struct {
 	SubmittedAt           string
 	ValidationState       string // valid | invalid
 	ValidationReasonsJSON string
+	// BegunAt preserves the run's begin timestamp across terminal
+	// updates (migration v4).
+	BegunAt string
 }
 
 // WorkReceiptView is the durable read model of one run's receipt.
@@ -49,6 +52,8 @@ type WorkReceiptView struct {
 	ValidationState       string
 	ValidationReasonsJSON string
 	SubmittedAt           string
+	// BegunAt is the run's begin timestamp (the attribution window).
+	BegunAt string
 }
 
 // WorkReceiptStore is the durable work-receipt surface.
@@ -69,4 +74,23 @@ type WorkReceiptStore interface {
 	// AuditWorkReceipt appends one work-receipt audit transition (invalid
 	// receipts and lifecycle evidence; FBK-003 retention).
 	AuditWorkReceipt(ctx context.Context, transitionID, dispatchID, fromState, toState, recordedAt, contextJSON string) error
+	// LoadActiveGenerationChanges returns every observation change merged
+	// into the route's current active generation (batches recorded since
+	// the active dispatch was created), oldest first — the exact set a
+	// completion receipt may partially suppress (E5-T3, FBK-001).
+	LoadActiveGenerationChanges(ctx context.Context, routeID, dispatchID string) ([]DirtyChange, error)
+	// AuditAttribution appends the exact-suppression decision evidence
+	// for one completion receipt (AC-403: the decision is audited).
+	AuditAttribution(ctx context.Context, transitionID, dispatchID, recordedAt, contextJSON string) error
+}
+
+// DirtyChange is one observed change of the active dirty generation.
+type DirtyChange struct {
+	Path         string
+	Operation    string
+	BeforeDigest string
+	AfterDigest  string
+	DigestStatus string
+	ObservedAt   string
+	BatchID      string
 }

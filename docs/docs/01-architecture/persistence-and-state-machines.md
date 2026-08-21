@@ -103,6 +103,7 @@ stateDiagram-v2
     ACTIVE_CLEAN --> ACTIVE_DIRTY: later relevant change
     ACTIVE_DIRTY --> ACTIVE_DIRTY: more changes merge
     ACTIVE_CLEAN --> IDLE: work completes with no dirty generation
+    ACTIVE_DIRTY --> IDLE: work completes with every change exact-suppressed by a validated receipt
     ACTIVE_DIRTY --> FOLLOWUP_READY: work completes
     ACTIVE_CLEAN --> FOLLOWUP_READY: work failed or canceled, retry budget remains
     ACTIVE_DIRTY --> FOLLOWUP_READY: work failed or canceled, retry budget remains

@@ -142,7 +142,7 @@ func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.Acti
 	// guards evaluate.
 	snap.FailureBudget = req.FailureBudgetRemaining
 	out.DirtyGeneration = snap.DirtyGeneration
-	needsFollowup := snap.DirtyGeneration > 0 || snap.PendingReconcile
+	needsFollowup := (snap.DirtyGeneration > 0 && !req.DirtySuppressed) || snap.PendingReconcile
 	var to state.RouteState
 	var reason state.RouteReason
 	if needsFollowup {
@@ -164,6 +164,9 @@ func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.Acti
 		}
 	} else {
 		to, reason = state.RouteIdle, state.ReasonWorkCompletedClean
+		if req.DirtySuppressed && snap.DirtyGeneration > 0 {
+			reason = state.ReasonWorkSuppressed
+		}
 	}
 	evidence := state.RouteEvidence{Actor: req.Actor, ReceiptRef: req.ReceiptRef}
 	if err := applyRouteTransition(tx, snap, to, reason, evidence, now,
@@ -171,8 +174,12 @@ func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.Acti
 		return out, err
 	}
 	if to == state.RouteIdle {
-		// Clean completion clears the active slot (invariant 5 freed).
-		if _, err := tx.Exec(`UPDATE route_runtime_state SET active_dispatch_id = NULL, active_generation = 0 WHERE route_id = ? AND active_dispatch_id = ?`, req.RouteID, req.DispatchID); err != nil {
+		// Clean completion clears the active slot (invariant 5 freed);
+		// an exact-suppressed dirty generation clears with it.
+		if _, err := tx.Exec(`UPDATE route_runtime_state SET active_dispatch_id = NULL, active_generation = 0,
+			dirty_generation = CASE WHEN ? THEN 0 ELSE dirty_generation END,
+			dirty_since = CASE WHEN ? THEN NULL ELSE dirty_since END
+			WHERE route_id = ? AND active_dispatch_id = ?`, req.DirtySuppressed, req.DirtySuppressed, req.RouteID, req.DispatchID); err != nil {
 			return out, err
 		}
 	} else if to == state.RouteFollowupReady {

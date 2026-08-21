@@ -128,6 +128,10 @@ type Result struct {
 	FollowupDispatchID string `json:"followup_dispatch_id,omitempty"`
 	DirtyGeneration    int    `json:"dirty_generation"`
 	FailureBudgetLeft  int    `json:"failure_budget_remaining,omitempty"`
+	// SuppressedPaths lists exactly-verified self-generated changes and
+	// SelfChangeSuppressed reports the whole generation cleared (E5-T3).
+	SuppressedPaths      []string `json:"suppressed_paths,omitempty"`
+	SelfChangeSuppressed bool     `json:"self_change_suppressed,omitempty"`
 }
 
 // Begin validates and records one begun run (FBK-005).
@@ -148,6 +152,7 @@ func (s *Service) Begin(ctx context.Context, in BeginInput) (Result, error) {
 		BaseRevision:    in.BaseRevision,
 		SubmittedAt:     s.timestamp(),
 		ValidationState: "valid",
+		BegunAt:         s.timestamp(),
 	}
 	if err := s.Store.InsertWorkReceipt(ctx, w); err != nil {
 		return Result{}, err
@@ -173,6 +178,17 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 	if in.ResultRevision != "" {
 		resultRevision = in.ResultRevision
 	}
+	// The begun receipt anchors the attribution window; a completion
+	// without one is rejected by the atomic update too, but the matcher
+	// needs its timestamp before any mutation.
+	begun, err := s.Store.LoadWorkReceipt(ctx, in.DispatchID, in.RunID)
+	if errors.Is(err, ports.ErrWorkReceiptNotFound) {
+		s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: []string{fmt.Sprintf("run %s has no begun receipt for dispatch %s", in.RunID, in.DispatchID)}})
+		return Result{}, &InvalidError{Reasons: []string{fmt.Sprintf("run %s has no begun receipt for dispatch %s", in.RunID, in.DispatchID)}}
+	}
+	if err != nil {
+		return Result{}, err
+	}
 	changesJSON, _ := json.Marshal(changes)
 	w := ports.WorkReceiptInput{
 		ReceiptID:       s.receiptID(in.DispatchID),
@@ -185,10 +201,28 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 		SubmittedAt:     s.timestamp(),
 		ValidationState: "valid",
 	}
-	return s.applyCompletion(ctx, intent, snap, w, ports.ActiveCompletion{
+	// Exact self-change attribution (E5-T3): match the receipt against
+	// the dirty generation; only a fully verified generation may clear
+	// the route without a follow-up, and the decision is always audited.
+	dirty, err := s.Store.LoadActiveGenerationChanges(ctx, intent.RouteID, in.DispatchID)
+	if err != nil {
+		return Result{}, err
+	}
+	decision := Match(ReceiptEvidence{
+		ReceiptID: w.ReceiptID, DispatchID: in.DispatchID, RunID: in.RunID,
+		ResourceID: intent.ResourceID, BegunAt: begun.BegunAt, CompletedAt: w.SubmittedAt,
+		Changes: changes,
+	}, dirty, w.SubmittedAt)
+	_ = s.Store.AuditAttribution(ctx, "attr-"+w.ReceiptID, in.DispatchID, w.SubmittedAt, decision.ContextJSON())
+	out, err := s.applyCompletion(ctx, intent, snap, w, ports.ActiveCompletion{
 		RouteID: intent.RouteID, DispatchID: in.DispatchID, Failed: false,
-		ReceiptRef: w.ReceiptID, Actor: "hermes-task",
+		ReceiptRef: w.ReceiptID, Actor: "hermes-task", DirtySuppressed: decision.FullySuppressed,
 	})
+	if err == nil {
+		out.SuppressedPaths = decision.SuppressedPaths
+		out.SelfChangeSuppressed = decision.FullySuppressed
+	}
+	return out, err
 }
 
 // Fail validates one cooperative failure and applies the completion
@@ -233,7 +267,7 @@ func (s *Service) Fail(ctx context.Context, in FailInput) (Result, error) {
 // and applies the atomic receipt-plus-completion transaction.
 func (s *Service) applyCompletion(ctx context.Context, intent ports.IntentSnapshot, snap state.RouteSnapshot, w ports.WorkReceiptInput, base ports.ActiveCompletion) (Result, error) {
 	base.FollowupRequest = nil
-	if snap.DirtyGeneration > 0 || snap.PendingReconcile {
+	if (snap.DirtyGeneration > 0 && !base.DirtySuppressed) || snap.PendingReconcile {
 		followup, err := s.buildFollowup(intent)
 		if err != nil {
 			return Result{}, fmt.Errorf("building the follow-up request: %w", err)

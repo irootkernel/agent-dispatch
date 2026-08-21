@@ -31,6 +31,7 @@ var Migrations = []Migration{
 	{Version: 1, Name: "initial-schema", SQL: schemaV1},
 	{Version: 2, Name: "attempts-unique-by-attempt-id", SQL: schemaV2AttemptsUniqueByAttemptID},
 	{Version: 3, Name: "intent-target-scope", SQL: schemaV3IntentTargetScope},
+	{Version: 4, Name: "work-receipts-begun-at", SQL: schemaV4WorkReceiptsBegunAt},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
@@ -69,6 +70,17 @@ CREATE INDEX idx_attempts_dispatch ON dispatch_attempts(dispatch_id, started_at)
 // proof).
 const schemaV3IntentTargetScope = `
 ALTER TABLE dispatch_intents ADD COLUMN target_scope TEXT NOT NULL DEFAULT '';
+`
+
+// schemaV4WorkReceiptsBegunAt preserves the begin timestamp of a run
+// across its terminal update (E5-T3): the receipt row's submitted_at is
+// rewritten by `work complete`/`work fail`, but exact self-change
+// attribution must compare observations against the run's begin window,
+// so the begin time is kept in its own column and backfilled from the
+// submitted timestamp of existing begun rows.
+const schemaV4WorkReceiptsBegunAt = `
+ALTER TABLE work_receipts ADD COLUMN begun_at TEXT;
+UPDATE work_receipts SET begun_at = submitted_at WHERE begun_at IS NULL;
 `
 
 // checksum returns the immutable migration checksum.

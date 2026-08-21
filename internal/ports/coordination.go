@@ -53,7 +53,12 @@ type ActiveCompletion struct {
 	FollowupRequest *IntentInput
 	// DirtyLineageJSON records the dirty generation lineage reference.
 	DirtyLineageJSON string
-	Now              string
+	// DirtySuppressed reports that every change of the dirty generation
+	// was verified self-generated through an exact receipt match, so the
+	// completion may clear the route instead of scheduling a follow-up
+	// (E5-T3; a pending reconciliation still forces one).
+	DirtySuppressed bool
+	Now             string
 }
 
 // FollowupCreated reports the completion outcome.

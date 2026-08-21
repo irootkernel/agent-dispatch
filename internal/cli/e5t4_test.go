@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -316,4 +317,77 @@ func TestFullReconcileEnumeratesAndCompares(t *testing.T) {
 	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "bogus"}, &out, &errb); code != 2 {
 		t.Fatalf("unknown reason must be a usage error, got %d", code)
 	}
+}
+
+// TestIdleNoDiffReconcileClearsPending proves a full reconciliation on
+// an idle route resolves a pending generation it did not need (the E5
+// audit remediation: the flag no longer waits indefinitely for a
+// dispatch completion that may never come).
+func TestIdleNoDiffReconcileClearsPending(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	e4t3RegisterRoute(t, configPath)
+	// Store the snapshot so the comparison finds no diff, then mark a
+	// pending generation directly (the quarantine-release aftermath).
+	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "initial"}, &bytes.Buffer{}, &bytes.Buffer{}); code != 0 {
+		t.Fatal("initial reconcile failed")
+	}
+	// Complete the created reconciliation intent through the receipt
+	// loop so the route returns to idle with the snapshot current: the
+	// pending generation collapses into its follow-up, and the
+	// follow-up completes clean.
+	store := e5t1Store(t, configPath)
+	var dispatchID string
+	if err := store.QueryRow(`SELECT dispatch_id FROM dispatch_intents ORDER BY created_at DESC LIMIT 1`).Scan(&dispatchID); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "r1"}, &out, &errb); code != 0 {
+		t.Fatalf("begin: %s", errb.String())
+	}
+	out.Reset()
+	errb.Reset()
+	withStdin(t, `[]`, func() {
+		Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "r1", "--manifest", "-"}, &out, &errb)
+	})
+	if errb.Len() != 0 {
+		t.Fatalf("complete: %s", errb.String())
+	}
+	first := decodeEnvelope(t, &out)
+	followup, _ := first["followup_dispatch_id"].(string)
+	if followup == "" {
+		t.Fatalf("the pending generation must collapse into a follow-up: %v", first)
+	}
+	if err := store.ActivateFollowup(context.Background(), followup, "test", "2026-08-21T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", followup, "--run-id", "r2"}, &out, &errb); code != 0 {
+		t.Fatalf("follow-up begin: %s", errb.String())
+	}
+	out.Reset()
+	errb.Reset()
+	withStdin(t, `[]`, func() {
+		Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", followup, "--run-id", "r2", "--manifest", "-"}, &out, &errb)
+	})
+	if errb.Len() != 0 {
+		t.Fatalf("follow-up complete: %s", errb.String())
+	}
+	// Mark a pending generation (quarantine-release aftermath) and
+	// reconcile the unchanged scope: the idle route resolves it.
+	if err := store.MarkPendingReconcile(context.Background(), "wiki", "", "2026-08-21T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "manual"}, &out, &errb); code != 0 {
+		t.Fatalf("no-diff reconcile: %s", errb.String())
+	}
+	res := decodeEnvelope(t, &out)
+	if res["pending_reconcile"] == true {
+		t.Fatalf("an idle no-diff reconciliation must resolve the pending generation: %v", res)
+	}
+	var pending int
+	if err := store.QueryRow(`SELECT pending_reconcile FROM route_runtime_state WHERE route_id = 'wiki'`).Scan(&pending); err != nil || pending != 0 {
+		t.Fatalf("pending generation must be cleared: %d %v", pending, err)
+	}
+	_ = vault
 }

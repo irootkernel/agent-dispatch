@@ -143,6 +143,15 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 	}
 	out.SnapshotStored = true
 	out.PendingReconcile = true
+	// An idle route whose full reconciliation proved no work remains
+	// resolves its pending generation: no dispatch completion is needed
+	// to clear it (E5 audit remediation).
+	if !workDue && snap.State == state.RouteIdle {
+		if err := s.Store.ClearPendingReconcile(ctx, routeID, now); err != nil {
+			return FullResult{}, err
+		}
+		out.PendingReconcile = false
+	}
 
 	// An idle route with due work schedules exactly one latest-state
 	// reconciliation intent; an active or pending route merges into the

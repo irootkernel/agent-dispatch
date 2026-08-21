@@ -259,6 +259,20 @@ func (s *Store) MarkPendingReconcile(ctx context.Context, routeID, sourcePositio
 	return tx.Commit()
 }
 
+// ClearPendingReconcile resolves the pending generation after an idle
+// full reconciliation proved no work remains.
+func (s *Store) ClearPendingReconcile(ctx context.Context, routeID, now string) error {
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`UPDATE route_runtime_state SET pending_reconcile = 0, last_reconciled_at = ? WHERE route_id = ?`, now, routeID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // ReplacePathFacts stores one full-scope snapshot (previous facts for
 // the resource are replaced atomically).
 func (s *Store) ReplacePathFacts(ctx context.Context, resourceID string, facts []ports.PathFact, observedAt string) error {

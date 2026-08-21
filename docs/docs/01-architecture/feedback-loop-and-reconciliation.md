@@ -97,7 +97,7 @@ If active work is completed:
 - no dirty generation: clear active route state;
 - dirty generation but every change exact-suppressed: clear active route state;
 - unresolved dirty changes: create one follow-up intent and make it active after acceptance;
-- pending reconciliation: create one full-reconciliation intent.
+- pending reconciliation: the generation collapses into the single follow-up intent (the follow-up is the full-reconciliation vehicle under the CON-003 bound); an idle route's `reconcile` command may also schedule the intent directly.
 
 If active work fails or is canceled (cooperative `work fail`, or a verified terminal target status):
 

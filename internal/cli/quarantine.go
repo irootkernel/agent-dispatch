@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/rootkernel/jjukkumi/internal/app/dispatch"
@@ -181,8 +182,19 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 	}
 	result, err := service.Run(requestCtx(), routeID, reason)
 	if err != nil {
-		writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
-		return 20
+		// Store-surface failures are storage; anything else from the
+		// service (enumeration, configuration-derived setup) is an
+		// internal-class defect, never a silent storage relabel
+		// (E5 audit F004/F007).
+		if isStoreError(err) {
+			writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
+			return 20
+		}
+		if strings.Contains(err.Error(), "unknown reconcile reason") {
+			return usageError(stderr, command, err.Error())
+		}
+		writeError(stderr, command, "internal_unclassified", "internal", err.Error())
+		return 40
 	}
 	if submit && result.ReconcileDispatch == "" {
 		warnings := []string{"--submit skipped: no eligible reconciliation intent (the route was not idle or no work was due); the pending generation is recorded"}
@@ -203,4 +215,13 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 		})
 	}
 	return writeEnvelope(stdout, command, result)
+}
+
+// isStoreError reports whether a reconcile failure came from the
+// durable store rather than the service's own logic.
+func isStoreError(err error) bool {
+	return strings.Contains(err.Error(), "sqlite") ||
+		strings.Contains(err.Error(), "constraint failed") ||
+		errors.Is(err, ports.ErrStateNotEligible) ||
+		strings.Contains(err.Error(), "route_runtime_state")
 }

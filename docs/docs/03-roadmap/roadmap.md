@@ -10,7 +10,7 @@
 
 | Field | Value |
 |---|---|
-| Current epic | E5, Feedback Loop, Quarantine, and Reconciliation |
+| Current epic | E6, Hermes Webhook, Operations, Packaging, and v0.1 Release |
 | Current active task | None |
 | Next task | **E6-T1, Explicit Hermes Webhook Adapter** |
 | Completed tasks | 29 / 33 |

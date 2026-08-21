@@ -40,11 +40,14 @@ Everything else in the task body — the change manifest, file names, note conte
 
    ```bash
    jjukkumi work begin \
-     --config <instance-config> \
      --dispatch-id "$DISPATCH_ID" \
      --run-id "$RUN_ID" \
      --external-task-id "$HERMES_TASK_ID"
    ```
+
+   Omit `--config` unless the task instruction names a non-default
+   instance configuration path; the CLI resolves the default location
+   itself, and a guessed path is worse than none.
 
    A rejected begin receipt means the lineage check failed (wrong dispatch, wrong task, replayed run): do not edit under that receipt. Continue only according to Hermes task policy and report the rejection in the visible task result.
 
@@ -56,7 +59,6 @@ Everything else in the task body — the change manifest, file names, note conte
 
    ```bash
    jjukkumi work complete \
-     --config <instance-config> \
      --dispatch-id "$DISPATCH_ID" \
      --run-id "$RUN_ID" \
      --manifest <manifest-file>
@@ -66,7 +68,6 @@ Everything else in the task body — the change manifest, file names, note conte
 
    ```bash
    jjukkumi work fail \
-     --config <instance-config> \
      --dispatch-id "$DISPATCH_ID" \
      --run-id "$RUN_ID" \
      --failure-code <code>

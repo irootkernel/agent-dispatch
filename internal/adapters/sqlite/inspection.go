@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -250,14 +251,23 @@ func (s *Store) RerunIntent(ctx context.Context, in ports.RerunInput) (ports.Int
 	}
 	_ = routeID
 	newDecision := "dec-" + in.New.DispatchID
+	reasonCodes := `["operator_rerun"]`
+	if len(in.ReasonCodes) > 0 {
+		encoded, err := json.Marshal(in.ReasonCodes)
+		if err != nil {
+			return sum, err
+		}
+		reasonCodes = string(encoded)
+	}
 	// SaveIntent persists decision_id from the input; align it with the
-	// superseding decision created above.
+	// superseding decision created above. The superseding decision keeps
+	// the route and policy revisions of the replacement intent (E7-T3).
 	in.New.DecisionID = newDecision
 	if _, err := tx.Exec(`INSERT INTO policy_decisions
 		(decision_id, batch_id, route_id, route_revision, policy_revision, generation_lineage_json, disposition, classification, reason_codes_json, created_at, actor, supersedes_decision_id)
-		SELECT ?, batch_id, route_id, route_revision, policy_revision, generation_lineage_json, 'dispatch', 'normal', ?, ?, ?, decision_id
+		SELECT ?, batch_id, route_id, ?, policy_revision, generation_lineage_json, 'dispatch', 'normal', ?, ?, ?, decision_id
 		FROM policy_decisions WHERE decision_id = ?`,
-		newDecision, `["operator_rerun"]`, now, in.Actor, originalDecision); err != nil {
+		newDecision, in.New.RouteRevision, reasonCodes, now, in.Actor, originalDecision); err != nil {
 		return sum, err
 	}
 	// The rerun takes over the active slot when its own original holds
@@ -272,16 +282,18 @@ func (s *Store) RerunIntent(ctx context.Context, in ports.RerunInput) (ports.Int
 	if err := tx.QueryRow(`SELECT state FROM dispatch_intents WHERE dispatch_id = ?`, in.OriginalDispatchID).Scan(&originalState); err != nil {
 		return sum, err
 	}
-	supersedeContext := fmt.Sprintf(`{"actor":%q,"operator_reason":%q,"superseded_by":%q}`, in.Actor, in.Reason, in.New.DispatchID)
+	supersedeContext := func(reason state.IntentReason) string {
+		return fmt.Sprintf(`{"reason":%q,"actor":%q,"operator_reason":%q,"superseded_by":%q}`, reason, in.Actor, in.Reason, in.New.DispatchID)
+	}
 	switch records.IntentState(originalState) {
 	case records.IntentReady:
 		if err := s.transitionWithin(ctx, tx, in.OriginalDispatchID, records.IntentReady, records.IntentSuperseded, state.ReasonRouteInvalidated,
-			state.IntentEvidence{Actor: in.Actor}, now, supersedeContext); err != nil {
+			state.IntentEvidence{Actor: in.Actor}, now, supersedeContext(state.ReasonRouteInvalidated)); err != nil {
 			return sum, err
 		}
 	case records.IntentDeadLettered:
 		if err := s.transitionWithin(ctx, tx, in.OriginalDispatchID, records.IntentDeadLettered, records.IntentSuperseded, state.ReasonReprocessOrDiscard,
-			state.IntentEvidence{Actor: in.Actor}, now, supersedeContext); err != nil {
+			state.IntentEvidence{Actor: in.Actor}, now, supersedeContext(state.ReasonReprocessOrDiscard)); err != nil {
 			return sum, err
 		}
 	default:

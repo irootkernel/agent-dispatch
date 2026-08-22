@@ -110,7 +110,13 @@ type planArtifacts struct {
 // planPipeline runs the shared read-only planning pipeline: parse stdin,
 // validate the trusted environment binding, normalize the batch, and
 // evaluate the pure policy planner (POL-007, POL-008, SEC-010).
-func planPipeline(command string, args []string, stderr io.Writer) (*planArtifacts, int) {
+// factsSource supplies the durable prior-digest lookup for the batch
+// build (E7-T3/H-2). The durable dispatch path wires the stored
+// path-facts snapshot; plan and dry-run keep the conservative no-history
+// fallback (CLI-003: they open no database).
+type factsSource func(configPath, resourceID string) (ingest.PathFacts, error)
+
+func planPipeline(command string, args []string, stderr io.Writer, facts factsSource) (*planArtifacts, int) {
 	opts, code := parsePlanFlags(command, args, nil, stderr)
 	if code != 0 {
 		return nil, code
@@ -165,7 +171,17 @@ func planPipeline(command string, args []string, stderr io.Writer) (*planArtifac
 	}
 	engine, resolver, maxHash := runtime.engine, runtime.resolver, runtime.maxHash
 
-	batch, err := ingest.BuildBatch(input.Entries, engine, resolver, ingest.NoFacts{}, env.Flags(), route.Source.Resource, ingest.Options{MaxHashBytes: maxHash})
+	factsFor := ingest.PathFacts(ingest.NoFacts{})
+	if facts != nil {
+		loaded, err := facts(opts.configPath, route.Source.Resource)
+		if err != nil {
+			return nil, planErr(stderr, command, "sqlite_open_failed", "storage", err.Error(), 20)
+		}
+		if loaded != nil {
+			factsFor = loaded
+		}
+	}
+	batch, err := ingest.BuildBatch(input.Entries, engine, resolver, factsFor, env.Flags(), route.Source.Resource, ingest.Options{MaxHashBytes: maxHash})
 	if err != nil {
 		if errors.Is(err, ingest.ErrUnsafePath) {
 			return nil, planErr(stderr, command, "source_unsafe_path", "security", err.Error(), 30)
@@ -189,11 +205,10 @@ func planPipeline(command string, args []string, stderr io.Writer) (*planArtifac
 		return nil, planErr(stderr, command, "internal_unclassified", "internal", err.Error(), 40)
 	}
 
-	// POL-008/SEC-010: revalidate the plan's revision against the active
-	// snapshot before emitting or persisting it.
-	if plan.Route.Revision != revision {
-		return nil, planErr(stderr, command, "internal_unclassified", "internal", "plan revision does not match the active route revision", 40)
-	}
+	// POL-008/SEC-010 live at the submit boundary (E7-T3/H-1): every
+	// submit path revalidates the stored plan against the active
+	// configuration and supersedes-and-rebuilds stale work, so this
+	// plan-time self-comparison carried no authority and was removed.
 	hints, err := hintsOf(route)
 	if err != nil {
 		return nil, planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
@@ -208,7 +223,7 @@ func planPipeline(command string, args []string, stderr io.Writer) (*planArtifac
 // runPlan plans one Watchman invocation end to end with no SQLite
 // mutation and no target call.
 func runPlan(command string, args []string, stdout, stderr io.Writer) int {
-	artifacts, code := planPipeline(command, args, stderr)
+	artifacts, code := planPipeline(command, args, stderr, nil)
 	if code != 0 {
 		return code
 	}
@@ -244,7 +259,10 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	if noSubmit {
 		rest = append(rest, "--no-submit")
 	}
-	artifacts, code := planPipeline(command, rest, stderr)
+	// The durable path plans against the stored path-facts snapshot so
+	// unchanged and metadata-only modifies suppress with audit
+	// (PTH-006/PTH-007, E7-T3/H-2).
+	artifacts, code := planPipeline(command, rest, stderr, durableFacts)
 	if code != 0 {
 		return code
 	}
@@ -301,6 +319,7 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 		Store: outcome.store, Sink: sink, Now: time.Now,
 		LeaseTTL: time.Minute, Backoff: backoff, JitterUnit: jitterUnit, Actor: "dispatch",
 		Log: opsLogger(stderr, artifacts.cfg), TraceID: globalTraceID,
+		StalenessCheck: stalenessCheckOf(artifacts.cfg), StaleRebuilder: staleRebuilderOf(outcome.store, artifacts.cfg),
 	}
 	report, err := rt.SubmitOnce(requestCtx(), outcome.dispatchID, "agent-dispatch-dispatch")
 	outcome.Close()

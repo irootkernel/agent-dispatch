@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E7 |
 | Current active task | None |
-| Next task | E7-T3 |
-| Completed tasks | 35 / 45 |
-| Planned tasks | 10 / 45 |
+| Next task | E7-T4 |
+| Completed tasks | 36 / 45 |
+| Planned tasks | 9 / 45 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -73,7 +73,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 33 | E6-T4 | Completed | v0.1 release verification and final SOT reconciliation |
 | 34 | E7-T1 | Completed | Documentation truth restored after the compliance review |
 | 35 | E7-T2 | Completed | Crash recovery, rerun supersession, follow-up activation |
-| 36 | E7-T3 | Planned | Submit-path revalidation and durable path facts |
+| 36 | E7-T3 | Completed | Submit-path revalidation and durable path facts |
 | 37 | E7-T4 | Planned | Gate-evidence tests repaired and platform guards added |
 | 38 | E7-T5 | Planned | CLI inspection contract completed |
 | 39 | E7-T6 | Planned | Write gates, audit rows, and decision records closed |
@@ -628,7 +628,7 @@ E2-T3 Completed.
 
 ### Evidence
 
-- `internal/app/dispatch`: pure deterministic planner (`Evaluate`) implementing the processing-pipeline §5 precedence — overflow-class signal (flags from the E2-T1 environment model) → reconcile with `merge_reconcile` following the route's overflow/fresh action; no meaningful changes → drop; protected or immutable paths → quarantine (PTH-008, protected precedence over bulk); hard-limit and serialized manifest bound (deterministic `ManifestBytes` estimate, POL-004) → quarantine; over automatic threshold → the route-configured bulk action (quarantine or reconcile); unresolved active dispatch → merge_pending with `increment_dirty`; otherwise dispatch with `create_if_idle`. Machine-readable reason codes accompany every disposition (POL-006); no note content is ever inspected (POL-003) and a payload can never request a disposition. The computed route revision — which now records the host-resolved pattern case mode (configuration-spec §7) — is carried in the plan and revalidated before emission (POL-007, POL-008, SEC-010).
+- `internal/app/dispatch`: pure deterministic planner (`Evaluate`) implementing the processing-pipeline §5 precedence — overflow-class signal (flags from the E2-T1 environment model) → reconcile with `merge_reconcile` following the route's overflow/fresh action; no meaningful changes → drop; protected or immutable paths → quarantine (PTH-008, protected precedence over bulk); hard-limit and serialized manifest bound (deterministic `ManifestBytes` estimate, POL-004) → quarantine; over automatic threshold → the route-configured bulk action (quarantine or reconcile); unresolved active dispatch → merge_pending with `increment_dirty`; otherwise dispatch with `create_if_idle`. Machine-readable reason codes accompany every disposition (POL-006); no note content is ever inspected (POL-003) and a payload can never request a disposition. The computed route revision — which now records the host-resolved pattern case mode (configuration-spec §7) — is carried in the plan (POL-007); POL-008/SEC-010 revalidation lives at the submit boundary since E7-T3.
 - `internal/cli/plan.go`: `route plan --route <id> --input watchman` and `dispatch --route <id> --input watchman --dry-run` (cli-spec §3/§5) run the full side-effect-free pipeline — config load, trusted environment parsing and binding validation, bounded stdin parse, pattern engine with host-resolved case mode, batch normalization without path facts (no SQLite access), planning, and the versioned dispatch plan in the CLI JSON envelope (CLI-001..003). Malformed input fails with `source_malformed_json` (exit 4) before any file access; missing environment metadata with `source_missing_required_metadata` (4); binding mismatch with `source_binding_mismatch` (4); oversized stdin with `source_input_too_large` (4); containment violations with `source_unsafe_path` (exit 30, the non-durable security rejection per error-model §4; durable `unsafe_path_quarantined` arrives with E5 quarantine persistence); configuration failures exit 3. Malformed and unsafe inputs are rejected before the planner, so its `malformed` classification is unreachable by construction; `stale` and `unknown` classifications arrive with the E3/E5 state consumers. Non-dry-run dispatch remains `command_not_implemented` until the E3 durable core.
 - Tests: full precedence table including protected-over-bulk and action fallbacks, manifest bound, overflow/fresh never partial, plan JSON validated against the compiled `dispatch-plan` v1 Draft 2020-12 schema, deterministic byte-identical output, a pinned golden plan file (`internal/app/dispatch/testdata/plan-golden.json`), and CLI end-to-end tests over a real temporary vault (normal dispatch plan, fresh-instance reconcile, binding mismatch, malformed stdin, unknown route, dry-run-only guard). `docs/examples/dispatch-plan.json` continues to validate in `make schema-validation`.
 
@@ -1589,6 +1589,10 @@ E7-T2 Completed.
 - a configuration change between planning and drain supersedes the stale intent instead of submitting it;
 - a target re-point never submits a stored intent to a different sink or board while recording false lineage;
 - a byte-identical modify is suppressed with the `unchanged_content` reason visible in the decision.
+
+### Evidence
+
+Delivered as the H-1/H-2 fixes (H-1): `ports.IntentSnapshot` carries the stored route revision (`LoadIntent` SELECT), every submit runtime (dispatch, drain, scheduled reconcile) installs `stalenessCheckOf` so POL-008/SEC-010 revalidation runs inside `SubmitOnce` immediately before the lease commits - a stored intent whose route revision, target identity, or target scope no longer matches the active configuration is superseded through the declared `route_revision_invalidated` edge and rebuilt by `OperatorService.RebuildStale` under the current revision and target, with the superseding decision recording the reason and the plan-time tautological self-comparison in `planPipeline` removed; rerun now derives its revision from the active configuration instead of the stored plan (its target identity still inherits the stored values; resolving it is deferred with the round-2 review residuals). (H-2): the ingestion transaction maintains the `path_facts` snapshot (`upsertPathFacts` inside `CommitLineage`), the durable dispatch path plans against the stored facts (`durableFacts` wired into `planPipeline`; plan and dry-run keep the documented no-history fallback), and the planner propagates `unchanged_content`/`create_delete_never_existed` drops into the plan and decision reason codes (`propagateDrops`). The E5 uncertain-resolution test now drives due work with a real file change (the maintained facts make a no-diff reconciliation resolve to the documented no-work exit instead). Proven by `internal/cli/e7t3_test.go`: `TestStaleIntentRebuiltUnderActiveRevision` (supersede plus replacement under the active revision with the audited invalidation), `TestStaleTargetRepointNeverSubmitsFalseLineage` (current target scope recorded), and `TestUnchangedModifySuppressedDurably` (fact recorded by ingestion, byte-identical modify drops with `unchanged_content` in the decision, no second intent). The round-1 Mulgae review remediations are folded in (run r_01a02b75-16aa, reports_only): the direct `dispatch` submit runtime now installs the staleness check (the earlier wiring miss), `dispatches rerun` resolves the active revision and target identity instead of inheriting the stored plan's, the stale-rebuild recursion is depth-bounded with an unresolvable rebuild refused, the drain surfaces a staleness refusal it cannot resolve as an operator-visible warning instead of aborting, the superseding decision inherits the original's policy revision while carrying the replacement's route revision, and the E2-T4 plan-time-revalidation evidence claim and the path-facts section citation were corrected. Verified by `make verify` on darwin/arm64. Changelog 1.0.16.
 
 ## E7-T4: Repair Gate-Evidence Tests and Platform Guards
 

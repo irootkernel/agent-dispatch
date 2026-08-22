@@ -3,6 +3,7 @@ package dispatch
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -40,6 +41,14 @@ type Runtime struct {
 	Log *observability.Logger
 	// TraceID correlates this runtime's log events.
 	TraceID string
+	// StalenessCheck reports whether a loaded intent was planned under a
+	// route revision or target identity that is no longer active
+	// (POL-008/SEC-010, E7-T3/H-1). Nil disables the check (tests).
+	StalenessCheck func(ctx context.Context, snap ports.IntentSnapshot) (stale bool, detail string, err error)
+	// StaleRebuilder replaces one stale intent under the active
+	// configuration and returns the replacement dispatch id. Without a
+	// rebuilder a stale intent fails closed with ErrStaleRouteRevision.
+	StaleRebuilder func(ctx context.Context, dispatchID string) (string, error)
 }
 
 // SubmitReport summarizes one completed submit attempt.
@@ -71,6 +80,14 @@ type RouteCoordinationView interface {
 // never failed (DUR-005), and no automatic target fallback exists
 // (DUR-008).
 func (r *Runtime) SubmitOnce(ctx context.Context, dispatchID, owner string) (SubmitReport, error) {
+	return r.submitOnce(ctx, dispatchID, owner, 0)
+}
+
+// submitOnce bounds the stale-rebuild recursion (E7-T3 round-1
+// remediation): at most one supersede-and-rebuild per submission, so a
+// rebuilder that cannot produce a fresh intent fails closed instead of
+// looping.
+func (r *Runtime) submitOnce(ctx context.Context, dispatchID, owner string, rebuildDepth int) (SubmitReport, error) {
 	var report SubmitReport
 	snap, err := r.Store.LoadIntent(ctx, dispatchID)
 	if err != nil {
@@ -82,6 +99,33 @@ func (r *Runtime) SubmitOnce(ctx context.Context, dispatchID, owner string) (Sub
 		return report, fmt.Errorf("%w: dispatch %s is submitting under owner %q", ports.ErrLeaseHeld, dispatchID, snap.LeaseOwner)
 	default:
 		return report, fmt.Errorf("dispatch %s is %s, not submittable", dispatchID, snap.State)
+	}
+	// POL-008/SEC-010 (E7-T3/H-1): the stored plan is revalidated against
+	// the active configuration immediately before any side effect. A
+	// stale intent is superseded and rebuilt under the current revision
+	// and target; without a rebuilder it fails closed.
+	if r.StalenessCheck != nil {
+		stale, detail, err := r.StalenessCheck(ctx, snap)
+		if err != nil {
+			return report, err
+		}
+		if stale {
+			if rebuildDepth >= 1 {
+				return report, fmt.Errorf("%w: dispatch %s was planned under %s and its replacement is still stale", ports.ErrStaleRouteRevision, dispatchID, detail)
+			}
+			if r.StaleRebuilder == nil {
+				return report, fmt.Errorf("%w: dispatch %s was planned under %s", ports.ErrStaleRouteRevision, dispatchID, detail)
+			}
+			replacement, err := r.StaleRebuilder(ctx, dispatchID)
+			if err != nil {
+				return report, fmt.Errorf("%w: rebuilding stale dispatch %s: %v", ports.ErrStaleRouteRevision, dispatchID, err)
+			}
+			if replacement == "" || replacement == dispatchID {
+				return report, fmt.Errorf("%w: dispatch %s was planned under %s and no replacement was built", ports.ErrStaleRouteRevision, dispatchID, detail)
+			}
+			r.logEvent(observability.LevelInfo, observability.EventDispatchRetryScheduled, dispatchID, "", snap.RouteID, snap.TargetID, "stale intent superseded and rebuilt under the active configuration", map[string]any{"replacement": replacement, "stale_detail": detail})
+			return r.submitOnce(ctx, replacement, owner, rebuildDepth+1)
+		}
 	}
 	// The route's active slot must be empty or held by exactly this
 	// dispatch before the lease commits (CON-001: a submission never runs
@@ -253,6 +297,10 @@ type DrainReport struct {
 	Processed int
 	Skipped   int
 	Reports   []SubmitReport
+	// Warnings carries per-dispatch conditions that did not abort the
+	// drain (a stale intent the rebuilder could not resolve stays
+	// operator-visible instead of blocking the route).
+	Warnings []string
 }
 
 // DrainLister supplies the drain loop's reads: the intent listing plus
@@ -309,6 +357,15 @@ func (r *Runtime) Drain(ctx context.Context, routeID string, max int, lister Dra
 		}
 		report, err := r.SubmitOnce(ctx, sum.DispatchID, "drain")
 		if err != nil {
+			if errors.Is(err, ports.ErrStaleRouteRevision) {
+				// A stale intent the rebuilder could not resolve (for
+				// example its route or target left the configuration)
+				// never blocks the route's other work; it stays visible
+				// as a drain warning for the operator.
+				out.Skipped++
+				out.Warnings = append(out.Warnings, fmt.Sprintf("dispatch %s skipped: %v", sum.DispatchID, err))
+				continue
+			}
 			return out, fmt.Errorf("drain stopped at %s: %w", sum.DispatchID, err)
 		}
 		out.Processed++

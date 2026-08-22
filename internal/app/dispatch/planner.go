@@ -131,6 +131,10 @@ func Evaluate(policy RoutePolicy, in Input) (*Plan, error) {
 		RequiredCapabilities: sortedCopy(policy.RequiredCapabilities),
 		Changes:              projectChanges(in.Batch.Changes),
 	}
+	finish := func(disposition records.Disposition, generation records.GenerationAction) *Plan {
+		propagateDrops(plan, in.Batch)
+		return finishPlan(plan, disposition, generation)
+	}
 
 	// Structural classification only (POL-002, POL-003): a non-empty
 	// batch is normal until a precedence rule labels it otherwise;
@@ -155,14 +159,14 @@ func Evaluate(policy RoutePolicy, in Input) (*Plan, error) {
 			plan.ReasonCodes = append(plan.ReasonCodes, ReasonFreshInstance)
 		}
 		plan.Classification = classifyList(classification)
-		return finish(plan, actionOr(action, records.DispositionReconcile), records.GenMergeReconcile), nil
+		return finish(actionOr(action, records.DispositionReconcile), records.GenMergeReconcile), nil
 	}
 
 	// Precedence 3: no meaningful changes.
 	if len(in.Batch.Changes) == 0 {
 		plan.ReasonCodes = append(plan.ReasonCodes, ReasonNoMeaningfulChanges)
 		plan.Classification = classifyList(classification)
-		return finish(plan, records.DispositionDrop, records.GenNone), nil
+		return finish(records.DispositionDrop, records.GenNone), nil
 	}
 
 	// Precedence 4: protected or immutable paths quarantine (PTH-008).
@@ -170,13 +174,13 @@ func Evaluate(policy RoutePolicy, in Input) (*Plan, error) {
 		classification[records.ClassProtected] = true
 		plan.ReasonCodes = append(plan.ReasonCodes, ReasonProtectedPath)
 		plan.Classification = classifyList(classification)
-		return finish(plan, records.DispositionQuarantine, records.GenNone), nil
+		return finish(records.DispositionQuarantine, records.GenNone), nil
 	}
 	if len(in.Batch.Immutable) > 0 {
 		classification[records.ClassProtected] = true
 		plan.ReasonCodes = append(plan.ReasonCodes, ReasonImmutablePath)
 		plan.Classification = classifyList(classification)
-		return finish(plan, records.DispositionQuarantine, records.GenNone), nil
+		return finish(records.DispositionQuarantine, records.GenNone), nil
 	}
 
 	// Precedence 5: hard limit quarantines.
@@ -185,7 +189,7 @@ func Evaluate(policy RoutePolicy, in Input) (*Plan, error) {
 		classification[records.ClassBulk] = true
 		plan.ReasonCodes = append(plan.ReasonCodes, ReasonBatchOverHardLimit)
 		plan.Classification = classifyList(classification)
-		return finish(plan, records.DispositionQuarantine, records.GenNone), nil
+		return finish(records.DispositionQuarantine, records.GenNone), nil
 	}
 
 	// Serialized payload bound (POL-004).
@@ -193,7 +197,7 @@ func Evaluate(policy RoutePolicy, in Input) (*Plan, error) {
 		classification[records.ClassBulk] = true
 		plan.ReasonCodes = append(plan.ReasonCodes, ReasonManifestOverLimit)
 		plan.Classification = classifyList(classification)
-		return finish(plan, records.DispositionQuarantine, records.GenNone), nil
+		return finish(records.DispositionQuarantine, records.GenNone), nil
 	}
 
 	// Precedence 6: over automatic threshold follows route policy.
@@ -201,7 +205,7 @@ func Evaluate(policy RoutePolicy, in Input) (*Plan, error) {
 		classification[records.ClassBulk] = true
 		plan.ReasonCodes = append(plan.ReasonCodes, ReasonOverThreshold)
 		plan.Classification = classifyList(classification)
-		return finish(plan, actionOr(policy.BulkAction, records.DispositionQuarantine), records.GenMergeReconcile), nil
+		return finish(actionOr(policy.BulkAction, records.DispositionQuarantine), records.GenMergeReconcile), nil
 	}
 
 	// Precedence 7: unresolved active dispatch merges into one pending
@@ -209,16 +213,16 @@ func Evaluate(policy RoutePolicy, in Input) (*Plan, error) {
 	if in.ActiveDispatchExists {
 		plan.ReasonCodes = append(plan.ReasonCodes, ReasonActiveDispatch)
 		plan.Classification = classifyList(classification)
-		return finish(plan, records.DispositionMergePending, records.GenIncrementDirty), nil
+		return finish(records.DispositionMergePending, records.GenIncrementDirty), nil
 	}
 
 	// Precedence 8: normal bounded batch dispatches.
 	plan.ReasonCodes = append(plan.ReasonCodes, ReasonNormalBatch)
 	plan.Classification = classifyList(classification)
-	return finish(plan, records.DispositionDispatch, records.GenCreateIfIdle), nil
+	return finish(records.DispositionDispatch, records.GenCreateIfIdle), nil
 }
 
-func finish(plan *Plan, disposition records.Disposition, generation records.GenerationAction) *Plan {
+func finishPlan(plan *Plan, disposition records.Disposition, generation records.GenerationAction) *Plan {
 	plan.Disposition = string(disposition)
 	plan.GenerationAction = string(generation)
 	if plan.Classification == nil {
@@ -228,6 +232,34 @@ func finish(plan *Plan, disposition records.Disposition, generation records.Gene
 		plan.ReasonCodes = []string{}
 	}
 	return plan
+}
+
+// propagateDrops surfaces the batch's suppressed paths in the plan's
+// reason codes (AC-102, E7-T3/H-2): an unchanged or metadata-only modify
+// suppressed by the durable path facts must be visible in the plan and
+// the persisted decision, never silently discarded.
+func propagateDrops(plan *Plan, batch *ingest.Result) {
+	if batch == nil {
+		return
+	}
+	seen := make(map[string]bool, len(batch.Dropped))
+	for _, d := range batch.Dropped {
+		seen[d.Reason] = true
+	}
+	for _, reason := range []string{ingest.ReasonUnchangedModify, ingest.ReasonCreateDeleteNever} {
+		if seen[reason] && !containsReason(plan.ReasonCodes, reason) {
+			plan.ReasonCodes = append(plan.ReasonCodes, reason)
+		}
+	}
+}
+
+func containsReason(codes []string, reason string) bool {
+	for _, c := range codes {
+		if c == reason {
+			return true
+		}
+	}
+	return false
 }
 
 func actionOr(action string, fallback records.Disposition) records.Disposition {

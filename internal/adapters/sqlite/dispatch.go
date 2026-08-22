@@ -39,7 +39,29 @@ func (s *Store) CommitLineage(ctx context.Context, lin ports.Lineage) error {
 	if err := s.SaveIntent(tx, portsIntent(lin.Intent)); err != nil {
 		return mapIntentConstraint(err)
 	}
+	if err := s.upsertPathFacts(tx, lin.Observation.ResourceID, lin.Observation.Changes, lin.Observation.ReceivedAt); err != nil {
+		return err
+	}
 	return tx.Commit()
+}
+
+// upsertPathFacts maintains the durable prior-digest snapshot inside the
+// ingestion transaction (processing-pipeline §6 step 5, E7-T3/H-2): every
+// hashed path records its latest fact so the next arrival's unchanged
+// and metadata-only suppression is durable. A delete records absence; an
+// unhashed modify keeps the prior fact (conservative, never false).
+func (s *Store) upsertPathFacts(tx *sql.Tx, resourceID string, changes []ports.ObservationChange, observedAt string) error {
+	for _, c := range changes {
+		if c.AfterDigest == "" && c.ExistsAfter {
+			continue
+		}
+		if _, err := tx.Exec(`INSERT INTO path_facts (resource_id, path, digest, "exists", observed_at) VALUES (?,?,?,?,?)
+			ON CONFLICT (resource_id, path) DO UPDATE SET digest = excluded.digest, "exists" = excluded."exists", observed_at = excluded.observed_at`,
+			resourceID, c.Path, c.AfterDigest, c.ExistsAfter, observedAt); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // mapIntentConstraint converts driver constraint rejections into the
@@ -113,9 +135,9 @@ func portsIntent(i ports.IntentInput) IntentRecord {
 func (s *Store) LoadIntent(ctx context.Context, dispatchID string) (ports.IntentSnapshot, error) {
 	var snap ports.IntentSnapshot
 	var leaseOwner, leaseExpires, nextAttempt, externalRef sql.NullString
-	err := s.QueryRowContext(ctx, `SELECT dispatch_id, route_id, target_id, target_type, target_scope, resource_id, generation, idempotency_key, state, request_json, manifest_digest, external_ref, lease_owner, lease_expires_at, attempt_count, next_attempt_at
+	err := s.QueryRowContext(ctx, `SELECT dispatch_id, route_id, route_revision, target_id, target_type, target_scope, resource_id, generation, idempotency_key, state, request_json, manifest_digest, external_ref, lease_owner, lease_expires_at, attempt_count, next_attempt_at
 		FROM dispatch_intents WHERE dispatch_id = ?`, dispatchID).Scan(
-		&snap.DispatchID, &snap.RouteID, &snap.TargetID, &snap.TargetType, &snap.TargetScope, &snap.ResourceID, &snap.Generation, &snap.IdempotencyKey,
+		&snap.DispatchID, &snap.RouteID, &snap.RouteRevision, &snap.TargetID, &snap.TargetType, &snap.TargetScope, &snap.ResourceID, &snap.Generation, &snap.IdempotencyKey,
 		&snap.State, &snap.RequestJSON, &snap.ManifestDigest, &externalRef,
 		&leaseOwner, &leaseExpires, &snap.AttemptCount, &nextAttempt)
 	if errors.Is(err, sql.ErrNoRows) {

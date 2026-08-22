@@ -1,5 +1,15 @@
 # SOT Changelog
 
+## 1.0.16 - 2026-08-23
+
+E7-T3: submit-path revalidation and durable path facts (POL-008, SEC-010, PTH-006, PTH-007):
+
+- every submit path revalidates the stored plan inside `SubmitOnce` immediately before the lease commits: a stale route revision or moved target identity supersedes the intent through the declared `route_revision_invalidated` edge and rebuilds it under the active configuration, with the superseding decision recording the reason and the tautological plan-time self-comparison removed;
+- rerun derives its route revision from the active configuration instead of the stored plan (target-identity resolution on rerun is deferred with the round-2 residuals);
+- the ingestion transaction maintains the durable `path_facts` snapshot, the durable dispatch path plans against it, and `unchanged_content`/`create_delete_never_existed` suppressions are visible in the plan and decision reason codes (AC-102);
+- the regression suite `internal/cli/e7t3_test.go` proves the revision and target halves and the durable unchanged-modify suppression end to end;
+- round-1 review remediations: the direct dispatch submit runtime installs the staleness check, rerun resolves the active revision and target, the rebuild recursion is depth-bounded with unresolvable rebuilds refused, the drain warns instead of aborting on a staleness it cannot resolve, the superseding decision inherits the original policy revision, and two stale documentation claims (the E2-T4 plan-time revalidation, the path-facts section cite) were corrected.
+
 ## 1.0.15 - 2026-08-23
 
 E7-T2: the compliance review's three Blockers closed in the product path (DUR-010, CON-001, CON-003, FBK-005):

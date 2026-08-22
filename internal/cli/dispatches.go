@@ -205,7 +205,32 @@ func runDispatchesRetry(command string, args []string, stdout, stderr io.Writer)
 			return ""
 		}
 	}
-	op := &dispatch.OperatorService{Store: store, Now: func() string { return dispatch.Timestamp(time.Now()) }, TargetScopeResolver: scopeResolver}
+	// The rerun carries the active configuration's revision and target
+	// identity, never the stored plan's superseded values (E7-T3/H-1
+	// round-1 remediation).
+	var revisionResolver func(routeID string) (string, bool)
+	var targetResolver func(routeID string) (string, string, string, bool)
+	if cfgErr == nil {
+		rerunCfg := cfgRerun
+		revisionResolver = func(routeID string) (string, bool) {
+			return config.RouteRevision(rerunCfg, routeID)
+		}
+		targetResolver = func(routeID string) (string, string, string, bool) {
+			route, ok := rerunCfg.Routes[routeID]
+			if !ok {
+				return "", "", "", false
+			}
+			target, ok := rerunCfg.Targets[route.Dispatch.Target]
+			if !ok {
+				return "", "", "", false
+			}
+			return route.Dispatch.Target, target.Type, targetScope(target), true
+		}
+	}
+	op := &dispatch.OperatorService{
+		Store: store, Now: func() string { return dispatch.Timestamp(time.Now()) },
+		TargetScopeResolver: scopeResolver, RevisionResolver: revisionResolver, TargetResolver: targetResolver,
+	}
 	to, err := op.Retry(requestCtx(), flags.positional, "operator", flags.val("--reason"))
 	if err != nil {
 		if errors.Is(err, ports.ErrStateNotEligible) {
@@ -307,7 +332,32 @@ func runDispatchesRerun(command string, args []string, stdout, stderr io.Writer)
 			return ""
 		}
 	}
-	op := &dispatch.OperatorService{Store: store, Now: func() string { return dispatch.Timestamp(time.Now()) }, TargetScopeResolver: scopeResolver}
+	// The rerun carries the active configuration's revision and target
+	// identity, never the stored plan's superseded values (E7-T3/H-1
+	// round-1 remediation).
+	var revisionResolver func(routeID string) (string, bool)
+	var targetResolver func(routeID string) (string, string, string, bool)
+	if cfgErr == nil {
+		rerunCfg := cfgRerun
+		revisionResolver = func(routeID string) (string, bool) {
+			return config.RouteRevision(rerunCfg, routeID)
+		}
+		targetResolver = func(routeID string) (string, string, string, bool) {
+			route, ok := rerunCfg.Routes[routeID]
+			if !ok {
+				return "", "", "", false
+			}
+			target, ok := rerunCfg.Targets[route.Dispatch.Target]
+			if !ok {
+				return "", "", "", false
+			}
+			return route.Dispatch.Target, target.Type, targetScope(target), true
+		}
+	}
+	op := &dispatch.OperatorService{
+		Store: store, Now: func() string { return dispatch.Timestamp(time.Now()) },
+		TargetScopeResolver: scopeResolver, RevisionResolver: revisionResolver, TargetResolver: targetResolver,
+	}
 	summary, err := op.Rerun(requestCtx(), flags.positional, "operator", flags.val("--reason"))
 	if err != nil {
 		return intentErr(stderr, command, err)
@@ -364,6 +414,7 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 		Now: time.Now, LeaseTTL: time.Minute, Actor: "drain",
 		Backoff: backoff, JitterUnit: jitterUnit,
 		Log: opsLogger(stderr, cfg), TraceID: globalTraceID,
+		StalenessCheck: stalenessCheckOf(cfg), StaleRebuilder: staleRebuilderOf(store, cfg),
 	}
 	// Expired submitting leases are recovered before unknown
 	// reconciliation so the DUR-006 lookup ordering covers them (DUR-010,
@@ -393,10 +444,12 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 		}
 		return intentErr(stderr, command, err)
 	}
+	warnings := append([]string{}, reconcileErrors...)
+	warnings = append(warnings, report.Warnings...)
 	return writeEnvelopeWithWarnings(stdout, command, map[string]any{
 		"processed": report.Processed, "skipped": report.Skipped,
 		"reports": report.Reports, "reconciled": reconciled, "recovered": recovered,
-	}, reconcileErrors)
+	}, warnings)
 }
 
 // reconcileUnknownDispatches runs the DUR-006 resolution over the

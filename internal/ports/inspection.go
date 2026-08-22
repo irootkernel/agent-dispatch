@@ -179,6 +179,10 @@ type RerunInput struct {
 	New    IntentInput
 	Actor  string
 	Reason string
+	// ReasonCodes override the superseding decision's reason codes; nil
+	// keeps the operator_rerun default (E7-T3/H-1: stale rebuilds record
+	// route_revision_invalidated).
+	ReasonCodes []string
 }
 
 // ReconcileStore extends the durable surface with the unknown-resolution

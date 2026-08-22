@@ -185,5 +185,6 @@ func (a *reconcileArtifacts) submitRuntime(store storeOp) (*dispatch.Runtime, er
 		Store: store, Sink: sink, Now: time.Now,
 		LeaseTTL: time.Minute, Backoff: backoff, JitterUnit: jitterUnit, Actor: "reconcile",
 		Log: opsLogger(a.stderr, a.cfg), TraceID: globalTraceID,
+		StalenessCheck: stalenessCheckOf(a.cfg), StaleRebuilder: staleRebuilderOf(store, a.cfg),
 	}, nil
 }

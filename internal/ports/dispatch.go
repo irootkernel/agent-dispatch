@@ -133,10 +133,17 @@ type IntentInput struct {
 	CreatedAt          string
 }
 
+// ErrStaleRouteRevision reports a stored intent whose planned route
+// revision or target identity is no longer active (POL-008/SEC-010,
+// E7-T3/H-1): the intent must be superseded and rebuilt under the
+// current configuration, never submitted as stored.
+var ErrStaleRouteRevision = errors.New("stored intent is stale against the active configuration")
+
 // IntentSnapshot is the durable state of one dispatch intent.
 type IntentSnapshot struct {
 	DispatchID     string
 	RouteID        string
+	RouteRevision  string
 	TargetID       string
 	TargetScope    string
 	TargetType     string

@@ -675,8 +675,16 @@ func TestUncertainResolvedByReconcile(t *testing.T) {
 	}
 
 	// The operator resolution: one reconciliation resolves the uncertain
-	// route with due work (the stored snapshot is empty, so the whole
-	// scope is due) and schedules exactly one latest-state intent.
+	// route with due work and schedules exactly one latest-state intent.
+	// The durable path facts now track every observed arrival (E7-T3),
+	// so due work requires a real file change after the failure.
+	stale := filepath.Join(vault, "Indexes", "stale-index.md")
+	os.MkdirAll(filepath.Dir(stale), 0o755)
+	os.WriteFile(stale, []byte("stale index content"), 0o644)
+	setPlanEnv(t, vault, false)
+	withStdin(t, `[{"name":"Indexes/stale-index.md","exists":true,"new":true,"size":19,"type":"f"}]`, func() {
+		Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman", "--no-submit"}, &bytes.Buffer{}, &bytes.Buffer{})
+	})
 	out.Reset()
 	errb.Reset()
 	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "manual"}, &out, &errb); code != 0 {

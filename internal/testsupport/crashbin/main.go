@@ -9,7 +9,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
@@ -50,6 +52,21 @@ func main() {
 		// acquire-race --db PATH --owner O: one simultaneous one-shot
 		// competitor (AC-204); exit 0 only for the single lease winner.
 		err := acquire(flag("db"), flag("owner"), "60", false)
+		exitWith(err)
+	case "submit-die":
+		// submit-die --db PATH --stub PATH --board B --title T --dispatch ID: acquire
+		// the attempt lease, submit through the stub hermes (the remote
+		// acceptance commits on the target), and die hard before the
+		// local receipt transaction — the after-remote-acceptance crash
+		// window (AC-203, E7-T4).
+		err := submitDie(flag("db"), flag("stub"), flag("board"), flag("title"), flag("dispatch"), flag("ttl-seconds"))
+		exitWith(err)
+	case "migrate-mid-unit":
+		// migrate-mid-unit --db PATH: apply every migration unit except
+		// the last, then die hard INSIDE the final unit after its SQL
+		// executed but before the ledger insert commits (AC-207's
+		// in-unit interruption window, E7-T4).
+		err := migrateMidUnit(flag("db"))
 		exitWith(err)
 	case "migrate-partial":
 		// migrate-partial --db PATH --steps N: apply N migrations then die
@@ -288,6 +305,9 @@ func migratePartial(db, steps string) error {
 	if n > len(list) {
 		n = len(list)
 	}
+	if err := s.EnsureLedgerForHarness(); err != nil {
+		return err
+	}
 	for i := 0; i < n; i++ {
 		if err := s.ApplyMigrationForHarness(list[i]); err != nil {
 			return err
@@ -295,6 +315,70 @@ func migratePartial(db, steps string) error {
 	}
 	// Die hard mid-migration-sequence: the ledger holds exactly the
 	// applied prefix.
+	os.Exit(0)
+	return nil
+}
+
+// submitDie models the after-remote-acceptance crash: the lease is
+// committed, the target genuinely accepts (the stub records the task and
+// prints its id), and the process dies before any local receipt.
+func submitDie(db, stub, board, title, dispatchID, ttl string) error {
+	s, err := open(db)
+	if err != nil {
+		return err
+	}
+	snap, err := s.LoadIntent(context.Background(), dispatchID)
+	if err != nil {
+		return err
+	}
+	seconds, err := strconv.Atoi(ttl)
+	if err != nil || seconds <= 0 {
+		return fmt.Errorf("invalid ttl %q", ttl)
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	if _, err := s.AcquireAttempt(context.Background(), ports.AcquireAttempt{
+		DispatchID: dispatchID, AttemptID: "attempt-victim", Owner: "victim",
+		Now: now.Format(time.RFC3339), LeaseExpiresAt: now.Add(time.Duration(seconds) * time.Second).Format(time.RFC3339),
+	}); err != nil {
+		return err
+	}
+	out, err := exec.Command(stub, "kanban", "--board", board, "create", title, "--idempotency-key", snap.IdempotencyKey).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("stub submit: %v: %s", err, out)
+	}
+	task := strings.TrimSpace(string(out))
+	// The stub answers either the bare task id or its JSON record.
+	if !strings.HasPrefix(task, "t_") && !strings.Contains(task, `"id":"t_`) {
+		return fmt.Errorf("stub did not accept: %s", out)
+	}
+	fmt.Fprintf(os.Stderr, "crashbin: hard death after remote acceptance (%s)\n", task)
+	os.Exit(0)
+	return nil
+}
+
+// migrateMidUnit applies every migration except the last, opens the
+// final unit's transaction, executes its SQL, and dies hard before the
+// ledger insert: the WAL discards the unit and the database stays at the
+// previous version.
+func migrateMidUnit(db string) error {
+	s, err := open(db)
+	if err != nil {
+		return err
+	}
+	list := sqlite.Migrations
+	if err := s.EnsureLedgerForHarness(); err != nil {
+		return err
+	}
+	for i := 0; i < len(list)-1; i++ {
+		if err := s.ApplyMigrationForHarness(list[i]); err != nil {
+			return err
+		}
+	}
+	last := list[len(list)-1]
+	if err := s.ApplyMigrationSQLWithoutLedgerForHarness(last); err != nil {
+		return fmt.Errorf("apply in-unit: %w", err)
+	}
+	fmt.Fprintln(os.Stderr, "crashbin: hard death inside migration unit")
 	os.Exit(0)
 	return nil
 }

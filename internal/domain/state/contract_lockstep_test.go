@@ -13,9 +13,12 @@ import (
 // from the transition table alphabet (acceptance: all state enums match
 // contracts and schemas).
 func TestIntentStatesMatchContractSchema(t *testing.T) {
-	raw, err := os.ReadFile("../../docs/schemas/dispatch-intent.schema.json")
+	// The schemas live at the repository root's docs/schemas; a missing
+	// file is a broken checkout, not a skippable condition (E7-T4: the
+	// wrong relative path made this guard skip silently on every run).
+	raw, err := os.ReadFile("../../../docs/schemas/dispatch-intent.schema.json")
 	if err != nil {
-		t.Skip("docs schemas unavailable")
+		t.Fatalf("docs schemas unavailable: %v", err)
 	}
 	var schema struct {
 		Properties struct {
@@ -62,9 +65,9 @@ func TestIntentStatesMatchContractSchema(t *testing.T) {
 // schema and fails when the acceptance or execution enums drift from the
 // projection axes.
 func TestReceiptAxesMatchContractSchema(t *testing.T) {
-	raw, err := os.ReadFile("../../docs/schemas/dispatch-receipt.schema.json")
+	raw, err := os.ReadFile("../../../docs/schemas/dispatch-receipt.schema.json")
 	if err != nil {
-		t.Skip("docs schemas unavailable")
+		t.Fatalf("docs schemas unavailable: %v", err)
 	}
 	var schema struct {
 		Properties struct {

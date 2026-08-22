@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E7 |
 | Current active task | None |
-| Next task | E7-T4 |
-| Completed tasks | 36 / 45 |
-| Planned tasks | 9 / 45 |
+| Next task | E7-T5 |
+| Completed tasks | 37 / 45 |
+| Planned tasks | 8 / 45 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -74,7 +74,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 34 | E7-T1 | Completed | Documentation truth restored after the compliance review |
 | 35 | E7-T2 | Completed | Crash recovery, rerun supersession, follow-up activation |
 | 36 | E7-T3 | Completed | Submit-path revalidation and durable path facts |
-| 37 | E7-T4 | Planned | Gate-evidence tests repaired and platform guards added |
+| 37 | E7-T4 | Completed | Gate-evidence tests repaired and platform guards added |
 | 38 | E7-T5 | Planned | CLI inspection contract completed |
 | 39 | E7-T6 | Planned | Write gates, audit rows, and decision records closed |
 | 40 | E7-T7 | Planned | Migration lock, WAL classification, operator exits |
@@ -1624,6 +1624,10 @@ E7-T2 Completed.
 - every acceptance test cited as evidence executes and asserts on every supported development platform;
 - the lockstep guard fails loudly on schema/enum drift;
 - the test suite classifies platform-specific tests as skips, never failures, off-platform.
+
+### Evidence
+
+Delivered as the evidence-integrity repairs (H-4): `TestG2AC207` was rewritten to interrupt between every pair of migration units and inside the final unit through the crashbin (`migrate-partial` now creates the ledger first through `EnsureLedgerForHarness` so every boundary including the pre-first-unit leg asserts; the new `migrate-mid-unit` mode executes the unit's SQL through the store's own harness method and dies before the ledger insert commits, with an asserted hard-death marker) - every leg executes its assertions on every platform, replacing the earlier pre-ledger leg that skipped unconditionally; the contract lockstep tests read the real `docs/schemas` path (the wrong relative path made them skip silently on every run) and fail loudly when the schemas are missing, so schema/enum drift is caught; the after-remote-acceptance crash boundary gained a real process-death variant (`crashbin submit-die`: lease, a genuine stub-hermes submission, hard death before the receipt; `TestAfterAcceptanceProcessDeathRecoversDedupSafe` proves the drain heals the expired lease, the unprovable acceptance lands in the honest retry or dead-letter state, and the dedup-safe retry resubmits the same idempotency key back to the original task with exactly one board task); and the two darwin-only keychain tests skip with a recorded reason off-platform instead of failing (the class of failure the review's Linux container runs exposed). The VALIDATION G2 header and the AC-203/AC-207/AC-505 rows now state the delivered evidence. Verified by `make verify` on darwin/arm64. Changelog 1.0.17.
 
 ## E7-T5: Complete the CLI Inspection Contract
 

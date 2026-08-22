@@ -1,5 +1,15 @@
 # SOT Changelog
 
+## 1.0.17 - 2026-08-23
+
+E7-T4: gate-evidence integrity and platform honesty (TST-004, TST-009, AC-207, AC-203):
+
+- `TestG2AC207` now interrupts before the first unit, between every pair of migration units, and inside the final unit (the new in-unit crashbin mode carries an asserted hard-death marker); every assertion executes on every platform, replacing the pre-ledger leg that skipped unconditionally;
+- the contract lockstep tests read the real docs/schemas directory and fail loudly on missing schemas, so schema/enum drift is caught;
+- the after-remote-acceptance crash boundary has a real process-death variant: the crashbin leases, genuinely submits through the stub hermes, and dies before the receipt; the drain heals the lease and the dedup-safe retry resubmits the same idempotency key back to the original task;
+- the darwin-only keychain tests skip with a recorded reason off-platform instead of failing;
+- the VALIDATION G2 evidence rows state the delivered evidence.
+
 ## 1.0.16 - 2026-08-23
 
 E7-T3: submit-path revalidation and durable path facts (POL-008, SEC-010, PTH-006, PTH-007):

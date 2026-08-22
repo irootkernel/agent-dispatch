@@ -147,6 +147,9 @@ func TestResolveFDRereadsOnRetry(t *testing.T) {
 // stdin, and bounded failure detail. A stub script stands in for
 // /usr/bin/security and records what it observed.
 func TestRunSecurityControls(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("the keychain security subprocess exists only on darwin (E7-T4: this test previously failed, not skipped, off-platform)")
+	}
 	t.Setenv("LEAKED_MARKER", "must-not-inherit")
 	dir := t.TempDir()
 	observed := filepath.Join(dir, "observed")
@@ -279,6 +282,9 @@ func TestResolveBoundsEveryKind(t *testing.T) {
 // resolved credential: a succeeding lookup that also writes keychain
 // notices to stderr yields exactly the stdout bytes.
 func TestRunSecuritySeparatesStderr(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("the keychain security subprocess exists only on darwin (E7-T4: this test previously failed, not skipped, off-platform)")
+	}
 	dir := t.TempDir()
 	stub := filepath.Join(dir, "stub.sh")
 	script := `#!/bin/sh

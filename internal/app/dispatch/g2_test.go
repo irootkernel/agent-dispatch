@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"github.com/irootkernel/agent-dispatch/internal/app/reconcile"
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/testsupport/crashbinbuild"
 	"github.com/irootkernel/agent-dispatch/internal/testsupport/fakesink"
 )
 
@@ -27,37 +27,9 @@ import (
 // durability (synchronous=FULL, WAL) and this tested crash model:
 // process death at transaction boundaries, not machine power loss.
 
-var (
-	crashbinOnce sync.Once
-	crashbinPath string
-	crashbinErr  error
-)
-
 func crashbin(t *testing.T) string {
 	t.Helper()
-	crashbinOnce.Do(func() {
-		if _, err := os.Stat("../../../go.mod"); err != nil {
-			crashbinErr = fmt.Errorf("repository root unavailable: %v", err)
-			return
-		}
-		out, err := os.CreateTemp("", "agent-dispatch-crashbin-*")
-		if err != nil {
-			crashbinErr = err
-			return
-		}
-		out.Close()
-		cmd := exec.Command("go", "build", "-o", out.Name(), "./internal/testsupport/crashbin")
-		cmd.Dir = "../../.."
-		if build, err := cmd.CombinedOutput(); err != nil {
-			crashbinErr = fmt.Errorf("build crashbin: %v: %s", err, build)
-			return
-		}
-		crashbinPath = out.Name()
-	})
-	if crashbinErr != nil {
-		t.Skipf("crashbin unavailable: %v", crashbinErr)
-	}
-	return crashbinPath
+	return crashbinbuild.Build(t)
 }
 
 // g2Seed prepares a database through the harness and returns its path.
@@ -351,32 +323,72 @@ func TestG2AC206(t *testing.T) {
 
 // TestG2AC207 proves an interrupted migration leaves the database valid
 // at the previous version, and a restart completes to the new version —
-// never a partially assumed schema.
+// never a partially assumed schema. Interruption is injected between
+// every pair of migration units and inside the final unit (E7-T4: the
+// earlier pre-ledger leg skipped unconditionally, so these assertions
+// never ran).
 func TestG2AC207(t *testing.T) {
+	// Before the first unit: the ledger exists at version 0 and the
+	// empty database is exactly the valid previous version.
+	{
+		db := filepath.Join(t.TempDir(), "state.db")
+		if out, err := exec.Command(crashbin(t), "migrate-partial", "--db", db, "--steps", "0").CombinedOutput(); err != nil {
+			t.Fatalf("pre-first-unit interruption: %v: %s", err, out)
+		}
+		s := g2Open(t, db)
+		if version, err := s.SchemaVersion(); err != nil || version != 0 {
+			t.Fatalf("the pre-first-unit database must read version 0: %d %v", version, err)
+		}
+		if err := s.Migrate(t.TempDir()); err != nil {
+			t.Fatalf("restart must complete from the empty ledger: %v", err)
+		}
+	}
+	// Between every pair of migration units: the ledger holds exactly
+	// the applied prefix and a restart completes to the newest version.
+	for steps := 1; steps < sqlite.MaxSchemaVersion; steps++ {
+		db := filepath.Join(t.TempDir(), "state.db")
+		if out, err := exec.Command(crashbin(t), "migrate-partial", "--db", db, "--steps", fmt.Sprint(steps)).CombinedOutput(); err != nil {
+			t.Fatalf("interrupted migration after %d units: %v: %s", steps, err, out)
+		}
+		s := g2Open(t, db)
+		version, err := s.SchemaVersion()
+		if err != nil || version != steps {
+			t.Fatalf("interruption after %d units must leave version %d, got %d (%v)", steps, steps, version, err)
+		}
+		if err := s.Migrate(t.TempDir()); err != nil {
+			t.Fatalf("restart must complete the migration: %v", err)
+		}
+		if version, err := s.SchemaVersion(); err != nil || version != sqlite.MaxSchemaVersion {
+			t.Fatalf("restart must reach the newest version: %d %v", version, err)
+		}
+		if err := s.IntegrityCheck(false); err != nil {
+			t.Fatalf("restarted database must pass integrity: %v", err)
+		}
+	}
+	// Inside a migration unit: the unit's SQL executed but the ledger
+	// insert never committed, so the database stays at the previous
+	// version and the restart re-applies the unit.
 	db := filepath.Join(t.TempDir(), "state.db")
-	// Die before any migration applied: the database is valid at the
-	// previous (empty) version.
-	if out, err := exec.Command(crashbin(t), "migrate-partial", "--db", db, "--steps", "0").CombinedOutput(); err != nil {
-		t.Fatalf("interrupted migration: %v: %s", err, out)
+	out, err := exec.Command(crashbin(t), "migrate-mid-unit", "--db", db).CombinedOutput()
+	if err != nil {
+		t.Fatalf("in-unit interruption: %v: %s", err, out)
+	}
+	if !strings.Contains(string(out), "hard death inside migration unit") {
+		t.Fatalf("the in-unit die path must be the one that ran: %s", out)
 	}
 	s := g2Open(t, db)
-	// With no migration applied the ledger does not exist yet: the empty
-	// database is exactly the valid previous version (AC-207).
 	version, err := s.SchemaVersion()
-	if err != nil {
-		t.Skipf("ledger not created before the first migration: %v", err)
-	}
-	if version != 0 {
-		t.Fatalf("interrupted migration must leave the previous version, got %d", version)
+	if err != nil || version != sqlite.MaxSchemaVersion-1 {
+		t.Fatalf("an in-unit death must leave the previous version %d, got %d (%v)", sqlite.MaxSchemaVersion-1, version, err)
 	}
 	if err := s.Migrate(t.TempDir()); err != nil {
-		t.Fatalf("restart must complete the migration: %v", err)
+		t.Fatalf("restart must complete the interrupted unit: %v", err)
 	}
 	if version, err := s.SchemaVersion(); err != nil || version != sqlite.MaxSchemaVersion {
-		t.Fatalf("restart must reach the newest version: %d %v", version, err)
+		t.Fatalf("restart must reach the newest version after the in-unit death: %d %v", version, err)
 	}
 	if err := s.IntegrityCheck(false); err != nil {
-		t.Fatalf("restarted database must pass integrity: %v", err)
+		t.Fatalf("restarted database must pass integrity after the in-unit death: %v", err)
 	}
 }
 

@@ -290,3 +290,28 @@ func (s *Store) SchemaVersion() (int, error) {
 func (s *Store) ApplyMigrationForHarness(m Migration) error {
 	return s.applyMigration(m)
 }
+
+// EnsureLedgerForHarness creates the migration ledger without applying
+// any unit, so the crash harness can interrupt at exact unit boundaries
+// (AC-207, E7-T4).
+func (s *Store) EnsureLedgerForHarness() error {
+	return s.ensureMigrationLedger()
+}
+
+// ApplyMigrationSQLWithoutLedgerForHarness executes one migration
+// unit's SQL inside an open transaction that the harness abandons by
+// dying hard: the unit's statements run, the ledger insert never
+// commits, and the WAL discards the unit (AC-207's in-unit window,
+// E7-T4 round-1 remediation: the transaction structure stays inside the
+// sqlite package, not re-encoded in the harness).
+func (s *Store) ApplyMigrationSQLWithoutLedgerForHarness(m Migration) error {
+	tx, err := s.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(m.SQL); err != nil {
+		return err
+	}
+	return nil
+}

@@ -183,8 +183,9 @@ func TestDoctorDetectsFailureClasses(t *testing.T) {
 
 	var out, errb bytes.Buffer
 	code := Run([]string{"doctor", "--config", configPath}, &out, &errb)
-	if code != 0 {
-		t.Fatalf("doctor must succeed at producing findings, got %d: %s", code, errb.String())
+	// Error-severity findings carry the stable nonzero code (AC-502).
+	if code != 3 || !strings.Contains(errb.String(), "doctor_findings_present") {
+		t.Fatalf("doctor must carry the stable code for error findings, got %d: %s", code, errb.String())
 	}
 	res := decodeResult(t, &out)
 	findings, _ := res["findings"].([]any)
@@ -211,8 +212,8 @@ func TestDoctorConfigErrorStillProducesFindings(t *testing.T) {
 	}
 	var out, errb bytes.Buffer
 	code := Run([]string{"doctor", "--config", path}, &out, &errb)
-	if code != 0 {
-		t.Fatalf("doctor exits %d: %s", code, errb.String())
+	if code != 3 || !strings.Contains(errb.String(), "doctor_findings_present") {
+		t.Fatalf("doctor must carry the stable code for the config finding, got %d: %s", code, errb.String())
 	}
 	res := decodeResult(t, &out)
 	findings, _ := res["findings"].([]any)

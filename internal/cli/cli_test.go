@@ -96,18 +96,21 @@ func TestEveryRegisteredCommandIsImplemented(t *testing.T) {
 	for name := range knownCommands {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv("HOME", t.TempDir())
+			t.Setenv("XDG_CONFIG_HOME", "")
+			t.Setenv("XDG_STATE_HOME", "")
 			t.Setenv("JJUKKUMI_CONFIG", "")
 			t.Setenv("JJUKKUMI_STATE_DIR", "")
 			var out, errb bytes.Buffer
 			code := Run([]string{name}, &out, &errb)
 			_ = out
-			// version prints its result, doctor reports findings as
-			// data, and a sandboxed bare init legitimately writes the
-			// example configuration; every other bare invocation must
-			// be its own usage or configuration failure — never
+			// version prints its result and a sandboxed bare init
+			// legitimately writes the example configuration; doctor
+			// now emits both the findings log on stderr and the
+			// stable error envelope; every bare invocation must be
+			// its own usage or configuration failure — never
 			// command_not_implemented or command_unknown.
 			if code == 0 {
-				if name != "version" && name != "doctor" && name != "init" {
+				if name != "version" && name != "init" {
 					t.Errorf("bare invocation unexpectedly succeeded")
 				}
 				return
@@ -116,8 +119,21 @@ func TestEveryRegisteredCommandIsImplemented(t *testing.T) {
 				t.Errorf("bare invocation exits %d, want its own usage (2) or configuration (3) failure", code)
 				return
 			}
+			// doctor's stderr carries the structured log lines
+			// before the error envelope; decode the last
+			// api_version-prefixed line.
+			envBytes := errb.Bytes()
+			if name == "doctor" {
+				lines := strings.Split(strings.TrimRight(errb.String(), "\n"), "\n")
+				for i := len(lines) - 1; i >= 0; i-- {
+					if strings.HasPrefix(lines[i], "{\"api_version\":") {
+						envBytes = []byte(lines[i])
+						break
+					}
+				}
+			}
 			var env ErrorEnvelope
-			if err := json.Unmarshal(errb.Bytes(), &env); err != nil {
+			if err := json.Unmarshal(envBytes, &env); err != nil {
 				t.Fatalf("stderr is not the error envelope: %s", errb.String())
 			}
 			if env.Error.Code == "command_not_implemented" || env.Error.Code == "command_unknown" {

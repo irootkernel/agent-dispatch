@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E6, Hermes Webhook, Operations, Packaging, and v0.1 Release |
 | Current active task | None |
-| Next task | **E6-T4, Verify and Release v0.1.0** |
-| Completed tasks | 32 / 33 |
-| Planned tasks | 1 / 33 |
+| Next task | None (v0.1 sequence complete) |
+| Completed tasks | 33 / 33 |
+| Planned tasks | 0 / 33 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
@@ -68,7 +68,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 30 | E6-T1 | Completed | Explicit Hermes webhook adapter |
 | 31 | E6-T2 | Completed | Doctor, status, retention, and operational observability |
 | 32 | E6-T3 | Completed | macOS/Linux packaging and scheduled reconciliation |
-| 33 | E6-T4 | Planned | v0.1 release verification and final SOT reconciliation |
+| 33 | E6-T4 | Completed | v0.1 release verification and final SOT reconciliation |
 
 ---
 
@@ -1424,7 +1424,7 @@ Delivered as the release process (`make release`: byte-reproducible darwin/arm64
 
 ## E6-T4: Verify and Release v0.1.0
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -1458,6 +1458,10 @@ E6-T3 Completed.
 - production route enablement is an explicit operator action;
 - roadmap tasks E0-T1 through E6-T4 are Completed;
 - v0.1.0 artifacts are reproducible and version-compatible.
+
+### Evidence
+
+Delivered as the release-verification surface: the executable G5 acceptance suite (`internal/cli/e6t4_test.go`: AC-501 through AC-506 — the webhook route's auth-without-persistence, transport-vs-durable distinction, and no-fallback proof; doctor's actionable stable-coded findings; prune's resolved-expired removal preserving unresolved lineage and the append-only audit; the clean-host macOS install→dispatch→scheduled-reconciliation→doctor flow with the production-gate acknowledgement; the release-way build with the version envelope and artifact set; plus the upgrade-and-backup rehearsal restoring the snapshot standalone with its lineage), the Gate G5 evidence table in `docs/VALIDATION.md` (closing G0–G5: G0 by E0-T5, G1–G4 previously, G5 here), the regenerated requirement traceability matrix (`make traceability`, 33 tasks, 15 groups, every requirement ID resolved to its owning and verifying tasks), the release artifacts (`make release VERSION=v0.1.0`: byte-reproducible darwin/arm64 and linux/amd64 binaries with SHA256SUMS; `docs/RELEASE-NOTES-v0.1.0.md`; the SOT package manifest-verified; schemas, examples, and the companion skill in place), and the security/architecture review posture carried by the per-task Mulgae rounds and the frozen ADR set. Compatibility is frozen (config version 1, schema range 1-4, record payload versions, adapter profiles 0.19.1/2026.07.27.00 — `jjukkumi version` reports every axis); no deferred feature is partially enabled (the future-work list stands apart); the Hermes plugin remains absent; production enablement stays the explicit computed-revision operator action. Verified by `make verify` on the release tree including the Linux CI leg for AC-505. Reviewed through two full-target Mulgae rounds (r_01a0277c and r_01a02791, both remediated in place: the delivered webhook adapter entry in `jjukkumi version`, the doctor stable-nonzero contract with the `doctor_findings_present` registry code, the real production-gate enablement and uninstall ordering in the AC-504 evidence, the computed-revision rehearsal enable, the monotonic audit assertion, the webhook target-type and v0.1.0 version assertions, the unified doctor emission with the version adapter pin, and the documentation corrections); the epic validation audit reconciles the member-task hardening deferrals (r_01a026d2, r_01a0270a, r_01a0274b) and this task's round-2 residuals under run r_01a02791. Changelog 1.0.11.
 
 ---
 

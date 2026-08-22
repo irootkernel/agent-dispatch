@@ -1,5 +1,30 @@
 # SOT Changelog
 
+## 1.0.11 - 2026-08-22
+
+E6-T4: v0.1.0 verification and release:
+
+- the executable G5 acceptance suite closes the gate: AC-501 (webhook auth without persistence, transport-vs-durable distinction, no Kanban fallback), AC-502 (doctor's stable actionable findings), AC-503 (prune removes resolved expired data while unresolved lineage and the audit survive), AC-504 (the clean-host macOS install→validate→dry-run dispatch→gate-acknowledged enable→scheduled reconciliation→doctor flow without manual database edits), AC-505 (the Linux CI leg of make verify), and AC-506 (the release-way build with its version envelope and the full artifact set);
+- the upgrade-and-backup rehearsal is executable: built-in backup with verification, doctor, full integrity, one reconciliation, and a standalone restore that carries the lineage;
+- docs/VALIDATION.md gains the Gate G5 evidence table (G0–G5 now closed) and docs/RELEASE-NOTES-v0.1.0.md ships as the release notes artifact;
+- the requirement traceability matrix regenerates with every requirement resolved to its owning and verifying tasks (33 tasks, 15 groups);
+- compatibility is frozen and reported: config version 1, schema range 1-4, record payload versions, adapter profiles hermes 0.19.1 and watchman 2026.07.27.00;
+- the roadmap records all 33 tasks Completed with the v0.1 sequence complete; the deferred future work stays apart (no partially enabled feature), the Hermes plugin remains absent, and production enablement stays the explicit computed-revision operator action.
+
+Review round 1 remediations (all roles, reports_only):
+
+- `jjukkumi version` reports the delivered webhook adapter (its static-declaration HTTPS sink posture) instead of the stale "not-implemented" entry;
+- doctor now satisfies AC-502's stable-nonzero contract: error-severity findings keep the structured stdout result while the command emits the new stable `doctor_findings_present` code (configuration, exit 3) — registry and cli-spec updated, and the affected tests pinned to the new shape;
+- the AC-504 evidence runs the real production gate (`route enable --acknowledge-production-gate <computed> --yes`) instead of a direct store write, adds the documented uninstall ordering (route disable, trigger removal under Watchman, configuration and state retention), and the upgrade rehearsal enables the route through the same command with the computed revision;
+- the AC-503 audit assertion proves monotonicity (exactly the prune's own audit row is added, nothing deleted), AC-501 asserts the durable intent's webhook target type, and AC-506 asserts the built binary reports v0.1.0 and lists the release-notes artifact;
+- the Gate G5 header names all four evidence files, and the installation guide documents the restore procedure the release notes reference.
+
+Round 2 remediations (all roles, reports_only):
+
+- the doctor emission tail is unified (one writer computes the error-finding count in both branches), the config-load failure produces exactly the configuration finding set with nothing fabricated, and the doc comment states the nonzero contract;
+- the version command's adapter map is regression-pinned (no not-implemented markers; the hermeswebhook entry names its delivered HTTPS-sink posture);
+- the completeness test sandbox resets the XDG variables too.
+
 ## 1.0.10 - 2026-08-22
 
 E6-T3: packaging and scheduled reconciliation (SCP-008, OPS-006, OPS-007, OPS-009):

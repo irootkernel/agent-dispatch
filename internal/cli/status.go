@@ -145,9 +145,10 @@ func nilIfEmpty(s string) any {
 // runDoctor implements `jjukkumi doctor [--probe-targets]
 // [--integrity full]` (cli-spec §10, OPS-005): one findings examination
 // over configuration, store health, route runtime state, and the
-// external integrations. Findings are data — the command exits 0 when
-// it successfully produced them; error-severity findings are visible in
-// the result and through the doctor.finding log events.
+// external integrations. The actionable findings are the stdout result;
+// when any finding has error severity the command also emits the
+// stable doctor_findings_present code and exits 3 (AC-502), with the
+// doctor.finding log events carrying the per-finding severities.
 func runDoctor(args []string, stdout, stderr io.Writer) int {
 	command := "doctor"
 	flags := parseOpsFlags(command, args, stderr, map[string]bool{"--config": true, "--integrity": true})
@@ -158,13 +159,12 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 	integrityFull := flags.val("--integrity") == "full"
 	cfg, err := config.Load(resolveConfigPath(flags.val("--config")))
 	if err != nil {
-		findings := doctor.Examine(doctor.Input{
-			SemanticErrors: []string{err.Error()},
-			// The store was never tried: the store-dependent findings
-			// are skipped rather than fabricated.
-		})
+		// The store, integrations, and targets were never examined: a
+		// configuration that fails to load produces exactly the
+		// configuration finding set, nothing fabricated.
+		findings := doctor.Examine(doctor.Input{SemanticErrors: []string{err.Error()}})
 		emitFindings(opsLogger(stderr, nil), findings)
-		return writeEnvelope(stdout, command, map[string]any{"findings": findings, "findings_count": len(findings)})
+		return writeDoctorResult(stdout, stderr, command, findings)
 	}
 	log := opsLogger(stderr, cfg)
 	input := doctor.Input{ConfigPath: resolveConfigPath(flags.val("--config"))}
@@ -204,6 +204,27 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 
 	findings := doctor.Examine(input)
 	emitFindings(log, findings)
+	return writeDoctorResult(stdout, stderr, command, findings)
+}
+
+// writeDoctorResult emits the findings result and, when any finding has
+// error severity, the stable nonzero code (AC-502). The registry maps
+// doctor_findings_present to the configuration class; findings whose
+// own classes are storage or migration carry that detail in their codes
+// and remediation.
+func writeDoctorResult(stdout, stderr io.Writer, command string, findings []doctor.Finding) int {
+	errors := 0
+	for _, f := range findings {
+		if f.Severity == doctor.SeverityError {
+			errors++
+		}
+	}
+	if errors > 0 {
+		writeError(stderr, command, "doctor_findings_present", "configuration",
+			fmt.Sprintf("%d error-severity finding(s): see the findings result for codes, summaries, and remediation", errors))
+		writeEnvelope(stdout, command, map[string]any{"findings": findings, "findings_count": len(findings)})
+		return 3
+	}
 	return writeEnvelope(stdout, command, map[string]any{"findings": findings, "findings_count": len(findings)})
 }
 

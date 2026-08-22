@@ -250,7 +250,7 @@ Returns route active/dirty state, queue counts, unresolved delivery, quarantine,
 jjukkumi doctor [--probe-targets] [--integrity full]
 ```
 
-Returns findings with `code`, `severity`, `summary`, `details`, and `remediation`.
+Returns findings with `code`, `severity`, `summary`, `details`, and `remediation`. Findings are the stdout result; when any finding has error severity the command also emits the stable `doctor_findings_present` code and exits nonzero (AC-502).
 
 ## 11. Maintenance
 

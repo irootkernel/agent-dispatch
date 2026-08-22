@@ -118,6 +118,7 @@ The v0.1 registry is closed: implementations emit only the codes below. Adding o
 | `retention_reference_conflict` | `conflict` | 14 |
 | `maintenance_active_work` | `conflict` | 14 |
 | `backup_target_exists` | `conflict` | 14 |
+| `doctor_findings_present` | `configuration` | 3 |
 | `sqlite_open_failed` | `storage` | 20 |
 | `sqlite_integrity_failed` | `storage` | 20 |
 | `migration_newer_schema` | `migration` | 21 |

@@ -117,6 +117,14 @@ without its WAL/SHM or a checkpoint is not a valid backup (runbook
 Before upgrading or risky maintenance, stop drain/reconciliation
 commands and confirm no unexpired attempt lease (`jjukkumi doctor`).
 
+To restore: stop all jjukkumi commands, replace the state database
+with the backup file (owner-only permissions), keep the configuration
+that matches it, and run `jjukkumi maintenance integrity --full` and
+`jjukkumi doctor` before resuming the route. Downgrades are
+unsupported: restore only a backup made at or below the running
+schema version, and treat a newer-schema backup as unreadable until
+the matching binary is installed.
+
 ## 7. Uninstall
 
 `docs/examples/scripts/jjukkumi-uninstall.sh.example` follows runbook

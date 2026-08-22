@@ -31,6 +31,6 @@ func AdapterVersions() map[string]string {
 		"localfs":       "containment resolver (E2-T2)",
 		"sqlite":        "schema-v1..v4 (v2 attempts uniqueness, v3 target scope, v4 work-receipt begin windows)",
 		"hermeskanban":  "public-cli transport, capability probe, and durable sink, verified hermes 0.19.1 (E4-T1..T4)",
-		"hermeswebhook": "not-implemented (E6)",
+		"hermeswebhook": "static-declaration HTTPS sink, transport acceptance only, from the E0-T4 s9 evidence (E6-T1)",
 	}
 }

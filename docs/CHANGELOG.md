@@ -1,5 +1,14 @@
 # SOT Changelog
 
+## 1.0.13 - 2026-08-23
+
+D-017: the 2026-08-22 MVP compliance review is accepted in full and remediation epic E7 is registered:
+
+- the review report (`docs/reports/mvp-compliance-review-2026-08-22.md`) is admitted into the manifest-verified docs package;
+- the roadmap gains E7 with twelve Planned tasks (8 epics, 45 tasks total) owning the Blocker, High, Medium, and Low/Info remediation and the v0.1.1 patch release; the traceability matrix is regenerated for the new membership;
+- SCP-008 is recorded as an explicit exception for v0.1.1: verification runs on macOS only, the linux-amd64 artifact ships unverified, and the surviving "Linux CI leg" claims are queued for correction in E7-T1;
+- affected Completed tasks are not reopened (task-execution-rules §4); E7 is the formal audit remediation cycle and appends `Audit remediation (compliance review 2026-08-22):` evidence notes to the affected tasks instead.
+
 ## 1.0.12 - 2026-08-22
 
 E6 epic validation audit and closeout:

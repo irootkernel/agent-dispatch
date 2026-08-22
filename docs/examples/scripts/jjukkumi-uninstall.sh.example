@@ -1,0 +1,51 @@
+#!/bin/sh
+# E6-T3 uninstall procedure (runbook s10): removes the managed trigger,
+# the schedule units, and the binary — and deliberately RETAINS the
+# SQLite state and configuration unless --purge-state is passed
+# explicitly, because that history is the dedup and reconciliation
+# evidence. REVIEW BEFORE RUNNING; it is an example, not a product
+# surface.
+set -eu
+
+ROUTE="${JJUKKUMI_ROUTE:-wiki-maintenance}"
+CONFIG="${JJUKKUMI_CONFIG:-$HOME/.config/jjukkumi/config.yaml}"
+BINARY="${JJUKKUMI_BINARY:-/usr/local/bin/jjukkumi}"
+PLIST="$HOME/Library/LaunchAgents/xyz.rootkernel.jjukkumi.reconcile.plist"
+UNITS="$HOME/.config/systemd/user/jjukkumi-reconcile.service $HOME/.config/systemd/user/jjukkumi-reconcile.timer"
+
+purge_state=0
+for arg in "$@"; do
+    case "$arg" in
+    --purge-state) purge_state=1 ;;
+    *) echo "unknown argument $arg (only --purge-state is accepted)" >&2; exit 2 ;;
+    esac
+done
+
+# 1. Disable the route (idempotent; keeps observations and history).
+"$BINARY" route disable --route "$ROUTE" --config "$CONFIG" || true
+
+# 2. Remove the managed Watchman trigger (never removes the watch root).
+"$BINARY" watchman remove --route "$ROUTE" --config "$CONFIG" --yes || true
+
+# 3. Remove the scheduled reconciliation units.
+if [ -f "$PLIST" ]; then
+    launchctl unload "$PLIST" 2>/dev/null || true
+    rm -f "$PLIST"
+fi
+for unit in $UNITS; do
+    if [ -f "$unit" ]; then
+        systemctl --user disable --now "$(basename "$unit")" 2>/dev/null || true
+        rm -f "$unit"
+        systemctl --user daemon-reload 2>/dev/null || true
+    fi
+done
+
+# 4. Remove the binary.
+rm -f "$BINARY"
+
+# 5-6. Retain configuration and SQLite state by default: no purge
+# without the explicit flag.
+if [ "$purge_state" -eq 1 ]; then
+    echo "--purge-state given: back up and remove the state directory manually per runbook s8; this script does not delete it automatically." >&2
+fi
+echo "Uninstalled the trigger, schedule, and binary. Configuration and SQLite state were retained."

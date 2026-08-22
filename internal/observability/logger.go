@@ -86,6 +86,7 @@ const (
 	EventReconciliationRequested = "reconciliation.requested"
 	EventMaintenancePruned       = "maintenance.pruned"
 	EventMaintenanceVacuumed     = "maintenance.vacuumed"
+	EventMaintenanceBackedUp     = "maintenance.backed_up"
 	EventDoctorFinding           = "doctor.finding"
 )
 

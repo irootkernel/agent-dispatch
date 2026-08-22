@@ -1,5 +1,15 @@
 # Deployment Script Examples
 
-Executable Watchman, `launchd`, and `systemd --user` scripts are intentionally not frozen in this SOT. Any script added here is a provisional placeholder pending verification of the installed Watchman trigger behavior in `E2-T5` and of the public Hermes interface in `E0-T4`, which produces a capability report rather than scripts.
+The `launchd` and `systemd --user` scheduled-reconciliation examples
+and the uninstall procedure script are the E6-T3 deliverables,
+generated from the verified `reconcile` and `watchman` command shapes
+(OPS-006/007): the platform validators lint them on each OS of the CI
+matrix (`make schedule-check`), and the CLI test suite pins their
+safety properties. Replace the placeholder binary path, route id, and
+review the uninstall script before use — see
+`docs/docs/05-operations/installation.md` for the full install,
+schedule, upgrade, and backup procedures.
 
-`E6-T3` owns the tested Watchman install/uninstall and `launchd`/`systemd --user` scheduling scripts generated from the verified commands. Do not turn illustrative command names in the design documents into production scripts without that verification.
+- `jjukkumi-reconcile.launchd.plist.example` — macOS LaunchAgent
+- `jjukkumi-reconcile.service.example` + `jjukkumi-reconcile.timer.example` — Linux systemd --user units
+- `jjukkumi-uninstall.sh.example` — runbook §10 uninstall order; retains SQLite and configuration

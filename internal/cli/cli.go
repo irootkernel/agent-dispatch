@@ -59,8 +59,9 @@ type VersionResult struct {
 }
 
 // knownCommands lists the top-level commands of the v0.1 CLI tree
-// (cli-spec §2). A command in this set that this build does not implement
-// fails with command_not_implemented; anything else is command_unknown.
+// (cli-spec §2). Every command in this set is implemented; the default
+// Run branch keeps its not-implemented guard as a safety net for future
+// registrations, and an unrecognized name is command_unknown.
 var knownCommands = map[string]bool{
 	"version": true, "init": true, "config": true, "route": true,
 	"watchman": true, "dispatch": true, "dispatches": true,
@@ -73,9 +74,7 @@ var knownCommands = map[string]bool{
 // given streams. It returns the process exit code. Global options
 // (--log-level, --trace-id) are scanned out before dispatch and shape
 // the stderr structured log (OPS-001). This build implements the full
-// v0.1 command tree except `completion`; every registered but
-// unimplemented command fails with command_not_implemented rather than
-// silently succeeding, and an unrecognized name is command_unknown.
+// v0.1 command tree; an unrecognized name is command_unknown.
 func Run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		writeError(stderr, "", "command_unknown", "usage", "usage: jjukkumi <command> [flags]; run 'jjukkumi version --output json'")
@@ -115,6 +114,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runDoctor(args[1:], stdout, stderr)
 	case "maintenance":
 		return runMaintenance(args[1:], stdout, stderr)
+	case "completion":
+		return runCompletion(args[1:], stdout, stderr)
 	default:
 		if knownCommands[args[0]] {
 			writeError(stderr, args[0], "command_not_implemented", "usage",

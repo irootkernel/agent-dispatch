@@ -70,6 +70,7 @@ type storeOp interface {
 	IntegrityCheck(full bool) error
 	SchemaVersion() (int, error)
 	LatestSchemaVersion() int
+	Backup(path string) error
 	SetRouteActivation(ctx context.Context, routeID, activation, acknowledgeRevision, now string) error
 	LoadRouteState(ctx context.Context, routeID string) (state.RouteSnapshot, error)
 	CommitMergePending(ctx context.Context, lin ports.Lineage, actor, now string) (int, error)

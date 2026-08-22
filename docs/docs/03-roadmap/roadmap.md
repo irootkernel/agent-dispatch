@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E6, Hermes Webhook, Operations, Packaging, and v0.1 Release |
 | Current active task | None |
-| Next task | **E6-T3, Packaging and Scheduled Reconciliation** |
-| Completed tasks | 31 / 33 |
-| Planned tasks | 2 / 33 |
+| Next task | **E6-T4, Verify and Release v0.1.0** |
+| Completed tasks | 32 / 33 |
+| Planned tasks | 1 / 33 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
@@ -67,7 +67,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 29 | E5-T5 | Completed | Production-capable test-vault gate G4 |
 | 30 | E6-T1 | Completed | Explicit Hermes webhook adapter |
 | 31 | E6-T2 | Completed | Doctor, status, retention, and operational observability |
-| 32 | E6-T3 | Planned | macOS/Linux packaging and scheduled reconciliation |
+| 32 | E6-T3 | Completed | macOS/Linux packaging and scheduled reconciliation |
 | 33 | E6-T4 | Planned | v0.1 release verification and final SOT reconciliation |
 
 ---
@@ -1386,7 +1386,7 @@ Delivered in `internal/observability` (the structured log: §3 event vocabulary,
 
 ## E6-T3: Package macOS/Linux Installation and Scheduled Reconciliation
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -1417,6 +1417,10 @@ E6-T2 Completed.
 - uninstall does not delete SQLite or config without explicit flag;
 - trigger and schedule are idempotently inspectable;
 - no JJUKKUMI daemon is introduced.
+
+### Evidence
+
+Delivered as the release process (`make release`: byte-reproducible darwin/arm64 and linux/amd64 binaries with the full commit hash and commit-date build time, verified by identical SHA-256 digests across consecutive builds, plus a portable `LC_ALL=C`-sorted `SHA256SUMS`; `make clean` covers `dist/`), the platform-validated scheduling artifacts (`make schedule-check` inside `make verify`: `plutil -lint` on macOS, `systemd-analyze verify` on Linux per the CI matrix, `sh -n` always), the launchd LaunchAgent and systemd --user service/timer examples invoking the verified one-shot `reconcile --reason scheduled` shape (whose `--output json` option the dispatches family now accepts, pinned by a test driving the example's exact arguments) with no daemon, the runbook §10 uninstall example that retains SQLite and configuration by design, `jjukkumi completion bash|zsh` derived from the registered tree, `jjukkumi maintenance backup` (Lstat symlink guard, `backup_target_exists` conflict, partial-file cleanup, the dedicated `maintenance.backed_up` event, and a verified owner-only standalone snapshot), and `docs/docs/05-operations/installation.md` (platform paths, clean-host scenario, scheduling, upgrade, backup, uninstall). Verified by `make verify` plus the e6t3 suite: the clean-host init through the default paths with owner-only permissions and fail-closed re-init refusal, the backup snapshot opening standalone with quick-check integrity, the uninstall safety pins, the schedule invocation shapes with timer properties, the completion registry invariant parsed back out of the emitted script, and the sandboxed per-command completeness proof. Reviewed through three full-target Mulgae rounds (r_01a0272c and r_01a0273e findings remediated in place; r_01a0274b as the authorized extra round whose residuals are the deferral) — all coverage complete, ci pass, zero structured findings; the round-3 residuals (backup create-vs-guard race and umask window, unsigned release artifacts, further systemd sandboxing, the duplicated no-overwrite guard, launchd output visibility, release-reproducibility automation, and the remaining prose/test notes) are recorded as the hardening deferral for the epic validation audit under run r_01a0274b (reports_only). Changelog 1.0.10.
 
 ## E6-T4: Verify and Release v0.1.0
 

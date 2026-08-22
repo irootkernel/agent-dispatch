@@ -117,6 +117,7 @@ The v0.1 registry is closed: implementations emit only the codes below. Adding o
 | `quarantine_release_denied` | `conflict` | 14 |
 | `retention_reference_conflict` | `conflict` | 14 |
 | `maintenance_active_work` | `conflict` | 14 |
+| `backup_target_exists` | `conflict` | 14 |
 | `sqlite_open_failed` | `storage` | 20 |
 | `sqlite_integrity_failed` | `storage` | 20 |
 | `migration_newer_schema` | `migration` | 21 |

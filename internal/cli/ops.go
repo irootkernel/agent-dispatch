@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -92,7 +94,7 @@ func parseOpsFlags(command string, args []string, stderr io.Writer, valueFlags m
 // --yes; nothing here reads Watchman input.
 func runMaintenance(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		return usageError(stderr, "maintenance", "maintenance requires a subcommand: prune, vacuum, or integrity")
+		return usageError(stderr, "maintenance", "maintenance requires a subcommand: prune, vacuum, integrity, or backup")
 	}
 	command := "maintenance " + args[0]
 	switch args[0] {
@@ -102,9 +104,49 @@ func runMaintenance(args []string, stdout, stderr io.Writer) int {
 		return runMaintenanceVacuum(command, args[1:], stdout, stderr)
 	case "integrity":
 		return runMaintenanceIntegrity(command, args[1:], stdout, stderr)
+	case "backup":
+		return runMaintenanceBackup(command, args[1:], stdout, stderr)
 	default:
 		return usageError(stderr, "maintenance", fmt.Sprintf("unknown maintenance subcommand %q", args[0]))
 	}
+}
+
+// runMaintenanceBackup writes a verified owner-only backup of the
+// durable store (runbook §8: the built-in backup path; VACUUM INTO
+// plus a quick check — never a bare copy of a live WAL database).
+func runMaintenanceBackup(command string, args []string, stdout, stderr io.Writer) int {
+	flags := parseOpsFlags(command, args, stderr, map[string]bool{"--config": true, "--output": true})
+	if flags == nil {
+		return 2
+	}
+	output := flags.val("--output")
+	if output == "" {
+		return usageError(stderr, command, "backup requires --output <path> for the backup file")
+	}
+	// Lstat so a symlink at the target — dangling or not — is itself a
+	// conflict: the snapshot must never land through a link the backup
+	// path did not create.
+	if _, err := os.Lstat(output); err == nil {
+		return planErr(stderr, command, "backup_target_exists", "conflict",
+			"backup "+output+" already exists; the backup path is never overwritten (runbook s8) — choose a new path", 14)
+	}
+	cfg, err := config.Load(resolveConfigPath(flags.val("--config")))
+	if err != nil {
+		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
+	}
+	store, closer, exit := openOperatorStore(command, flags.val("--config"), stderr)
+	if exit != 0 {
+		return exit
+	}
+	defer closer.Close()
+	if err := store.Backup(output); err != nil {
+		// A failed snapshot leaves nothing behind: a partial file would
+		// turn the operator's retry into a spurious conflict.
+		_ = os.Remove(output)
+		return planErr(stderr, command, "sqlite_query_failed", "storage", err.Error(), 20)
+	}
+	opsLogger(stderr, cfg).Info(observability.EventMaintenanceBackedUp, observability.Correlation{TraceID: globalTraceID}, "database backup written", map[string]any{"path": output})
+	return writeEnvelope(stdout, command, map[string]any{"backup_path": output})
 }
 
 // runMaintenancePrune plans or executes the retention prune
@@ -242,4 +284,32 @@ func policyMap(p maintenance.Policy) map[string]any {
 		"resolved_quarantine": p.ResolvedQuarantine.String(),
 		"unresolved":          "forever (retained until resolution)",
 	}
+}
+
+// completionCommands derives the completion vocabulary from the
+// registered command tree (cli-spec §2), so the two cannot drift.
+func completionCommands() []string {
+	names := make([]string, 0, len(knownCommands))
+	for name := range knownCommands {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// runCompletion implements `jjukkumi completion <bash|zsh>` (E6-T3
+// deliverable): one static completion script for the fixed v0.1
+// command tree, written to stdout.
+func runCompletion(args []string, stdout, stderr io.Writer) int {
+	command := "completion"
+	if len(args) != 1 || (args[0] != "bash" && args[0] != "zsh") {
+		return usageError(stderr, command, "completion requires exactly one shell: bash or zsh")
+	}
+	words := strings.Join(completionCommands(), " ")
+	if args[0] == "bash" {
+		fmt.Fprintf(stdout, "_jjukkumi()\n{\n  local cur\n  cur=${COMP_WORDS[COMP_CWORD]}\n  COMPREPLY=( $(compgen -W \"%s\" -- \"$cur\") )\n}\ncomplete -F _jjukkumi jjukkumi\n", words)
+		return 0
+	}
+	fmt.Fprintf(stdout, "#compdef jjukkumi\n_jjukkumi() {\n  _arguments '1:command:(%s)'\n}\n_jjukkumi \"$@\"\n", words)
+	return 0
 }

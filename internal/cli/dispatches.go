@@ -39,7 +39,7 @@ func (f dispatchesFlags) val(name string) string { return f.values[name] }
 // bare positional operand.
 func parseDispatchesFlags(command string, args []string, stderr io.Writer, allowed map[string]bool) (dispatchesFlags, int) {
 	out := dispatchesFlags{values: map[string]string{}}
-	valueFlags := map[string]bool{"--config": true, "--route": true, "--state": true, "--target": true, "--reason": true, "--max": true, "--limit": true, "--dispatch": true, "--kind": true, "--acknowledge-production-gate": true}
+	valueFlags := map[string]bool{"--config": true, "--route": true, "--state": true, "--target": true, "--reason": true, "--max": true, "--limit": true, "--dispatch": true, "--kind": true, "--acknowledge-production-gate": true, "--output": true}
 	for name := range allowed {
 		valueFlags[name] = true
 	}
@@ -70,6 +70,9 @@ func parseDispatchesFlags(command string, args []string, stderr io.Writer, allow
 			}
 			return out, usageError(stderr, command, fmt.Sprintf("unknown argument %q", arg))
 		}
+	}
+	if v := out.values["--output"]; v != "" && v != "json" {
+		return out, usageError(stderr, command, "--output requires 'json'")
 	}
 	return out, 0
 }

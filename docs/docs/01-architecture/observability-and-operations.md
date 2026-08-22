@@ -63,7 +63,7 @@ feedback.unresolved
 quarantine.created
 quarantine.released
 reconciliation.requested
-maintenance.pruned, maintenance.vacuumed
+maintenance.pruned, maintenance.vacuumed, maintenance.backed_up
 doctor.finding
 ```
 

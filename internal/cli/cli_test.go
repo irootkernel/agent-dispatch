@@ -87,22 +87,43 @@ func TestUnknownCommandFailsClosed(t *testing.T) {
 	}
 }
 
-func TestEveryKnownCommandClassifiesAsNotImplemented(t *testing.T) {
+func TestEveryRegisteredCommandIsImplemented(t *testing.T) {
+	// E6-T3 completes the v0.1 tree: every registered command must
+	// reach its own run function. Each command runs in a fresh
+	// sandboxed home so a bare `init` can neither touch the
+	// developer's configuration nor change what the next bare command
+	// sees.
 	for name := range knownCommands {
-		if name == "version" || name == "init" || name == "route" || name == "dispatch" || name == "dispatches" || name == "watchman" || name == "config" || name == "receipts" || name == "work" || name == "quarantine" || name == "reconcile" || name == "status" || name == "doctor" || name == "maintenance" {
-			continue // the implemented commands (E6-T2 adds the operations tree)
-		}
-		var out, errb bytes.Buffer
-		if code := Run([]string{name}, &out, &errb); code != 2 {
-			t.Errorf("%s: exit code = %d, want 2", name, code)
-		}
-		var env ErrorEnvelope
-		if err := json.Unmarshal(errb.Bytes(), &env); err != nil {
-			t.Fatalf("%s: stderr is not the error envelope: %s", name, errb.String())
-		}
-		if env.Error.Code != "command_not_implemented" {
-			t.Errorf("%s: error code = %q, want command_not_implemented", name, env.Error.Code)
-		}
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+			t.Setenv("JJUKKUMI_CONFIG", "")
+			t.Setenv("JJUKKUMI_STATE_DIR", "")
+			var out, errb bytes.Buffer
+			code := Run([]string{name}, &out, &errb)
+			_ = out
+			// version prints its result, doctor reports findings as
+			// data, and a sandboxed bare init legitimately writes the
+			// example configuration; every other bare invocation must
+			// be its own usage or configuration failure — never
+			// command_not_implemented or command_unknown.
+			if code == 0 {
+				if name != "version" && name != "doctor" && name != "init" {
+					t.Errorf("bare invocation unexpectedly succeeded")
+				}
+				return
+			}
+			if code != 2 && code != 3 {
+				t.Errorf("bare invocation exits %d, want its own usage (2) or configuration (3) failure", code)
+				return
+			}
+			var env ErrorEnvelope
+			if err := json.Unmarshal(errb.Bytes(), &env); err != nil {
+				t.Fatalf("stderr is not the error envelope: %s", errb.String())
+			}
+			if env.Error.Code == "command_not_implemented" || env.Error.Code == "command_unknown" {
+				t.Errorf("fell through to the default classification (%s)", env.Error.Code)
+			}
+		})
 	}
 }
 

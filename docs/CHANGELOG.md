@@ -1,5 +1,38 @@
 # SOT Changelog
 
+## 1.0.10 - 2026-08-22
+
+E6-T3: packaging and scheduled reconciliation (SCP-008, OPS-006, OPS-007, OPS-009):
+
+- `make release VERSION=v0.1.0` builds byte-reproducible cross-platform binaries (darwin/arm64, linux/amd64) with `-trimpath`, the full release commit hash, and the commit's committer date as the build time, and emits a portable `LC_ALL=C`-sorted `SHA256SUMS` over the binaries under `dist/`;
+- the scheduling examples exist and are validated: the launchd LaunchAgent plist (`plutil -lint` on macOS), the systemd --user service and timer (`systemd-analyze verify` on Linux), and the uninstall script (`sh -n`), wired as `make schedule-check` inside `make verify` so each CI platform lints its own artifact (SCP-008, where possible); both schedules invoke the verified `reconcile --reason scheduled` one-shot shape with no daemon, omitting `--submit` before the production gate;
+- `jjukkumi completion bash|zsh` emits the static v0.1 command-tree completion, completing the registered CLI tree;
+- `jjukkumi maintenance backup --output <path>` writes the runbook §8 built-in backup: an owner-only `VACUUM INTO` snapshot with a post-write quick check that refuses to overwrite (cli-spec §11 updated);
+- `docs/docs/05-operations/installation.md` documents the install, platform config/state paths (macOS and XDG Linux), first-use clean-host scenario, daily scheduling, upgrade, backup, and uninstall procedures;
+- the uninstall example follows runbook §10 and retains SQLite and configuration by design — `--purge-state` only prints the manual backup guidance; the acceptance lines are pinned by tests (clean-host init through the default paths with owner-only perms and idempotent refusal, backup standalone-open and integrity, schedule shapes, no recursive deletion);
+- the Linux CI leg of `make verify` (existing ubuntu-latest matrix) validates the binary, configuration, SQLite, and — with this change — the systemd unit syntax.
+
+Review round 1 remediations (all roles, reports_only):
+
+- the release ships byte-reproducible binaries with checksums over the binaries themselves (Go `-trimpath` plus the commit-pinned version, commit, and build time; verified by two consecutive `make release` runs producing identical SHA-256 digests) — the earlier tar archives embedded machine-specific metadata and a stale-checksum edge, so the archive layer is gone, `make clean` removes `dist/`, and the checksum list sorts under `LC_ALL=C`;
+- `maintenance backup` refuses an existing target with the new stable `backup_target_exists` code (conflict, exit 14) before opening the store, logs the dedicated `maintenance.backed_up` event instead of the vacuum event, and its failure shapes are test-pinned alongside the missing-flag usage;
+- the completion vocabulary derives from the registered command registry at run time (the duplicated list is gone), the no-op zsh transform is removed, and the registry-equals-vocabulary invariant is pinned by a test;
+- the cli-spec §2 command tree lists `maintenance backup`; the launchd example drops its fixed `/tmp` error path; the bare-command completeness test regained its teeth (each registered command must reach its own handler with its own error class, never `command_not_implemented` or `command_unknown`).
+
+Review round 2 remediations (all roles, reports_only):
+
+- the release documentation matches the remediated shape everywhere: the installation guide and the changelog headline describe the byte-reproducible binaries with binary-level checksums (no tar layer), the full commit hash is stamped for builder-independent bytes, and the checksum verification line runs from `dist/` as written;
+- the backup target guard uses `Lstat`, so a symlink at the target — dangling or not — is itself the `backup_target_exists` conflict and the snapshot can never land through a link the backup path did not create; a failed snapshot removes its partial file so the operator's retry is not misclassified as a conflict; the storage-failure branch and the no-artifact-on-failure property are test-pinned;
+- the completion invariant test parses the emitted bash word list back out and compares it set-for-set with the registry (the earlier derivation-based test was tautological); the completeness test sandboxes `HOME` so a bare `init` cannot touch the developer's configuration, allows exactly the three legitimately-succeeding bare commands, and excludes `command_unknown` fallthrough;
+- the launchd example's fixed `/tmp` path removal is pinned by a regression assertion; `make schedule-check` lost its dead success flag; the stale dispatcher comments now describe the fully implemented tree.
+
+Round 3 remediations (authorized extra round; all roles, reports_only):
+
+- the scheduling examples' invocation actually runs: the documented global `--output json` option is accepted across the dispatches command family (reconcile included — the high-severity finding that would have failed every scheduled run), pinned by a test driving the example's exact arguments;
+- the uninstall example no longer passes the undocumented `--yes` to `route disable`;
+- the Lstat symlink guard, the `maintenance.backed_up` event, the zsh completion header, and the launchd `/tmp` exclusion all gained real assertions;
+- `make release` warns when git metadata is absent instead of silently stamping `unknown`.
+
 ## 1.0.9 - 2026-08-22
 
 E6-T2: doctor, status, retention, and operational observability (OPS-001..005, OPS-008, CLI-004, CLI-007, SEC-007):

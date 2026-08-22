@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- E6-T3 launchd scheduled-reconciliation example (OPS-007).
+     Install for the current user:
+       cp jjukkumi-reconcile.launchd.plist ~/Library/LaunchAgents/xyz.rootkernel.jjukkumi.reconcile.plist
+       launchctl load ~/Library/LaunchAgents/xyz.rootkernel.jjukkumi.reconcile.plist
+     Replace /usr/local/bin/jjukkumi and wiki-maintenance with the
+     installed binary path and route id. Before the production gate the
+     recipe omits --submit (persisted decisions only); after the gate
+     add --submit to the ProgramArguments. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>xyz.rootkernel.jjukkumi.reconcile</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/jjukkumi</string>
+        <string>reconcile</string>
+        <string>--route</string>
+        <string>wiki-maintenance</string>
+        <string>--reason</string>
+        <string>scheduled</string>
+        <string>--output</string>
+        <string>json</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>3</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>

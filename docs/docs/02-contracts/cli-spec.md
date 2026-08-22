@@ -40,7 +40,7 @@ jjukkumi quarantine list|show|release|discard
 jjukkumi reconcile
 jjukkumi status
 jjukkumi doctor
-jjukkumi maintenance prune|vacuum|integrity
+jjukkumi maintenance prune|vacuum|integrity|backup
 jjukkumi completion
 ```
 
@@ -257,8 +257,9 @@ Returns findings with `code`, `severity`, `summary`, `details`, and `remediation
 - `maintenance prune --before ... --dry-run|--yes`
 - `maintenance vacuum --yes`
 - `maintenance integrity [--full]`
+- `maintenance backup --output <path>`
 
-Prune is dry-run by default. Vacuum refuses while active attempts exist.
+Prune is dry-run by default. Vacuum refuses while active attempts exist. Backup writes a verified owner-only snapshot of the durable store through the built-in `VACUUM INTO` path (runbook §8) and refuses to overwrite an existing file.
 
 ## 12. JSON Envelope
 

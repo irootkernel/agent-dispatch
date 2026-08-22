@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
-	"github.com/rootkernel/jjukkumi/internal/app/reconcile"
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
-	"github.com/rootkernel/jjukkumi/internal/ports"
-	"github.com/rootkernel/jjukkumi/internal/testsupport/fakesink"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/app/reconcile"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/testsupport/fakesink"
 )
 
 // The G2 gate suite (E3-T5): every crash window and the simultaneous
@@ -38,7 +38,7 @@ func crashbin(t *testing.T) string {
 			crashbinErr = fmt.Errorf("repository root unavailable: %v", err)
 			return
 		}
-		out, err := os.CreateTemp("", "jjukkumi-crashbin-*")
+		out, err := os.CreateTemp("", "agent-dispatch-crashbin-*")
 		if err != nil {
 			crashbinErr = err
 			return
@@ -358,7 +358,7 @@ func g2Lineage() ports.Lineage {
 	now := "2026-08-20T01:00:00Z"
 	return ports.Lineage{
 		Observation: ports.ObservationInput{
-			ObservationID: "obs-1", SchemaVersion: "jjukkumi.source-observation/v1",
+			ObservationID: "obs-1", SchemaVersion: "agent-dispatch.source-observation/v1",
 			SourceType: "watchman", SourceID: "watchman-main", TriggerName: "trig",
 			ResourceID: "vault-main", ObservedAt: now, ReceivedAt: now,
 			RawPayloadDigest: "sha256:" + hex64('a'), IngestStatus: "accepted",
@@ -376,9 +376,9 @@ func g2Lineage() ports.Lineage {
 		Intent: ports.IntentInput{
 			DispatchID: "dispatch-1", DecisionID: "decision-1", RouteID: "wiki",
 			RouteRevision: "route-rev-1", TargetID: "hermes-kanban-main", TargetType: "hermes_kanban",
-			ResourceID: "vault-main", Generation: 1, IdempotencyKey: "jjukkumi:v1:sha256:" + hex64('1'),
+			ResourceID: "vault-main", Generation: 1, IdempotencyKey: "agent-dispatch:v1:sha256:" + hex64('1'),
 			ContentFingerprint: "sha256:" + hex64('c'), ManifestDigest: "sha256:" + hex64('d'),
-			RequestVersion: "jjukkumi.hermes-task/v1", RequestJSON: "{}", CreatedAt: now,
+			RequestVersion: "agent-dispatch.hermes-task/v1", RequestJSON: "{}", CreatedAt: now,
 		},
 	}
 }

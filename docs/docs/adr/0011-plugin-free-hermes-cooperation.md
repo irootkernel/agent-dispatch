@@ -9,7 +9,7 @@ Feedback-loop attribution benefits from run and changed-path receipts, but Herme
 
 ## Decision
 
-JJUKKUMI exposes `work begin`, `work complete`, and `work fail` CLI commands and ships an optional Hermes companion skill. Hermes agents may use them without a plugin.
+Agent Dispatch exposes `work begin`, `work complete`, and `work fail` CLI commands and ships an optional Hermes companion skill. Hermes agents may use them without a plugin.
 
 ## Consequences
 

@@ -157,7 +157,7 @@ func (c *Client) runInto(ctx context.Context, argv []any, out any) error {
 	cmd.Env = c.env()
 	// Capture through a real file: the child writes directly (no pipe
 	// copy races) and the read is bounded to maxOut (SEC-004).
-	outFile, err := os.CreateTemp("", "jjukkumi-watchman-*.json")
+	outFile, err := os.CreateTemp("", "agent-dispatch-watchman-*.json")
 	if err != nil {
 		return fmt.Errorf("creating capture file: %w", err)
 	}

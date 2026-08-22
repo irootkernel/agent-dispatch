@@ -21,10 +21,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/hermeswebhook"
-	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
-	"github.com/rootkernel/jjukkumi/internal/config"
-	"github.com/rootkernel/jjukkumi/internal/platformpaths"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/hermeswebhook"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/platformpaths"
 )
 
 // e6t1Capture records one inbound webhook delivery.
@@ -79,7 +79,7 @@ func e6t1Fixture(t *testing.T, handler http.HandlerFunc) (configPath, vault stri
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("JJUKKUMI_WEBHOOK_TOKEN", "cli-secret-1")
+	t.Setenv("AGENT_DISPATCH_WEBHOOK_TOKEN", "cli-secret-1")
 	server = e6t1TLSServer(t, handler)
 	cfg := `version: 1
 instance:
@@ -98,7 +98,7 @@ targets:
     endpoint: ` + server.URL + `
     auth:
       type: bearer
-      secret_ref: env:JJUKKUMI_WEBHOOK_TOKEN
+      secret_ref: env:AGENT_DISPATCH_WEBHOOK_TOKEN
     submit_timeout: 5s
     idempotency_header: Idempotency-Key
 routes:
@@ -108,7 +108,7 @@ routes:
       type: watchman-trigger
       source_id: vault-main-watchman
       resource: vault-main
-      trigger_name: jjukkumi.wiki.test
+      trigger_name: agent-dispatch.wiki.test
       include: ["**/*.md"]
       exclude: [".obsidian/workspace*.json"]
     batching:
@@ -237,7 +237,7 @@ func e6t1LoadCert(t *testing.T) tls.Certificate {
 		}
 		template := x509.Certificate{
 			SerialNumber: serial,
-			Subject:      pkix.Name{CommonName: "jjukkumi-e6t1-loopback"},
+			Subject:      pkix.Name{CommonName: "agent-dispatch-e6t1-loopback"},
 			NotBefore:    time.Now().Add(-time.Hour),
 			NotAfter:     time.Now().Add(24 * time.Hour),
 			KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
@@ -307,13 +307,13 @@ func TestDispatchSubmitsThroughWebhookSink(t *testing.T) {
 		t.Fatalf("endpoint invocations = %d, want 1", capture.count())
 	}
 	key, auth, body := capture.at(0)
-	if !strings.HasPrefix(key, "jjukkumi:v1:sha256:") {
+	if !strings.HasPrefix(key, "agent-dispatch:v1:sha256:") {
 		t.Fatalf("idempotency header = %q, want the core key", key)
 	}
 	if auth != "Bearer cli-secret-1" {
 		t.Fatalf("authorization = %q", auth)
 	}
-	if !strings.Contains(body, `"contract_version":"jjukkumi.hermes-task/v1"`) {
+	if !strings.Contains(body, `"contract_version":"agent-dispatch.hermes-task/v1"`) {
 		t.Fatalf("body does not carry the logical task contract: %s", body)
 	}
 	// The durable intent records the webhook endpoint as its target

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/ports"
-	"github.com/rootkernel/jjukkumi/internal/testsupport/stubhermes"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/testsupport/stubhermes"
 )
 
 // sinkFixture builds a gated sink over the stateful stub with the frozen
@@ -19,7 +19,7 @@ func sinkFixture(t *testing.T, bin string) *Sink {
 	t.Helper()
 	sink, err := NewSink("hermes-main", bin, machineReport, []string{
 		"durable_acceptance", "submit_idempotency_key", "lookup_by_external_ref",
-	}, "jjukkumi-test", ProcessLimits{SubmitTimeout: 5 * time.Second, LookupTimeout: 5 * time.Second}, 262144)
+	}, "agent-dispatch-test", ProcessLimits{SubmitTimeout: 5 * time.Second, LookupTimeout: 5 * time.Second}, 262144)
 	if err != nil {
 		t.Fatalf("sink: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestSinkLookupByExternalRef(t *testing.T) {
 // emulates one (sink-adapter-contract §2, E0-T4 §5).
 func TestSinkLookupByKeyUnsupported(t *testing.T) {
 	sink := sinkFixture(t, stubhermes.Write(t))
-	_, err := sink.LookupByIdempotencyKey(context.Background(), "jjukkumi:v1:sha256:xyz")
+	_, err := sink.LookupByIdempotencyKey(context.Background(), "agent-dispatch:v1:sha256:xyz")
 	if err == nil || !errors.Is(err, ports.ErrCapabilityUnsupported) {
 		t.Fatalf("by-key lookup must be capability_unsupported, got %v", err)
 	}
@@ -214,7 +214,7 @@ func TestSinkGetExecution(t *testing.T) {
 
 	// A capability-less target reports unsupported and is not emulated.
 	withoutExecution := filepath.Join(t.TempDir(), "report.json")
-	body := `{"schema_version":"jjukkumi.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":true,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":true,"execution_status":false,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
+	body := `{"schema_version":"agent-dispatch.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":true,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":true,"execution_status":false,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
 	if err := os.WriteFile(withoutExecution, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +306,7 @@ func TestSinkSubmitCapabilityGuardDefinite(t *testing.T) {
 	bin := stubhermes.Write(t)
 	// A report without durable_acceptance.
 	withoutDurable := filepath.Join(t.TempDir(), "report.json")
-	body := `{"schema_version":"jjukkumi.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":false,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":true,"execution_status":true,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
+	body := `{"schema_version":"agent-dispatch.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":false,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":true,"execution_status":true,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
 	if err := os.WriteFile(withoutDurable, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -330,8 +330,8 @@ func TestSinkSubmitCapabilityGuardDefinite(t *testing.T) {
 func TestSinkReportSwapDetectedAtSubmission(t *testing.T) {
 	dir := t.TempDir()
 	report := filepath.Join(dir, "report.json")
-	good := `{"schema_version":"jjukkumi.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":true,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":true,"execution_status":true,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
-	bad := `{"schema_version":"jjukkumi.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":false,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":true,"execution_status":true,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
+	good := `{"schema_version":"agent-dispatch.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":true,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":true,"execution_status":true,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
+	bad := `{"schema_version":"agent-dispatch.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":false,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":true,"execution_status":true,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
 	if err := os.WriteFile(report, []byte(good), 0o600); err != nil {
 		t.Fatal(err)
 	}

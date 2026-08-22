@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/rootkernel/jjukkumi/internal/app/workreceipt"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/app/workreceipt"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // TestQuarantineErrClassification pins every arm of the quarantine error

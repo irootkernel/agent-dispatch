@@ -18,7 +18,7 @@ Future work is not permission to partially implement these features during v0.1 
 | Snapshot-bound mode | Historical reproducibility | immutable artifact store and retention approved | storage/privacy and replay semantics |
 | Remote or multi-host state | Distributed deployment | SQLite limitation reached and broker/workflow comparison completed | consensus, leases, duplicate side effects |
 | Local dashboard | Operator convenience | stable status/management API exists | unnecessary daemon/network surface |
-| Hermes management plugin | Native Hermes UI | public authenticated JJUKKUMI management API or MCP stable | lifecycle coupling and split authority |
+| Hermes management plugin | Native Hermes UI | public authenticated Agent Dispatch management API or MCP stable | lifecycle coupling and split authority |
 
 ## Future Hermes Plugin Constraints
 
@@ -27,16 +27,16 @@ A future plugin may:
 - display route health and active/dirty state;
 - list receipts, unknown dispatches, dead letters, and quarantine;
 - issue explicit pause/resume, reconcile, retry, release, or discard requests;
-- link Hermes task IDs to JJUKKUMI lineage.
+- link Hermes task IDs to Agent Dispatch lineage.
 
 It may not:
 
 - own Watchman subscriptions;
 - replace the SQLite state authority;
-- access JJUKKUMI state by directly reading its database;
+- access Agent Dispatch state by directly reading its database;
 - make silent policy changes;
 - automatically retry unknown delivery;
-- become required for JJUKKUMI correctness.
+- become required for Agent Dispatch correctness.
 
 ## Daemon Entry Criteria
 
@@ -67,13 +67,13 @@ Before certifying multiple vaults:
 MCP should expose existing application ports rather than duplicate logic. Candidate tools:
 
 ```text
-jjukkumi_status
-jjukkumi_dispatch_show
-jjukkumi_work_begin
-jjukkumi_work_complete
-jjukkumi_work_fail
-jjukkumi_reconcile
-jjukkumi_quarantine_release
+agent-dispatch_status
+agent-dispatch_dispatch_show
+agent-dispatch_work_begin
+agent-dispatch_work_complete
+agent-dispatch_work_fail
+agent-dispatch_reconcile
+agent-dispatch_quarantine_release
 ```
 
 Authentication, local transport, permission scopes, prompt-injection boundaries, and destructive-action confirmation require an ADR before implementation.

@@ -74,7 +74,7 @@ func schemaCompiler() (*jsonschema.Schema, error) {
 	return c.Compile(configSchemaID)
 }
 
-const configSchemaID = "urn:jjukkumi:schema:config:v1"
+const configSchemaID = "urn:agent-dispatch:schema:config:v1"
 
 // SchemaValidate validates the typed configuration against the SOT config
 // JSON Schema by round-tripping through canonical JSON.
@@ -109,13 +109,13 @@ func toRaw(cfg *Config) (any, error) {
 }
 
 // ResolvePath applies the configuration precedence (configuration-spec
-// §1): an explicit path wins, then JJUKKUMI_CONFIG, then the platform
+// §1): an explicit path wins, then AGENT_DISPATCH_CONFIG, then the platform
 // default. It returns the resolved path and whether it exists.
 func ResolvePath(explicit string, defaultPath func() string) (string, bool) {
 	if explicit != "" {
 		return explicit, fileExists(explicit)
 	}
-	if env := os.Getenv("JJUKKUMI_CONFIG"); env != "" {
+	if env := os.Getenv("AGENT_DISPATCH_CONFIG"); env != "" {
 		return env, fileExists(env)
 	}
 	p := defaultPath()

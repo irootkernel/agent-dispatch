@@ -9,16 +9,16 @@ import (
 	"sort"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
-	"github.com/rootkernel/jjukkumi/internal/adapters/watchman"
-	"github.com/rootkernel/jjukkumi/internal/app/dispatch"
-	"github.com/rootkernel/jjukkumi/internal/app/ingest"
-	"github.com/rootkernel/jjukkumi/internal/config"
-	"github.com/rootkernel/jjukkumi/internal/domain/ids"
-	"github.com/rootkernel/jjukkumi/internal/domain/policy"
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
-	"github.com/rootkernel/jjukkumi/internal/platformpaths"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
+	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
+	"github.com/irootkernel/agent-dispatch/internal/app/ingest"
+	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/domain/ids"
+	"github.com/irootkernel/agent-dispatch/internal/domain/policy"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/platformpaths"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // planOptions carries the shared planning flags.
@@ -73,13 +73,13 @@ func parsePlanFlags(command string, args []string, stdout, stderr io.Writer) (*p
 }
 
 // resolveConfigPath applies the shared configuration-path precedence
-// (cli-spec §1): explicit path, then JJUKKUMI_CONFIG, then the platform
+// (cli-spec §1): explicit path, then AGENT_DISPATCH_CONFIG, then the platform
 // default.
 func resolveConfigPath(explicit string) string {
 	if explicit != "" {
 		return explicit
 	}
-	if env := os.Getenv("JJUKKUMI_CONFIG"); env != "" {
+	if env := os.Getenv("AGENT_DISPATCH_CONFIG"); env != "" {
 		return env
 	}
 	return platformpaths.DefaultConfigPath()
@@ -302,7 +302,7 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 		LeaseTTL: time.Minute, Backoff: backoff, JitterUnit: jitterUnit, Actor: "dispatch",
 		Log: opsLogger(stderr, artifacts.cfg), TraceID: globalTraceID,
 	}
-	report, err := rt.SubmitOnce(requestCtx(), outcome.dispatchID, "jjukkumi-dispatch")
+	report, err := rt.SubmitOnce(requestCtx(), outcome.dispatchID, "agent-dispatch-dispatch")
 	outcome.Close()
 	if err != nil {
 		return intentErr(stderr, command, err)
@@ -496,7 +496,7 @@ func buildHeldLineage(a *planArtifacts) (ports.Lineage, ports.QuarantineInput, e
 	}
 	return ports.Lineage{
 			Observation: ports.ObservationInput{
-				ObservationID: string(observationID), SchemaVersion: "jjukkumi.source-observation/v1",
+				ObservationID: string(observationID), SchemaVersion: "agent-dispatch.source-observation/v1",
 				SourceType: "watchman", SourceID: a.route.Source.SourceID,
 				SourceEventKey: a.input.SourceEventKey(a.route.Source.SourceID),
 				TriggerName:    a.env.Trigger, ResourceID: a.route.Source.Resource,

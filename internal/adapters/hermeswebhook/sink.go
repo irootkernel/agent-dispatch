@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/secretresolver"
-	"github.com/rootkernel/jjukkumi/internal/config"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/secretresolver"
+	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // DefaultSubmitTimeout bounds one webhook submission when the operator

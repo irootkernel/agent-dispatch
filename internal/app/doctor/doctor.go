@@ -120,7 +120,7 @@ func Examine(in Input) []Finding {
 			Code: "config_invalid", Severity: SeverityError,
 			Summary:     "Configuration fails validation",
 			Details:     err,
-			Remediation: "fix the configuration document; see jjukkumi config validate",
+			Remediation: "fix the configuration document; see agent-dispatch config validate",
 		})
 	}
 	for _, r := range in.Resources {
@@ -181,7 +181,7 @@ func Examine(in Input) []Finding {
 			Code: "migration_pending", Severity: SeverityError,
 			Summary:     "Database schema version is not current",
 			Details:     fmt.Sprintf("schema version %d, latest %d", in.Store.SchemaVersion, in.Store.LatestVersion),
-			Remediation: "run any jjukkumi command once to apply pending migrations (OPS-009)",
+			Remediation: "run any agent-dispatch command once to apply pending migrations (OPS-009)",
 		})
 	}
 	if len(in.Store.StaleLeases) > 0 {
@@ -189,28 +189,28 @@ func Examine(in Input) []Finding {
 			Code: "stale_attempt_lease", Severity: SeverityWarning,
 			Summary:     fmt.Sprintf("%d dispatch intents hold expired attempt leases", len(in.Store.StaleLeases)),
 			Details:     strings.Join(bounded(in.Store.StaleLeases, 20), ", "),
-			Remediation: "run jjukkumi dispatches drain to recover expired submitting intents",
+			Remediation: "run agent-dispatch dispatches drain to recover expired submitting intents",
 		})
 	}
 	if in.Store.UnknownCount > 0 {
 		out = append(out, Finding{
 			Code: "unknown_dispatches", Severity: SeverityWarning,
 			Summary:     fmt.Sprintf("%d dispatch intents have unknown delivery", in.Store.UnknownCount),
-			Remediation: "resolve each through jjukkumi dispatches drain and operator retry (DUR-006)",
+			Remediation: "resolve each through agent-dispatch dispatches drain and operator retry (DUR-006)",
 		})
 	}
 	if in.Store.DeadLettered > 0 {
 		out = append(out, Finding{
 			Code: "dead_lettered_dispatches", Severity: SeverityWarning,
 			Summary:     fmt.Sprintf("%d dispatch intents are dead-lettered", in.Store.DeadLettered),
-			Remediation: "inspect jjukkumi dispatches list --state dead_lettered and retry or rerun each",
+			Remediation: "inspect agent-dispatch dispatches list --state dead_lettered and retry or rerun each",
 		})
 	}
 	if in.Store.DatabaseBytes > largeDatabaseBytes {
 		out = append(out, Finding{
 			Code: "database_size_large", Severity: SeverityInfo,
 			Summary:     fmt.Sprintf("Database is %d bytes", in.Store.DatabaseBytes),
-			Remediation: "review retention policy and run jjukkumi maintenance prune",
+			Remediation: "review retention policy and run agent-dispatch maintenance prune",
 		})
 	}
 	if !in.Watchman.Available {
@@ -259,13 +259,13 @@ func Examine(in Input) []Finding {
 			out = append(out, Finding{
 				Code: "reconciliation_never_run", Severity: SeverityInfo,
 				Summary:     fmt.Sprintf("route %s expects daily reconciliation but has never reconciled", r.RouteID),
-				Remediation: "run jjukkumi reconcile --route " + r.RouteID + " --reason manual and install the daily schedule (OPS-007)",
+				Remediation: "run agent-dispatch reconcile --route " + r.RouteID + " --reason manual and install the daily schedule (OPS-007)",
 			})
 		case r.DailyExpected && r.ReconciledAge > 25*time.Hour:
 			out = append(out, Finding{
 				Code: "reconciliation_overdue", Severity: SeverityWarning,
 				Summary:     fmt.Sprintf("route %s daily reconciliation is overdue (last run %s ago)", r.RouteID, r.ReconciledAge.Round(time.Hour)),
-				Remediation: "run jjukkumi reconcile --route " + r.RouteID + " --reason manual and verify the platform schedule (OPS-007)",
+				Remediation: "run agent-dispatch reconcile --route " + r.RouteID + " --reason manual and verify the platform schedule (OPS-007)",
 			})
 		}
 	}

@@ -1,6 +1,6 @@
 # E6-T3 systemd --user timer for the scheduled reconciliation unit.
 [Unit]
-Description=Run JJUKKUMI reconciliation daily
+Description=Run Agent Dispatch reconciliation daily
 
 [Timer]
 OnCalendar=daily

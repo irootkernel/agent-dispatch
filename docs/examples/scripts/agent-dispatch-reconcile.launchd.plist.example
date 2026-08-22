@@ -2,19 +2,19 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- E6-T3 launchd scheduled-reconciliation example (OPS-007).
      Install for the current user:
-       cp jjukkumi-reconcile.launchd.plist ~/Library/LaunchAgents/xyz.rootkernel.jjukkumi.reconcile.plist
-       launchctl load ~/Library/LaunchAgents/xyz.rootkernel.jjukkumi.reconcile.plist
-     Replace /usr/local/bin/jjukkumi and wiki-maintenance with the
+       cp agent-dispatch-reconcile.launchd.plist ~/Library/LaunchAgents/xyz.rootkernel.agent-dispatch.reconcile.plist
+       launchctl load ~/Library/LaunchAgents/xyz.rootkernel.agent-dispatch.reconcile.plist
+     Replace /usr/local/bin/agent-dispatch and wiki-maintenance with the
      installed binary path and route id. Before the production gate the
      recipe omits --submit (persisted decisions only); after the gate
      add --submit to the ProgramArguments. -->
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>xyz.rootkernel.jjukkumi.reconcile</string>
+    <string>xyz.rootkernel.agent-dispatch.reconcile</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/local/bin/jjukkumi</string>
+        <string>/usr/local/bin/agent-dispatch</string>
         <string>reconcile</string>
         <string>--route</string>
         <string>wiki-maintenance</string>

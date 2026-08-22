@@ -3,9 +3,9 @@
 Recommended v0.1 repository structure:
 
 ```text
-jjukkumi/
+agent-dispatch/
 ├── cmd/
-│   └── jjukkumi/
+│   └── agent-dispatch/
 │       └── main.go
 ├── internal/
 │   ├── app/

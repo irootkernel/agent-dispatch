@@ -1,7 +1,7 @@
 # SOT Package Validation
 
 > **Validated:** 2026-08-20 (post E1 closeout)  
-> **Package target:** JJUKKUMI SOT 1.0.4 / implementation v0.1.0
+> **Package target:** Agent Dispatch SOT 1.0.4 / implementation v0.1.0
 
 ## Completed Checks
 
@@ -63,7 +63,7 @@ Watchman public-interface and fixture-baseline verification (E0-T5) is complete:
 
 ## Gate G1: Watchman Deterministic Dry-Run Pipeline (E2)
 
-Gate G1 closed on 2026-08-20 against the frozen E0-T5 baseline (Watchman 2026.07.27.00, Homebrew, macOS). Every acceptance check runs through the public dry-run surface (`jjukkumi route plan` / `jjukkumi dispatch --dry-run`) over real temporary vaults; the evidence is executable and reproducible via `make verify`.
+Gate G1 closed on 2026-08-20 against the frozen E0-T5 baseline (Watchman 2026.07.27.00, Homebrew, macOS). Every acceptance check runs through the public dry-run surface (`agent-dispatch route plan` / `agent-dispatch dispatch --dry-run`) over real temporary vaults; the evidence is executable and reproducible via `make verify`.
 
 | Check | Evidence |
 |---|---|
@@ -104,7 +104,7 @@ Boundary of the durability claim: the tested crash model is process death at the
 
 ## Gate G3: Hermes Kanban Durable Integration (E4)
 
-Verified 2026-08-21 by executable acceptance tests in `internal/cli/g3_test.go`, running the real components end to end: the built jjukkumi binary as separate one-shot OS processes, the installed Watchman with a real trigger on a disposable vault, and the installed Hermes 0.19.1 through a disposable board created and hard-deleted through the public CLI (TST-007, E0-T4 boundary). The tests skip with a recorded environment gap when Watchman or a verified Hermes is unavailable. The user's active board selection and the production vault are never touched, and no real production vault automatic write is enabled anywhere in this gate.
+Verified 2026-08-21 by executable acceptance tests in `internal/cli/g3_test.go`, running the real components end to end: the built agent-dispatch binary as separate one-shot OS processes, the installed Watchman with a real trigger on a disposable vault, and the installed Hermes 0.19.1 through a disposable board created and hard-deleted through the public CLI (TST-007, E0-T4 boundary). The tests skip with a recorded environment gap when Watchman or a verified Hermes is unavailable. The user's active board selection and the production vault are never touched, and no real production vault automatic write is enabled anywhere in this gate.
 
 | Acceptance criterion | Executable evidence |
 |---|---|
@@ -119,7 +119,7 @@ Restart evidence (AC-303's restart clause): every gate interaction runs as a sep
 
 Gate finding remediated during verification: migration v2 (`attempts-unique-by-attempt-id`) drops the over-constraining `UNIQUE(dispatch_id, started_at)` on `dispatch_attempts`, which rejected legitimate same-second retries of one dispatch under the canonical second-precision timestamps; attempt identity remains the primary-keyed attempt id and per-dispatch ordering stays queryable through the indexed `(dispatch_id, started_at)`.
 
-Operator demo (the gate procedure, runbook-grade): (1) `hermes kanban boards create jjukkumi-demo`; (2) write a jjukkumi configuration naming the board, the frozen capability report path, and the vault resource; (3) `jjukkumi watchman install --route <id>` (the managed trigger invokes this binary's dispatch path); (4) edit a note in the vault and observe `jjukkumi dispatches list --route <id>` reach `accepted` with the external task id; (5) `jjukkumi receipts list --dispatch <id>` shows the acceptance evidence; `jjukkumi dispatches refresh <id>` re-reads execution; (6) during outages `dispatches drain` reconciles unknowns and `dispatches retry --reason` re-arms them; (7) `hermes kanban --board jjukkumi-demo show <t_id>` shows the delivered task. No production vault automatic write is enabled by any of these steps; route activation on a production vault remains behind the explicit `route enable` production gate.
+Operator demo (the gate procedure, runbook-grade): (1) `hermes kanban boards create agent-dispatch-demo`; (2) write a agent-dispatch configuration naming the board, the frozen capability report path, and the vault resource; (3) `agent-dispatch watchman install --route <id>` (the managed trigger invokes this binary's dispatch path); (4) edit a note in the vault and observe `agent-dispatch dispatches list --route <id>` reach `accepted` with the external task id; (5) `agent-dispatch receipts list --dispatch <id>` shows the acceptance evidence; `agent-dispatch dispatches refresh <id>` re-reads execution; (6) during outages `dispatches drain` reconciles unknowns and `dispatches retry --reason` re-arms them; (7) `hermes kanban --board agent-dispatch-demo show <t_id>` shows the delivered task. No production vault automatic write is enabled by any of these steps; route activation on a production vault remains behind the explicit `route enable` production gate.
 
 ## Gate G4: Feedback Loop, Quarantine, and Reconciliation (E5)
 

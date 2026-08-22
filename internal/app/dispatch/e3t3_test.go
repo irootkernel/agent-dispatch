@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
-	"github.com/rootkernel/jjukkumi/internal/app/reconcile"
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
-	"github.com/rootkernel/jjukkumi/internal/ports"
-	"github.com/rootkernel/jjukkumi/internal/testsupport/fakesink"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/app/reconcile"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/testsupport/fakesink"
 )
 
 // E3-T3 acceptance coverage: bounded retry with jittered backoff, the

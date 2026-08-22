@@ -7,10 +7,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/app/dispatch"
-	"github.com/rootkernel/jjukkumi/internal/app/quarantine"
-	"github.com/rootkernel/jjukkumi/internal/app/reconcile"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
+	"github.com/irootkernel/agent-dispatch/internal/app/quarantine"
+	"github.com/irootkernel/agent-dispatch/internal/app/reconcile"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // runQuarantine implements `quarantine list|show|release|discard`
@@ -215,7 +215,7 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 			writeError(stderr, command, "config_invalid", "configuration", rtErr.Error())
 			return 3
 		}
-		report, err := rt.SubmitOnce(requestCtx(), result.ReconcileDispatch, "jjukkumi-reconcile")
+		report, err := rt.SubmitOnce(requestCtx(), result.ReconcileDispatch, "agent-dispatch-reconcile")
 		if err != nil {
 			return intentErr(stderr, command, err)
 		}

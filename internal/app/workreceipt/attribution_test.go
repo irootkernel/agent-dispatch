@@ -3,7 +3,7 @@ package workreceipt
 import (
 	"testing"
 
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 func dirty(path, digest, observedAt string) ports.DirtyChange {

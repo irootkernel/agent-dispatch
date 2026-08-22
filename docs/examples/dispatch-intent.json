@@ -1,5 +1,5 @@
 {
-  "schema_version": "jjukkumi.dispatch-intent/v1",
+  "schema_version": "agent-dispatch.dispatch-intent/v1",
   "dispatch_id": "019c2234-5678-7abc-9def-0123456789ab",
   "decision_id": "019c2234-5678-7abc-9def-012345678901",
   "route": {
@@ -9,13 +9,13 @@
   "target_id": "hermes-kanban-main",
   "resource_id": "vault-main",
   "generation": 1,
-  "idempotency_key": "jjukkumi:v1:sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "idempotency_key": "agent-dispatch:v1:sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
   "content_fingerprint": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
   "state": "ready",
   "request": {
-    "contract_version": "jjukkumi.hermes-task/v1",
+    "contract_version": "agent-dispatch.hermes-task/v1",
     "dispatch_id": "019c2234-5678-7abc-9def-0123456789ab",
-    "idempotency_key": "jjukkumi:v1:sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "idempotency_key": "agent-dispatch:v1:sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
     "route": {
       "id": "wiki-maintenance",
       "revision": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
@@ -51,7 +51,7 @@
       "Re-evaluate indexing, referencing, and grouping affected by the latest state.",
       "Respect Hermes permissions, approvals, and protected-path policy.",
       "Do not assume that a manifest path still exists at execution time.",
-      "Report a bounded JJUKKUMI work receipt when the companion CLI is available."
+      "Report a bounded Agent Dispatch work receipt when the companion CLI is available."
     ]
   },
   "created_at": "2026-08-19T09:30:12.482Z"

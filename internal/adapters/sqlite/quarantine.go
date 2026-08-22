@@ -7,9 +7,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/rootkernel/jjukkumi/internal/domain/ids"
-	"github.com/rootkernel/jjukkumi/internal/domain/state"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/domain/ids"
+	"github.com/irootkernel/agent-dispatch/internal/domain/state"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // Quarantine and full-reconciliation persistence (E5-T4): the three

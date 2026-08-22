@@ -6,13 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 func baseRequest(key string) ports.TaskRequest {
 	return ports.TaskRequest{
-		ContractVersion:    "jjukkumi.hermes-task/v1",
+		ContractVersion:    "agent-dispatch.hermes-task/v1",
 		DispatchID:         "dispatch-1",
 		IdempotencyKey:     key,
 		AcceptanceCriteria: []string{"wiki maintenance completes"},

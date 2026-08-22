@@ -13,9 +13,9 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
-	"github.com/rootkernel/jjukkumi/internal/domain/state"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/state"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // openTestStore opens a real SQLite file under t.TempDir(), migrates it,
@@ -132,7 +132,7 @@ func TestBackupBeforeMigration(t *testing.T) {
 	if err := s.Migrate(backupDir); err != nil {
 		t.Fatal(err)
 	}
-	matches, err := filepath.Glob(filepath.Join(backupDir, "jjukkumi-v1-*.backup"))
+	matches, err := filepath.Glob(filepath.Join(backupDir, "agent-dispatch-v1-*.backup"))
 	if err != nil || len(matches) != 1 {
 		t.Fatalf("expected one pre-migration backup, got %v (%v)", matches, err)
 	}
@@ -149,7 +149,7 @@ func TestForeignKeyEnforcement(t *testing.T) {
 func TestUniqueConstraints(t *testing.T) {
 	s := openTestStore(t)
 	o := ObservationRecord{
-		ObservationID: "0192e6c6-4d7f-7abc-8def-012345678901", SchemaVersion: "jjukkumi.source-observation/v1",
+		ObservationID: "0192e6c6-4d7f-7abc-8def-012345678901", SchemaVersion: "agent-dispatch.source-observation/v1",
 		SourceType: "watchman", SourceID: "src-1", TriggerName: "trig", ResourceID: "vault-main",
 		ObservedAt: "2026-08-20T00:00:00Z", ReceivedAt: "2026-08-20T00:00:00Z",
 		RawPayloadDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", IngestStatus: "ok",
@@ -329,7 +329,7 @@ func TestTransactionsRollbackAtomically(t *testing.T) {
 		t.Fatal(err)
 	}
 	o := ObservationRecord{
-		ObservationID: "0192e6c6-4d7f-7abc-8def-012345678902", SchemaVersion: "jjukkumi.source-observation/v1",
+		ObservationID: "0192e6c6-4d7f-7abc-8def-012345678902", SchemaVersion: "agent-dispatch.source-observation/v1",
 		SourceType: "watchman", SourceID: "src-1", TriggerName: "trig", ResourceID: "vault-main",
 		ObservedAt: now(), ReceivedAt: now(),
 		RawPayloadDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", IngestStatus: "ok",
@@ -368,7 +368,7 @@ func TestOpenRejectsDirectoryOverFile(t *testing.T) {
 func seedObservation(t *testing.T, s *Store) {
 	t.Helper()
 	o := ObservationRecord{
-		ObservationID: "0192e6c6-4d7f-7abc-8def-012345678901", SchemaVersion: "jjukkumi.source-observation/v1",
+		ObservationID: "0192e6c6-4d7f-7abc-8def-012345678901", SchemaVersion: "agent-dispatch.source-observation/v1",
 		SourceType: "watchman", SourceID: "src-1", TriggerName: "trig", ResourceID: "vault-main",
 		ObservedAt: now(), ReceivedAt: now(),
 		RawPayloadDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", IngestStatus: "ok",
@@ -397,8 +397,8 @@ func intentRecord(dispatchID, decisionID string) IntentRecord {
 	return IntentRecord{
 		DispatchID: dispatchID, DecisionID: decisionID, RouteID: "wiki-maintenance", RouteRevision: "route-rev-1",
 		TargetID: "hermes-kanban-main", TargetType: "hermes-kanban", ResourceID: "vault-main", Generation: 1,
-		IdempotencyKey: "jjukkumi:v1:sha256:" + strings.Repeat("0", 63) + "1", ContentFingerprint: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ManifestDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", RequestVersion: "jjukkumi.dispatch-intent/v1",
+		IdempotencyKey: "agent-dispatch:v1:sha256:" + strings.Repeat("0", 63) + "1", ContentFingerprint: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		ManifestDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", RequestVersion: "agent-dispatch.dispatch-intent/v1",
 		RequestJSON: "{}", CreatedAt: now(),
 	}
 }
@@ -617,7 +617,7 @@ func TestSourceEventKeyUniquePerSource(t *testing.T) {
 	s := openTestStore(t)
 	mk := func(id, sourceID, eventKey string) ObservationRecord {
 		return ObservationRecord{
-			ObservationID: id, SchemaVersion: "jjukkumi.source-observation/v1", SourceType: "watchman",
+			ObservationID: id, SchemaVersion: "agent-dispatch.source-observation/v1", SourceType: "watchman",
 			SourceID: sourceID, SourceEventKey: eventKey, TriggerName: "trig", ResourceID: "vault-main",
 			ObservedAt: now(), ReceivedAt: now(),
 			RawPayloadDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", IngestStatus: "ok",
@@ -784,7 +784,7 @@ func TestMigrationV2PreservesAttemptRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	seedv1 := `INSERT INTO dispatch_intents (dispatch_id, decision_id, route_id, route_revision, target_id, target_type, resource_id, generation, idempotency_key, content_fingerprint, manifest_digest, request_version, request_json, state, created_at, updated_at)
-		VALUES ('dispatch-mig', 'decision-mig', 'wiki', 'rev-1', 'hermes-kanban-main', 'hermes-kanban', 'vault-main', 1, 'key', 'sha256:a', 'sha256:b', 'jjukkumi.hermes-task/v1', '{}', 'accepted', '2026-08-21T00:00:00Z', '2026-08-21T00:00:00Z')`
+		VALUES ('dispatch-mig', 'decision-mig', 'wiki', 'rev-1', 'hermes-kanban-main', 'hermes-kanban', 'vault-main', 1, 'key', 'sha256:a', 'sha256:b', 'agent-dispatch.hermes-task/v1', '{}', 'accepted', '2026-08-21T00:00:00Z', '2026-08-21T00:00:00Z')`
 	if _, err := s.Exec(seedv1); err != nil {
 		t.Fatal(err)
 	}
@@ -829,7 +829,7 @@ func TestMigrationV2PreservesAttemptRows(t *testing.T) {
 func attemptLineage(dispatchID, decisionID, obsID, batchID, now string) ports.Lineage {
 	return ports.Lineage{
 		Observation: ports.ObservationInput{
-			ObservationID: obsID, SchemaVersion: "jjukkumi.source-observation/v1",
+			ObservationID: obsID, SchemaVersion: "agent-dispatch.source-observation/v1",
 			SourceType: "watchman", SourceID: "watchman-main", TriggerName: "trig",
 			ResourceID: "vault-main", ObservedAt: now, ReceivedAt: now,
 			RawPayloadDigest: "sha256:a", IngestStatus: "accepted",
@@ -848,7 +848,7 @@ func attemptLineage(dispatchID, decisionID, obsID, batchID, now string) ports.Li
 			DispatchID: dispatchID, DecisionID: decisionID, RouteID: "wiki", RouteRevision: "rev-1",
 			TargetID: "hermes-kanban-main", TargetType: "hermes-kanban", ResourceID: "vault-main",
 			Generation: 1, IdempotencyKey: "key-" + dispatchID, ContentFingerprint: "sha256:a",
-			ManifestDigest: "sha256:b", RequestVersion: "jjukkumi.hermes-task/v1", RequestJSON: "{}", CreatedAt: now,
+			ManifestDigest: "sha256:b", RequestVersion: "agent-dispatch.hermes-task/v1", RequestJSON: "{}", CreatedAt: now,
 		},
 	}
 }
@@ -926,7 +926,7 @@ func TestConcurrentQuarantineResolutionSingleWinner(t *testing.T) {
 	s := openTestStore(t)
 	seedIntentChain(t, s, "dispatch-q")
 	lin := ports.Lineage{
-		Observation: ports.ObservationInput{ObservationID: "obs-q", SchemaVersion: "jjukkumi.source-observation/v1",
+		Observation: ports.ObservationInput{ObservationID: "obs-q", SchemaVersion: "agent-dispatch.source-observation/v1",
 			SourceType: "watchman", SourceID: "src", ResourceID: "vault-main", ObservedAt: now(), ReceivedAt: now(),
 			IngestStatus: "accepted"},
 		Batch: ports.BatchInput{BatchID: "batch-q", RouteID: "wiki-maintenance", RouteRevision: "route-rev-1",
@@ -1011,10 +1011,10 @@ func TestResolveUncertainReconciliation(t *testing.T) {
 		DispatchID: "disp-u-resolved", DecisionID: "decision-r", RouteID: "wiki-maintenance",
 		RouteRevision: "route-rev-1", TargetID: "hermes-kanban-main", TargetType: "hermes-kanban",
 		ResourceID: "vault-main", Generation: 3,
-		IdempotencyKey:     "jjukkumi:v1:sha256:" + strings.Repeat("9", 64),
+		IdempotencyKey:     "agent-dispatch:v1:sha256:" + strings.Repeat("9", 64),
 		ContentFingerprint: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 		ManifestDigest:     "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		RequestVersion:     "jjukkumi.dispatch-intent/v1", RequestJSON: "{}",
+		RequestVersion:     "agent-dispatch.dispatch-intent/v1", RequestJSON: "{}",
 	}
 
 	// With due work: the resolution releases the stale slot, collapses the
@@ -1114,10 +1114,10 @@ func TestConcurrentUncertainResolutionSingleWinner(t *testing.T) {
 		DispatchID: "disp-u2-resolved", DecisionID: "decision-rr", RouteID: "wiki-maintenance",
 		RouteRevision: "route-rev-1", TargetID: "hermes-kanban-main", TargetType: "hermes-kanban",
 		ResourceID: "vault-main", Generation: 2,
-		IdempotencyKey:     "jjukkumi:v1:sha256:" + strings.Repeat("7", 64),
+		IdempotencyKey:     "agent-dispatch:v1:sha256:" + strings.Repeat("7", 64),
 		ContentFingerprint: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 		ManifestDigest:     "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		RequestVersion:     "jjukkumi.dispatch-intent/v1", RequestJSON: "{}",
+		RequestVersion:     "agent-dispatch.dispatch-intent/v1", RequestJSON: "{}",
 	}
 	var wg sync.WaitGroup
 	results := make(chan error, 2)

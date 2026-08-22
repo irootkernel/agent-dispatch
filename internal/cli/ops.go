@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
-	"github.com/rootkernel/jjukkumi/internal/app/dispatch"
-	"github.com/rootkernel/jjukkumi/internal/app/maintenance"
-	"github.com/rootkernel/jjukkumi/internal/config"
-	"github.com/rootkernel/jjukkumi/internal/observability"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
+	"github.com/irootkernel/agent-dispatch/internal/app/maintenance"
+	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/observability"
 )
 
 // globalLogLevel is the process log level set from the global
@@ -296,7 +296,7 @@ func completionCommands() []string {
 	return names
 }
 
-// runCompletion implements `jjukkumi completion <bash|zsh>` (E6-T3
+// runCompletion implements `agent-dispatch completion <bash|zsh>` (E6-T3
 // deliverable): one static completion script for the fixed v0.1
 // command tree, written to stdout.
 func runCompletion(args []string, stdout, stderr io.Writer) int {
@@ -306,9 +306,9 @@ func runCompletion(args []string, stdout, stderr io.Writer) int {
 	}
 	words := strings.Join(completionCommands(), " ")
 	if args[0] == "bash" {
-		fmt.Fprintf(stdout, "_jjukkumi()\n{\n  local cur\n  cur=${COMP_WORDS[COMP_CWORD]}\n  COMPREPLY=( $(compgen -W \"%s\" -- \"$cur\") )\n}\ncomplete -F _jjukkumi jjukkumi\n", words)
+		fmt.Fprintf(stdout, "_agent-dispatch()\n{\n  local cur\n  cur=${COMP_WORDS[COMP_CWORD]}\n  COMPREPLY=( $(compgen -W \"%s\" -- \"$cur\") )\n}\ncomplete -F _agent-dispatch agent-dispatch\n", words)
 		return 0
 	}
-	fmt.Fprintf(stdout, "#compdef jjukkumi\n_jjukkumi() {\n  _arguments '1:command:(%s)'\n}\n_jjukkumi \"$@\"\n", words)
+	fmt.Fprintf(stdout, "#compdef agent-dispatch\n_agent-dispatch() {\n  _arguments '1:command:(%s)'\n}\n_agent-dispatch \"$@\"\n", words)
 	return 0
 }

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:jjukkumi:schema:dispatch-plan:v1",
-  "title": "JJUKKUMI DispatchPlan v1",
+  "$id": "urn:agent-dispatch:schema:dispatch-plan:v1",
+  "title": "Agent Dispatch DispatchPlan v1",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -18,7 +18,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "jjukkumi.dispatch-plan/v1"
+      "const": "agent-dispatch.dispatch-plan/v1"
     },
     "route": {
       "type": "object",
@@ -42,7 +42,7 @@
     "changes": {
       "type": "array",
       "items": {
-        "$ref": "urn:jjukkumi:schema:source-observation:v1#/$defs/change"
+        "$ref": "urn:agent-dispatch:schema:source-observation:v1#/$defs/change"
       }
     },
     "content_fingerprint": {

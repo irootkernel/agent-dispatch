@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
-	"github.com/rootkernel/jjukkumi/internal/domain/state"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/state"
 )
 
 // DispatchStore is the durable surface the dispatch runtime consumes

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
-	"github.com/rootkernel/jjukkumi/internal/config"
-	"github.com/rootkernel/jjukkumi/internal/platformpaths"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/platformpaths"
 )
 
 // TestCompletionEmitsCommandTree proves the E6-T3 completion deliverable:
@@ -106,8 +106,8 @@ func TestCleanHostInstallationScenario(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("XDG_STATE_HOME", "")
-	t.Setenv("JJUKKUMI_CONFIG", "")
-	t.Setenv("JJUKKUMI_STATE_DIR", "")
+	t.Setenv("AGENT_DISPATCH_CONFIG", "")
+	t.Setenv("AGENT_DISPATCH_STATE_DIR", "")
 
 	var out, errb bytes.Buffer
 	code := Run([]string{"init", "--resource-root", filepath.Join(home, "Vault")}, &out, &errb)
@@ -158,7 +158,7 @@ func TestCleanHostInstallationScenario(t *testing.T) {
 // the explicit flag only prints guidance, and the script's safety
 // lines are pinned.
 func TestUninstallExampleRetainsStateAndConfig(t *testing.T) {
-	raw, err := os.ReadFile("../../docs/examples/scripts/jjukkumi-uninstall.sh.example")
+	raw, err := os.ReadFile("../../docs/examples/scripts/agent-dispatch-uninstall.sh.example")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,11 +182,11 @@ func TestUninstallExampleRetainsStateAndConfig(t *testing.T) {
 // examples drive the verified reconcile command shape (OPS-006/007)
 // and introduce no daemon.
 func TestScheduleExamplesInvokeVerifiedCommands(t *testing.T) {
-	plist, err := os.ReadFile("../../docs/examples/scripts/jjukkumi-reconcile.launchd.plist.example")
+	plist, err := os.ReadFile("../../docs/examples/scripts/agent-dispatch-reconcile.launchd.plist.example")
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := os.ReadFile("../../docs/examples/scripts/jjukkumi-reconcile.service.example")
+	service, err := os.ReadFile("../../docs/examples/scripts/agent-dispatch-reconcile.service.example")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +211,7 @@ func TestScheduleExamplesInvokeVerifiedCommands(t *testing.T) {
 	if !strings.Contains(string(service), "Type=oneshot") {
 		t.Fatalf("systemd service must be a oneshot, not a daemon")
 	}
-	timer, err := os.ReadFile("../../docs/examples/scripts/jjukkumi-reconcile.timer.example")
+	timer, err := os.ReadFile("../../docs/examples/scripts/agent-dispatch-reconcile.timer.example")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +221,7 @@ func TestScheduleExamplesInvokeVerifiedCommands(t *testing.T) {
 		}
 	}
 	var zout, zerr bytes.Buffer
-	if code := Run([]string{"completion", "zsh"}, &zout, &zerr); code != 0 || !strings.HasPrefix(zout.String(), "#compdef jjukkumi") {
+	if code := Run([]string{"completion", "zsh"}, &zout, &zerr); code != 0 || !strings.HasPrefix(zout.String(), "#compdef agent-dispatch") {
 		t.Fatalf("zsh completion lacks its header: %q", zout.String())
 	}
 }
@@ -229,10 +229,10 @@ func TestScheduleExamplesInvokeVerifiedCommands(t *testing.T) {
 // TestScheduleExamplesExistForBothPlatforms guards the example set.
 func TestScheduleExamplesExistForBothPlatforms(t *testing.T) {
 	for _, name := range []string{
-		"jjukkumi-reconcile.launchd.plist.example",
-		"jjukkumi-reconcile.service.example",
-		"jjukkumi-reconcile.timer.example",
-		"jjukkumi-uninstall.sh.example",
+		"agent-dispatch-reconcile.launchd.plist.example",
+		"agent-dispatch-reconcile.service.example",
+		"agent-dispatch-reconcile.timer.example",
+		"agent-dispatch-uninstall.sh.example",
 	} {
 		if _, err := os.Stat(filepath.Join("../../docs/examples/scripts", name)); err != nil {
 			t.Fatalf("scheduling example %s missing: %v", name, err)

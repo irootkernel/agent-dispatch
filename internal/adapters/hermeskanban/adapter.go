@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // Adapter is the E4-T1 Hermes Kanban target facade: it owns the

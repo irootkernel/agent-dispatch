@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 func main() {
@@ -86,7 +86,7 @@ func open(db string) (*sqlite.Store, error) {
 func baseLineage(now string) ports.Lineage {
 	return ports.Lineage{
 		Observation: ports.ObservationInput{
-			ObservationID: "obs-1", SchemaVersion: "jjukkumi.source-observation/v1",
+			ObservationID: "obs-1", SchemaVersion: "agent-dispatch.source-observation/v1",
 			SourceType: "watchman", SourceID: "watchman-main", TriggerName: "trig",
 			ResourceID: "vault-main", ObservedAt: now, ReceivedAt: now,
 			RawPayloadDigest: "sha256:" + rep('a'), IngestStatus: "accepted",
@@ -104,9 +104,9 @@ func baseLineage(now string) ports.Lineage {
 		Intent: ports.IntentInput{
 			DispatchID: "dispatch-1", DecisionID: "decision-1", RouteID: "wiki",
 			RouteRevision: "route-rev-1", TargetID: "hermes-kanban-main", TargetType: "hermes_kanban",
-			ResourceID: "vault-main", Generation: 1, IdempotencyKey: "jjukkumi:v1:sha256:" + rep('1'),
+			ResourceID: "vault-main", Generation: 1, IdempotencyKey: "agent-dispatch:v1:sha256:" + rep('1'),
 			ContentFingerprint: "sha256:" + rep('c'), ManifestDigest: "sha256:" + rep('d'),
-			RequestVersion: "jjukkumi.hermes-task/v1", RequestJSON: "{}", CreatedAt: now,
+			RequestVersion: "agent-dispatch.hermes-task/v1", RequestJSON: "{}", CreatedAt: now,
 		},
 	}
 }
@@ -200,7 +200,7 @@ func arrive(db, tag string) error {
 	lin.Decision.BatchID = "batch-" + tag
 	lin.Intent.DispatchID = "dispatch-" + tag
 	lin.Intent.DecisionID = "decision-" + tag
-	lin.Intent.IdempotencyKey = "jjukkumi:v1:sha256:" + rep('0')[:63] + tag[:1]
+	lin.Intent.IdempotencyKey = "agent-dispatch:v1:sha256:" + rep('0')[:63] + tag[:1]
 	return s.CommitLineage(context.Background(), lin)
 }
 

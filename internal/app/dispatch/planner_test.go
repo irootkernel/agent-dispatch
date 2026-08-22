@@ -5,9 +5,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/rootkernel/jjukkumi/internal/app/ingest"
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
-	"github.com/rootkernel/jjukkumi/internal/schemavalid"
+	"github.com/irootkernel/agent-dispatch/internal/app/ingest"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/schemavalid"
 )
 
 func basePolicy() RoutePolicy {
@@ -176,7 +176,7 @@ func TestPlanJSONValidatesAgainstSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	schema, ok := compiled["urn:jjukkumi:schema:dispatch-plan:v1"]
+	schema, ok := compiled["urn:agent-dispatch:schema:dispatch-plan:v1"]
 	if !ok {
 		t.Fatal("dispatch-plan schema missing")
 	}

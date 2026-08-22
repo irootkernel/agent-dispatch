@@ -134,7 +134,7 @@ Use a disposable vault and disposable Hermes task space. Never run release E2E t
 The harness must capture:
 
 - Watchman trigger definition;
-- JJUKKUMI version/config digest;
+- Agent Dispatch version/config digest;
 - Hermes version/capability report;
 - source batch;
 - database lineage IDs;

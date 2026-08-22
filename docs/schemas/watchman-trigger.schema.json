@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:jjukkumi:schema:watchman-trigger:v1",
-  "title": "JJUKKUMI Watchman trigger stdin payload v1",
+  "$id": "urn:agent-dispatch:schema:watchman-trigger:v1",
+  "title": "Agent Dispatch Watchman trigger stdin payload v1",
   "description": "The bare JSON array of file objects a Watchman trigger delivers on stdin, as frozen by the E0-T5 fixture corpus (docs/integrations/watchman-public-interface-report.md \u00a73-\u00a74). The payload carries no route, resource, or target information of any kind (SRC-003).",
   "type": "array",
   "minItems": 1,

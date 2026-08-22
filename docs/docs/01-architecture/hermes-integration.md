@@ -2,7 +2,7 @@
 
 ## 1. Authority Statement
 
-Hermes is the authoritative agent runtime. JJUKKUMI is one of its external activation tools.
+Hermes is the authoritative agent runtime. Agent Dispatch is one of its external activation tools.
 
 v0.1 integration must satisfy all of the following:
 
@@ -11,13 +11,13 @@ v0.1 integration must satisfy all of the following:
 - no private Hermes API assumption;
 - no Hermes plugin dependency;
 - public CLI or public webhook only;
-- optional JJUKKUMI-owned companion skill and receipt CLI.
+- optional Agent Dispatch-owned companion skill and receipt CLI.
 
 ## 2. Integration Layers
 
 ```mermaid
 flowchart LR
-    Core[JJUKKUMI Dispatch Service] --> Port[SinkPort]
+    Core[Agent Dispatch Dispatch Service] --> Port[SinkPort]
     Port --> KA[Hermes Kanban Adapter]
     Port --> WA[Hermes Webhook Adapter]
     KA --> CLI[Verified public Hermes CLI]
@@ -138,16 +138,16 @@ Never invoke the webhook as fallback.
 
 ## 9. Work Receipt Cooperation Without a Plugin
 
-JJUKKUMI ships:
+Agent Dispatch ships:
 
-- `jjukkumi work begin`;
-- `jjukkumi work complete`;
-- `jjukkumi work fail`;
+- `agent-dispatch work begin`;
+- `agent-dispatch work complete`;
+- `agent-dispatch work fail`;
 - a Hermes companion skill describing how to use them.
 
 The Hermes task contains the dispatch ID and resource ID. The skill may call the CLI before and after edits. This creates provenance without modifying Hermes.
 
-Failure to submit a receipt is tolerated conservatively. JJUKKUMI may generate an additional follow-up task, but it does not suppress unknown changes.
+Failure to submit a receipt is tolerated conservatively. Agent Dispatch may generate an additional follow-up task, but it does not suppress unknown changes.
 
 ## 10. Webhook Adapter
 
@@ -167,10 +167,10 @@ The v0.1 capability declaration is static and offline, derived from the frozen E
 | submit_idempotency_key | true | the core's key is transmitted verbatim under the configured header |
 | lookup_by_idempotency_key / lookup_by_external_ref | false | no public lookup contract exists |
 | resource_mutex / execution_status / cancellation / result_receipt | false | not provided by the interface |
-| maximum_request_bytes | 262144 | JJUKKUMI's own bound (SEC-009) |
+| maximum_request_bytes | 262144 | Agent Dispatch's own bound (SEC-009) |
 
 The conservative response mapping (WHK-004, DUR-005): 2xx is acceptance of the transmission with `durable=false` — never durable task acceptance; the definite request-refusal statuses (400, 401, 403, 404, 405, 406, 410, 413, 414, 415, 422) and unfollowed redirects (3xx) are definite rejections; 408, 409, 429, and every 5xx are unknown because their processing semantics are undocumented. Transport failures provably before transmission — name resolution, dialing, and the TLS handshake — are definite non-submission; everything after possible transmission is unknown. Unknown webhook dispatches dead-letter for the operator: the adapter declares no lookup, so drain reconciliation cannot resolve them and never submits through another sink.
 
 ## 11. Future Hermes Plugin
 
-A future optional plugin may expose JJUKKUMI status, route pause/resume, quarantine, receipts, and manual operations inside Hermes. It remains a management surface. Sensing, SQLite state, policy, and dispatch correctness must continue to work when the plugin is absent or Hermes is stopped.
+A future optional plugin may expose Agent Dispatch status, route pause/resume, quarantine, receipts, and manual operations inside Hermes. It remains a management surface. Sensing, SQLite state, policy, and dispatch correctness must continue to work when the plugin is absent or Hermes is stopped.

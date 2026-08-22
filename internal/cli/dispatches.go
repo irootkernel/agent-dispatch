@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
-	"github.com/rootkernel/jjukkumi/internal/app/dispatch"
-	"github.com/rootkernel/jjukkumi/internal/app/reconcile"
-	"github.com/rootkernel/jjukkumi/internal/config"
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
+	"github.com/irootkernel/agent-dispatch/internal/app/reconcile"
+	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // knownDispatchesSubcommands is the published dispatches command tree
@@ -380,7 +380,7 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 		// inside the single failure envelope so the operator sees what
 		// changed without a second, mislabeled error document.
 		if len(reconciled) > 0 || len(reconcileErrors) > 0 {
-			err = fmt.Errorf("%w (note: %d unknown dispatch(es) were reconciled and %d were skipped or failed before this failure; inspect with 'jjukkumi dispatches list --route %s')", err, len(reconciled), len(reconcileErrors), routeID)
+			err = fmt.Errorf("%w (note: %d unknown dispatch(es) were reconciled and %d were skipped or failed before this failure; inspect with 'agent-dispatch dispatches list --route %s')", err, len(reconciled), len(reconcileErrors), routeID)
 		}
 		return intentErr(stderr, command, err)
 	}

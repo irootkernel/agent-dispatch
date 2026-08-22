@@ -2,7 +2,7 @@
 
 ## 1. General Contract
 
-Executable name: `jjukkumi`
+Executable name: `agent-dispatch`
 
 Global options:
 
@@ -27,21 +27,21 @@ Rules:
 ## 2. Command Tree
 
 ```text
-jjukkumi version
-jjukkumi init
-jjukkumi config validate|show
-jjukkumi route list|show|plan|enable|disable
-jjukkumi watchman install|status|remove|test
-jjukkumi dispatch
-jjukkumi dispatches list|show|retry|reprocess|rerun|refresh|drain
-jjukkumi receipts list|show
-jjukkumi work begin|complete|fail
-jjukkumi quarantine list|show|release|discard
-jjukkumi reconcile
-jjukkumi status
-jjukkumi doctor
-jjukkumi maintenance prune|vacuum|integrity|backup
-jjukkumi completion
+agent-dispatch version
+agent-dispatch init
+agent-dispatch config validate|show
+agent-dispatch route list|show|plan|enable|disable
+agent-dispatch watchman install|status|remove|test
+agent-dispatch dispatch
+agent-dispatch dispatches list|show|retry|reprocess|rerun|refresh|drain
+agent-dispatch receipts list|show
+agent-dispatch work begin|complete|fail
+agent-dispatch quarantine list|show|release|discard
+agent-dispatch reconcile
+agent-dispatch status
+agent-dispatch doctor
+agent-dispatch maintenance prune|vacuum|integrity|backup
+agent-dispatch completion
 ```
 
 There is no `replay` command.
@@ -59,7 +59,7 @@ Creates a disabled example configuration and state directory after checking for 
 ### `config validate`
 
 ```text
-jjukkumi config validate [--probe-targets] [--output json]
+agent-dispatch config validate [--probe-targets] [--output json]
 ```
 
 Performs schema and semantic validation. `--probe-targets` invokes read-only public capability probes; hermes-webhook targets report their static, evidence-tied capability declaration with no endpoint network I/O, because the receiving platform cannot be assumed running (E0-T4 §9).
@@ -71,8 +71,8 @@ Prints normalized redacted configuration and computed revisions.
 ### `route enable|disable`
 
 ```text
-jjukkumi route enable --route <id> --acknowledge-production-gate <computed-route-revision> --yes
-jjukkumi route disable --route <id> [--reason <text>]
+agent-dispatch route enable --route <id> --acknowledge-production-gate <computed-route-revision> --yes
+agent-dispatch route disable --route <id> [--reason <text>]
 ```
 
 The config field `enabled: true` permits activation but does not by itself activate a production route. `route enable` stores an acknowledged route revision in SQLite. A behavior-sensitive revision change pauses the route until explicitly acknowledged again. `route disable` immediately prevents new submissions while preserving observations, active work, and dirty state.
@@ -80,7 +80,7 @@ The config field `enabled: true` permits activation but does not by itself activ
 ### `route plan`
 
 ```text
-jjukkumi route plan --route <id> --input watchman < fixture.json
+agent-dispatch route plan --route <id> --input watchman < fixture.json
 ```
 
 Side-effect-free. Prints a versioned dispatch plan. It may read files under the resource root to hash them, but does not write SQLite unless `--with-state` is explicitly supported and documented. The default is no database mutation. This command accepts only `--output json`; it has no human rendering (CLI-001 machine-output discipline).
@@ -90,7 +90,7 @@ Side-effect-free. Prints a versioned dispatch plan. It may read files under the 
 ### `watchman install`
 
 ```text
-jjukkumi watchman install --route <id> [--replace]
+agent-dispatch watchman install --route <id> [--replace]
 ```
 
 Creates or verifies the route trigger. No replacement occurs without `--replace`.
@@ -102,7 +102,7 @@ Shows installed vs expected trigger definition and source health.
 ### `watchman remove`
 
 ```text
-jjukkumi watchman remove --route <id> --yes
+agent-dispatch watchman remove --route <id> --yes
 ```
 
 Removes only the exact managed trigger. It never removes the Watchman watch root automatically.
@@ -114,7 +114,7 @@ Uses a temporary or supplied fixture and prints normalized source input without 
 ## 5. Dispatch Command
 
 ```text
-jjukkumi dispatch \
+agent-dispatch dispatch \
   --route <id> \
   --input watchman \
   [--dry-run] \
@@ -156,7 +156,7 @@ Creates an intentional new work request with new dispatch ID and idempotency key
 ### `dispatches drain`
 
 ```text
-jjukkumi dispatches drain --route <id> --max <N>
+agent-dispatch dispatches drain --route <id> --max <N>
 ```
 
 Operator command for bounded ready/retry work. First reconciles the route's `unknown` dispatches (lookup by idempotency key then external reference; on Hermes Kanban the by-key read does not exist, so unresolved ambiguity dead-letters for the operator, whose `dispatches retry` resubmits the same idempotency key through the dedup-safe path); the envelope reports each reconciliation under `reconciled` and per-dispatch failures as warnings without blocking the route's due work. Not installed as a Watchman trigger.
@@ -166,8 +166,8 @@ Operator command for bounded ready/retry work. First reconciles the route's `unk
 ### `receipts list|show`
 
 ```text
-jjukkumi receipts list [--route <id>] [--dispatch <id>] [--kind acceptance|execution_projection|work] [--limit <N>]
-jjukkumi receipts show <receipt-id>
+agent-dispatch receipts list [--route <id>] [--dispatch <id>] [--kind acceptance|execution_projection|work] [--limit <N>]
+agent-dispatch receipts show <receipt-id>
 ```
 
 Inspect acceptance, execution projection, and work receipts. Output is redacted: detail carries the bounded persisted payload only, never note bodies or unrestricted target output (OPS-001/OPS-002).
@@ -175,7 +175,7 @@ Inspect acceptance, execution projection, and work receipts. Output is redacted:
 ### `work begin`
 
 ```text
-jjukkumi work begin \
+agent-dispatch work begin \
   --dispatch-id <id> \
   --run-id <id> \
   [--external-task-id <id>] \
@@ -187,7 +187,7 @@ Registers an agent run. Returns the run ID that `work complete` and `work fail` 
 ### `work complete`
 
 ```text
-jjukkumi work complete \
+agent-dispatch work complete \
   --dispatch-id <id> \
   --run-id <id> \
   --manifest <json-file-or-stdin> \
@@ -199,7 +199,7 @@ Manifest contains only relative paths and before/after digests. It may trigger e
 ### `work fail`
 
 ```text
-jjukkumi work fail \
+agent-dispatch work fail \
   --dispatch-id <id> \
   --run-id <id> \
   --failure-code <code> \
@@ -213,8 +213,8 @@ Records a cooperative failed execution projection with a bounded reason code. It
 ### `quarantine list|show`
 
 ```text
-jjukkumi quarantine list [--route <id>] [--state held|released|discarded|superseded] [--limit <N>]
-jjukkumi quarantine show <quarantine-id>
+agent-dispatch quarantine list [--route <id>] [--state held|released|discarded|superseded] [--limit <N>]
+agent-dispatch quarantine show <quarantine-id>
 ```
 
 Lists structural holds; the default covers every state, `--state held` narrows to open cases.
@@ -230,7 +230,7 @@ Marks the hold resolved without task creation. Requires `--reason` and `--yes` a
 ## 9. Reconciliation
 
 ```text
-jjukkumi reconcile \
+agent-dispatch reconcile \
   --route <id> \
   --reason initial|scheduled|overflow|fresh-instance|lost-cursor|manual|delivery|stale-active \
   [--submit]
@@ -247,7 +247,7 @@ Returns route active/dirty state, queue counts, unresolved delivery, quarantine,
 ### `doctor`
 
 ```text
-jjukkumi doctor [--probe-targets] [--integrity full]
+agent-dispatch doctor [--probe-targets] [--integrity full]
 ```
 
 Returns findings with `code`, `severity`, `summary`, `details`, and `remediation`. Findings are the stdout result; when any finding has error severity the command also emits the stable `doctor_findings_present` code and exits nonzero (AC-502).
@@ -267,7 +267,7 @@ Successful commands use:
 
 ```json
 {
-  "api_version": "jjukkumi.cli/v1",
+  "api_version": "agent-dispatch.cli/v1",
   "command": "dispatch",
   "ok": true,
   "result": {},

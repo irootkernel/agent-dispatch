@@ -3,7 +3,7 @@ package state
 import (
 	"fmt"
 
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 )
 
 // IntentReason is the typed cause recorded with one dispatch-intent

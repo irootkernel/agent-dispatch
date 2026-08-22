@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 )
 
 // Env value bound; longer values are rejected before any parsing

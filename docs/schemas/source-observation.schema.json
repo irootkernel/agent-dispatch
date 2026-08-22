@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:jjukkumi:schema:source-observation:v1",
-  "title": "JJUKKUMI SourceObservation v1",
+  "$id": "urn:agent-dispatch:schema:source-observation:v1",
+  "title": "Agent Dispatch SourceObservation v1",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -16,7 +16,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "jjukkumi.source-observation/v1"
+      "const": "agent-dispatch.source-observation/v1"
     },
     "observation_id": {
       "type": "string",

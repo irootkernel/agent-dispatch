@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/watchman"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
 )
 
 // g1Harness drives `route plan` (the E2 dry-run pipeline) over a real
@@ -26,7 +26,7 @@ func newG1(t *testing.T) *g1Harness {
 	t.Helper()
 	configPath, vault := planFixture(t)
 	h := &g1Harness{t: t, configPath: configPath, vault: vault}
-	t.Setenv("JJUKKUMI_STATE_DIR", t.TempDir())
+	t.Setenv("AGENT_DISPATCH_STATE_DIR", t.TempDir())
 	return h
 }
 
@@ -291,7 +291,7 @@ func TestWatchmanCLILifecycle(t *testing.T) {
 		t.Skip("watchman binary not available")
 	}
 	configPath, vault := planFixture(t)
-	t.Setenv("JJUKKUMI_STATE_DIR", t.TempDir())
+	t.Setenv("AGENT_DISPATCH_STATE_DIR", t.TempDir())
 	argv := []string{"--route", "wiki", "--config", configPath}
 	run := func(sub string, extra ...string) (map[string]any, *bytes.Buffer, *bytes.Buffer, int) {
 		var out, errb bytes.Buffer
@@ -338,7 +338,7 @@ func TestWatchmanCLILifecycle(t *testing.T) {
 		t.Fatalf("ensure watch: %v", err)
 	}
 	exe, _ := os.Executable()
-	diverged := watchman.ManagedTrigger("jjukkumi.wiki.test", []string{exe, "dispatch", "--route", "wiki", "--input", "watchman", "--unexpected"})
+	diverged := watchman.ManagedTrigger("agent-dispatch.wiki.test", []string{exe, "dispatch", "--route", "wiki", "--input", "watchman", "--unexpected"})
 	if _, err := client.TriggerInstall(ctx, watchRoot, diverged); err != nil {
 		t.Fatalf("diverge: %v", err)
 	}
@@ -395,7 +395,7 @@ func decodeEnvelope(t *testing.T, out *bytes.Buffer) map[string]any {
 // availability state with actionable guidance.
 func TestConfigValidateWatchmanReporting(t *testing.T) {
 	configPath, _ := planFixture(t)
-	t.Setenv("JJUKKUMI_STATE_DIR", t.TempDir())
+	t.Setenv("AGENT_DISPATCH_STATE_DIR", t.TempDir())
 	var out, errb bytes.Buffer
 	code := Run([]string{"config", "validate", "--config", configPath}, &out, &errb)
 	if code != 0 {
@@ -465,7 +465,7 @@ func TestWatchmanTestCommand(t *testing.T) {
 // remediation text when the binary cannot be found.
 func TestWatchmanAbsenceActionable(t *testing.T) {
 	configPath, _ := planFixture(t)
-	t.Setenv("JJUKKUMI_STATE_DIR", t.TempDir())
+	t.Setenv("AGENT_DISPATCH_STATE_DIR", t.TempDir())
 	// Shadow PATH with a directory that has no watchman binary.
 	empty := t.TempDir()
 	t.Setenv("PATH", empty)

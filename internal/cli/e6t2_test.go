@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
-	"github.com/rootkernel/jjukkumi/internal/config"
-	"github.com/rootkernel/jjukkumi/internal/platformpaths"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/platformpaths"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // e6t2Open opens the fixture's store for direct seeding.
@@ -47,7 +47,7 @@ func e6t2SeedLineage(t *testing.T, store *sqlite.Store, suffix, when string) {
 	}
 	lin := ports.Lineage{
 		Observation: ports.ObservationInput{
-			ObservationID: "obs-" + suffix, SchemaVersion: "jjukkumi.source-observation/v1", SourceType: "watchman",
+			ObservationID: "obs-" + suffix, SchemaVersion: "agent-dispatch.source-observation/v1", SourceType: "watchman",
 			SourceID: "watchman-main", TriggerName: "trig", ResourceID: "vault-main",
 			ObservedAt: when, ReceivedAt: when,
 			RawPayloadDigest: "sha256:" + rep64('a'), IngestStatus: "accepted",
@@ -65,9 +65,9 @@ func e6t2SeedLineage(t *testing.T, store *sqlite.Store, suffix, when string) {
 		Intent: ports.IntentInput{
 			DispatchID: "dispatch-" + suffix, DecisionID: "decision-" + suffix, RouteID: "wiki",
 			RouteRevision: "route-rev-1", TargetID: "hermes-kanban-main", TargetType: "hermes_kanban",
-			ResourceID: "vault-main", Generation: 1, IdempotencyKey: "jjukkumi:v1:sha256:" + rep64(byte(suffix[0])),
+			ResourceID: "vault-main", Generation: 1, IdempotencyKey: "agent-dispatch:v1:sha256:" + rep64(byte(suffix[0])),
 			ContentFingerprint: "sha256:" + rep64('c'), ManifestDigest: "sha256:" + rep64('d'),
-			RequestVersion: "jjukkumi.hermes-task/v1", RequestJSON: "{}", CreatedAt: when,
+			RequestVersion: "agent-dispatch.hermes-task/v1", RequestJSON: "{}", CreatedAt: when,
 		},
 	}
 	if err := store.CommitLineage(context.Background(), lin); err != nil {
@@ -270,7 +270,7 @@ func TestMaintenancePruneDryRunThenExecute(t *testing.T) {
 	// whose intent is prunable, an old batch referenced only by it,
 	// and an observation referenced only by that batch.
 	if _, err := store.ExecContext(context.Background(), `INSERT INTO source_observations (observation_id, schema_version, source_type, source_id, trigger_name, resource_id, observed_at, received_at, raw_payload_digest, ingest_status)
-		VALUES ('obs-free', 'jjukkumi.source-observation/v1', 'watchman', 'watchman-main', 'trig', 'vault-main', '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z', 'sha256:aa', 'accepted')`); err != nil {
+		VALUES ('obs-free', 'agent-dispatch.source-observation/v1', 'watchman', 'watchman-main', 'trig', 'vault-main', '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z', 'sha256:aa', 'accepted')`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.ExecContext(context.Background(), `INSERT INTO change_batches (batch_id, route_id, route_revision, resource_id, created_at, content_fingerprint)

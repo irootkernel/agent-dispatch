@@ -19,12 +19,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/localfs"
-	"github.com/rootkernel/jjukkumi/internal/domain/ids"
-	"github.com/rootkernel/jjukkumi/internal/domain/policy"
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
-	"github.com/rootkernel/jjukkumi/internal/domain/state"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/localfs"
+	"github.com/irootkernel/agent-dispatch/internal/domain/ids"
+	"github.com/irootkernel/agent-dispatch/internal/domain/policy"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/state"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // Reasons is the closed reconcile --reason set (cli-spec §9).

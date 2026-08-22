@@ -2,7 +2,7 @@
 
 ## 1. Product Identity
 
-**Name:** JJUKKUMI  
+**Name:** Agent Dispatch  
 **Tagline:** Sense. Catch. Route.  
 **Category:** Local-first event-ingress and activation gateway  
 **First authoritative runtime:** Hermes  
@@ -12,7 +12,7 @@
 
 Native watchers can report that files changed, and agent runtimes can execute work, but the boundary between them remains unsafe and operationally incomplete. A direct watcher-to-agent command does not adequately handle editor save noise, duplicate source delivery, restart recovery, target downtime, ambiguous acceptance, bulk changes, protected paths, concurrent work, recursive agent edits, or an auditable causal record.
 
-JJUKKUMI supplies that missing boundary.
+Agent Dispatch supplies that missing boundary.
 
 ## 3. Vision
 
@@ -24,7 +24,7 @@ For the first use case, the work request asks Hermes to evaluate the **latest st
 
 ## 4. Responsibility Boundary
 
-### JJUKKUMI owns
+### Agent Dispatch owns
 
 - source ingestion and source-specific validation;
 - trusted resource and route resolution;
@@ -50,7 +50,7 @@ For the first use case, the work request asks Hermes to evaluate the **latest st
 - work success, failure, cancellation, and result semantics;
 - the authoritative task history after durable acceptance.
 
-### JJUKKUMI does not own
+### Agent Dispatch does not own
 
 - note editing;
 - semantic indexing or grouping algorithms;
@@ -64,19 +64,19 @@ For the first use case, the work request asks Hermes to evaluate the **latest st
 
 1. A user creates, modifies, moves, or deletes one or more Markdown notes in an Obsidian vault.
 2. Watchman emits a settled trigger batch.
-3. JJUKKUMI validates the source, resource, paths, and source position.
-4. JJUKKUMI ignores non-meaningful changes, persists meaningful observations, and creates or extends one route generation.
-5. If no unresolved Hermes maintenance task exists, JJUKKUMI durably creates one dispatch intent and submits one Hermes Kanban task.
+3. Agent Dispatch validates the source, resource, paths, and source position.
+4. Agent Dispatch ignores non-meaningful changes, persists meaningful observations, and creates or extends one route generation.
+5. If no unresolved Hermes maintenance task exists, Agent Dispatch durably creates one dispatch intent and submits one Hermes Kanban task.
 6. Hermes executes the configured LLM Wiki maintenance skill against the latest vault state.
-7. If Hermes changes the vault, a bundled JJUKKUMI work-receipt CLI may record the run and changed paths without modifying Hermes core.
+7. If Hermes changes the vault, a bundled Agent Dispatch work-receipt CLI may record the run and changed paths without modifying Hermes core.
 8. Changes observed while work is active are retained as a dirty generation.
-9. When the active work completes, JJUKKUMI creates at most one follow-up maintenance request if the vault became dirty.
+9. When the active work completes, Agent Dispatch creates at most one follow-up maintenance request if the vault became dirty.
 10. Unknown delivery or attribution never causes silent deletion or blind duplicate submission.
 
 ## 6. Goals
 
 1. One meaningful burst of Markdown changes results in one effective Hermes maintenance request.
-2. Work survives JJUKKUMI process termination, machine restart, and temporary Hermes unavailability.
+2. Work survives Agent Dispatch process termination, machine restart, and temporary Hermes unavailability.
 3. Duplicate source delivery does not create duplicate accepted work when the Hermes interface supports idempotency or lookup.
 4. Agent-generated changes do not recurse indefinitely.
 5. Mixed human and agent changes are never incorrectly discarded as self-generated.
@@ -91,7 +91,7 @@ For the first use case, the work request asks Hermes to evaluate the **latest st
 - Requiring Git for basic operation.
 - Reconstructing an immutable historical snapshot of note content.
 - Multi-host coordination or a shared network database.
-- A long-running JJUKKUMI daemon.
+- A long-running Agent Dispatch daemon.
 - Multi-vault production certification.
 - Generic subprocess execution supplied by arbitrary configuration.
 - Automatic failover between Hermes Kanban and webhook.
@@ -100,7 +100,7 @@ For the first use case, the work request asks Hermes to evaluate the **latest st
 
 ## 8. Success Definition for v0.1
 
-JJUKKUMI v0.1 is complete when all release acceptance cases pass on macOS and the supported Linux CI environment, a real Obsidian vault can be wired to Watchman, Hermes Kanban receives one durable task per effective route generation, restart and ambiguity tests do not silently lose work, and feedback-loop tests demonstrate bounded follow-up behavior.
+Agent Dispatch v0.1 is complete when all release acceptance cases pass on macOS and the supported Linux CI environment, a real Obsidian vault can be wired to Watchman, Hermes Kanban receives one durable task per effective route generation, restart and ambiguity tests do not silently lose work, and feedback-loop tests demonstrate bounded follow-up behavior.
 
 ## 9. Product Constraints
 

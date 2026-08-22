@@ -5,7 +5,7 @@
 
 ## Context
 
-JJUKKUMI must govern activation without becoming a semantic LLM layer. Protected, bulk, overflow, and malformed events still require conservative handling.
+Agent Dispatch must govern activation without becoming a semantic LLM layer. Protected, bulk, overflow, and malformed events still require conservative handling.
 
 ## Decision
 
@@ -13,7 +13,7 @@ Policy is deterministic and structural. It may drop, dispatch, merge pending, qu
 
 ## Consequences
 
-- No LLM is called inside JJUKKUMI.
+- No LLM is called inside Agent Dispatch.
 - Operator release creates new decision lineage.
 - Hermes owns semantic and execution approval.
 - Large or uncertain input is never silently truncated into ordinary work.

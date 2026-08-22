@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // TestRealHermesDisposableBoardSubmitDedupLookup is the TST-007
@@ -33,7 +33,7 @@ func TestRealHermesDisposableBoardSubmitDedupLookup(t *testing.T) {
 		t.Skipf("installed hermes %s outside the verified set: %v", version, err)
 	}
 
-	board := fmt.Sprintf("jjukkumi-e4t3-test-%d", time.Now().UnixNano())
+	board := fmt.Sprintf("agent-dispatch-e4t3-test-%d", time.Now().UnixNano())
 	if out, err := runHermes(t, bin, "kanban", "boards", "create", board); err != nil {
 		t.Skipf("boards create unavailable (%v): %s", err, out)
 	}

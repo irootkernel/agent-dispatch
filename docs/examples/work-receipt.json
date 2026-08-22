@@ -1,5 +1,5 @@
 {
-  "schema_version": "jjukkumi.work-receipt/v1",
+  "schema_version": "agent-dispatch.work-receipt/v1",
   "dispatch_id": "019c2234-5678-7abc-9def-0123456789ab",
   "external_task_id": "hermes-task-12345",
   "run_id": "wiki-maintenance-run-001",

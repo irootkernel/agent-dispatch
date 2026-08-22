@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"unicode/utf8"
 
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 )
 
 // DefaultMaxStdinBytes matches docs/examples/config.yaml limits.max_stdin_bytes.

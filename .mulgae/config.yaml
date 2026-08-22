@@ -1,6 +1,6 @@
 version: 3
 project:
-  name: "jjukkumi"
+  name: "agent-dispatch"
 providers:
   zcode: {}
 execution:

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:jjukkumi:schema:hermes-task-request:v1",
-  "title": "JJUKKUMI Hermes Task Request v1",
+  "$id": "urn:agent-dispatch:schema:hermes-task-request:v1",
+  "title": "Agent Dispatch Hermes Task Request v1",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -15,14 +15,14 @@
   ],
   "properties": {
     "contract_version": {
-      "const": "jjukkumi.hermes-task/v1"
+      "const": "agent-dispatch.hermes-task/v1"
     },
     "dispatch_id": {
       "type": "string"
     },
     "idempotency_key": {
       "type": "string",
-      "pattern": "^jjukkumi:v1:sha256:[0-9a-f]{64}$"
+      "pattern": "^agent-dispatch:v1:sha256:[0-9a-f]{64}$"
     },
     "route": {
       "type": "object",

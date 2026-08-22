@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"context"
-	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // cliStoreFixture builds one real store behind a config that points the
@@ -41,7 +41,7 @@ func cliStoreFixture(t *testing.T) (configPath string, dispatchID string) {
 	}
 	lin := ports.Lineage{
 		Observation: ports.ObservationInput{
-			ObservationID: "obs-1", SchemaVersion: "jjukkumi.source-observation/v1", SourceType: "watchman",
+			ObservationID: "obs-1", SchemaVersion: "agent-dispatch.source-observation/v1", SourceType: "watchman",
 			SourceID: "watchman-main", TriggerName: "trig", ResourceID: "vault-main",
 			ObservedAt: "2026-08-20T01:00:00Z", ReceivedAt: "2026-08-20T01:00:00Z",
 			RawPayloadDigest: "sha256:" + rep64('a'), IngestStatus: "accepted",
@@ -59,15 +59,15 @@ func cliStoreFixture(t *testing.T) (configPath string, dispatchID string) {
 		Intent: ports.IntentInput{
 			DispatchID: "dispatch-1", DecisionID: "decision-1", RouteID: "wiki",
 			RouteRevision: "route-rev-1", TargetID: "hermes-kanban-main", TargetType: "hermes_kanban",
-			ResourceID: "vault-main", Generation: 1, IdempotencyKey: "jjukkumi:v1:sha256:" + rep64('1'),
+			ResourceID: "vault-main", Generation: 1, IdempotencyKey: "agent-dispatch:v1:sha256:" + rep64('1'),
 			ContentFingerprint: "sha256:" + rep64('c'), ManifestDigest: "sha256:" + rep64('d'),
-			RequestVersion: "jjukkumi.hermes-task/v1", RequestJSON: "{}", CreatedAt: "2026-08-20T01:00:00Z",
+			RequestVersion: "agent-dispatch.hermes-task/v1", RequestJSON: "{}", CreatedAt: "2026-08-20T01:00:00Z",
 		},
 	}
 	if err := db.CommitLineage(context.Background(), lin); err != nil {
 		t.Fatal(err)
 	}
-	cfgPath := filepath.Join(dir, "jjukkumi.yaml")
+	cfgPath := filepath.Join(dir, "agent-dispatch.yaml")
 	base, _ := planFixture(t)
 	raw, err := os.ReadFile(base)
 	if err != nil {

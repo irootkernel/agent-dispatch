@@ -2,8 +2,8 @@ version: 1
 
 instance:
   id: workstation-main
-  # Prefer JJUKKUMI_STATE_DIR or the platform default in real installations.
-  state_dir: /Users/example/Library/Application Support/JJUKKUMI
+  # Prefer AGENT_DISPATCH_STATE_DIR or the platform default in real installations.
+  state_dir: /Users/example/Library/Application Support/Agent Dispatch
   log_paths: relative
 
 limits:
@@ -23,9 +23,9 @@ resources:
 targets:
   hermes-kanban-main:
     type: hermes-kanban
-    board: jjukkumi
+    board: agent-dispatch
     executable: hermes
-    capability_report: /Users/example/.config/jjukkumi/hermes-capabilities.json
+    capability_report: /Users/example/.config/agent-dispatch/hermes-capabilities.json
     required_capabilities:
       - durable_acceptance
       - submit_idempotency_key
@@ -54,9 +54,9 @@ routes:
       type: watchman-trigger
       source_id: vault-main-watchman
       resource: vault-main
-      # Follows the trigger-name convention jjukkumi.<route-id>.<short-config-digest>
+      # Follows the trigger-name convention agent-dispatch.<route-id>.<short-config-digest>
       # documented in watchman-integration.md.
-      trigger_name: jjukkumi.wiki-maintenance.4f8c21
+      trigger_name: agent-dispatch.wiki-maintenance.4f8c21
       include:
         - "**/*.md"
       exclude:

@@ -2,29 +2,29 @@
 
 ## 1. Initial Deployment Sequence
 
-1. Install the verified Go-built JJUKKUMI binary.
-2. Confirm `jjukkumi version --output json`.
-3. Create a disabled config with `jjukkumi init`.
+1. Install the verified Go-built Agent Dispatch binary.
+2. Confirm `agent-dispatch version --output json`.
+3. Create a disabled config with `agent-dispatch init`.
 4. Set the Obsidian vault as a named resource.
 5. Generate or install the verified Hermes capability report from E0-T4 procedures.
-6. Run `jjukkumi config validate --probe-targets`.
-7. Run `jjukkumi doctor --probe-targets`.
+6. Run `agent-dispatch config validate --probe-targets`.
+7. Run `agent-dispatch doctor --probe-targets`.
 8. Run fixture-based `route plan`.
 9. Install the Watchman trigger while the route remains disabled or no-submit according to implementation policy.
 10. Run an initial full reconciliation in dry-run/no-submit mode.
 11. Use a disposable vault and Hermes task space to pass the automatic-write gate.
-12. Set config `enabled: true`, then explicitly activate the computed route revision with `jjukkumi route enable --route wiki-maintenance --acknowledge-production-gate <computed-route-revision> --yes` (the acknowledgement must equal the revision `route show` computes; any other value is refused).
+12. Set config `enabled: true`, then explicitly activate the computed route revision with `agent-dispatch route enable --route wiki-maintenance --acknowledge-production-gate <computed-route-revision> --yes` (the acknowledgement must equal the revision `route show` computes; any other value is refused).
 13. Install daily scheduled reconciliation.
 
 ## 2. Routine Inspection
 
 ```text
-jjukkumi status --output json
-jjukkumi doctor --output json
-jjukkumi dispatches list --state unknown
-jjukkumi dispatches list --state dead_lettered
-jjukkumi quarantine list
-jjukkumi receipts list --route wiki-maintenance
+agent-dispatch status --output json
+agent-dispatch doctor --output json
+agent-dispatch dispatches list --state unknown
+agent-dispatch dispatches list --state dead_lettered
+agent-dispatch quarantine list
+agent-dispatch receipts list --route wiki-maintenance
 ```
 
 Investigate any unknown dispatch before retrying.
@@ -45,13 +45,13 @@ No operator action is required unless target acceptance becomes unknown, the ite
 1. Inspect lineage:
 
    ```text
-   jjukkumi dispatches show <dispatch-id>
+   agent-dispatch dispatches show <dispatch-id>
    ```
 
 2. Run target reconciliation if supported:
 
    ```text
-   jjukkumi reconcile --route <route-id> --reason delivery
+   agent-dispatch reconcile --route <route-id> --reason delivery
    ```
 
 3. If lookup finds the Hermes task, record acceptance and do not retry.
@@ -60,7 +60,7 @@ No operator action is required unless target acceptance becomes unknown, the ite
 
 ## 5. Stale Active Task
 
-1. Inspect public Hermes status and JJUKKUMI receipts.
+1. Inspect public Hermes status and Agent Dispatch receipts.
 2. If Hermes proves terminal, refresh projection.
 3. If a work receipt exists, validate it.
 4. If status is unavailable, do not auto-fail based on time alone.
@@ -72,7 +72,7 @@ No operator action is required unless target acceptance becomes unknown, the ite
 For protected, unsafe, or oversized input:
 
 ```text
-jjukkumi quarantine show <id>
+agent-dispatch quarantine show <id>
 ```
 
 Options:
@@ -95,7 +95,7 @@ Run for:
 - operator suspicion of missed events.
 
 ```text
-jjukkumi reconcile --route wiki-maintenance --reason manual --submit
+agent-dispatch reconcile --route wiki-maintenance --reason manual --submit
 ```
 
 If active work exists, reconciliation merges into the pending dirty generation rather than creating parallel work.

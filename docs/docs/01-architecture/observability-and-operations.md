@@ -78,7 +78,7 @@ A normal excluded path is not an error.
 
 ## 5. Metrics
 
-v0.1 does not require a metrics server. `jjukkumi status --json` and `doctor --json` should expose counters computed from SQLite:
+v0.1 does not require a metrics server. `agent-dispatch status --json` and `doctor --json` should expose counters computed from SQLite:
 
 - observations by disposition;
 - active routes;
@@ -113,7 +113,7 @@ Audit rows are append-only through application code. Retention may compact resol
 
 ## 7. Health and Doctor
 
-`jjukkumi doctor` checks:
+`agent-dispatch doctor` checks:
 
 - config syntax and schema;
 - route/resource references;
@@ -136,7 +136,7 @@ Findings have stable severity and code.
 Daily full reconciliation uses an external scheduler invoking:
 
 ```text
-jjukkumi reconcile --route wiki-maintenance --reason scheduled --output json
+agent-dispatch reconcile --route wiki-maintenance --reason scheduled --output json
 ```
 
 Before the production gate, scheduled invocations omit `--submit` and persist reconciliation decisions for audit only. After the production gate, installed scheduled recipes add `--submit` (see the CLI contract) so that due reconciliation intents are actually submitted; without it, reconcile output alone never reaches Hermes when no new source events arrive.

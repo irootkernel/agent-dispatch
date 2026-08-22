@@ -8,8 +8,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/watchman"
-	"github.com/rootkernel/jjukkumi/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
+	"github.com/irootkernel/agent-dispatch/internal/config"
 )
 
 // runWatchman implements the managed Watchman trigger lifecycle (cli-spec
@@ -408,7 +408,7 @@ func runWatchmanTest(args []string, stdout, stderr io.Writer) int {
 		payload = raw
 	}
 	env := watchman.Env{
-		Trigger: "jjukkumi.test",
+		Trigger: "agent-dispatch.test",
 		Root:    "/synthetic-test-root",
 		Clock:   "c:0:0:0:1",
 		// No Since: the synthetic first-position shape, the verified

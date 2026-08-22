@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // machineReport is the real E0-T4 capability report frozen in the docs
@@ -62,9 +62,9 @@ func TestLoadReportFailsClosed(t *testing.T) {
 		body string
 	}{
 		{"not json", "not json"},
-		{"wrong schema version", `{"schema_version":"jjukkumi.hermes-capabilities/v2","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{},"evidence":[]}`},
-		{"wrong interface", `{"schema_version":"jjukkumi.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1","interface":"public_webhook","capabilities":{},"evidence":[]}`},
-		{"missing version", `{"schema_version":"jjukkumi.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","interface":"public_cli","capabilities":{},"evidence":[]}`},
+		{"wrong schema version", `{"schema_version":"agent-dispatch.hermes-capabilities/v2","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{},"evidence":[]}`},
+		{"wrong interface", `{"schema_version":"agent-dispatch.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1","interface":"public_webhook","capabilities":{},"evidence":[]}`},
+		{"missing version", `{"schema_version":"agent-dispatch.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","interface":"public_cli","capabilities":{},"evidence":[]}`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

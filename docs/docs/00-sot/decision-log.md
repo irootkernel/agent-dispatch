@@ -40,7 +40,7 @@ Post-baseline decisions and documented errata. Entries amend completed E0 output
 - `repository-layout.md` tree now includes `test/e2e` and `test/helpers`, which the prose already referenced.
 - `implementation-guide.md` service list gains `SetRouteActivation` (implements `route enable`/`route disable` with the acknowledged-revision gate) assigned to `application/maintenance`.
 - `task-execution-rules.md` DoD applies `go test ./...` only when a Go module exists at that stage.
-- `examples/config.yaml` trigger name follows the documented `jjukkumi.<route-id>.<short-config-digest>` convention.
+- `examples/config.yaml` trigger name follows the documented `agent-dispatch.<route-id>.<short-config-digest>` convention.
 - E3-T3 and E5-T4 deliverables each gain one line requiring JSON output contracts for the records their commands expose (attempts/dead letters; quarantine/batch/decision).
 - `canonical-record-contracts.md` §4 states the request self-containment rule recorded in D-001.
 
@@ -80,7 +80,7 @@ Post-baseline decisions and documented errata. Entries amend completed E0 output
 
 ## D-010 - 2026-08-19 - E0 gains Watchman verification task E0-T5
 
-**Decision.** New task E0-T5 verifies the real Watchman public interface and freezes the payload fixture baseline, mirroring E0-T4 for Hermes. E2-T1 depends on E0-T5 and its acceptance cites the frozen baseline; E2-T5 verifies the trigger lifecycle against that baseline and its acceptance references `config validate` instead of the not-yet-existing `doctor`. E1-T2 owns `jjukkumi init`; E3-T3 owns `route list|show|enable|disable`. The roadmap now has 33 tasks.
+**Decision.** New task E0-T5 verifies the real Watchman public interface and freezes the payload fixture baseline, mirroring E0-T4 for Hermes. E2-T1 depends on E0-T5 and its acceptance cites the frozen baseline; E2-T5 verifies the trigger lifecycle against that baseline and its acceptance references `config validate` instead of the not-yet-existing `doctor`. E1-T2 owns `agent-dispatch init`; E3-T3 owns `route list|show|enable|disable`. The roadmap now has 33 tasks.
 
 **Context.** E2-T1's acceptance required real payload shapes from an E0/E2 verification that only E2-T5 produced, which is circular under the strict linear execution rule. Hermes was verified before code (E0-T4) while the riskiest external input, Watchman, was verified only after the pipeline was implemented; a wrong payload assumption would have reopened all of E2. The audit also found no task owned the `init` and route-management commands required by CLI-004.
 
@@ -98,7 +98,7 @@ Post-baseline decisions and documented errata. Entries amend completed E0 output
 
 **Decision.** The following verified inconsistencies were fixed in one pass:
 
-- the trigger-name convention `jjukkumi.<route-id>.<short-config-digest>` is now applied in the configuration-spec example and the source-observation and watchman-environment examples (D-005 had fixed only the config example);
+- the trigger-name convention `agent-dispatch.<route-id>.<short-config-digest>` is now applied in the configuration-spec example and the source-observation and watchman-environment examples (D-005 had fixed only the config example);
 - the watchman-environment example drops the null-valued environment key, which a real environment cannot express;
 - the README SOT version aligns with the changelog;
 - `Acceptance receipt` is renamed `Dispatch receipt` in the terminology, with DAT-001 aligned to the contract and schema naming;
@@ -120,7 +120,7 @@ Post-baseline decisions and documented errata. Entries amend completed E0 output
 
 **Decision.** Route dispatch configuration gains `failure_budget` (integer, 1 through 10, required): the maximum number of consecutive failed or canceled accepted tasks before the route moves to `UNCERTAIN`. A completed task resets the count. The failure-path references in the persistence state-machine note, feedback-loop §7, and the `work fail` contract now cite `failure_budget` instead of reusing `execution_hints.max_attempts`.
 
-**Context.** D-009 bound the route's consecutive-failure budget to the Hermes execution hint, giving one field two meanings that can diverge: the hint advises the runtime about execution retries inside Hermes, while the budget governs how many follow-up intents JJUKKUMI creates after accepted work fails.
+**Context.** D-009 bound the route's consecutive-failure budget to the Hermes execution hint, giving one field two meanings that can diverge: the hint advises the runtime about execution retries inside Hermes, while the budget governs how many follow-up intents Agent Dispatch creates after accepted work fails.
 
 **Consequences.** The three budgets are now distinct and documented together in `configuration-spec.md` §9: `submission_retry.max_attempts` (delivery attempts for one intent), `execution_hints.max_attempts` (Hermes execution hint), and `failure_budget` (consecutive accepted-work failures). `failure_budget` is behavior-affecting and participates in the route revision digest. Config schema, both config examples, the domain-model Route, and the revision-input list are updated.
 
@@ -148,6 +148,6 @@ Post-baseline decisions and documented errata. Entries amend completed E0 output
 
 **Decision.** The closed v0.1 error-code registry gains its first usage-class (exit 2) codes: `command_unknown` for an unrecognized command, `command_not_implemented` for a command defined by the CLI contract but not yet built, and `flag_invalid` for argument errors. `internal_unclassified` (exit 40) gives the required panic-recovery path a legal code. The minimal E1-T1 CLI emits only these four codes plus success; the registry stays closed and future codes remain contract changes recorded here and in the changelog.
 
-**Context.** The registry predated any executable CLI and contained no usage-class codes, so the first real `jjukkumi` binary had no legal encoding for its failure modes; emitting unregistered codes would violate error-model §4 ("implementations emit only the codes below").
+**Context.** The registry predated any executable CLI and contained no usage-class codes, so the first real `agent-dispatch` binary had no legal encoding for its failure modes; emitting unregistered codes would violate error-model §4 ("implementations emit only the codes below").
 
 **Consequences.** SOT 1.0.4. `version` and `init` are the first implemented commands (init landed with E1-T2); every other tree entry fails closed with `command_not_implemented` instead of silently succeeding.

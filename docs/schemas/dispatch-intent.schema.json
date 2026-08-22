@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:jjukkumi:schema:dispatch-intent:v1",
-  "title": "JJUKKUMI DispatchIntent v1",
+  "$id": "urn:agent-dispatch:schema:dispatch-intent:v1",
+  "title": "Agent Dispatch DispatchIntent v1",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -20,7 +20,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "jjukkumi.dispatch-intent/v1"
+      "const": "agent-dispatch.dispatch-intent/v1"
     },
     "dispatch_id": {
       "type": "string"
@@ -56,7 +56,7 @@
     },
     "idempotency_key": {
       "type": "string",
-      "pattern": "^jjukkumi:v1:sha256:[0-9a-f]{64}$"
+      "pattern": "^agent-dispatch:v1:sha256:[0-9a-f]{64}$"
     },
     "content_fingerprint": {
       "type": "string",
@@ -79,7 +79,7 @@
       ]
     },
     "request": {
-      "$ref": "urn:jjukkumi:schema:hermes-task-request:v1"
+      "$ref": "urn:agent-dispatch:schema:hermes-task-request:v1"
     },
     "created_at": {
       "type": "string",

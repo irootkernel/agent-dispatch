@@ -120,7 +120,7 @@ func (s *Store) Migrate(backupDir string) error {
 		}
 	}
 	if newest > maxVersion {
-		return &ErrSchemaTooNewType{Detail: fmt.Sprintf("database schema version %d is newer than the supported maximum %d; upgrade jjukkumi instead of downgrading", newest, maxVersion)}
+		return &ErrSchemaTooNewType{Detail: fmt.Sprintf("database schema version %d is newer than the supported maximum %d; upgrade agent-dispatch instead of downgrading", newest, maxVersion)}
 	}
 	// Prefix integrity: the applied set must be exactly {1..newest} drawn
 	// from this binary's list, with no gaps and no foreign versions.
@@ -147,7 +147,7 @@ func (s *Store) Migrate(backupDir string) error {
 			}
 			continue
 		}
-		if err := s.Backup(fmt.Sprintf("%s/jjukkumi-v%d-%s.backup", backupDir, m.Version, nowFileTimestamp())); err != nil {
+		if err := s.Backup(fmt.Sprintf("%s/agent-dispatch-v%d-%s.backup", backupDir, m.Version, nowFileTimestamp())); err != nil {
 			return fmt.Errorf("pre-migration backup: %w", err)
 		}
 		if err := s.applyMigration(m); err != nil {

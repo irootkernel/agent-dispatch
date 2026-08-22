@@ -9,7 +9,7 @@ Exactly-once execution cannot be proven across a local process and an external r
 
 ## Decision
 
-JJUKKUMI provides at-least-once delivery. It uses stable idempotency keys when supported and records ambiguous outcomes as `unknown`. Unknown work is reconciled before retry.
+Agent Dispatch provides at-least-once delivery. It uses stable idempotency keys when supported and records ambiguous outcomes as `unknown`. Unknown work is reconciled before retry.
 
 ## Consequences
 

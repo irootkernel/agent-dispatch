@@ -13,17 +13,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/localfs"
-	"github.com/rootkernel/jjukkumi/internal/app/dispatch"
-	"github.com/rootkernel/jjukkumi/internal/domain/ids"
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
-	"github.com/rootkernel/jjukkumi/internal/domain/state"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/localfs"
+	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
+	"github.com/irootkernel/agent-dispatch/internal/domain/ids"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/state"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // SchemaVersion is the receipt document version this service accepts
 // (docs/schemas/work-receipt.schema.json).
-const SchemaVersion = "jjukkumi.work-receipt/v1"
+const SchemaVersion = "agent-dispatch.work-receipt/v1"
 
 // Limits bound one receipt submission (SEC-009); the change count and
 // digest shapes mirror the schema, the byte caps bound the untrusted

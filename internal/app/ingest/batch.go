@@ -17,11 +17,11 @@ import (
 	"math"
 	"sort"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/localfs"
-	"github.com/rootkernel/jjukkumi/internal/adapters/watchman"
-	"github.com/rootkernel/jjukkumi/internal/domain/fingerprint"
-	"github.com/rootkernel/jjukkumi/internal/domain/policy"
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/localfs"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
+	"github.com/irootkernel/agent-dispatch/internal/domain/fingerprint"
+	"github.com/irootkernel/agent-dispatch/internal/domain/policy"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 )
 
 // PathFacts is the read-only prior-digest lookup port (PTH-006): the last

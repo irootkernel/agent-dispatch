@@ -5,7 +5,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // Exact self-change attribution (E5-T3, FBK-002, FBK-004, FBK-008): a

@@ -8,9 +8,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
-	"github.com/rootkernel/jjukkumi/internal/domain/state"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/state"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // Read side, operator actions, and unknown reconciliation (E3-T3).
@@ -504,7 +504,7 @@ func (s *Store) saveIntentTakeOverOriginal(tx *sql.Tx, i IntentRecord, originalD
 func (s *Store) SaveExecutionProjection(ctx context.Context, in ports.ExecutionProjectionInput) error {
 	_, err := s.ExecContext(ctx, `INSERT INTO dispatch_receipts
 		(receipt_id, dispatch_id, receipt_kind, execution_state, durable, external_ref, target_observed_at, received_at, payload_version, bounded_payload)
-		VALUES (?,?, 'execution_projection', ?, NULL, ?, ?, ?, 'jjukkumi.execution/v1', ?)`,
+		VALUES (?,?, 'execution_projection', ?, NULL, ?, ?, ?, 'agent-dispatch.execution/v1', ?)`,
 		in.ReceiptID, in.DispatchID, string(in.ExecutionState), nullString(in.ExternalRef),
 		nullString(in.TargetObservedAt), in.ReceivedAt, in.BoundedPayload)
 	return err

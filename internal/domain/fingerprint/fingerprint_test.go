@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 )
 
 func sampleInput() records.ContentFingerprintInput {
@@ -28,7 +28,7 @@ func idemInput(fp string, generation int64) records.IdempotencyKeyInput {
 		TargetID:           "hermes-kanban-main",
 		Generation:         generation,
 		ContentFingerprint: fp,
-		RequestVersion:     "jjukkumi.dispatch-intent/v1",
+		RequestVersion:     "agent-dispatch.dispatch-intent/v1",
 	}
 }
 
@@ -105,7 +105,7 @@ func TestIdempotencyKeyProperties(t *testing.T) {
 	if key1 != key2 {
 		t.Fatalf("identical inputs must yield identical keys: %s vs %s", key1, key2)
 	}
-	if !regexp.MustCompile(`^jjukkumi:v1:sha256:[0-9a-f]{64}$`).MatchString(key1) {
+	if !regexp.MustCompile(`^agent-dispatch:v1:sha256:[0-9a-f]{64}$`).MatchString(key1) {
 		t.Fatalf("key form invalid: %s", key1)
 	}
 	// A rerun advances the generation and must change the key.

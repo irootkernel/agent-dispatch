@@ -24,7 +24,7 @@ A `Resource` is trusted configuration, not event data.
 ```text
 Resource {
   id                 stable operator name
-  root               absolute path, resolved only inside JJUKKUMI
+  root               absolute path, resolved only inside Agent Dispatch
   canonical_root     symlink-resolved trusted root identity
   file_scope         markdown-only in v0.1
   git_mode           optional | disabled
@@ -242,7 +242,7 @@ active_dispatch_id != null
 
 ## 12. WorkReceipt
 
-A work receipt is produced through JJUKKUMI's public receipt CLI or later MCP interface.
+A work receipt is produced through Agent Dispatch's public receipt CLI or later MCP interface.
 
 ```text
 WorkReceipt {
@@ -261,7 +261,7 @@ WorkReceipt {
 }
 ```
 
-A work receipt is not accepted merely because a Hermes agent supplied it. JJUKKUMI verifies route lineage, active dispatch, resource containment, path set, and digest evidence.
+A work receipt is not accepted merely because a Hermes agent supplied it. Agent Dispatch verifies route lineage, active dispatch, resource containment, path set, and digest evidence.
 
 ## 13. QuarantineItem
 
@@ -307,7 +307,7 @@ Timestamps, observation IDs, and source delivery attempt fields are excluded.
 ### Idempotency key
 
 ```text
-idempotency_key = "jjukkumi:v1:" + SHA-256(
+idempotency_key = "agent-dispatch:v1:" + SHA-256(
   canonical_json({
     route_id,
     route_revision,

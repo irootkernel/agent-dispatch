@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:jjukkumi:schema:hermes-capabilities:v1",
+  "$id": "urn:agent-dispatch:schema:hermes-capabilities:v1",
   "title": "Hermes Public Interface Capability Report",
   "type": "object",
   "additionalProperties": false,
@@ -14,7 +14,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "jjukkumi.hermes-capabilities/v1"
+      "const": "agent-dispatch.hermes-capabilities/v1"
     },
     "probed_at": {
       "type": "string",

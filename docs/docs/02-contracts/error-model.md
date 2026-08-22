@@ -4,7 +4,7 @@
 
 ```json
 {
-  "api_version": "jjukkumi.cli/v1",
+  "api_version": "agent-dispatch.cli/v1",
   "command": "dispatch",
   "ok": false,
   "error": {
@@ -13,7 +13,7 @@
     "message": "Hermes may have accepted the task; reconciliation is required.",
     "retryable": false,
     "dispatch_id": "019c...",
-    "remediation": "Run 'jjukkumi dispatches show ...' and reconcile by idempotency key."
+    "remediation": "Run 'agent-dispatch dispatches show ...' and reconcile by idempotency key."
   },
   "trace_id": "..."
 }

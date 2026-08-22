@@ -7,7 +7,7 @@ The configuration file is YAML. It is trusted operator policy and should be stor
 Configuration precedence:
 
 1. `--config <path>`
-2. `JJUKKUMI_CONFIG`
+2. `AGENT_DISPATCH_CONFIG`
 3. platform default config path
 
 No event payload may override configuration.
@@ -78,7 +78,7 @@ A resource root is resolved to a canonical identity during validation. Symlinks 
 targets:
   hermes-kanban-main:
     type: hermes-kanban
-    board: jjukkumi
+    board: agent-dispatch
     executable: hermes
     capability_report: /path/to/hermes-capabilities.json
     required_capabilities:
@@ -92,7 +92,7 @@ targets:
       - PATH
 ```
 
-`board` names the Hermes kanban board the route submits to. The operator creates it once with the public `hermes kanban boards create <slug>` command; JJUKKUMI never creates, renames, or deletes boards. `capability_report` is generated and verified by the E0-T4 compatibility task. It contains no secrets. Exact command mapping is compiled into or versioned with the adapter after verification; it is not supplied by untrusted route data. `required_capabilities` names the sink capabilities the route depends on; key-based reconciliation on Hermes runs through the idempotent dedup submission (the capability report records `lookup_by_idempotency_key` as the dedup behavior), so routes that reconcile by reference require `lookup_by_external_ref`.
+`board` names the Hermes kanban board the route submits to. The operator creates it once with the public `hermes kanban boards create <slug>` command; Agent Dispatch never creates, renames, or deletes boards. `capability_report` is generated and verified by the E0-T4 compatibility task. It contains no secrets. Exact command mapping is compiled into or versioned with the adapter after verification; it is not supplied by untrusted route data. `required_capabilities` names the sink capabilities the route depends on; key-based reconciliation on Hermes runs through the idempotent dedup submission (the capability report records `lookup_by_idempotency_key` as the dedup behavior), so routes that reconcile by reference require `lookup_by_external_ref`.
 
 ### Hermes Webhook
 
@@ -125,7 +125,7 @@ routes:
       type: watchman-trigger
       source_id: vault-main-watchman
       resource: vault-main
-      trigger_name: jjukkumi.wiki-maintenance.4f8c21
+      trigger_name: agent-dispatch.wiki-maintenance.4f8c21
       include:
         - "**/*.md"
       exclude:
@@ -256,6 +256,6 @@ Beyond schema validation, the validator must check:
 
 ## 13. Computed Configuration Revision
 
-The operator does not manually enter a route revision. JJUKKUMI computes it from normalized behavior-affecting configuration. Canonical route revision input includes source binding, resource ID, normalized patterns, batch limits, policy actions, target ID, profile, skills, mutex, latest-state flag, submission retry, execution hints, failure budget, and capability requirements.
+The operator does not manually enter a route revision. Agent Dispatch computes it from normalized behavior-affecting configuration. Canonical route revision input includes source binding, resource ID, normalized patterns, batch limits, policy actions, target ID, profile, skills, mutex, latest-state flag, submission retry, execution hints, failure budget, and capability requirements.
 
 It excludes comments, display order, state directory, the command-line log level, and resolved secret values.

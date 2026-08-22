@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 )
 
 // documentIntentTable restates the dispatch state machine independently

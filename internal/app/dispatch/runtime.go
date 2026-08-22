@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
-	"github.com/rootkernel/jjukkumi/internal/domain/state"
-	"github.com/rootkernel/jjukkumi/internal/observability"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/state"
+	"github.com/irootkernel/agent-dispatch/internal/observability"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // Runtime drives the durable submit flow (E3-T2/E3-T3): commit the

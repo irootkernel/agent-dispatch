@@ -41,7 +41,7 @@ The release gate is cumulative. A later gate cannot pass while an earlier gate i
 
 | ID | Given / When / Then |
 |---|---|
-| AC-201 | Given a crash before the intent transaction commits, when JJUKKUMI restarts, then no external submit is inferred and no committed intent is lost. |
+| AC-201 | Given a crash before the intent transaction commits, when Agent Dispatch restarts, then no external submit is inferred and no committed intent is lost. |
 | AC-202 | Given a crash after intent commit but before submit, when restarted, then the intent returns to eligible `ready` processing exactly once. |
 | AC-203 | Given remote acceptance followed by a crash before local receipt commit, when restarted, then the dispatch enters or remains `unknown`, performs lookup, and does not blindly create a second task. |
 | AC-204 | Given two simultaneous one-shot processes, when both attempt the same dispatch, then one obtains the attempt lease and one observes existing ownership. |
@@ -69,7 +69,7 @@ The release gate is cumulative. A later gate cannot pass while an earlier gate i
 | AC-403 | Given a valid work receipt whose changed path and digest set exactly matches observed changes, when attribution runs, then exact self-generated changes may be suppressed and the decision is audited. |
 | AC-404 | Given a receipt with missing paths, extra paths, mismatched digest, wrong resource, or wrong dispatch, when attribution runs, then changes are not suppressed. |
 | AC-405 | Given agent and human changes in the same interval, when attribution runs, then the route remains dirty and receives a bounded follow-up evaluation. |
-| AC-406 | Given no work receipt, when agent changes are observed, then JJUKKUMI may produce an extra follow-up but never silently loses potential human work. |
+| AC-406 | Given no work receipt, when agent changes are observed, then Agent Dispatch may produce an extra follow-up but never silently loses potential human work. |
 | AC-407 | Given a protected path, when observed, then it is quarantined, excluded from the automatic task, and visible to the operator. |
 | AC-408 | Given overflow or fresh instance while a task is active, when processed, then one dirty reconciliation generation remains pending after active completion. |
 | AC-409 | Given explicit `retry`, `reprocess`, `rerun`, and `reconcile` commands, when each is used, then IDs and lineage follow their distinct documented semantics. |

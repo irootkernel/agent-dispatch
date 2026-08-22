@@ -6,9 +6,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
-	"github.com/rootkernel/jjukkumi/internal/domain/state"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/state"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // dispatchNow is the fixed clock the dispatch tests run under.
@@ -17,8 +17,8 @@ const dispatchNow = "2026-08-20T01:00:00Z"
 func lineage(dispatchID, idempotencyKey string) ports.Lineage {
 	return ports.Lineage{
 		Observation: ports.ObservationInput{
-			ObservationID: "obs-" + dispatchID, SchemaVersion: "jjukkumi.source-observation/v1",
-			SourceType: "watchman", SourceID: "watchman-main", TriggerName: "jjukkumi-wiki-maintenance",
+			ObservationID: "obs-" + dispatchID, SchemaVersion: "agent-dispatch.source-observation/v1",
+			SourceType: "watchman", SourceID: "watchman-main", TriggerName: "agent-dispatch-wiki-maintenance",
 			ResourceID: "vault-main", ObservedAt: dispatchNow, ReceivedAt: dispatchNow,
 			RawPayloadDigest: "sha256:" + repeat("a", 64), IngestStatus: "accepted",
 			Changes: []ports.ObservationChange{{
@@ -41,7 +41,7 @@ func lineage(dispatchID, idempotencyKey string) ports.Lineage {
 			RouteRevision: "route-rev-1", TargetID: "hermes-kanban-main", TargetType: "hermes_kanban",
 			ResourceID: "vault-main", Generation: 1, IdempotencyKey: idempotencyKey,
 			ContentFingerprint: "sha256:" + repeat("c", 64), ManifestDigest: "sha256:" + repeat("d", 64),
-			RequestVersion: "jjukkumi.hermes-task/v1", RequestJSON: `{"contract_version":"jjukkumi.hermes-task/v1"}`,
+			RequestVersion: "agent-dispatch.hermes-task/v1", RequestJSON: `{"contract_version":"agent-dispatch.hermes-task/v1"}`,
 			CreatedAt: dispatchNow,
 		},
 	}
@@ -57,7 +57,7 @@ func repeat(ch string, n int) string {
 
 func commitTestLineage(t *testing.T, s *Store, dispatchID string) {
 	t.Helper()
-	if err := s.CommitLineage(context.Background(), lineage(dispatchID, "jjukkumi:v1:sha256:"+repeat(dispatchID[len(dispatchID)-1:], 64))); err != nil {
+	if err := s.CommitLineage(context.Background(), lineage(dispatchID, "agent-dispatch:v1:sha256:"+repeat(dispatchID[len(dispatchID)-1:], 64))); err != nil {
 		t.Fatalf("commit lineage: %v", err)
 	}
 }
@@ -91,7 +91,7 @@ func TestCommitLineagePersistsWholeChain(t *testing.T) {
 // uniqueness constraint is enforced through the port error.
 func TestCommitLineageDuplicateIdempotency(t *testing.T) {
 	s := openTestStore(t)
-	key := "jjukkumi:v1:sha256:" + repeat("1", 64)
+	key := "agent-dispatch:v1:sha256:" + repeat("1", 64)
 	if err := s.CommitLineage(context.Background(), lineage("dispatch-1", key)); err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestCommitLineageDuplicateIdempotency(t *testing.T) {
 func TestCommitLineageRouteSlotHeld(t *testing.T) {
 	s := openTestStore(t)
 	commitTestLineage(t, s, "dispatch-1")
-	second := lineage("dispatch-2", "jjukkumi:v1:sha256:"+repeat("2", 64))
+	second := lineage("dispatch-2", "agent-dispatch:v1:sha256:"+repeat("2", 64))
 	err := s.CommitLineage(context.Background(), second)
 	if !errors.Is(err, ports.ErrRouteSlotHeld) {
 		t.Fatalf("second active dispatch must map to ErrRouteSlotHeld: %v", err)

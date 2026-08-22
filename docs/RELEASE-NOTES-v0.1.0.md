@@ -1,4 +1,4 @@
-# JJUKKUMI v0.1.0 Release Notes
+# Agent Dispatch v0.1.0 Release Notes
 
 Release target: v0.1.0 · SOT package version 1.0.x · schema range 1-4 ·
 config version 1 · Hermes adapter 0.19.1 · Watchman verified
@@ -6,7 +6,7 @@ config version 1 · Hermes adapter 0.19.1 · Watchman verified
 
 ## What this release is
 
-JJUKKUMI watches an Obsidian-style markdown vault through Watchman and
+Agent Dispatch watches an Obsidian-style markdown vault through Watchman and
 delivers bounded, latest-state maintenance tasks to a Hermes agent
 runtime through the explicit Kanban or webhook target, with durable
 SQLite-backed dispatch, receipt-cooperative feedback suppression,
@@ -32,11 +32,11 @@ no daemon is installed or required.
 
 ## Artifacts
 
-- `jjukkumi-v0.1.0-darwin-arm64`, `jjukkumi-v0.1.0-linux-amd64`, and
+- `agent-dispatch-v0.1.0-darwin-arm64`, `agent-dispatch-v0.1.0-linux-amd64`, and
   `SHA256SUMS` from `make release VERSION=v0.1.0`.
 - The SOT documentation package under `docs/` (manifest-verified).
 - JSON schemas and examples for every durable record.
-- The Hermes companion skill `jjukkumi-wiki-maintenance`.
+- The Hermes companion skill `agent-dispatch-wiki-maintenance`.
 
 ## Verification
 

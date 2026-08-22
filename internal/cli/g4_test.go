@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/config"
 )
 
 // Gate G4 (E5-T5): the production-capable feedback-loop harness. Every

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 )
 
 // Read-side and operator-action surface for the dispatch inspection and

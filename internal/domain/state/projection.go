@@ -3,7 +3,7 @@ package state
 import (
 	"fmt"
 
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 )
 
 // Projection is the paired target projection axes of one dispatch

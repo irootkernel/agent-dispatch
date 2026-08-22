@@ -10,7 +10,7 @@
 ## 1. Method and Boundary
 
 Every claim below was produced by invoking only public Hermes CLI commands
-against a disposable kanban board `jjukkumi-e0t4-probe`, created for this probe
+against a disposable kanban board `agent-dispatch-e0t4-probe`, created for this probe
 and hard-deleted afterwards. The active board selection was never changed (all
 commands used the `--board` flag). No Hermes source file was modified, no
 Hermes internal database was opened, and no private API was assumed. Where a
@@ -99,7 +99,7 @@ Operational consequences recorded for E4-T3:
 - Reconciliation after a lost create response: re-run `create` with the same
   key; a returned existing id proves the original submission was accepted; a
   new id proves no non-archived task holds the key (safe resubmission).
-- Never archive JJUKKUMI-created tasks from the JJUKKUMI side without
+- Never archive Agent Dispatch-created tasks from the Agent Dispatch side without
   recording that the idempotency key is freed by doing so.
 
 ## 6. Lookup (Verified)
@@ -128,7 +128,7 @@ Operational consequences recorded for E4-T3:
 - **Mutex:** `--mutex-key` "serializes this task with other running tasks that
   use the same explicit board-local key" (public help). Key scope is the board;
   keys are trimmed only, schemes and case preserved. Runtime contention was not
-  exercised (requires dispatching workers). JJUKKUMI's route-level single-task
+  exercised (requires dispatching workers). Agent Dispatch's route-level single-task
   invariant (CON-*) must not depend solely on this; the local serialization of
   E3-T4 remains required.
 - **Runtime hint:** `--max-runtime` is an enforced cap: on overrun the
@@ -136,7 +136,7 @@ Operational consequences recorded for E4-T3:
   Treat as a guarantee of termination, not of completion.
 - **Retry hint:** `--max-retries N` is a per-task consecutive-failure circuit
   breaker (trip on the Nth failure; dispatcher default 2). Distinct from
-  JJUKKUMI's own persisted retry policy (DUR-*): this bounds only Hermes-side
+  Agent Dispatch's own persisted retry policy (DUR-*): this bounds only Hermes-side
   worker retries.
 - **Execution status:** portable through the public status enum and
   `started_at` / `completed_at` / `result` fields; `result` and
@@ -157,7 +157,7 @@ Operational consequences recorded for E4-T3:
   worker run it prints a no-log-yet notice with exit 0. Never parse it for
   correctness decisions.
 - No public request-size limit is documented for title or body. The adapter
-  must enforce JJUKKUMI's own bounded-manifest policy (SEC-*, E4-T2) and must
+  must enforce Agent Dispatch's own bounded-manifest policy (SEC-*, E4-T2) and must
   not rely on a Hermes-side limit.
 - Fixture: `fixtures/hermes/error-cases.txt`.
 
@@ -202,12 +202,12 @@ Known behavioral caveats the adapter must carry forward:
 
 ## 11. Boundary Confirmation
 
-During this probe, JJUKKUMI work used only: `hermes --version`,
+During this probe, Agent Dispatch work used only: `hermes --version`,
 `hermes kanban boards {create,list,current,rm}`, `hermes kanban --board <slug>
 {create,show,list,block,unblock,complete,archive,assignees}`,
 `hermes webhook list`, and `hermes profile --help` (discovery only). The
 per-board `kanban.db` path was disclosed by public CLI output but never
 opened. No Hermes file, configuration, plugin, or internal state was modified.
 The disposable board was hard-deleted after evidence capture
-(`hermes kanban boards rm jjukkumi-e0t4-probe --delete`), leaving the
+(`hermes kanban boards rm agent-dispatch-e0t4-probe --delete`), leaving the
 installation's board inventory unchanged.

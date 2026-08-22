@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 func testNow() time.Time { return time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC) }

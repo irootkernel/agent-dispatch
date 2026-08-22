@@ -1,4 +1,4 @@
-module github.com/rootkernel/jjukkumi
+module github.com/irootkernel/agent-dispatch
 
 go 1.26.6
 

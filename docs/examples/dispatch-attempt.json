@@ -1,8 +1,8 @@
 {
-  "schema_version": "jjukkumi.dispatch-attempt/v1",
+  "schema_version": "agent-dispatch.dispatch-attempt/v1",
   "attempt_id": "019c2345-6789-7abc-9def-0123456789ab-1787220000000000000",
   "dispatch_id": "019c2345-6789-7abc-9def-0123456789ab",
-  "lease_owner": "jjukkumi-dispatch-pid-821",
+  "lease_owner": "agent-dispatch-dispatch-pid-821",
   "started_at": "2026-08-20T01:00:00Z",
   "completed_at": "2026-08-20T01:00:31Z",
   "outcome": "unknown",

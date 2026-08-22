@@ -15,7 +15,7 @@ import (
 	"sort"
 	"unicode/utf8"
 
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 )
 
 // Content computes the content fingerprint. Changes are sorted into
@@ -86,7 +86,7 @@ func validateContentInput(in records.ContentFingerprintInput) error {
 }
 
 // Idempotency computes the idempotency key in the contract form
-// jjukkumi:v1:sha256:<hex>. The projection excludes attempt number and
+// agent-dispatch:v1:sha256:<hex>. The projection excludes attempt number and
 // submission time; callers change the key intentionally by advancing the
 // generation (a rerun) while retries keep it.
 func Idempotency(in records.IdempotencyKeyInput) (string, error) {
@@ -112,7 +112,7 @@ func Idempotency(in records.IdempotencyKeyInput) (string, error) {
 		return "", fmt.Errorf("idempotency projection: %w", err)
 	}
 	sum := sha256.Sum256(enc)
-	return "jjukkumi:v1:sha256:" + hex.EncodeToString(sum[:]), nil
+	return "agent-dispatch:v1:sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
 // canonicalJSON encodes a dedicated projection struct deterministically.

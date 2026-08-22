@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/config"
 )
 
 // keychainCommand is the controlled macOS Keychain lookup used for

@@ -2,14 +2,14 @@
 
 ## 1. Architectural Style
 
-JJUKKUMI uses a **hexagonal architecture** with deterministic domain services at the center and source, storage, filesystem, clock, and Hermes integrations at the edges.
+Agent Dispatch uses a **hexagonal architecture** with deterministic domain services at the center and source, storage, filesystem, clock, and Hermes integrations at the edges.
 
 The v0.1 process is a short-lived CLI. Watchman owns long-lived filesystem observation. SQLite supplies durable coordination across independent CLI invocations. Hermes owns long-lived agent execution.
 
 ```mermaid
 flowchart LR
     O[Operator-owned YAML] --> C[Config and Route Registry]
-    W[Watchman daemon] -->|stdin JSON + env (source metadata, verify)| CLI[jjukkumi CLI process]
+    W[Watchman daemon] -->|stdin JSON + env (source metadata, verify)| CLI[agent-dispatch CLI process]
     CLI --> I[Watchman Ingress Port]
     I --> N[Normalize and Validate]
     N --> P[Deterministic Policy Planner]
@@ -19,7 +19,7 @@ flowchart LR
     H -->|public CLI only| HK[Hermes Kanban]
     HK --> HR[Hermes Runtime]
     HR --> S[LLM Wiki Skill]
-    HR -. optional receipt .-> R[jjukkumi work CLI]
+    HR -. optional receipt .-> R[agent-dispatch work CLI]
     R --> DB
     CLI --> A[JSON / human audit output]
 ```
@@ -30,8 +30,8 @@ flowchart LR
 flowchart TB
     subgraph TrustedOperator[Trusted operator boundary]
         CFG[Route configuration]
-        BIN[JJUKKUMI binary]
-        DB[(JJUKKUMI SQLite)]
+        BIN[Agent Dispatch binary]
+        DB[(Agent Dispatch SQLite)]
     end
 
     subgraph UntrustedSource[Untrusted event data]
@@ -53,7 +53,7 @@ flowchart TB
     HCLI --> HK --> HA
 ```
 
-Trust is not inherited transitively. A valid Watchman invocation proves the configured source process invoked JJUKKUMI; it does not make a file name or note body a trusted instruction. A valid Hermes task receipt proves a target claim was received; it does not automatically prove the reported changed paths are correct.
+Trust is not inherited transitively. A valid Watchman invocation proves the configured source process invoked Agent Dispatch; it does not make a file name or note body a trusted instruction. A valid Hermes task receipt proves a target claim was received; it does not automatically prove the reported changed paths are correct.
 
 ## 3. Runtime Topology
 
@@ -63,13 +63,13 @@ Trust is not inherited transitively. A valid Watchman invocation proves the conf
 one local machine
   Watchman daemon
   Obsidian vault
-  zero or more short-lived JJUKKUMI CLI processes
-  one local JJUKKUMI SQLite database
+  zero or more short-lived Agent Dispatch CLI processes
+  one local Agent Dispatch SQLite database
   public Hermes CLI and/or local authenticated Hermes endpoint
   Hermes runtime
 ```
 
-The SQLite file must reside on a local filesystem. Multiple JJUKKUMI processes may open it, but transaction and lease rules guarantee one owner for a side effect.
+The SQLite file must reside on a local filesystem. Multiple Agent Dispatch processes may open it, but transaction and lease rules guarantee one owner for a side effect.
 
 ### Excluded topology
 
@@ -78,7 +78,7 @@ v0.1 does not support:
 - multiple machines sharing one SQLite file;
 - distributed leases;
 - network filesystem database placement;
-- a JJUKKUMI daemon coordinating long-lived subscriptions;
+- a Agent Dispatch daemon coordinating long-lived subscriptions;
 - direct calls into Hermes internal components.
 
 ## 4. Logical Components
@@ -103,7 +103,7 @@ v0.1 does not support:
 ```mermaid
 sequenceDiagram
     participant W as Watchman
-    participant J as JJUKKUMI
+    participant J as Agent Dispatch
     participant DB as SQLite
     participant H as Hermes public CLI
 
@@ -151,7 +151,7 @@ No target call is permitted before these conditions.
 - Payloads cannot override target, profile, skills, workspace, mutex, or permissions.
 - A ready but not yet submitted intent is revalidated against the currently active route before submission.
 - An accepted Hermes task retains original lineage and is never silently rewritten because configuration changed.
-- Hermes remains authoritative for the execution result. JJUKKUMI stores a projection and audit evidence only.
+- Hermes remains authoritative for the execution result. Agent Dispatch stores a projection and audit evidence only.
 
 ## 8. Compatibility Layers
 

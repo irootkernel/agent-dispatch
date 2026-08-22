@@ -133,7 +133,7 @@ max intents processed per invocation = 1 newly planned intent
                                   + 1 already due recovery intent
 ```
 
-A dedicated `jjukkumi dispatches drain --max N` operator command may process more. Watchman must not invoke an unbounded drain.
+A dedicated `agent-dispatch dispatches drain --max N` operator command may process more. Watchman must not invoke an unbounded drain.
 
 Recovery of due `RETRY_WAIT` intents is intentionally trigger-driven in v0.1: a due retry is submitted by the next source event's dispatch invocation or by an explicit `dispatches drain`, never by a background timer. A route with no new events stays idle until the next event or operator action; pending retries remain visible in `status` and `dispatches list`.
 

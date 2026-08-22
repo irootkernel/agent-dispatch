@@ -35,7 +35,7 @@ resources:
 targets:
   hermes-main:
     type: hermes-kanban
-    board: jjukkumi
+    board: agent-dispatch
     executable: hermes
     capability_report: "` + filepath.Join(dir, "cap.json") + `"
     required_capabilities: [durable_acceptance, submit_idempotency_key]
@@ -46,7 +46,7 @@ routes:
       type: watchman-trigger
       source_id: vault-main-watchman
       resource: vault-main
-      trigger_name: jjukkumi.wiki.test
+      trigger_name: agent-dispatch.wiki.test
       include: ["**/*.md"]
       exclude: [".obsidian/workspace*.json"]
     batching:
@@ -82,7 +82,7 @@ routes:
       daily_expected: true
 `
 	// capability_report is only referenced, not read during planning.
-	configPath = filepath.Join(dir, "jjukkumi.yaml")
+	configPath = filepath.Join(dir, "agent-dispatch.yaml")
 	if err := os.WriteFile(configPath, []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ routes:
 
 func setPlanEnv(t *testing.T, vault string, fresh bool) {
 	t.Helper()
-	t.Setenv("WATCHMAN_TRIGGER", "jjukkumi.wiki.test")
+	t.Setenv("WATCHMAN_TRIGGER", "agent-dispatch.wiki.test")
 	t.Setenv("WATCHMAN_ROOT", vault)
 	t.Setenv("WATCHMAN_CLOCK", "c:1:2:3:4")
 	t.Setenv("WATCHMAN_SOCK", "/tmp/sock")
@@ -100,7 +100,7 @@ func setPlanEnv(t *testing.T, vault string, fresh bool) {
 	} else {
 		t.Setenv("WATCHMAN_SINCE", "c:1:2:3:3")
 	}
-	t.Setenv("JJUKKUMI_STATE_DIR", t.TempDir())
+	t.Setenv("AGENT_DISPATCH_STATE_DIR", t.TempDir())
 }
 
 func withStdin(t *testing.T, payload string, fn func()) {
@@ -146,7 +146,7 @@ func TestRoutePlanNormalBatch(t *testing.T) {
 		if plan["disposition"] != "dispatch" {
 			t.Fatalf("normal batch must dispatch: %s", raw)
 		}
-		if plan["schema_version"] != "jjukkumi.dispatch-plan/v1" {
+		if plan["schema_version"] != "agent-dispatch.dispatch-plan/v1" {
 			t.Fatalf("schema version wrong: %s", raw)
 		}
 		route := plan["route"].(map[string]any)

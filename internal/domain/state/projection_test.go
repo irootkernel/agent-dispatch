@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 )
 
 // TestAcceptanceTransitionAxis verifies every acceptance outcome maps to

@@ -21,7 +21,7 @@ type Config struct {
 	Warnings []string `yaml:"-" json:"-"`
 }
 
-// Instance identifies this jjukkumi installation (§3).
+// Instance identifies this agent-dispatch installation (§3).
 type Instance struct {
 	ID       string `yaml:"id"         json:"id"`
 	StateDir string `yaml:"state_dir"  json:"state_dir,omitempty"`

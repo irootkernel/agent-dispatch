@@ -55,7 +55,7 @@ func TestLifecycleInstallNoOpReplaceAndRemove(t *testing.T) {
 	client := hasWatchman(t)
 	ctx := context.Background()
 	root := tempRoot(t)
-	def := ManagedTrigger("jjukkumi-test-lifecycle", []string{"/bin/true"})
+	def := ManagedTrigger("agent-dispatch-test-lifecycle", []string{"/bin/true"})
 
 	watchRoot, err := client.EnsureWatch(ctx, root)
 	if err != nil {

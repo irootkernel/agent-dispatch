@@ -1,4 +1,4 @@
-# Installing the JJUKKUMI Companion Skill
+# Installing the Agent Dispatch Companion Skill
 
 The companion skill is an ordinary Hermes skill: one directory containing a
 `SKILL.md` with YAML frontmatter. Installation uses only the public Hermes
@@ -12,19 +12,19 @@ skill mechanism — no plugin, no Hermes core change, no permission grant
 
    ```bash
    mkdir -p ~/.hermes/skills/productivity
-   cp -R <jjukkumi-repo>/docs/skills/jjukkumi-wiki-maintenance \
+   cp -R <agent-dispatch-repo>/docs/skills/agent-dispatch-wiki-maintenance \
      ~/.hermes/skills/productivity/
    ```
 
 2. Verify Hermes recognizes it through the public surface:
 
    ```bash
-   hermes skills list          # shows jjukkumi-wiki-maintenance, source local, enabled
-   hermes skills inspect jjukkumi-wiki-maintenance
+   hermes skills list          # shows agent-dispatch-wiki-maintenance, source local, enabled
+   hermes skills inspect agent-dispatch-wiki-maintenance
    ```
 
-3. JJUKKUMI routes request the skill by name (`skills: [llm-wiki,
-   jjukkumi-wiki-maintenance]` in the route configuration). Hermes preloads
+3. Agent Dispatch routes request the skill by name (`skills: [llm-wiki,
+   agent-dispatch-wiki-maintenance]` in the route configuration). Hermes preloads
    it for the task through the same public `--skill` selection the kanban
    create command exposes.
 
@@ -33,8 +33,8 @@ skill mechanism — no plugin, no Hermes core change, no permission grant
 If you publish the `SKILL.md` at an HTTPS URL:
 
 ```bash
-hermes skills install https://<host>/jjukkumi-wiki-maintenance/SKILL.md \
-  --category productivity --name jjukkumi-wiki-maintenance
+hermes skills install https://<host>/agent-dispatch-wiki-maintenance/SKILL.md \
+  --category productivity --name agent-dispatch-wiki-maintenance
 ```
 
 Pin integrity: publish the SKILL.md alongside its SHA-256 digest and
@@ -46,8 +46,8 @@ blindly.
 ## Uninstall
 
 ```bash
-hermes skills uninstall jjukkumi-wiki-maintenance
-# or, for a local copy: rm -rf ~/.hermes/skills/<category>/jjukkumi-wiki-maintenance
+hermes skills uninstall agent-dispatch-wiki-maintenance
+# or, for a local copy: rm -rf ~/.hermes/skills/<category>/agent-dispatch-wiki-maintenance
 ```
 
 ## What the skill does not do
@@ -55,8 +55,8 @@ hermes skills uninstall jjukkumi-wiki-maintenance
 - It does not modify Hermes core, internal storage, configuration, or other
   skills.
 - It grants no permissions and requests no tool elevation.
-- It is optional: JJUKKUMI dispatch, deduplication, reconciliation, and the
-  receipt CLI work identically without it. Without the skill, JJUKKUMI
+- It is optional: Agent Dispatch dispatch, deduplication, reconciliation, and the
+  receipt CLI work identically without it. Without the skill, Agent Dispatch
   simply lacks agent-side provenance and stays conservative (at most one
   redundant latest-state follow-up, never a silently dropped change).
 

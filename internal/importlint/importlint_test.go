@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-const mod = "github.com/rootkernel/jjukkumi/"
+const mod = "github.com/irootkernel/agent-dispatch/"
 
 func TestCheckPackagesCatchesViolationFromSubpackage(t *testing.T) {
 	_, violations := checkPackages([]goPackage{
@@ -33,7 +33,7 @@ func TestCheckPackagesAllowsDocumentedDirections(t *testing.T) {
 		{ImportPath: mod + "internal/adapters/sqlite", Imports: []string{mod + "internal/ports", mod + "internal/domain/records"}},
 		{ImportPath: mod + "internal/domain/records", Imports: []string{"fmt", mod + "internal/domain/errors"}},
 		{ImportPath: mod + "internal/cli", Imports: []string{mod + "internal/config"}},
-		{ImportPath: "cmd/jjukkumi", Imports: []string{mod + "internal/cli"}},
+		{ImportPath: "cmd/agent-dispatch", Imports: []string{mod + "internal/cli"}},
 	})
 	if len(violations) != 0 {
 		t.Fatalf("expected no violations, got %v", violations)

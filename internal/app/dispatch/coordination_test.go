@@ -7,10 +7,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
-	"github.com/rootkernel/jjukkumi/internal/domain/state"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/state"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // E3-T4 acceptance coverage: one active dispatch per route under
@@ -50,7 +50,7 @@ func coordLineage(t *testing.T, n int, disposition string) ports.Lineage {
 	now := "2026-08-20T01:00:00Z"
 	return ports.Lineage{
 		Observation: ports.ObservationInput{
-			ObservationID: fmt.Sprintf("obs-%d", n), SchemaVersion: "jjukkumi.source-observation/v1",
+			ObservationID: fmt.Sprintf("obs-%d", n), SchemaVersion: "agent-dispatch.source-observation/v1",
 			SourceType: "watchman", SourceID: "watchman-main", TriggerName: "trig",
 			ResourceID: "vault-main", ObservedAt: now, ReceivedAt: now,
 			RawPayloadDigest: fmt.Sprintf("sha256:%064d", n), IngestStatus: "accepted",

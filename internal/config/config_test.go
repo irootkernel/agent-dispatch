@@ -39,11 +39,11 @@ func TestParseGoldenWithReplacedPaths(t *testing.T) {
 	// Acceptance: the example validates after placeholder paths are
 	// replaced with real local ones.
 	root := t.TempDir()
-	state := filepath.Join(filepath.Dir(root), "jjukkumi-state")
+	state := filepath.Join(filepath.Dir(root), "agent-dispatch-state")
 	text := string(goldenExample(t))
 	text = strings.ReplaceAll(text, "/Users/example/Documents/Obsidian/MainVault", root)
-	text = strings.ReplaceAll(text, "/Users/example/Library/Application Support/JJUKKUMI", state)
-	text = strings.ReplaceAll(text, "/Users/example/.config/jjukkumi/hermes-capabilities.json", filepath.Join(state, "caps.json"))
+	text = strings.ReplaceAll(text, "/Users/example/Library/Application Support/Agent Dispatch", state)
+	text = strings.ReplaceAll(text, "/Users/example/.config/agent-dispatch/hermes-capabilities.json", filepath.Join(state, "caps.json"))
 	if _, err := Parse([]byte(text)); err != nil {
 		t.Fatalf("replaced-path example must validate: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestUnknownReferencesFail(t *testing.T) {
 
 func TestStateDirInsideVaultWarns(t *testing.T) {
 	// Spec §3: "Validation warns if it is."
-	text := strings.Replace(string(minimalYAML(t)), "state_dir: /var/lib/jjukkumi", "state_dir: /srv/vault/state", 1)
+	text := strings.Replace(string(minimalYAML(t)), "state_dir: /var/lib/agent-dispatch", "state_dir: /srv/vault/state", 1)
 	cfg, err := Parse([]byte(text))
 	if err != nil {
 		t.Fatalf("state dir inside the vault must warn, not fail: %v", err)
@@ -136,7 +136,7 @@ func TestRouteRevisionDeterministicAndSensitive(t *testing.T) {
 	}
 
 	// Excluded fields: state directory and log level stay out.
-	excluded := strings.Replace(string(minimalYAML(t)), "state_dir: /var/lib/jjukkumi", "state_dir: /var/lib/other", 1)
+	excluded := strings.Replace(string(minimalYAML(t)), "state_dir: /var/lib/agent-dispatch", "state_dir: /var/lib/other", 1)
 	excluded = strings.Replace(excluded, "log_paths: relative", "log_paths: full", 1)
 	cfg4, err := Parse([]byte(excluded))
 	if err != nil {
@@ -203,7 +203,7 @@ func TestWriteExampleRefusesOverwrite(t *testing.T) {
 }
 
 func TestParseSecretRefForms(t *testing.T) {
-	ok := []string{"env:HOME", "env:_PRIVATE_1", "file:/etc/jjukkumi/token", "keychain:jjukkumi-webhook", "fd:3"}
+	ok := []string{"env:HOME", "env:_PRIVATE_1", "file:/etc/agent-dispatch/token", "keychain:agent-dispatch-webhook", "fd:3"}
 	for _, ref := range ok {
 		if _, err := ParseSecretRef(ref); err != nil {
 			t.Errorf("%q must parse: %v", ref, err)
@@ -215,8 +215,8 @@ func TestParseSecretRefForms(t *testing.T) {
 			t.Errorf("%q must fail closed", ref)
 		}
 	}
-	sr, err := ParseSecretRef("file:/etc/jjukkumi/token")
-	if err != nil || sr.Redacted() != "file:/etc/jjukkumi/token" || sr.Kind != RefFile || sr.Path != "/etc/jjukkumi/token" {
+	sr, err := ParseSecretRef("file:/etc/agent-dispatch/token")
+	if err != nil || sr.Redacted() != "file:/etc/agent-dispatch/token" || sr.Kind != RefFile || sr.Path != "/etc/agent-dispatch/token" {
 		t.Errorf("unexpected parse result: %+v %v", sr, err)
 	}
 }
@@ -228,7 +228,7 @@ func minimalYAML(t *testing.T) []byte {
 	return []byte(`version: 1
 instance:
   id: test-instance
-  state_dir: /var/lib/jjukkumi
+  state_dir: /var/lib/agent-dispatch
   log_paths: relative
 resources:
   vault-main:
@@ -240,9 +240,9 @@ resources:
 targets:
   hermes-kanban-main:
     type: hermes-kanban
-    board: jjukkumi
+    board: agent-dispatch
     executable: hermes
-    capability_report: /etc/jjukkumi/caps.json
+    capability_report: /etc/agent-dispatch/caps.json
     required_capabilities:
       - durable_acceptance
       - submit_idempotency_key
@@ -259,7 +259,7 @@ routes:
       type: watchman-trigger
       source_id: vault-main-watchman
       resource: vault-main
-      trigger_name: jjukkumi.r1.abc123
+      trigger_name: agent-dispatch.r1.abc123
       include:
         - "docs/*.md"
         - "**/*.md"
@@ -375,14 +375,14 @@ func TestResolvePathPrecedence(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	t.Setenv("JJUKKUMI_CONFIG", envPath)
+	t.Setenv("AGENT_DISPATCH_CONFIG", envPath)
 	if got, ok := ResolvePath("", func() string { return def }); got != envPath || !ok {
 		t.Errorf("env precedence: %q %v", got, ok)
 	}
 	if got, ok := ResolvePath(explicit, func() string { return def }); got != explicit || !ok {
 		t.Errorf("explicit precedence: %q %v", got, ok)
 	}
-	t.Setenv("JJUKKUMI_CONFIG", "")
+	t.Setenv("AGENT_DISPATCH_CONFIG", "")
 	if got, ok := ResolvePath("", func() string { return def }); got != def || !ok {
 		t.Errorf("default precedence: %q %v", got, ok)
 	}

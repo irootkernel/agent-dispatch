@@ -29,7 +29,7 @@ func newStubHermes(t *testing.T, script string) string {
 // allowlisted environment (SEC-004): a poisoned variable outside the
 // allowlist never reaches Hermes.
 func TestRunnerEnvironmentAllowlisted(t *testing.T) {
-	t.Setenv("JJUKKUMI_SECRET_SHOULD_NOT_LEAK", "sesame")
+	t.Setenv("AGENT_DISPATCH_SECRET_SHOULD_NOT_LEAK", "sesame")
 	bin := newStubHermes(t, `env | sort`)
 	r := &runner{executable: bin, limits: ProcessLimits{
 		SubmitTimeout: 5 * time.Second, LookupTimeout: 5 * time.Second,

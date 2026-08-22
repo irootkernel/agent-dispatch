@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
-	"github.com/rootkernel/jjukkumi/internal/config"
-	"github.com/rootkernel/jjukkumi/internal/platformpaths"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/platformpaths"
 )
 
 // TestG5AC501WebhookExplicitRoute covers AC-501 end to end through the
@@ -164,8 +164,8 @@ func TestG5AC504CleanHostInstallDispatchScheduleUninstall(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("XDG_STATE_HOME", "")
-	t.Setenv("JJUKKUMI_CONFIG", "")
-	t.Setenv("JJUKKUMI_STATE_DIR", "")
+	t.Setenv("AGENT_DISPATCH_CONFIG", "")
+	t.Setenv("AGENT_DISPATCH_STATE_DIR", "")
 
 	var out, errb bytes.Buffer
 	if code := Run([]string{"init", "--resource-root", filepath.Join(home, "Vault")}, &out, &errb); code != 0 {
@@ -182,7 +182,7 @@ func TestG5AC504CleanHostInstallDispatchScheduleUninstall(t *testing.T) {
 	os.MkdirAll(filepath.Join(home, "Vault", "Inbox"), 0o755)
 	os.WriteFile(filepath.Join(home, "Vault", "Inbox", "note.md"), []byte("x"), 0o644)
 	setPlanEnv(t, filepath.Join(home, "Vault"), false)
-	t.Setenv("WATCHMAN_TRIGGER", "jjukkumi.wiki-maintenance.4f8c21")
+	t.Setenv("WATCHMAN_TRIGGER", "agent-dispatch.wiki-maintenance.4f8c21")
 	out.Reset()
 	errb.Reset()
 	var code int
@@ -273,8 +273,8 @@ func TestG5AC506ReleaseArtifactsPresent(t *testing.T) {
 		t.Fatal(err)
 	}
 	cmd := exec.Command("go", "build", "-trimpath",
-		"-ldflags", "-X github.com/rootkernel/jjukkumi/internal/version.Version=v0.1.0",
-		"-o", filepath.Join(dir, "jjukkumi"), "./cmd/jjukkumi")
+		"-ldflags", "-X github.com/irootkernel/agent-dispatch/internal/version.Version=v0.1.0",
+		"-o", filepath.Join(dir, "agent-dispatch"), "./cmd/agent-dispatch")
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 	out, err := cmd.CombinedOutput()
@@ -282,7 +282,7 @@ func TestG5AC506ReleaseArtifactsPresent(t *testing.T) {
 		t.Fatalf("AC-506 release build failed: %v: %s", err, out)
 	}
 	var bout, berr bytes.Buffer
-	bin := filepath.Join(dir, "jjukkumi")
+	bin := filepath.Join(dir, "agent-dispatch")
 	code := runExternal(t, bin, []string{"version", "--output", "json"}, &bout, &berr)
 	if code != 0 {
 		t.Fatalf("AC-506 version failed: %s", berr.String())
@@ -303,7 +303,7 @@ func TestG5AC506ReleaseArtifactsPresent(t *testing.T) {
 	for _, rel := range []string{
 		"docs/schemas/config.schema.json",
 		"docs/examples/config.yaml",
-		"docs/skills/jjukkumi-wiki-maintenance/SKILL.md",
+		"docs/skills/agent-dispatch-wiki-maintenance/SKILL.md",
 		"docs/README.md",
 		"docs/CHANGELOG.md",
 		"docs/RELEASE-NOTES-v0.1.0.md",

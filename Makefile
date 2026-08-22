@@ -2,8 +2,8 @@
 # Every check the repository defines is reachable from `make verify`.
 
 GO      ?= go
-BINARY  := bin/jjukkumi
-PKG     := github.com/rootkernel/jjukkumi
+BINARY  := bin/agent-dispatch
+PKG     := github.com/irootkernel/agent-dispatch
 VERSION ?= 0.1.0-dev
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILDTIME ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -17,7 +17,7 @@ LDFLAGS := -X $(PKG)/internal/version.Version=$(VERSION) \
 all: build
 
 build:
-	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/jjukkumi
+	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/agent-dispatch
 
 test:
 	$(GO) test ./...
@@ -88,12 +88,12 @@ release:
 	tag=$$(printf '%s' "$$os_arch" | tr / -); \
 	CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch $(GO) build -trimpath \
 	  -ldflags "-X $(PKG)/internal/version.Version=$(VERSION) -X $(PKG)/internal/version.Commit=$(RELEASE_COMMIT) -X $(PKG)/internal/version.BuildTime=$(COMMIT_DATE)" \
-	  -o $(DIST_DIR)/jjukkumi-$(VERSION)-$$tag ./cmd/jjukkumi || exit 1; \
+	  -o $(DIST_DIR)/agent-dispatch-$(VERSION)-$$tag ./cmd/agent-dispatch || exit 1; \
 	done
 	@cd $(DIST_DIR) && if command -v shasum >/dev/null 2>&1; then \
-	  shasum -a 256 jjukkumi-$(VERSION)-* | LC_ALL=C sort > SHA256SUMS; \
+	  shasum -a 256 agent-dispatch-$(VERSION)-* | LC_ALL=C sort > SHA256SUMS; \
 	else \
-	  sha256sum jjukkumi-$(VERSION)-* | LC_ALL=C sort > SHA256SUMS; \
+	  sha256sum agent-dispatch-$(VERSION)-* | LC_ALL=C sort > SHA256SUMS; \
 	fi
 	@cat $(DIST_DIR)/SHA256SUMS
 	@echo "release: artifacts in $(DIST_DIR) for $(VERSION)"
@@ -105,12 +105,12 @@ release:
 schedule-check:
 	@miss=0; \
 	if command -v plutil >/dev/null 2>&1; then \
-	  plutil -lint docs/examples/scripts/jjukkumi-reconcile.launchd.plist.example || exit 1; \
+	  plutil -lint docs/examples/scripts/agent-dispatch-reconcile.launchd.plist.example || exit 1; \
 	else miss=1; fi; \
 	if command -v systemd-analyze >/dev/null 2>&1; then \
-	  systemd-analyze verify docs/examples/scripts/jjukkumi-reconcile.service.example docs/examples/scripts/jjukkumi-reconcile.timer.example || exit 1; \
+	  systemd-analyze verify docs/examples/scripts/agent-dispatch-reconcile.service.example docs/examples/scripts/agent-dispatch-reconcile.timer.example || exit 1; \
 	else miss=1; fi; \
-	sh -n docs/examples/scripts/jjukkumi-uninstall.sh.example || exit 1; \
+	sh -n docs/examples/scripts/agent-dispatch-uninstall.sh.example || exit 1; \
 	if [ $$miss -eq 1 ]; then echo "schedule-check: platform validator absent; validated the shell script only (CI matrix covers the other platform)"; fi; \
 	echo "schedule-check: done"
 

@@ -35,7 +35,7 @@ func TestVersionJSONEnvelope(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &env); err != nil {
 		t.Fatalf("stdout is not valid JSON (%v): %s", err, out.String())
 	}
-	if env.APIVersion != "jjukkumi.cli/v1" {
+	if env.APIVersion != "agent-dispatch.cli/v1" {
 		t.Errorf("api_version = %q", env.APIVersion)
 	}
 	if env.Command != "version" || !env.OK {
@@ -64,7 +64,7 @@ func TestVersionHumanOutputIsNotJSON(t *testing.T) {
 	if json.Valid(out.Bytes()) {
 		t.Errorf("human output must not be a JSON document: %q", out.String())
 	}
-	if !strings.Contains(out.String(), "jjukkumi") {
+	if !strings.Contains(out.String(), "agent-dispatch") {
 		t.Errorf("human output missing program name: %q", out.String())
 	}
 }
@@ -98,8 +98,8 @@ func TestEveryRegisteredCommandIsImplemented(t *testing.T) {
 			t.Setenv("HOME", t.TempDir())
 			t.Setenv("XDG_CONFIG_HOME", "")
 			t.Setenv("XDG_STATE_HOME", "")
-			t.Setenv("JJUKKUMI_CONFIG", "")
-			t.Setenv("JJUKKUMI_STATE_DIR", "")
+			t.Setenv("AGENT_DISPATCH_CONFIG", "")
+			t.Setenv("AGENT_DISPATCH_STATE_DIR", "")
 			var out, errb bytes.Buffer
 			code := Run([]string{name}, &out, &errb)
 			_ = out

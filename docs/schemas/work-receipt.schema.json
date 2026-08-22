@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:jjukkumi:schema:work-receipt:v1",
-  "title": "JJUKKUMI WorkReceipt v1",
+  "$id": "urn:agent-dispatch:schema:work-receipt:v1",
+  "title": "Agent Dispatch WorkReceipt v1",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -15,7 +15,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "jjukkumi.work-receipt/v1"
+      "const": "agent-dispatch.work-receipt/v1"
     },
     "dispatch_id": {
       "type": "string"

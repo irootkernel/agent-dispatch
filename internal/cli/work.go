@@ -7,9 +7,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/app/workreceipt"
-	"github.com/rootkernel/jjukkumi/internal/config"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/app/workreceipt"
+	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // runWork implements `work begin|complete|fail` (cli-spec §7, FBK-005):

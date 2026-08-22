@@ -10,7 +10,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // Store is the durable surface the hold service needs.

@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/rootkernel/jjukkumi/internal/domain/fingerprint"
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/domain/fingerprint"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // RequestContractVersion is the task request contract the runtime builds
@@ -137,7 +137,7 @@ var WikiAcceptanceCriteria = []string{
 	"Re-evaluate indexing, referencing, and grouping affected by the latest state.",
 	"Respect Hermes permissions, approvals, and protected-path policy.",
 	"Do not assume that a manifest path still exists at execution time.",
-	"Report a bounded JJUKKUMI work receipt when the companion CLI is available.",
+	"Report a bounded Agent Dispatch work receipt when the companion CLI is available.",
 }
 
 // ManifestDigest derives the manifest digest recorded on the intent: the

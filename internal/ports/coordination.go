@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/rootkernel/jjukkumi/internal/domain/state"
+	"github.com/irootkernel/agent-dispatch/internal/domain/state"
 )
 
 // Route coordination surface (E3-T4, ADR-0009): one active task per

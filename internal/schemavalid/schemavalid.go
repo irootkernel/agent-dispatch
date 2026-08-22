@@ -28,7 +28,7 @@ var reportTargets = []struct {
 	Path   string
 	Schema string
 }{
-	{"integrations/hermes-capability-report.json", "urn:jjukkumi:schema:hermes-capabilities:v1"},
+	{"integrations/hermes-capability-report.json", "urn:agent-dispatch:schema:hermes-capabilities:v1"},
 }
 
 // Failure describes one invalid document or schema.
@@ -202,14 +202,14 @@ func Validate(root string) ([]string, []Failure, error) {
 	if err := yaml.Unmarshal(raw, &configDoc); err != nil {
 		failures = append(failures, Failure{"examples/config.yaml", err.Error()})
 	} else {
-		sch := compiled["urn:jjukkumi:schema:config:v1"]
+		sch := compiled["urn:agent-dispatch:schema:config:v1"]
 		if sch == nil {
-			return nil, nil, fmt.Errorf("config schema urn:jjukkumi:schema:config:v1 not found")
+			return nil, nil, fmt.Errorf("config schema urn:agent-dispatch:schema:config:v1 not found")
 		}
 		if err := sch.Validate(configDoc); err != nil {
 			failures = append(failures, Failure{"examples/config.yaml", err.Error()})
 		} else {
-			lines = append(lines, "ok   examples/config.yaml (against urn:jjukkumi:schema:config:v1)")
+			lines = append(lines, "ok   examples/config.yaml (against urn:agent-dispatch:schema:config:v1)")
 		}
 	}
 	return lines, failures, nil

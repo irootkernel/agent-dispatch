@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 )
 
 // fixtureDir points at the frozen E0-T5 corpus so parser assumptions stay
@@ -269,7 +269,7 @@ func TestReadInputEmptyStdinFails(t *testing.T) {
 
 func TestParseEnvRequiredAndOptional(t *testing.T) {
 	base := map[string]string{
-		"WATCHMAN_TRIGGER": "jjukkumi-e0t5",
+		"WATCHMAN_TRIGGER": "agent-dispatch-e0t5",
 		"WATCHMAN_ROOT":    "/vault",
 		"WATCHMAN_CLOCK":   "c:1:2:3:4",
 	}

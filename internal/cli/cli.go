@@ -1,4 +1,4 @@
-// Package cli implements the jjukkumi command line surface and its JSON
+// Package cli implements the agent-dispatch command line surface and its JSON
 // envelope (CLI-001, CLI-002): successful machine-consumed output is
 // structured JSON on standard output, human output never mixes with it,
 // and the structured error envelope and all diagnostics go to standard
@@ -16,13 +16,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/config"
-	"github.com/rootkernel/jjukkumi/internal/observability"
-	"github.com/rootkernel/jjukkumi/internal/version"
+	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/observability"
+	"github.com/irootkernel/agent-dispatch/internal/version"
 )
 
 // APIVersion identifies the outer envelope contract (cli-spec §12).
-const APIVersion = "jjukkumi.cli/v1"
+const APIVersion = "agent-dispatch.cli/v1"
 
 // Envelope is the outer JSON structure of every successful command.
 type Envelope struct {
@@ -85,7 +85,7 @@ var knownCommands = map[string]bool{
 // v0.1 command tree; an unrecognized name is command_unknown.
 func Run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		writeError(stderr, "", "command_unknown", "usage", "usage: jjukkumi <command> [flags]; run 'jjukkumi version --output json'")
+		writeError(stderr, "", "command_unknown", "usage", "usage: agent-dispatch <command> [flags]; run 'agent-dispatch version --output json'")
 		return 2
 	}
 	// One process invocation carries one set of global options; the
@@ -141,7 +141,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 				fmt.Sprintf("command %q is not implemented in this build", args[0]))
 		} else {
 			writeError(stderr, args[0], "command_unknown", "usage",
-				fmt.Sprintf("unknown command %q; run 'jjukkumi version --output json'", args[0]))
+				fmt.Sprintf("unknown command %q; run 'agent-dispatch version --output json'", args[0]))
 		}
 		return 2
 	}
@@ -244,7 +244,7 @@ func runVersion(args []string, stdout, stderr io.Writer) int {
 			AdapterVersions: version.AdapterVersions(),
 		})
 	}
-	fmt.Fprintf(stdout, "jjukkumi %s (commit %s, built %s)\n", version.Version, version.Commit, version.BuildTime)
+	fmt.Fprintf(stdout, "agent-dispatch %s (commit %s, built %s)\n", version.Version, version.Commit, version.BuildTime)
 	fmt.Fprintf(stdout, "config version: %s, schema range: %s\n", version.ConfigVersion, version.SchemaRange)
 	names := make([]string, 0, len(version.AdapterVersions()))
 	for name := range version.AdapterVersions() {

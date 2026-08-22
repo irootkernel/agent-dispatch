@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
-	"github.com/rootkernel/jjukkumi/internal/ports"
-	"github.com/rootkernel/jjukkumi/internal/testsupport/fakesink"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/testsupport/fakesink"
 )
 
 func openStore(t *testing.T) *sqlite.Store {
@@ -41,7 +41,7 @@ func seedUnknown(t *testing.T, s *sqlite.Store, dispatchID string) string {
 	t.Helper()
 	lin := ports.Lineage{
 		Observation: ports.ObservationInput{
-			ObservationID: "obs-1", SchemaVersion: "jjukkumi.source-observation/v1", SourceType: "watchman",
+			ObservationID: "obs-1", SchemaVersion: "agent-dispatch.source-observation/v1", SourceType: "watchman",
 			SourceID: "watchman-main", TriggerName: "trig", ResourceID: "vault-main",
 			ObservedAt: "2026-08-20T01:00:00Z", ReceivedAt: "2026-08-20T01:00:00Z",
 			RawPayloadDigest: "sha256:" + rep('a'), IngestStatus: "accepted",
@@ -59,9 +59,9 @@ func seedUnknown(t *testing.T, s *sqlite.Store, dispatchID string) string {
 		Intent: ports.IntentInput{
 			DispatchID: dispatchID, DecisionID: "decision-1", RouteID: "wiki-maintenance",
 			RouteRevision: "route-rev-1", TargetID: "hermes-kanban-main", TargetType: "hermes_kanban",
-			ResourceID: "vault-main", Generation: 1, IdempotencyKey: "jjukkumi:v1:sha256:" + rep('1'),
+			ResourceID: "vault-main", Generation: 1, IdempotencyKey: "agent-dispatch:v1:sha256:" + rep('1'),
 			ContentFingerprint: "sha256:" + rep('c'), ManifestDigest: "sha256:" + rep('d'),
-			RequestVersion: "jjukkumi.hermes-task/v1", RequestJSON: "{}", CreatedAt: "2026-08-20T01:00:00Z",
+			RequestVersion: "agent-dispatch.hermes-task/v1", RequestJSON: "{}", CreatedAt: "2026-08-20T01:00:00Z",
 		},
 	}
 	if err := s.CommitLineage(context.Background(), lin); err != nil {

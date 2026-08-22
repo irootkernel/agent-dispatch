@@ -9,18 +9,18 @@ import (
 	"sort"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/hermeskanban"
-	"github.com/rootkernel/jjukkumi/internal/adapters/hermeswebhook"
-	"github.com/rootkernel/jjukkumi/internal/adapters/secretresolver"
-	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
-	"github.com/rootkernel/jjukkumi/internal/adapters/watchman"
-	"github.com/rootkernel/jjukkumi/internal/app/dispatch"
-	"github.com/rootkernel/jjukkumi/internal/app/doctor"
-	"github.com/rootkernel/jjukkumi/internal/config"
-	"github.com/rootkernel/jjukkumi/internal/observability"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/hermeskanban"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/hermeswebhook"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/secretresolver"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
+	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
+	"github.com/irootkernel/agent-dispatch/internal/app/doctor"
+	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/observability"
 )
 
-// runStatus implements `jjukkumi status` (cli-spec §10): route
+// runStatus implements `agent-dispatch status` (cli-spec §10): route
 // active/dirty state, queue counts, unresolved delivery, quarantine,
 // last reconciliation, and the target capability summary
 // (observability-and-operations §5 counters).
@@ -142,7 +142,7 @@ func nilIfEmpty(s string) any {
 	return s
 }
 
-// runDoctor implements `jjukkumi doctor [--probe-targets]
+// runDoctor implements `agent-dispatch doctor [--probe-targets]
 // [--integrity full]` (cli-spec §10, OPS-005): one findings examination
 // over configuration, store health, route runtime state, and the
 // external integrations. The actionable findings are the stdout result;

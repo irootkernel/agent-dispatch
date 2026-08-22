@@ -4,7 +4,7 @@ Accepted ADRs are normative below `required-spec.md` and above general architect
 
 | ADR | Decision | Status |
 |---|---|---|
-| [0001](0001-event-ingress-activation-gateway.md) | JJUKKUMI is an event-ingress and activation gateway | Accepted |
+| [0001](0001-event-ingress-activation-gateway.md) | Agent Dispatch is an event-ingress and activation gateway | Accepted |
 | [0002](0002-hermes-authoritative-public-interface-only.md) | Hermes is authoritative; public interfaces only | Accepted |
 | [0003](0003-watchman-one-shot-first.md) | Watchman one-shot trigger first; no v0.1 daemon | Accepted |
 | [0004](0004-go-yaml-sqlite-stack.md) | Go, YAML, and SQLite stack | Accepted |

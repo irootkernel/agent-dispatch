@@ -30,7 +30,7 @@ A dry-run plan contains:
 
 ```json
 {
-  "schema_version": "jjukkumi.dispatch-plan/v1",
+  "schema_version": "agent-dispatch.dispatch-plan/v1",
   "route": {"id": "wiki-maintenance", "revision": "..."},
   "resource_id": "vault-main",
   "changes": [],

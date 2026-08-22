@@ -221,7 +221,7 @@ Centralize defaults and resolved limits. Enforce at ingress and again before tar
 
 ## 17. Review Checklist for Every Task
 
-- Does this code assign semantic authority to JJUKKUMI?
+- Does this code assign semantic authority to Agent Dispatch?
 - Can a payload modify target/profile/skills/workspace?
 - Is an external side effect preceded by a committed intent?
 - Is ambiguity represented as unknown?

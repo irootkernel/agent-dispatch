@@ -2,7 +2,7 @@
 
 ## 1. Problem
 
-Hermes may edit the same Obsidian vault that activated it. Those edits are observed by Watchman and can recursively activate more work. At the same time, a human may edit the vault during the Hermes run. JJUKKUMI must limit recursion without discarding human work.
+Hermes may edit the same Obsidian vault that activated it. Those edits are observed by Watchman and can recursively activate more work. At the same time, a human may edit the vault during the Hermes run. Agent Dispatch must limit recursion without discarding human work.
 
 ## 2. Core Strategy
 
@@ -20,7 +20,7 @@ Hermes may edit the same Obsidian vault that activated it. Those edits are obser
 sequenceDiagram
     participant U as User
     participant W as Watchman
-    participant J as JJUKKUMI
+    participant J as Agent Dispatch
     participant H as Hermes
 
     U->>W: edits note A
@@ -81,7 +81,7 @@ When Hermes does not use the companion skill:
 - changes are retained;
 - completion may be learned through public Hermes status if supported;
 - self-change suppression is unavailable;
-- JJUKKUMI creates at most one conservative follow-up if dirty.
+- Agent Dispatch creates at most one conservative follow-up if dirty.
 
 This may produce one redundant maintenance task, which is preferred over silent loss.
 
@@ -89,7 +89,7 @@ This may produce one redundant maintenance task, which is preferred over silent 
 
 Completion evidence can be, in descending preference:
 
-1. validated `jjukkumi work complete` receipt;
+1. validated `agent-dispatch work complete` receipt;
 2. public Hermes execution status plus an optional result receipt;
 3. explicit operator resolution;
 4. timeout-based uncertainty, which does not imply completion.

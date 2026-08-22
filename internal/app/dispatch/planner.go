@@ -11,13 +11,13 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/rootkernel/jjukkumi/internal/app/ingest"
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/app/ingest"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 )
 
 // PlanSchemaVersion is the dispatch plan contract version
 // (docs/schemas/dispatch-plan.schema.json).
-const PlanSchemaVersion = "jjukkumi.dispatch-plan/v1"
+const PlanSchemaVersion = "agent-dispatch.dispatch-plan/v1"
 
 // Reason codes (POL-006, machine-readable).
 const (

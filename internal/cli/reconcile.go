@@ -5,14 +5,14 @@ import (
 	"io"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/localfs"
-	"github.com/rootkernel/jjukkumi/internal/app/dispatch"
-	"github.com/rootkernel/jjukkumi/internal/config"
-	"github.com/rootkernel/jjukkumi/internal/domain/fingerprint"
-	"github.com/rootkernel/jjukkumi/internal/domain/ids"
-	"github.com/rootkernel/jjukkumi/internal/domain/policy"
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/localfs"
+	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
+	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/domain/fingerprint"
+	"github.com/irootkernel/agent-dispatch/internal/domain/ids"
+	"github.com/irootkernel/agent-dispatch/internal/domain/policy"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // reconcileArtifacts carries the configuration-derived facts one full

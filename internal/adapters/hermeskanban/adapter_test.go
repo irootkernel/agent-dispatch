@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // stubVersionHermes emits the frozen version first line for --version.
@@ -73,7 +73,7 @@ func limitedReport(t *testing.T, resourceMutex bool) string {
 		mutex = "true"
 	}
 	body := `{
-	  "schema_version": "jjukkumi.hermes-capabilities/v1",
+	  "schema_version": "agent-dispatch.hermes-capabilities/v1",
 	  "probed_at": "2026-08-19T21:25:24+09:00",
 	  "hermes_version": "0.19.1 (2026.7.30)",
 	  "interface": "public_cli",
@@ -119,7 +119,7 @@ func TestProbeReportFreshness(t *testing.T) {
 	bin := stubVersionHermes(t, "Hermes Agent v0.19.1 (2026.7.30)")
 	other := filepath.Join(t.TempDir(), "report.json")
 	body := `{
-	  "schema_version": "jjukkumi.hermes-capabilities/v1",
+	  "schema_version": "agent-dispatch.hermes-capabilities/v1",
 	  "probed_at": "2026-08-19T21:25:24+09:00",
 	  "hermes_version": "0.18.0 (2026.6.01)",
 	  "interface": "public_cli",

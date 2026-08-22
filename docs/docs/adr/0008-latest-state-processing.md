@@ -9,7 +9,7 @@ A Hermes task may start after more vault changes occur. Persisting full note sna
 
 ## Decision
 
-The change manifest is activation evidence. Hermes processes the current vault state at execution time. JJUKKUMI does not preserve full historical note content by default.
+The change manifest is activation evidence. Hermes processes the current vault state at execution time. Agent Dispatch does not preserve full historical note content by default.
 
 ## Consequences
 

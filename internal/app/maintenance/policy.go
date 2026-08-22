@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/config"
 )
 
 // Default horizons (OPS-003).

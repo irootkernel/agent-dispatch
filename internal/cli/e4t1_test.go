@@ -36,7 +36,7 @@ resources:
 targets:
   hermes-main:
     type: hermes-kanban
-    board: jjukkumi
+    board: agent-dispatch
     executable: ` + executable + `
     capability_report: ` + report + `
     required_capabilities: [` + required + `]
@@ -50,7 +50,7 @@ routes:
       type: watchman-trigger
       source_id: vault-main-watchman
       resource: vault-main
-      trigger_name: jjukkumi.wiki.test
+      trigger_name: agent-dispatch.wiki.test
       include: ["**/*.md"]
       exclude: [".obsidian/workspace*.json"]
     batching:
@@ -98,7 +98,7 @@ func TestConfigValidateProbeTargetsAvailable(t *testing.T) {
 	dir := t.TempDir()
 	bin := e4t1StubHermes(t, dir, "Hermes Agent v0.19.1 (2026.7.30)")
 	configPath := e4t1ProbeConfig(t, dir, bin, "../../docs/integrations/hermes-capability-report.json", "durable_acceptance, submit_idempotency_key")
-	t.Setenv("JJUKKUMI_STATE_DIR", dir)
+	t.Setenv("AGENT_DISPATCH_STATE_DIR", dir)
 	var out, errb bytes.Buffer
 	code := Run([]string{"config", "validate", "--probe-targets", "--config", configPath}, &out, &errb)
 	if code != 0 {
@@ -133,12 +133,12 @@ func TestConfigValidateProbeTargetsCapabilityMismatch(t *testing.T) {
 	bin := e4t1StubHermes(t, dir, "Hermes Agent v0.19.1 (2026.7.30)")
 	// A report that honestly records no mutex.
 	limited := filepath.Join(dir, "limited.json")
-	body := `{"schema_version":"jjukkumi.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":true,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":false,"execution_status":true,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
+	body := `{"schema_version":"agent-dispatch.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":true,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":false,"execution_status":true,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
 	if err := os.WriteFile(limited, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	configPath := e4t1ProbeConfig(t, dir, bin, limited, "durable_acceptance, resource_mutex")
-	t.Setenv("JJUKKUMI_STATE_DIR", dir)
+	t.Setenv("AGENT_DISPATCH_STATE_DIR", dir)
 	var out, errb bytes.Buffer
 	code := Run([]string{"config", "validate", "--probe-targets", "--config", configPath}, &out, &errb)
 	if code != 3 {
@@ -166,7 +166,7 @@ func TestConfigValidateProbeTargetsVersionUnsupported(t *testing.T) {
 	dir := t.TempDir()
 	bin := e4t1StubHermes(t, dir, "Hermes Agent v0.20.0 (2026.8.10)")
 	configPath := e4t1ProbeConfig(t, dir, bin, "../../docs/integrations/hermes-capability-report.json", "durable_acceptance")
-	t.Setenv("JJUKKUMI_STATE_DIR", dir)
+	t.Setenv("AGENT_DISPATCH_STATE_DIR", dir)
 	var out, errb bytes.Buffer
 	code := Run([]string{"config", "validate", "--probe-targets", "--config", configPath}, &out, &errb)
 	if code != 0 {
@@ -188,7 +188,7 @@ func TestConfigValidateProbeTargetsVersionUnsupported(t *testing.T) {
 func TestConfigValidateProbeTargetsUnavailable(t *testing.T) {
 	dir := t.TempDir()
 	configPath := e4t1ProbeConfig(t, dir, filepath.Join(dir, "absent-hermes"), "../../docs/integrations/hermes-capability-report.json", "durable_acceptance")
-	t.Setenv("JJUKKUMI_STATE_DIR", dir)
+	t.Setenv("AGENT_DISPATCH_STATE_DIR", dir)
 	var out, errb bytes.Buffer
 	code := Run([]string{"config", "validate", "--probe-targets", "--config", configPath}, &out, &errb)
 	if code != 0 {
@@ -221,7 +221,7 @@ func TestConfigValidateProbeTargetsConfigErrors(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			configPath := e4t1ProbeConfig(t, dir, bin, c.report, c.required)
-			t.Setenv("JJUKKUMI_STATE_DIR", dir)
+			t.Setenv("AGENT_DISPATCH_STATE_DIR", dir)
 			var out, errb bytes.Buffer
 			code := Run([]string{"config", "validate", "--probe-targets", "--config", configPath}, &out, &errb)
 			if code != 3 {
@@ -259,7 +259,7 @@ func TestConfigValidateProbeTargetsInvalidTimeouts(t *testing.T) {
 			if err := os.WriteFile(configPath, updated, 0o600); err != nil {
 				t.Fatal(err)
 			}
-			t.Setenv("JJUKKUMI_STATE_DIR", dir)
+			t.Setenv("AGENT_DISPATCH_STATE_DIR", dir)
 			var out, errb bytes.Buffer
 			code := Run([]string{"config", "validate", "--probe-targets", "--config", configPath}, &out, &errb)
 			if code != 3 {
@@ -277,7 +277,7 @@ func TestConfigValidateProbeTargetsInvalidTimeouts(t *testing.T) {
 		if err := os.WriteFile(configPath, updated, 0o600); err != nil {
 			t.Fatal(err)
 		}
-		t.Setenv("JJUKKUMI_STATE_DIR", dir)
+		t.Setenv("AGENT_DISPATCH_STATE_DIR", dir)
 		var out, errb bytes.Buffer
 		code := Run([]string{"config", "validate", "--probe-targets", "--config", configPath}, &out, &errb)
 		if code != 0 {
@@ -305,13 +305,13 @@ resources:
 targets:
   a-target:
     type: hermes-kanban
-    board: jjukkumi
+    board: agent-dispatch
     executable: ` + bad + `
     capability_report: ` + frozen + `
     required_capabilities: [durable_acceptance]
   b-target:
     type: hermes-kanban
-    board: jjukkumi
+    board: agent-dispatch
     executable: ` + good + `
     capability_report: ` + frozen + `
     required_capabilities: [durable_acceptance]
@@ -322,7 +322,7 @@ routes:
       type: watchman-trigger
       source_id: vault-main-watchman
       resource: vault-main
-      trigger_name: jjukkumi.wiki.test
+      trigger_name: agent-dispatch.wiki.test
       include: ["**/*.md"]
       exclude: [".obsidian/workspace*.json"]
     batching:
@@ -361,7 +361,7 @@ routes:
 	if err := os.WriteFile(configPath, []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("JJUKKUMI_STATE_DIR", dir)
+	t.Setenv("AGENT_DISPATCH_STATE_DIR", dir)
 	var out, errb bytes.Buffer
 	code := Run([]string{"config", "validate", "--probe-targets", "--config", configPath}, &out, &errb)
 	if code != 0 {

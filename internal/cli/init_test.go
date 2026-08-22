@@ -7,12 +7,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/rootkernel/jjukkumi/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/config"
 )
 
 func TestInitCreatesDisabledExampleAndStateDir(t *testing.T) {
 	dir := t.TempDir()
-	configPath := filepath.Join(dir, "jjukkumi", "config.yaml")
+	configPath := filepath.Join(dir, "agent-dispatch", "config.yaml")
 	stateDir := filepath.Join(dir, "state")
 
 	var out, errb bytes.Buffer
@@ -47,7 +47,7 @@ func TestInitCreatesDisabledExampleAndStateDir(t *testing.T) {
 func TestInitRefusesOverwrite(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.yaml")
-	args := []string{"init", "--config", configPath, "--state-dir", filepath.Join(filepath.Dir(dir), "jjukkumi-state"), "--resource-root", dir}
+	args := []string{"init", "--config", configPath, "--state-dir", filepath.Join(filepath.Dir(dir), "agent-dispatch-state"), "--resource-root", dir}
 	if code := Run(args, &bytes.Buffer{}, &bytes.Buffer{}); code != 0 {
 		t.Fatal("first init must succeed")
 	}

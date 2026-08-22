@@ -10,14 +10,14 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/hermeskanban"
-	"github.com/rootkernel/jjukkumi/internal/adapters/hermeswebhook"
-	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
-	"github.com/rootkernel/jjukkumi/internal/app/dispatch"
-	"github.com/rootkernel/jjukkumi/internal/config"
-	"github.com/rootkernel/jjukkumi/internal/domain/state"
-	"github.com/rootkernel/jjukkumi/internal/platformpaths"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/hermeskanban"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/hermeswebhook"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
+	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/domain/state"
+	"github.com/irootkernel/agent-dispatch/internal/platformpaths"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // StateDBName is the durable database file inside the state directory.
@@ -28,7 +28,7 @@ const StateDBName = "state.db"
 var errConfigurationClass = errors.New("configuration")
 
 // openStateStore resolves the state directory with the shared precedence
-// (config instance.state_dir, then JJUKKUMI_STATE_DIR, then the platform
+// (config instance.state_dir, then AGENT_DISPATCH_STATE_DIR, then the platform
 // default), opens the SQLite store, and applies pending migrations.
 // globalStateDir is the explicit --state-dir override (cli-spec §1),
 // taking precedence over the configured and environment values.

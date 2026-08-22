@@ -1,6 +1,6 @@
-// Package platformpaths resolves jjukkumi's platform-specific default
+// Package platformpaths resolves agent-dispatch's platform-specific default
 // locations (configuration-spec §1, §3): the default configuration path,
-// the default state directory, and the JJUKKUMI_STATE_DIR override. Filesystem
+// the default state directory, and the AGENT_DISPATCH_STATE_DIR override. Filesystem
 // locality policy (SCP-007) is enforced later by the storage adapters; this
 // package only resolves paths.
 package platformpaths
@@ -13,10 +13,10 @@ import (
 )
 
 // AppName is the directory name used for application state and config.
-const AppName = "jjukkumi"
+const AppName = "agent-dispatch"
 
 // DefaultConfigPath returns the platform default configuration file path:
-// $HOME/.config/jjukkumi/config.yaml on both supported platforms. On Linux
+// $HOME/.config/agent-dispatch/config.yaml on both supported platforms. On Linux
 // an absolute XDG_CONFIG_HOME replaces the $HOME/.config prefix; relative
 // values are ignored per the XDG base-directory specification.
 func DefaultConfigPath() string {
@@ -36,15 +36,15 @@ func DefaultConfigPath() string {
 }
 
 // DefaultStateDir returns the platform default state directory:
-// ~/Library/Application Support/JJUKKUMI on macOS and
-// $XDG_STATE_HOME/jjukkumi (or ~/.local/state/jjukkumi) on Linux.
+// ~/Library/Application Support/Agent Dispatch on macOS and
+// $XDG_STATE_HOME/agent-dispatch (or ~/.local/state/agent-dispatch) on Linux.
 func DefaultStateDir() string {
 	if runtime.GOOS == "darwin" {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return tempFallbackDir()
 		}
-		return filepath.Join(home, "Library", "Application Support", "JJUKKUMI")
+		return filepath.Join(home, "Library", "Application Support", "Agent Dispatch")
 	}
 	if runtime.GOOS == "linux" {
 		if xdg := os.Getenv("XDG_STATE_HOME"); filepath.IsAbs(xdg) {
@@ -59,12 +59,12 @@ func DefaultStateDir() string {
 }
 
 // ResolveStateDir applies the state-directory precedence: an explicit
-// override wins, then JJUKKUMI_STATE_DIR, then the platform default.
+// override wins, then AGENT_DISPATCH_STATE_DIR, then the platform default.
 func ResolveStateDir(explicit string) string {
 	if explicit != "" {
 		return explicit
 	}
-	if env := os.Getenv("JJUKKUMI_STATE_DIR"); env != "" {
+	if env := os.Getenv("AGENT_DISPATCH_STATE_DIR"); env != "" {
 		return env
 	}
 	return DefaultStateDir()

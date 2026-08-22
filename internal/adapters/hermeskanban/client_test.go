@@ -117,10 +117,10 @@ func TestClientClassification(t *testing.T) {
 		}
 	})
 	t.Run("unknown board", func(t *testing.T) {
-		bin := newStubHermes(t, `echo "kanban: board 'jjukkumi-no-such-board' does not exist. Create it with a boards create command." >&2; exit 1`)
-		_, err := testClient(bin).List(context.Background(), "jjukkumi-no-such-board", ListOptions{})
+		bin := newStubHermes(t, `echo "kanban: board 'agent-dispatch-no-such-board' does not exist. Create it with a boards create command." >&2; exit 1`)
+		_, err := testClient(bin).List(context.Background(), "agent-dispatch-no-such-board", ListOptions{})
 		var unknown *UnknownBoardError
-		if !errors.As(err, &unknown) || unknown.Board != "jjukkumi-no-such-board" {
+		if !errors.As(err, &unknown) || unknown.Board != "agent-dispatch-no-such-board" {
 			t.Fatalf("frozen unknown-board behavior must classify as UnknownBoardError, got %v", err)
 		}
 	})
@@ -176,8 +176,8 @@ func TestClientCreateTypedRoundTrip(t *testing.T) {
 	}
 	bin := newStubHermes(t, `cat "`+response+`"`)
 	client := testClient(bin)
-	task, err := client.Create(context.Background(), "jjukkumi-probe", CreateOptions{
-		Title:          "JJUKKUMI E0-T4 capability probe 1",
+	task, err := client.Create(context.Background(), "agent-dispatch-probe", CreateOptions{
+		Title:          "Agent Dispatch E0-T4 capability probe 1",
 		Body:           "b",
 		Assignee:       "wiki-maintainer",
 		Skills:         []string{"llm-wiki"},
@@ -185,9 +185,9 @@ func TestClientCreateTypedRoundTrip(t *testing.T) {
 		MutexKey:       "wiki-publish",
 		MaxRuntime:     "30m",
 		MaxRetries:     2,
-		IdempotencyKey: "jjukkumi:v1:sha256:abc",
+		IdempotencyKey: "agent-dispatch:v1:sha256:abc",
 		Priority:       5,
-		CreatedBy:      "jjukkumi",
+		CreatedBy:      "agent-dispatch",
 	})
 	if err != nil {
 		t.Fatalf("typed create round trip: %v", err)
@@ -212,7 +212,7 @@ func TestCreateArgvDocumentedOrder(t *testing.T) {
 		MaxRetries:     2,
 		IdempotencyKey: "KEY",
 		Priority:       3,
-		CreatedBy:      "jjukkumi",
+		CreatedBy:      "agent-dispatch",
 	}.argv("board-1")
 	want := []string{
 		"kanban", "--board", "board-1", "create", "T",
@@ -221,7 +221,7 @@ func TestCreateArgvDocumentedOrder(t *testing.T) {
 		"--workspace", "scratch", "--mutex-key", "M",
 		"--max-runtime", "30m", "--max-retries", "2",
 		"--idempotency-key", "KEY", "--priority", "3",
-		"--created-by", "jjukkumi", "--json",
+		"--created-by", "agent-dispatch", "--json",
 	}
 	if len(argv) != len(want) {
 		t.Fatalf("argv length %d want %d: %v", len(argv), len(want), argv)
@@ -274,7 +274,7 @@ func TestHostileValuesTravelVerbatim(t *testing.T) {
 		Title:          "t; rm -rf /",
 		Body:           "$(echo no)\n`id`\nnewline",
 		Assignee:       "wiki|maintainer & co",
-		IdempotencyKey: "jjukkumi:v1:sha256:*",
+		IdempotencyKey: "agent-dispatch:v1:sha256:*",
 		CreatedBy:      "attacker\"; quoted",
 	}
 	// The stub emits no JSON, so the typed parse fails after the child
@@ -287,7 +287,7 @@ func TestHostileValuesTravelVerbatim(t *testing.T) {
 	got := string(raw)
 	for _, want := range []string{
 		"<t; rm -rf />", "<$(echo no)\n`id`\nnewline>", "<wiki|maintainer & co>",
-		"<jjukkumi:v1:sha256:*>", "<attacker\"; quoted>", "<board x; y>",
+		"<agent-dispatch:v1:sha256:*>", "<attacker\"; quoted>", "<board x; y>",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("verbatim argument %q missing from child argv capture %q", want, got)

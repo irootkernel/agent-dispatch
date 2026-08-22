@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:jjukkumi:schema:dead-letter-record:v1",
-  "title": "JJUKKUMI DeadLetterRecord v1",
+  "$id": "urn:agent-dispatch:schema:dead-letter-record:v1",
+  "title": "Agent Dispatch DeadLetterRecord v1",
   "description": "The inspectable record of one dead-lettered dispatch (DUR-009): automatic progress stopped, the full lineage remains, and only an explicit operator retry, reprocess, rerun, or discard can proceed.",
   "type": "object",
   "additionalProperties": false,
@@ -19,7 +19,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "jjukkumi.dead-letter-record/v1"
+      "const": "agent-dispatch.dead-letter-record/v1"
     },
     "dispatch_id": {
       "type": "string"
@@ -32,7 +32,7 @@
     },
     "idempotency_key": {
       "type": "string",
-      "pattern": "^jjukkumi:v1:sha256:[0-9a-f]{64}$"
+      "pattern": "^agent-dispatch:v1:sha256:[0-9a-f]{64}$"
     },
     "state": {
       "const": "dead_lettered"
@@ -54,7 +54,7 @@
     "attempts": {
       "type": "array",
       "items": {
-        "$ref": "urn:jjukkumi:schema:dispatch-attempt:v1"
+        "$ref": "urn:agent-dispatch:schema:dispatch-attempt:v1"
       }
     },
     "external_ref": {

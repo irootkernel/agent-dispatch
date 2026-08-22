@@ -16,23 +16,23 @@ func TestDefaultConfigPathShape(t *testing.T) {
 		t.Errorf("config file name = %q", filepath.Base(p))
 	}
 	home, _ := os.UserHomeDir()
-	if want := filepath.Join(home, ".config", "jjukkumi", "config.yaml"); p != want {
+	if want := filepath.Join(home, ".config", "agent-dispatch", "config.yaml"); p != want {
 		t.Errorf("default config path = %q, want %q", p, want)
 	}
 }
 
 func TestXDGConfigHomeGating(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "relative/x")
-	if p := DefaultConfigPath(); strings.Contains(p, "relative") || filepath.Base(filepath.Dir(p)) != "jjukkumi" {
+	if p := DefaultConfigPath(); strings.Contains(p, "relative") || filepath.Base(filepath.Dir(p)) != "agent-dispatch" {
 		t.Errorf("relative XDG_CONFIG_HOME must be ignored, got %q", p)
 	}
 	t.Setenv("XDG_CONFIG_HOME", "/abs/cfg")
 	p := DefaultConfigPath()
 	if runtime.GOOS == "linux" {
-		if p != "/abs/cfg/jjukkumi/config.yaml" {
+		if p != "/abs/cfg/agent-dispatch/config.yaml" {
 			t.Errorf("absolute XDG_CONFIG_HOME not honored on linux: %q", p)
 		}
-	} else if p == "/abs/cfg/jjukkumi/config.yaml" {
+	} else if p == "/abs/cfg/agent-dispatch/config.yaml" {
 		t.Errorf("XDG_CONFIG_HOME must not override the platform default on %s", runtime.GOOS)
 	}
 }
@@ -41,10 +41,10 @@ func TestDefaultCapabilityReportPathGating(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "/abs/cfg")
 	p := DefaultCapabilityReportPath()
 	if runtime.GOOS == "linux" {
-		if p != "/abs/cfg/jjukkumi/hermes-capabilities.json" {
+		if p != "/abs/cfg/agent-dispatch/hermes-capabilities.json" {
 			t.Errorf("XDG_CONFIG_HOME not honored on linux: %q", p)
 		}
-	} else if p == "/abs/cfg/jjukkumi/hermes-capabilities.json" {
+	} else if p == "/abs/cfg/agent-dispatch/hermes-capabilities.json" {
 		t.Errorf("XDG_CONFIG_HOME must not override the default on %s", runtime.GOOS)
 	}
 }
@@ -54,7 +54,7 @@ func TestDefaultStateDirShape(t *testing.T) {
 	switch runtime.GOOS {
 	case "darwin":
 		home, _ := os.UserHomeDir()
-		want := filepath.Join(home, "Library", "Application Support", "JJUKKUMI")
+		want := filepath.Join(home, "Library", "Application Support", "Agent Dispatch")
 		if p != want {
 			t.Errorf("darwin state dir = %q, want %q", p, want)
 		}
@@ -66,7 +66,7 @@ func TestDefaultStateDirShape(t *testing.T) {
 }
 
 func TestResolveStateDirPrecedence(t *testing.T) {
-	t.Setenv("JJUKKUMI_STATE_DIR", "/tmp/from-env")
+	t.Setenv("AGENT_DISPATCH_STATE_DIR", "/tmp/from-env")
 	if got := ResolveStateDir(""); got != "/tmp/from-env" {
 		t.Errorf("env override ignored: %q", got)
 	}
@@ -79,12 +79,12 @@ func TestXDGStateHomeGatedToLinux(t *testing.T) {
 	// A relative value must be ignored everywhere; an absolute value only
 	// applies on Linux.
 	t.Setenv("XDG_STATE_HOME", "relative/path")
-	if p := DefaultStateDir(); p == filepath.Join("relative/path", "jjukkumi") {
+	if p := DefaultStateDir(); p == filepath.Join("relative/path", "agent-dispatch") {
 		t.Errorf("relative XDG_STATE_HOME must be ignored, got %q", p)
 	}
 	if runtime.GOOS != "linux" {
 		t.Setenv("XDG_STATE_HOME", "/abs/xdg")
-		if p := DefaultStateDir(); p == "/abs/xdg/jjukkumi" {
+		if p := DefaultStateDir(); p == "/abs/xdg/agent-dispatch" {
 			t.Errorf("XDG_STATE_HOME must not override the platform default on %s", runtime.GOOS)
 		}
 	}
@@ -93,7 +93,7 @@ func TestXDGStateHomeGatedToLinux(t *testing.T) {
 func TestTempFallbackPerUser(t *testing.T) {
 	// When home resolution is impossible the fallback must be per-uid,
 	// never a predictable shared location.
-	if !strings.Contains(tempFallbackDir(), "jjukkumi-") {
+	if !strings.Contains(tempFallbackDir(), "agent-dispatch-") {
 		t.Errorf("fallback dir not per-app: %q", tempFallbackDir())
 	}
 	if !filepath.IsAbs(tempFallbackDir()) {

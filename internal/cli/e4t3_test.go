@@ -10,11 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
-	"github.com/rootkernel/jjukkumi/internal/config"
-	"github.com/rootkernel/jjukkumi/internal/platformpaths"
-	"github.com/rootkernel/jjukkumi/internal/ports"
-	"github.com/rootkernel/jjukkumi/internal/testsupport/stubhermes"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/platformpaths"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/testsupport/stubhermes"
 )
 
 // e4t3RegisterRoute creates the route runtime state row directly (the
@@ -87,7 +87,7 @@ resources:
 targets:
   hermes-main:
     type: hermes-kanban
-    board: jjukkumi-test
+    board: agent-dispatch-test
     executable: ` + stubhermes.Write(t) + `
     capability_report: ../../docs/integrations/hermes-capability-report.json
     required_capabilities: [durable_acceptance, submit_idempotency_key, lookup_by_external_ref]
@@ -101,7 +101,7 @@ routes:
       type: watchman-trigger
       source_id: vault-main-watchman
       resource: vault-main
-      trigger_name: jjukkumi.wiki.test
+      trigger_name: agent-dispatch.wiki.test
       include: ["**/*.md"]
       exclude: [".obsidian/workspace*.json"]
     batching:
@@ -429,7 +429,7 @@ func TestDispatchSinkErrorCodes(t *testing.T) {
 // capability-mismatch case.
 func limitedReportPath(t *testing.T, dir string) string {
 	t.Helper()
-	body := `{"schema_version":"jjukkumi.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":true,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":false,"execution_status":true,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
+	body := `{"schema_version":"agent-dispatch.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":true,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":false,"execution_status":true,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
 	path := filepath.Join(dir, "limited-report.json")
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
@@ -605,7 +605,7 @@ func TestReconcileSkipsRepointedScope(t *testing.T) {
 
 	// Re-point the target to a different board (scope change) and heal
 	// the executable; the drain must skip the reconciliation visibly.
-	updated := strings.Replace(string(raw), "board: jjukkumi-test", "board: jjukkumi-other", 1)
+	updated := strings.Replace(string(raw), "board: agent-dispatch-test", "board: agent-dispatch-other", 1)
 	lines = strings.Split(updated, "\n")
 	for i, l := range lines {
 		if strings.HasPrefix(l, "    executable: ") {
@@ -621,7 +621,7 @@ func TestReconcileSkipsRepointedScope(t *testing.T) {
 		t.Fatalf("drain: %s", errb.String())
 	}
 	body := out.String() + errb.String()
-	if !strings.Contains(body, "submitted against target scope") || !strings.Contains(body, "jjukkumi-test") {
+	if !strings.Contains(body, "submitted against target scope") || !strings.Contains(body, "agent-dispatch-test") {
 		t.Fatalf("the re-pointed scope skip must be visible: %s", body)
 	}
 	// The dispatch is untouched (still unknown, not dead-lettered by a
@@ -672,7 +672,7 @@ func TestRerunPreservesTargetScope(t *testing.T) {
 			rerunScope = snap.TargetScope
 		}
 	}
-	if rerunScope != "jjukkumi-test" {
+	if rerunScope != "agent-dispatch-test" {
 		t.Fatalf("rerun intent must inherit the target scope, got %q", rerunScope)
 	}
 }
@@ -688,7 +688,7 @@ func TestRefreshRefusedOnRepointedBoard(t *testing.T) {
 	dispatchID, _ := res["dispatch_id"].(string)
 
 	raw, _ := os.ReadFile(configPath)
-	updated := strings.Replace(string(raw), "board: jjukkumi-test", "board: jjukkumi-other", 1)
+	updated := strings.Replace(string(raw), "board: agent-dispatch-test", "board: agent-dispatch-other", 1)
 	if err := os.WriteFile(configPath, []byte(updated), 0o600); err != nil {
 		t.Fatal(err)
 	}

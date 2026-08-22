@@ -22,7 +22,7 @@ import (
 	"strings"
 )
 
-const modulePrefix = "github.com/rootkernel/jjukkumi/"
+const modulePrefix = "github.com/irootkernel/agent-dispatch/"
 
 type goPackage struct {
 	ImportPath string   `json:"ImportPath"`

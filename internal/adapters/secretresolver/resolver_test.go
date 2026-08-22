@@ -13,7 +13,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/rootkernel/jjukkumi/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/config"
 )
 
 // ref parses one reference or fails the test.
@@ -29,12 +29,12 @@ func ref(t *testing.T, text string) *config.SecretRef {
 // TestResolveEnv proves the env form resolves the live environment and
 // fails definitively when absent or empty (SEC-006).
 func TestResolveEnv(t *testing.T) {
-	t.Setenv("JJUKKUMI_TEST_SECRET", "value-1")
-	value, err := Resolve(context.Background(), ref(t, "env:JJUKKUMI_TEST_SECRET"))
+	t.Setenv("AGENT_DISPATCH_TEST_SECRET", "value-1")
+	value, err := Resolve(context.Background(), ref(t, "env:AGENT_DISPATCH_TEST_SECRET"))
 	if err != nil || value != "value-1" {
 		t.Fatalf("resolve = %q, %v", value, err)
 	}
-	if _, err := Resolve(context.Background(), ref(t, "env:JJUKKUMI_ABSENT_SECRET")); err == nil {
+	if _, err := Resolve(context.Background(), ref(t, "env:AGENT_DISPATCH_ABSENT_SECRET")); err == nil {
 		t.Fatalf("absent variable must fail")
 	} else {
 		var unresolved *UnresolvedError
@@ -45,8 +45,8 @@ func TestResolveEnv(t *testing.T) {
 			t.Fatalf("error leaks a value: %s", err)
 		}
 	}
-	t.Setenv("JJUKKUMI_EMPTY_SECRET", "")
-	if _, err := Resolve(context.Background(), ref(t, "env:JJUKKUMI_EMPTY_SECRET")); err == nil {
+	t.Setenv("AGENT_DISPATCH_EMPTY_SECRET", "")
+	if _, err := Resolve(context.Background(), ref(t, "env:AGENT_DISPATCH_EMPTY_SECRET")); err == nil {
 		t.Fatalf("empty variable must fail")
 	}
 }
@@ -94,19 +94,19 @@ func TestResolveKeychainStubbed(t *testing.T) {
 	original := keychainCommand
 	defer func() { keychainCommand = original }()
 	keychainCommand = func(ctx context.Context, name string) ([]byte, error) {
-		if name != "jjukkumi-test-item" {
+		if name != "agent-dispatch-test-item" {
 			t.Fatalf("keychain item name = %q", name)
 		}
 		return []byte("keychain-value\n"), nil
 	}
-	value, err := Resolve(context.Background(), ref(t, "keychain:jjukkumi-test-item"))
+	value, err := Resolve(context.Background(), ref(t, "keychain:agent-dispatch-test-item"))
 	if err != nil || value != "keychain-value" {
 		t.Fatalf("resolve = %q, %v", value, err)
 	}
 	keychainCommand = func(ctx context.Context, name string) ([]byte, error) {
 		return nil, errors.New("keychain lookup failed: item not found")
 	}
-	_, err = Resolve(context.Background(), ref(t, "keychain:jjukkumi-test-item"))
+	_, err = Resolve(context.Background(), ref(t, "keychain:agent-dispatch-test-item"))
 	var unresolved *UnresolvedError
 	if !errors.As(err, &unresolved) || strings.Contains(err.Error(), "keychain-value") {
 		t.Fatalf("err = %v, want unresolved without value leak", err)
@@ -169,7 +169,7 @@ printf 'keychain-value\n'
 		return exec.CommandContext(ctx, stub, args...)
 	}
 
-	out, err := runSecurity(context.Background(), "jjukkumi-item")
+	out, err := runSecurity(context.Background(), "agent-dispatch-item")
 	if err != nil || string(out) != "keychain-value\n" {
 		t.Fatalf("runSecurity = %q, %v", out, err)
 	}
@@ -177,7 +177,7 @@ printf 'keychain-value\n'
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(strings.Fields(string(argv)), " "); got != "find-generic-password -w -s jjukkumi-item" {
+	if got := strings.Join(strings.Fields(string(argv)), " "); got != "find-generic-password -w -s agent-dispatch-item" {
 		t.Fatalf("argv = %q", got)
 	}
 	envDump, err := os.ReadFile(observed + ".env")
@@ -195,7 +195,7 @@ printf 'keychain-value\n'
 	if err := os.WriteFile(observed+".fail", []byte("1"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, err = runSecurity(context.Background(), "jjukkumi-item")
+	_, err = runSecurity(context.Background(), "agent-dispatch-item")
 	if err == nil {
 		t.Fatalf("failing lookup must error")
 	}
@@ -239,8 +239,8 @@ func TestResolveFDSurvivesGC(t *testing.T) {
 func TestResolveBoundsEveryKind(t *testing.T) {
 	oversize := strings.Repeat("x", maxSecretBytes+1)
 
-	t.Setenv("JJUKKUMI_OVERSIZE", oversize)
-	if _, err := Resolve(context.Background(), ref(t, "env:JJUKKUMI_OVERSIZE")); err == nil || !strings.Contains(err.Error(), "exceeds") {
+	t.Setenv("AGENT_DISPATCH_OVERSIZE", oversize)
+	if _, err := Resolve(context.Background(), ref(t, "env:AGENT_DISPATCH_OVERSIZE")); err == nil || !strings.Contains(err.Error(), "exceeds") {
 		t.Fatalf("env oversize error = %v", err)
 	}
 

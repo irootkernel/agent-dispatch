@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rootkernel/jjukkumi/internal/version"
+	"github.com/irootkernel/agent-dispatch/internal/version"
 )
 
 // TestVersionMetadataMatchesSchema guards the audit finding F002: the

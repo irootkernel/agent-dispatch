@@ -6,12 +6,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // ReportSchemaVersion is the frozen capability-report document version
 // (schemas/hermes-capability-report.schema.json).
-const ReportSchemaVersion = "jjukkumi.hermes-capabilities/v1"
+const ReportSchemaVersion = "agent-dispatch.hermes-capabilities/v1"
 
 // ReportError is a persistent configuration defect in the capability
 // report itself: unreadable, wrong schema, wrong interface, or probed

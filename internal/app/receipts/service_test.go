@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
-	"github.com/rootkernel/jjukkumi/internal/domain/state"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/state"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // TestStaleActiveBoundaries proves the stale detection window: older
@@ -129,7 +129,7 @@ func storeWithAcceptedDispatch(t *testing.T) Store {
 	now := "2026-08-20T00:00:00Z"
 	if err := s.CommitLineage(ctx, ports.Lineage{
 		Observation: ports.ObservationInput{
-			ObservationID: "obs-1", SchemaVersion: "jjukkumi.source-observation/v1",
+			ObservationID: "obs-1", SchemaVersion: "agent-dispatch.source-observation/v1",
 			SourceType: "watchman", SourceID: "watchman-main", TriggerName: "trig",
 			ResourceID: "vault-main", ObservedAt: now, ReceivedAt: now,
 			RawPayloadDigest: "sha256:aaa", IngestStatus: "accepted",
@@ -147,8 +147,8 @@ func storeWithAcceptedDispatch(t *testing.T) Store {
 		Intent: ports.IntentInput{
 			DispatchID: acceptedDispatchID, DecisionID: "decision-1", RouteID: "wiki", RouteRevision: "route-rev-1",
 			TargetID: "hermes-kanban-main", TargetType: "hermes-kanban", ResourceID: "vault-main",
-			Generation: 1, IdempotencyKey: "jjukkumi:v1:sha256:abc", ContentFingerprint: "sha256:aaa",
-			ManifestDigest: "sha256:ddd", RequestVersion: "jjukkumi.hermes-task/v1", RequestJSON: "{}", CreatedAt: now,
+			Generation: 1, IdempotencyKey: "agent-dispatch:v1:sha256:abc", ContentFingerprint: "sha256:aaa",
+			ManifestDigest: "sha256:ddd", RequestVersion: "agent-dispatch.hermes-task/v1", RequestJSON: "{}", CreatedAt: now,
 		},
 	}); err != nil {
 		t.Fatal(err)

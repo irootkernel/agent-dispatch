@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
-	"github.com/rootkernel/jjukkumi/internal/app/dispatch"
-	"github.com/rootkernel/jjukkumi/internal/app/receipts"
-	"github.com/rootkernel/jjukkumi/internal/config"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
+	"github.com/irootkernel/agent-dispatch/internal/app/receipts"
+	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // Route runtime-management subcommands (E3-T3, CLI-004): list, show,
@@ -91,7 +91,7 @@ func runRouteShow(command string, args []string, stdout, stderr io.Writer) int {
 		}
 		var warnings []string
 		if row.PendingReconcile == 1 {
-			warnings = append(warnings, "a reconciliation generation is pending; run 'jjukkumi reconcile --route "+row.RouteID+"' or complete the active work to collapse it")
+			warnings = append(warnings, "a reconciliation generation is pending; run 'agent-dispatch reconcile --route "+row.RouteID+"' or complete the active work to collapse it")
 		}
 		if row.ActiveDispatchID != "" {
 			intent, err := store.LoadIntent(requestCtx(), row.ActiveDispatchID)

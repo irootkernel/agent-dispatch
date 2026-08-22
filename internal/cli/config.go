@@ -8,10 +8,10 @@ import (
 	"sort"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/hermeskanban"
-	"github.com/rootkernel/jjukkumi/internal/adapters/hermeswebhook"
-	"github.com/rootkernel/jjukkumi/internal/adapters/watchman"
-	"github.com/rootkernel/jjukkumi/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/hermeskanban"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/hermeswebhook"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
+	"github.com/irootkernel/agent-dispatch/internal/config"
 )
 
 // runConfig implements the config command tree (cli-spec §3); this build

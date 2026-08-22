@@ -12,12 +12,12 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 
 | ID | Requirement |
 |---|---|
-| BND-001 | JJUKKUMI **MUST** operate as an event-ingress and activation gateway, not as an agent runtime or semantic knowledge engine. |
+| BND-001 | Agent Dispatch **MUST** operate as an event-ingress and activation gateway, not as an agent runtime or semantic knowledge engine. |
 | BND-002 | Hermes **MUST** be treated as the authoritative runtime for task execution and semantic outcomes. |
 | BND-003 | v0.1 **MUST NOT** modify Hermes core, access Hermes internal storage, or require a Hermes plugin. |
-| BND-004 | Hermes integration **MUST** use public machine interfaces. A JJUKKUMI-owned adapter, CLI, or skill is permitted. |
-| BND-005 | JJUKKUMI **MUST NOT** directly edit governed vault content. |
-| BND-006 | JJUKKUMI **MUST NOT** perform open-ended LLM classification inside the bridge. |
+| BND-004 | Hermes integration **MUST** use public machine interfaces. A Agent Dispatch-owned adapter, CLI, or skill is permitted. |
+| BND-005 | Agent Dispatch **MUST NOT** directly edit governed vault content. |
+| BND-006 | Agent Dispatch **MUST NOT** perform open-ended LLM classification inside the bridge. |
 | BND-007 | A future Hermes management plugin **MAY** be documented but **MUST NOT** be a v0.1 dependency. |
 
 ## 3. v0.1 Scope and Platform
@@ -43,7 +43,7 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | SRC-003 | The adapter **MUST** validate that the invocation is bound to the configured route and resource. Payload data **MUST NOT** select another route or resource. |
 | SRC-004 | Canonical operations **MUST** be `create`, `modify`, and `delete`. Rename **MAY** be represented only as derived evidence and **MUST NOT** be required for correctness. |
 | SRC-005 | A fresh instance, lost cursor, recrawl uncertainty, or overflow **MUST NOT** dispatch a partial ordinary batch. It **MUST** create or merge one reconciliation request. |
-| SRC-006 | JJUKKUMI **MUST NOT** add a second time-based settle delay in one-shot trigger mode. It **MUST** treat the Watchman trigger input as the source batch. |
+| SRC-006 | Agent Dispatch **MUST NOT** add a second time-based settle delay in one-shot trigger mode. It **MUST** treat the Watchman trigger input as the source batch. |
 | SRC-007 | Trigger registration **MUST** use an explicit unique trigger name and **MUST** avoid destructive unnecessary re-registration. |
 | SRC-008 | The source adapter **MUST** support deterministic fixture input without a running Watchman daemon for tests. |
 
@@ -124,7 +124,7 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | HER-003 | The adapter **MUST** use argument arrays, structured input, bounded output, and no shell interpolation. |
 | HER-004 | The adapter **MUST** declare whether it supports durable acceptance, idempotency key submission, lookup by idempotency key, external task lookup, mutex, execution status, cancellation, and result retrieval. |
 | HER-005 | A route requiring a missing capability **MUST** fail validation or explicitly operate under a documented reduced guarantee. It **MUST NOT** silently emulate the capability. |
-| HER-006 | A Hermes task **MUST** contain a JJUKKUMI dispatch ID, resource ID, latest-state instruction, bounded change manifest, route revision, configured profile, configured skill list, and acceptance criteria. |
+| HER-006 | A Hermes task **MUST** contain a Agent Dispatch dispatch ID, resource ID, latest-state instruction, bounded change manifest, route revision, configured profile, configured skill list, and acceptance criteria. |
 | HER-007 | Note content **MUST NOT** be interpolated into operator instructions. Paths and source metadata **MUST** be encoded as structured untrusted data. |
 | HER-008 | Hermes Kanban acceptance and Hermes execution status **MUST** be modeled separately. |
 | HER-009 | If Hermes cannot provide machine-readable durable acceptance or lookup, the adapter **MUST** surface the limitation and the roadmap task **MAY** become blocked pending an explicit product decision. |
@@ -144,11 +144,11 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 
 | ID | Requirement |
 |---|---|
-| FBK-001 | JJUKKUMI **MUST** persist every relevant change observed while Hermes work is active. In-memory holding alone is prohibited. |
-| FBK-002 | JJUKKUMI **MUST** suppress a self-generated result only when a validated work receipt and observed path/digest set match exactly. |
+| FBK-001 | Agent Dispatch **MUST** persist every relevant change observed while Hermes work is active. In-memory holding alone is prohibited. |
+| FBK-002 | Agent Dispatch **MUST** suppress a self-generated result only when a validated work receipt and observed path/digest set match exactly. |
 | FBK-003 | Missing, incomplete, invalid, or mismatched provenance **MUST** be treated as unknown and **MUST NOT** cause event deletion. |
 | FBK-004 | Mixed human and agent changes **MUST** remain dirty and be re-evaluated. |
-| FBK-005 | JJUKKUMI **MUST** provide public CLI commands for a cooperating Hermes task to begin, complete, or fail a work receipt without a Hermes plugin. |
+| FBK-005 | Agent Dispatch **MUST** provide public CLI commands for a cooperating Hermes task to begin, complete, or fail a work receipt without a Hermes plugin. |
 | FBK-006 | A bundled Hermes companion skill **SHOULD** instruct the agent to use the receipt CLI and to process latest state. |
 | FBK-007 | Git commits and commit messages **MAY** support attribution but **MUST NOT** be the sole trust anchor. |
 | FBK-008 | Uncertain attribution **MUST** prefer an extra bounded follow-up over silent loss. |
@@ -191,7 +191,7 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | OPS-004 | Retention **MUST** be configurable and pruning **MUST** preserve referential and audit integrity. |
 | OPS-005 | Startup and `doctor` **MUST** detect database migration state, invalid configuration, inaccessible roots, unsupported filesystem placement, missing Watchman, and unavailable Hermes capabilities. |
 | OPS-006 | Full reconciliation **MUST** be available on startup uncertainty, Watchman overflow/fresh instance, explicit operator request, and scheduled daily operation. |
-| OPS-007 | Daily reconciliation **SHOULD** be installed through platform scheduling recipes rather than a JJUKKUMI daemon in v0.1. |
+| OPS-007 | Daily reconciliation **SHOULD** be installed through platform scheduling recipes rather than a Agent Dispatch daemon in v0.1. |
 | OPS-008 | SQLite **MUST** enable foreign keys, a busy timeout, crash-safe journaling appropriate for concurrent one-shot processes, and documented synchronous durability. |
 | OPS-009 | Database migrations **MUST** be forward-only, transactional where SQLite permits, and tested against interrupted upgrades. |
 

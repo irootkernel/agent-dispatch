@@ -9,7 +9,7 @@ The first use case is local filesystem observation. Watchman already supplies a 
 
 ## Decision
 
-v0.1 uses a short-lived `jjukkumi dispatch` process invoked by a Watchman trigger. JJUKKUMI does not implement a managed daemon.
+v0.1 uses a short-lived `agent-dispatch dispatch` process invoked by a Watchman trigger. Agent Dispatch does not implement a managed daemon.
 
 ## Consequences
 
@@ -20,5 +20,5 @@ v0.1 uses a short-lived `jjukkumi dispatch` process invoked by a Watchman trigge
 
 ## Rejected Alternatives
 
-- JJUKKUMI daemon from the start: rejected as unnecessary operational and concurrency complexity.
+- Agent Dispatch daemon from the start: rejected as unnecessary operational and concurrency complexity.
 - Native platform watcher implementation: rejected because it duplicates Watchman.

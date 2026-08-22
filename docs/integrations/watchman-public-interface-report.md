@@ -9,8 +9,8 @@
 ## 1. Method and Boundary
 
 Every claim below was produced by invoking only public Watchman CLI commands
-against a disposable watch root `/tmp/jjukkumi-e0t5-probe/vault` (macOS
-canonical form `/private/tmp/jjukkumi-e0t5-probe/vault`), created for this
+against a disposable watch root `/tmp/agent-dispatch-e0t5-probe/vault` (macOS
+canonical form `/private/tmp/agent-dispatch-e0t5-probe/vault`), created for this
 probe and deleted afterwards together with its watch and triggers. Trigger
 executions were captured by a probe command that recorded its own
 environment, argv, working directory, and standard-input bytes to files
@@ -100,7 +100,7 @@ Structural consequences for E2-T1 and E2-T3, all evidenced above: batch entry
 order is not sorted (the planner must sort deterministically), key order in
 JSON objects is not stable across responses, `size` on a delete entry is the
 pre-deletion size (never open the file), and same-content modifies are not
-suppressed by Watchman (digest comparison is JJUKKUMI's responsibility).
+suppressed by Watchman (digest comparison is Agent Dispatch's responsibility).
 
 ## 5. Expression and Ignore Behavior
 
@@ -108,7 +108,7 @@ suppressed by Watchman (digest comparison is JJUKKUMI's responsibility).
   inside the root were reported through both an unfiltered query and a
   `["type","f"]` filtered query (fixtures
   `fixtures/watchman/query-unfiltered-entries.json`,
-  `fixtures/watchman/query-no-default-ignore.txt`). JJUKKUMI must apply its
+  `fixtures/watchman/query-no-default-ignore.txt`). Agent Dispatch must apply its
   own exclusion rules (E2-T2 default Obsidian exclusions).
 - **Symlinks** are reported with `type: "l"` and `size` equal to the length
   of the target path string. A `["type","f"]` expression excludes them; a
@@ -226,7 +226,7 @@ All fixtures in `fixtures/watchman/error-cases.txt`.
   commands with an unreachable socket fail with `command ... not available
   in this mode` under `--no-spawn`, exit 1. Passing `--unix-listener-path`
   without `--no-spawn` spawns a second server sharing the per-user state
-  file; JJUKKUMI must never pass a custom listener path when targeting the
+  file; Agent Dispatch must never pass a custom listener path when targeting the
   user's server (a stray server spawned during this probe was shut down
   through its own socket; see §11).
 
@@ -286,7 +286,7 @@ Known behavioral caveats carried forward:
 
 ## 11. Boundary Confirmation
 
-During this probe, JJUKKUMI work used only: `watchman version`,
+During this probe, Agent Dispatch work used only: `watchman version`,
 `watchman -h`, `watchman get-sockname`, `watchman list-capabilities`,
 `watchman watch-project`, `watchman watch-list`, `watchman clock`,
 `watchman query` (positional and `-j` array forms), `watchman since`,

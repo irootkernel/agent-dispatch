@@ -2,7 +2,7 @@
 
 ## 1. Data Minimization
 
-JJUKKUMI stores operational evidence, not knowledge content.
+Agent Dispatch stores operational evidence, not knowledge content.
 
 Stored by default:
 

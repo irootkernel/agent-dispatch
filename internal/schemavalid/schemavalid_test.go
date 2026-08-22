@@ -16,14 +16,14 @@ func writeFixture(t *testing.T, root string) {
 			t.Fatal(err)
 		}
 	}
-	schema := `{"$id":"urn:jjukkumi:schema:hermes-capabilities:v1","type":"object"}`
+	schema := `{"$id":"urn:agent-dispatch:schema:hermes-capabilities:v1","type":"object"}`
 	if err := os.WriteFile(filepath.Join(root, "schemas", "caps.schema.json"), []byte(schema), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	// A permissive stand-in with the config schema $id so the config.yaml
 	// check is exercisable in isolation; the real check runs against the
 	// SOT docs package.
-	configSchema := `{"$id":"urn:jjukkumi:schema:config:v1","type":"object"}`
+	configSchema := `{"$id":"urn:agent-dispatch:schema:config:v1","type":"object"}`
 	if err := os.WriteFile(filepath.Join(root, "schemas", "config.schema.json"), []byte(configSchema), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ routes:
       type: watchman-trigger
       source_id: v
       resource: vault
-      trigger_name: jjukkumi.r1.x
+      trigger_name: agent-dispatch.r1.x
       include: ["**/*.md"]
     batching: {automatic_threshold: 25, hard_limit: 100, max_manifest_bytes: 262144}
     policy:

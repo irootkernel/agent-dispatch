@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/testsupport/stubhermes"
+	"github.com/irootkernel/agent-dispatch/internal/testsupport/stubhermes"
 )
 
 // e4t4Accepted runs one accepted dispatch and returns its id.
@@ -317,7 +317,7 @@ func TestRefreshHistoryAndFilters(t *testing.T) {
 func TestRefreshCapabilityLessTargetReportsUnsupported(t *testing.T) {
 	dir := t.TempDir()
 	report := filepath.Join(dir, "report.json")
-	body := `{"schema_version":"jjukkumi.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":true,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":true,"execution_status":false,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
+	body := `{"schema_version":"agent-dispatch.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":true,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":true,"execution_status":false,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
 	if err := os.WriteFile(report, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}

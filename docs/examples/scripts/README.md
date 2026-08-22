@@ -10,6 +10,6 @@ review the uninstall script before use — see
 `docs/docs/05-operations/installation.md` for the full install,
 schedule, upgrade, and backup procedures.
 
-- `jjukkumi-reconcile.launchd.plist.example` — macOS LaunchAgent
-- `jjukkumi-reconcile.service.example` + `jjukkumi-reconcile.timer.example` — Linux systemd --user units
-- `jjukkumi-uninstall.sh.example` — runbook §10 uninstall order; retains SQLite and configuration
+- `agent-dispatch-reconcile.launchd.plist.example` — macOS LaunchAgent
+- `agent-dispatch-reconcile.service.example` + `agent-dispatch-reconcile.timer.example` — Linux systemd --user units
+- `agent-dispatch-uninstall.sh.example` — runbook §10 uninstall order; retains SQLite and configuration

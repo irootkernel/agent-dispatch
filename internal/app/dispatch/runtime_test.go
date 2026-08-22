@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
-	"github.com/rootkernel/jjukkumi/internal/domain/state"
-	"github.com/rootkernel/jjukkumi/internal/ports"
-	"github.com/rootkernel/jjukkumi/internal/schemavalid"
-	"github.com/rootkernel/jjukkumi/internal/testsupport/fakesink"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/state"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/schemavalid"
+	"github.com/irootkernel/agent-dispatch/internal/testsupport/fakesink"
 )
 
 // The runtime tests compose the real SQLite adapter with the fake sink
@@ -56,8 +56,8 @@ func runtimeLineage(t *testing.T, dispatchID, requestJSON string) ports.Lineage 
 	t.Helper()
 	return ports.Lineage{
 		Observation: ports.ObservationInput{
-			ObservationID: "obs-1", SchemaVersion: "jjukkumi.source-observation/v1",
-			SourceType: "watchman", SourceID: "watchman-main", TriggerName: "jjukkumi-wiki-maintenance",
+			ObservationID: "obs-1", SchemaVersion: "agent-dispatch.source-observation/v1",
+			SourceType: "watchman", SourceID: "watchman-main", TriggerName: "agent-dispatch-wiki-maintenance",
 			ResourceID: "vault-main", ObservedAt: "2026-08-20T01:00:00Z", ReceivedAt: "2026-08-20T01:00:00Z",
 			RawPayloadDigest: "sha256:" + hex64('a'), IngestStatus: "accepted",
 			Changes: []ports.ObservationChange{{
@@ -79,7 +79,7 @@ func runtimeLineage(t *testing.T, dispatchID, requestJSON string) ports.Lineage 
 		Intent: ports.IntentInput{
 			DispatchID: dispatchID, DecisionID: "decision-1", RouteID: "wiki-maintenance",
 			RouteRevision: "route-rev-1", TargetID: "hermes-kanban-main", TargetType: "hermes_kanban",
-			ResourceID: "vault-main", Generation: 1, IdempotencyKey: "jjukkumi:v1:sha256:" + hex64('1'),
+			ResourceID: "vault-main", Generation: 1, IdempotencyKey: "agent-dispatch:v1:sha256:" + hex64('1'),
 			ContentFingerprint: "sha256:" + hex64('c'), ManifestDigest: "sha256:" + hex64('d'),
 			RequestVersion: RequestContractVersion, RequestJSON: requestJSON, CreatedAt: "2026-08-20T01:00:00Z",
 		},
@@ -391,7 +391,7 @@ func TestRequestValidatesAgainstContractSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	schema, ok := compiled["urn:jjukkumi:schema:hermes-task-request:v1"]
+	schema, ok := compiled["urn:agent-dispatch:schema:hermes-task-request:v1"]
 	if !ok {
 		t.Fatal("hermes-task-request schema missing")
 	}

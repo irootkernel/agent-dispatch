@@ -28,10 +28,10 @@ func checkCompiled(t *testing.T, schema string, resources map[string]string, ins
 	if err := json.Unmarshal([]byte(schema), &s); err != nil {
 		t.Fatalf("bad test schema: %v", err)
 	}
-	if err := c.AddResource("urn:jjukkumi:selftest:case", s); err != nil {
+	if err := c.AddResource("urn:agent-dispatch:selftest:case", s); err != nil {
 		t.Fatalf("register case schema: %v", err)
 	}
-	compiled, err := c.Compile("urn:jjukkumi:selftest:case")
+	compiled, err := c.Compile("urn:agent-dispatch:selftest:case")
 	if err != nil {
 		return err
 	}
@@ -105,10 +105,10 @@ func TestSelfTestKeywordCases(t *testing.T) {
 		{"items-false-ok", `{"items":false}`, `[]`, true, nil},
 		{"items-false-bad", `{"items":false}`, `[1]`, false, nil},
 		{"items-true-ok", `{"items":true}`, `[1,"a",null]`, true, nil},
-		{"ref-cross-doc-ok", `{"$ref":"urn:jjukkumi:selftest:v1#/$defs/pos"}`, `5`, true, refResources},
-		{"ref-cross-doc-bad", `{"$ref":"urn:jjukkumi:selftest:v1#/$defs/pos"}`, `-1`, false, refResources},
-		{"ref-sibling-applies-ok", `{"$ref":"urn:jjukkumi:selftest:v1#/$defs/pos","maximum":10}`, `5`, true, refResources},
-		{"ref-sibling-applies-bad", `{"$ref":"urn:jjukkumi:selftest:v1#/$defs/pos","maximum":10}`, `99`, false, refResources},
+		{"ref-cross-doc-ok", `{"$ref":"urn:agent-dispatch:selftest:v1#/$defs/pos"}`, `5`, true, refResources},
+		{"ref-cross-doc-bad", `{"$ref":"urn:agent-dispatch:selftest:v1#/$defs/pos"}`, `-1`, false, refResources},
+		{"ref-sibling-applies-ok", `{"$ref":"urn:agent-dispatch:selftest:v1#/$defs/pos","maximum":10}`, `5`, true, refResources},
+		{"ref-sibling-applies-bad", `{"$ref":"urn:agent-dispatch:selftest:v1#/$defs/pos","maximum":10}`, `99`, false, refResources},
 		{"deep-numeric-equal-ok", `{"const":[[1,{"x":2}]]}`, `[[1.0,{"x":2.0}]]`, true, nil},
 		{"deep-numeric-unequal-bad", `{"const":[[1]]}`, `[[2]]`, false, nil},
 	}
@@ -126,8 +126,8 @@ func TestSelfTestKeywordCases(t *testing.T) {
 }
 
 var refResources = map[string]string{
-	"urn:jjukkumi:selftest:v1": `{
-		"$id": "urn:jjukkumi:selftest:v1",
+	"urn:agent-dispatch:selftest:v1": `{
+		"$id": "urn:agent-dispatch:selftest:v1",
 		"$defs": {"pos": {"minimum": 0}, "small": {"maximum": 10}},
 		"type": "object"
 	}`,
@@ -145,7 +145,7 @@ func TestSelfTestStaticAdmission(t *testing.T) {
 		{"static-invalid-pattern", `{"properties":{"a":{"pattern":"([unclosed"}}}`},
 		{"static-items-not-schema", `{"items":[{"type":"string"}]}`},
 		{"static-unknown-type-name", `{"type":["string","gizmo"]}`},
-		{"static-unresolvable-ref", `{"$ref":"urn:jjukkumi:selftest:missing:v1"}`},
+		{"static-unresolvable-ref", `{"$ref":"urn:agent-dispatch:selftest:missing:v1"}`},
 	}
 	for _, tc := range rejected {
 		t.Run(tc.name, func(t *testing.T) {

@@ -112,7 +112,7 @@ func (r *runner) run(ctx context.Context, timeout time.Duration, argv []string) 
 	cmd.Env = r.environment()
 	cmd.Dir = r.workingDirectory()
 	// Stdin nil means /dev/null: the child inherits no open descriptor
-	// and can never block reading jjukkumi state (SEC-004).
+	// and can never block reading agent-dispatch state (SEC-004).
 	cmd.Stdin = nil
 	// Run the child in its own process group so a timeout can clean up
 	// the whole group, not just the leader (sink-adapter-contract §6).
@@ -128,13 +128,13 @@ func (r *runner) run(ctx context.Context, timeout time.Duration, argv []string) 
 	// writes into a capped sink (no unbounded temp-file growth while a
 	// deadline window runs) and the later read is bounded again as a
 	// belt (SEC-004/SEC-009).
-	outFile, err := os.CreateTemp("", "jjukkumi-hermes-*.out")
+	outFile, err := os.CreateTemp("", "agent-dispatch-hermes-*.out")
 	if err != nil {
 		return runResult{}, fmt.Errorf("creating capture file: %w", err)
 	}
 	defer os.Remove(outFile.Name())
 	defer outFile.Close()
-	errFile, err := os.CreateTemp("", "jjukkumi-hermes-*.err")
+	errFile, err := os.CreateTemp("", "agent-dispatch-hermes-*.err")
 	if err != nil {
 		return runResult{}, fmt.Errorf("creating capture file: %w", err)
 	}

@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
-	"github.com/rootkernel/jjukkumi/internal/config"
-	"github.com/rootkernel/jjukkumi/internal/platformpaths"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/platformpaths"
 )
 
 // e5t1Store opens the fixture's durable store directly for assertions.
@@ -158,18 +158,18 @@ func TestWorkCompleteValidatesManifest(t *testing.T) {
 		"note body":               `[{"path":"Inbox/new.md","note":"agent thoughts"}]`,
 		"symlink escape":          `[{"path":"link-out.md"}]`,
 		"over change limit":       `[` + strings.TrimRight(strings.Repeat(`{"path":"Inbox/new.md"},`, 1001), ",") + `]`,
-		"full doc wrong run":      `{"schema_version":"jjukkumi.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"other-run","status":"completed","changes":[]}`,
-		"full doc bad schema":     `{"schema_version":"jjukkumi.work-receipt/v2","dispatch_id":"` + dispatchID + `","run_id":"run-1","status":"completed","changes":[]}`,
-		"full doc wrong resource": `{"schema_version":"jjukkumi.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"run-1","resource_id":"wrong-vault","status":"completed","changes":[]}`,
-		"doc missing dispatch_id": `{"schema_version":"jjukkumi.work-receipt/v1","run_id":"run-1","resource_id":"vault-main","status":"completed","submitted_at":"2026-08-21T00:00:00Z","changes":[]}`,
-		"doc missing run_id":      `{"schema_version":"jjukkumi.work-receipt/v1","dispatch_id":"` + dispatchID + `","resource_id":"vault-main","status":"completed","submitted_at":"2026-08-21T00:00:00Z","changes":[]}`,
-		"doc missing resource_id": `{"schema_version":"jjukkumi.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"run-1","status":"completed","submitted_at":"2026-08-21T00:00:00Z","changes":[]}`,
-		"doc missing status":      `{"schema_version":"jjukkumi.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"run-1","resource_id":"vault-main","submitted_at":"2026-08-21T00:00:00Z","changes":[]}`,
-		"doc missing submitted":   `{"schema_version":"jjukkumi.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"run-1","resource_id":"vault-main","status":"completed","changes":[]}`,
-		"doc missing changes":     `{"schema_version":"jjukkumi.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"run-1","resource_id":"vault-main","status":"completed","submitted_at":"2026-08-21T00:00:00Z"}`,
-		"doc unknown top field":   `{"schema_version":"jjukkumi.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"run-1","resource_id":"vault-main","status":"completed","submitted_at":"2026-08-21T00:00:00Z","changes":[],"submittd_at":"typo"}`,
-		"doc case-variant key":    `{"schema_version":"jjukkumi.work-receipt/v1","Dispatch_ID":"` + dispatchID + `","run_id":"run-1","resource_id":"vault-main","status":"completed","submitted_at":"2026-08-21T00:00:00Z","changes":[]}`,
-		"trailing json value":     `{"schema_version":"jjukkumi.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"run-1","resource_id":"vault-main","status":"completed","submitted_at":"2026-08-21T00:00:00Z","changes":[]} {"extra":1}`,
+		"full doc wrong run":      `{"schema_version":"agent-dispatch.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"other-run","status":"completed","changes":[]}`,
+		"full doc bad schema":     `{"schema_version":"agent-dispatch.work-receipt/v2","dispatch_id":"` + dispatchID + `","run_id":"run-1","status":"completed","changes":[]}`,
+		"full doc wrong resource": `{"schema_version":"agent-dispatch.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"run-1","resource_id":"wrong-vault","status":"completed","changes":[]}`,
+		"doc missing dispatch_id": `{"schema_version":"agent-dispatch.work-receipt/v1","run_id":"run-1","resource_id":"vault-main","status":"completed","submitted_at":"2026-08-21T00:00:00Z","changes":[]}`,
+		"doc missing run_id":      `{"schema_version":"agent-dispatch.work-receipt/v1","dispatch_id":"` + dispatchID + `","resource_id":"vault-main","status":"completed","submitted_at":"2026-08-21T00:00:00Z","changes":[]}`,
+		"doc missing resource_id": `{"schema_version":"agent-dispatch.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"run-1","status":"completed","submitted_at":"2026-08-21T00:00:00Z","changes":[]}`,
+		"doc missing status":      `{"schema_version":"agent-dispatch.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"run-1","resource_id":"vault-main","submitted_at":"2026-08-21T00:00:00Z","changes":[]}`,
+		"doc missing submitted":   `{"schema_version":"agent-dispatch.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"run-1","resource_id":"vault-main","status":"completed","changes":[]}`,
+		"doc missing changes":     `{"schema_version":"agent-dispatch.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"run-1","resource_id":"vault-main","status":"completed","submitted_at":"2026-08-21T00:00:00Z"}`,
+		"doc unknown top field":   `{"schema_version":"agent-dispatch.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"run-1","resource_id":"vault-main","status":"completed","submitted_at":"2026-08-21T00:00:00Z","changes":[],"submittd_at":"typo"}`,
+		"doc case-variant key":    `{"schema_version":"agent-dispatch.work-receipt/v1","Dispatch_ID":"` + dispatchID + `","run_id":"run-1","resource_id":"vault-main","status":"completed","submitted_at":"2026-08-21T00:00:00Z","changes":[]}`,
+		"trailing json value":     `{"schema_version":"agent-dispatch.work-receipt/v1","dispatch_id":"` + dispatchID + `","run_id":"run-1","resource_id":"vault-main","status":"completed","submitted_at":"2026-08-21T00:00:00Z","changes":[]} {"extra":1}`,
 		"item case-variant key":   `[{"Path":"Inbox/new.md"}]`,
 	}
 	// A symlink inside the vault pointing outside exercises the SEC-002
@@ -405,7 +405,7 @@ func TestWorkCompleteFullDocumentReceipt(t *testing.T) {
 		t.Fatalf("begin: %s", errb.String())
 	}
 	doc := map[string]any{
-		"schema_version":  "jjukkumi.work-receipt/v1",
+		"schema_version":  "agent-dispatch.work-receipt/v1",
 		"dispatch_id":     dispatchID,
 		"run_id":          "run-1",
 		"resource_id":     "vault-main",

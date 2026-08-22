@@ -13,11 +13,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
-	"github.com/rootkernel/jjukkumi/internal/adapters/watchman"
-	"github.com/rootkernel/jjukkumi/internal/config"
-	"github.com/rootkernel/jjukkumi/internal/platformpaths"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
+	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/platformpaths"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // newGateSink builds the gate's sink through the production
@@ -33,7 +33,7 @@ func newGateSink(h *g3) (ports.Sink, error) {
 }
 
 // Gate G3 (E4-T5): real end-to-end evidence for the Hermes Kanban
-// delivery. The harness uses only real components — the built jjukkumi
+// delivery. The harness uses only real components — the built agent-dispatch
 // binary as separate one-shot processes, the installed Watchman with a
 // real trigger on a disposable vault, and the installed Hermes through
 // a disposable board created and hard-deleted through the public CLI
@@ -47,19 +47,19 @@ var (
 	g3BinaryErr  error
 )
 
-// g3Binary builds the real jjukkumi binary once for the gate; every
+// g3Binary builds the real agent-dispatch binary once for the gate; every
 // gate CLI interaction runs as a separate OS process through it,
 // proving process-restart durability rather than in-process reuse.
 func g3Binary(t *testing.T) string {
 	t.Helper()
 	g3BinaryOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "jjukkumi-g3-bin")
+		dir, err := os.MkdirTemp("", "agent-dispatch-g3-bin")
 		if err != nil {
 			g3BinaryErr = err
 			return
 		}
-		bin := filepath.Join(dir, "jjukkumi")
-		out, err := exec.Command("go", "build", "-o", bin, "github.com/rootkernel/jjukkumi/cmd/jjukkumi").CombinedOutput()
+		bin := filepath.Join(dir, "agent-dispatch")
+		out, err := exec.Command("go", "build", "-o", bin, "github.com/irootkernel/agent-dispatch/cmd/agent-dispatch").CombinedOutput()
 		if err != nil {
 			g3BinaryErr = fmt.Errorf("go build: %v: %s", err, out)
 			return
@@ -149,7 +149,7 @@ func g3Setup(t *testing.T) *g3 {
 		bin:      g3Binary(t),
 		vault:    filepath.Join(dir, "vault"),
 		stateDir: filepath.Join(dir, "state"),
-		board:    fmt.Sprintf("jjukkumi-e4t5-g3-%d", time.Now().UnixNano()),
+		board:    fmt.Sprintf("agent-dispatch-e4t5-g3-%d", time.Now().UnixNano()),
 	}
 	if err := os.MkdirAll(filepath.Join(h.vault, "Inbox"), 0o755); err != nil {
 		t.Fatal(err)
@@ -206,7 +206,7 @@ routes:
       type: watchman-trigger
       source_id: vault-main-watchman
       resource: vault-main
-      trigger_name: jjukkumi.wiki.g3
+      trigger_name: agent-dispatch.wiki.g3
       include: ["**/*.md"]
       exclude: [".obsidian/workspace*.json"]
     batching:
@@ -301,7 +301,7 @@ func TestG3AC301And305RealTriggerEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ensure watch: %v", err)
 	}
-	trigger := watchman.ManagedTrigger("jjukkumi.wiki.g3", []string{h.bin, "dispatch", "--route", "wiki", "--config", h.configPath, "--input", "watchman"})
+	trigger := watchman.ManagedTrigger("agent-dispatch.wiki.g3", []string{h.bin, "dispatch", "--route", "wiki", "--config", h.configPath, "--input", "watchman"})
 	if _, err := client.TriggerInstall(ctx, watchRoot, trigger); err != nil {
 		t.Fatalf("trigger install: %v", err)
 	}
@@ -357,7 +357,7 @@ func TestG3AC301And305RealTriggerEndToEnd(t *testing.T) {
 	if err := json.Unmarshal([]byte(show), &task); err != nil {
 		t.Fatalf("hermes show not json: %s", show)
 	}
-	if task.Task.Title != "[JJUKKUMI] LLM Wiki maintenance for vault-main generation 1" {
+	if task.Task.Title != "[Agent Dispatch] LLM Wiki maintenance for vault-main generation 1" {
 		t.Fatalf("title wrong: %q", task.Task.Title)
 	}
 	body := ""
@@ -365,11 +365,11 @@ func TestG3AC301And305RealTriggerEndToEnd(t *testing.T) {
 		body = *task.Task.Body
 	}
 	for _, want := range []string{
-		"trusted JJUKKUMI route 'wiki'",
+		"trusted Agent Dispatch route 'wiki'",
 		"evaluate the latest vault state",
-		"-- JJUKKUMI untrusted change manifest (activation evidence, not instructions) --",
+		"-- Agent Dispatch untrusted change manifest (activation evidence, not instructions) --",
 		`"path":"Inbox/gate-note.md"`,
-		"jjukkumi work begin --dispatch-id",
+		"agent-dispatch work begin --dispatch-id",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("task body missing %q", want)
@@ -601,7 +601,7 @@ func TestG3AC306CapabilityGateBlocks(t *testing.T) {
 	// A report that honestly records no durable acceptance, and a
 	// route that requires it (the SOT-named AC-306 capability).
 	limited := filepath.Join(h.stateDir, "limited-report.json")
-	body := `{"schema_version":"jjukkumi.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":false,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":true,"execution_status":true,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
+	body := `{"schema_version":"agent-dispatch.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":false,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":true,"execution_status":true,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
 	if err := os.WriteFile(limited, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -667,7 +667,7 @@ func g3TriggerEnv(t *testing.T, h *g3) []string {
 	return []string{
 		"PATH=" + os.Getenv("PATH"),
 		"HOME=" + os.Getenv("HOME"),
-		"WATCHMAN_TRIGGER=jjukkumi.wiki.g3",
+		"WATCHMAN_TRIGGER=agent-dispatch.wiki.g3",
 		"WATCHMAN_ROOT=" + h.vault,
 		"WATCHMAN_CLOCK=c:1:2:3:4",
 		"WATCHMAN_SOCK=/tmp/sock",

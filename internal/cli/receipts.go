@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/app/receipts"
-	"github.com/rootkernel/jjukkumi/internal/config"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/app/receipts"
+	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // runReceipts implements `receipts list|show` (cli-spec §6, OPS-002):

@@ -13,7 +13,7 @@
 
 | Input | Trust level | Permitted use |
 |---|---|---|
-| Signed/pinned JJUKKUMI binary | trusted code | execute SOT behavior |
+| Signed/pinned Agent Dispatch binary | trusted code | execute SOT behavior |
 | Owner-controlled config with safe permissions | trusted policy | route, resource, target, skills, limits |
 | CLI route argument | operator request, validate | select an existing configured route only |
 | Watchman environment | source metadata, verify | source identity and position |
@@ -48,7 +48,7 @@ Production configuration should reside outside the watched vault. If the operato
 Config loading precedence:
 
 1. explicit `--config`;
-2. `JJUKKUMI_CONFIG`;
+2. `AGENT_DISPATCH_CONFIG`;
 3. platform default.
 
 Config includes secret references, never secret values where avoidable.
@@ -81,7 +81,7 @@ For Hermes CLI invocation:
 
 ## 7. File Read Policy
 
-JJUKKUMI normally hashes Markdown content but does not store it. Maximum hashable file size is configurable, with a safe default. Files above the limit yield structural `unknown` or `bulk` policy, not partial hashing presented as complete evidence.
+Agent Dispatch normally hashes Markdown content but does not store it. Maximum hashable file size is configurable, with a safe default. Files above the limit yield structural `unknown` or `bulk` policy, not partial hashing presented as complete evidence.
 
 Deleted files are never opened. Non-regular files are rejected or excluded according to policy.
 

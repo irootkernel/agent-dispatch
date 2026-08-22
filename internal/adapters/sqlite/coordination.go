@@ -7,8 +7,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/rootkernel/jjukkumi/internal/domain/state"
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/domain/state"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // Route coordination (E3-T4): merge-pending, work completion with

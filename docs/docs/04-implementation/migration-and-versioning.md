@@ -8,8 +8,8 @@
 | SOT | `1.0.0` | document change control |
 | Config | `version: 1` | unknown major rejected |
 | SQLite schema | integer migration version | binary supports an explicit range |
-| JSON records | `jjukkumi.* /v1` | major contract version |
-| CLI envelope | `jjukkumi.cli/v1` | stable machine interface |
+| JSON records | `agent-dispatch.* /v1` | major contract version |
+| CLI envelope | `agent-dispatch.cli/v1` | stable machine interface |
 | Hermes adapter | target/version compatibility table | exact verified public behavior |
 | Watchman adapter | captured fixture/version range | exact verified source behavior |
 

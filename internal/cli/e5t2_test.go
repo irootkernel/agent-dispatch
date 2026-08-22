@@ -13,7 +13,7 @@ import (
 )
 
 // e5t2SkillDir is the packaged production skill inside the docs tree.
-var e5t2SkillDir = filepath.Join("..", "..", "docs", "skills", "jjukkumi-wiki-maintenance")
+var e5t2SkillDir = filepath.Join("..", "..", "docs", "skills", "agent-dispatch-wiki-maintenance")
 
 // e5t2Hermes runs one public hermes command against a disposable HOME so
 // the validation never touches the real Hermes profile.
@@ -37,12 +37,12 @@ func TestHermesCompanionSkillPackaged(t *testing.T) {
 	}
 	skill := string(body)
 	for _, required := range []string{
-		"name: jjukkumi-wiki-maintenance", // frontmatter identity
-		"latest",                          // latest-state rule
-		"untrusted data",                  // untrusted-data rule
-		"jjukkumi work begin",             // receipt CLI use
-		"jjukkumi work complete",
-		"jjukkumi work fail",
+		"name: agent-dispatch-wiki-maintenance", // frontmatter identity
+		"latest",                                // latest-state rule
+		"untrusted data",                        // untrusted-data rule
+		"agent-dispatch work begin",             // receipt CLI use
+		"agent-dispatch work complete",
+		"agent-dispatch work fail",
 		"No-Receipt Fallback", // fallback behavior
 		"DISPATCH_ID",         // task-variable mapping
 		"RUN_ID",
@@ -98,16 +98,16 @@ func TestHermesCompanionSkillValidated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("skills list: %v: %s", err, listing)
 	}
-	if !strings.Contains(listing, "jjukkumi-wiki-maintenance") {
+	if !strings.Contains(listing, "agent-dispatch-wiki-maintenance") {
 		t.Fatalf("disposable profile must list the installed skill: %s", listing)
 	}
-	inspected, err := e5t2Hermes(t, home, "skills", "inspect", "jjukkumi-wiki-maintenance")
-	if err != nil || !strings.Contains(inspected, "jjukkumi-wiki-maintenance") {
+	inspected, err := e5t2Hermes(t, home, "skills", "inspect", "agent-dispatch-wiki-maintenance")
+	if err != nil || !strings.Contains(inspected, "agent-dispatch-wiki-maintenance") {
 		t.Fatalf("skills inspect failed: %v: %s", err, inspected)
 	}
 
 	// Disposable board task selecting the skill through the public flag.
-	board := fmt.Sprintf("jjukkumi-e5t2-skill-%d", time.Now().UnixNano())
+	board := fmt.Sprintf("agent-dispatch-e5t2-skill-%d", time.Now().UnixNano())
 	if out, err := e5t2Hermes(t, home, "kanban", "boards", "create", board); err != nil {
 		t.Fatalf("boards create: %v: %s", err, out)
 	}
@@ -117,7 +117,7 @@ func TestHermesCompanionSkillValidated(t *testing.T) {
 		}
 	}()
 	created, err := e5t2Hermes(t, home, "kanban", "--board", board, "create",
-		"--skill", "jjukkumi-wiki-maintenance", "--json", "JJUKKUMI companion skill validation")
+		"--skill", "agent-dispatch-wiki-maintenance", "--json", "Agent Dispatch companion skill validation")
 	if err != nil {
 		t.Fatalf("kanban create with the skill: %v: %s", err, created)
 	}
@@ -133,7 +133,7 @@ func TestHermesCompanionSkillValidated(t *testing.T) {
 	}
 	found := false
 	for _, s := range task.Skills {
-		if s == "jjukkumi-wiki-maintenance" {
+		if s == "agent-dispatch-wiki-maintenance" {
 			found = true
 		}
 	}
@@ -143,7 +143,7 @@ func TestHermesCompanionSkillValidated(t *testing.T) {
 
 	// The durable record still carries it on the public show surface.
 	shown, err := e5t2Hermes(t, home, "kanban", "--board", board, "show", task.ID, "--json")
-	if err != nil || !strings.Contains(shown, "jjukkumi-wiki-maintenance") {
+	if err != nil || !strings.Contains(shown, "agent-dispatch-wiki-maintenance") {
 		t.Fatalf("task show must carry the skill: %v: %s", err, shown)
 	}
 }

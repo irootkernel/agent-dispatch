@@ -2,10 +2,10 @@
 
 ## 1. Role
 
-Watchman is the authoritative filesystem event source for v0.1. JJUKKUMI does not replace Watchman and does not run a duplicate long-lived file watcher.
+Watchman is the authoritative filesystem event source for v0.1. Agent Dispatch does not replace Watchman and does not run a duplicate long-lived file watcher.
 
 ```text
-Watchman daemon -> settled trigger invocation -> short-lived JJUKKUMI process
+Watchman daemon -> settled trigger invocation -> short-lived Agent Dispatch process
 ```
 
 ## 2. Invocation Contract
@@ -13,10 +13,10 @@ Watchman daemon -> settled trigger invocation -> short-lived JJUKKUMI process
 The installed trigger invokes:
 
 ```text
-jjukkumi dispatch --route wiki-maintenance --input watchman --output json
+agent-dispatch dispatch --route wiki-maintenance --input watchman --output json
 ```
 
-Watchman supplies JSON on standard input. JJUKKUMI treats selected environment variables as source metadata only after verifying the configured trigger binding.
+Watchman supplies JSON on standard input. Agent Dispatch treats selected environment variables as source metadata only after verifying the configured trigger binding.
 
 Fields to capture when present (the verified allowlist; `WATCHMAN_FILES_OVERFLOW` was refuted by the E0-T5 probe, 0/23 invocations — see `docs/integrations/watchman-public-interface-report.md` §3):
 
@@ -31,13 +31,13 @@ The adapter must tolerate absent optional fields in fixtures, but production val
 
 ## 3. Trigger Installation
 
-JJUKKUMI owns a stable trigger name, for example:
+Agent Dispatch owns a stable trigger name, for example:
 
 ```text
-jjukkumi.<route-id>.<short-config-digest>
+agent-dispatch.<route-id>.<short-config-digest>
 ```
 
-`jjukkumi watchman install --route <id>` must:
+`agent-dispatch watchman install --route <id>` must:
 
 1. verify Watchman availability;
 2. resolve and validate the resource root;
@@ -51,13 +51,13 @@ Repeated destructive registration can change incremental behavior and is therefo
 
 ## 4. Expression Scope
 
-The Watchman expression should reduce noise, but JJUKKUMI remains responsible for final policy. A typical expression selects files under the vault and requests fields sufficient to determine path, existence, type, and change status.
+The Watchman expression should reduce noise, but Agent Dispatch remains responsible for final policy. A typical expression selects files under the vault and requests fields sufficient to determine path, existence, type, and change status.
 
 The exact expression and field list must be verified during `E2-T5`. Examples are non-authoritative until that task completes.
 
 ## 5. No Second Settle Window
 
-Watchman trigger mode is already settle-aware. JJUKKUMI must not sleep for a configurable `settle_seconds` in the one-shot path. The trigger payload is one source batch.
+Watchman trigger mode is already settle-aware. Agent Dispatch must not sleep for a configurable `settle_seconds` in the one-shot path. The trigger payload is one source batch.
 
 Later daemon-based subscriptions may introduce explicit coalescing windows under a separate ADR.
 
@@ -108,9 +108,9 @@ If a trustworthy source position is absent, leave `source_event_key` null and re
 
 ## 10. Baseline and Reconciliation
 
-`jjukkumi reconcile --route <id>` enumerates the current configured Markdown scope safely, compares it with persisted path facts, and creates one reconciliation batch. It does not synthesize one source observation per file and does not invoke Watchman re-registration.
+`agent-dispatch reconcile --route <id>` enumerates the current configured Markdown scope safely, compares it with persisted path facts, and creates one reconciliation batch. It does not synthesize one source observation per file and does not invoke Watchman re-registration.
 
-Daily reconciliation is scheduled externally through `launchd`, `systemd --user`, cron, or another operator-owned scheduler. The schedule invokes the CLI and does not require a JJUKKUMI daemon.
+Daily reconciliation is scheduled externally through `launchd`, `systemd --user`, cron, or another operator-owned scheduler. The schedule invokes the CLI and does not require a Agent Dispatch daemon.
 
 ## 11. Test Fixtures
 

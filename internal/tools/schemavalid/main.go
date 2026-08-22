@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/rootkernel/jjukkumi/internal/schemavalid"
+	"github.com/irootkernel/agent-dispatch/internal/schemavalid"
 )
 
 func main() {

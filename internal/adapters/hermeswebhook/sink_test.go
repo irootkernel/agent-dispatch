@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rootkernel/jjukkumi/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // webhookFixture is one loopback HTTPS endpoint plus the sink pointed
@@ -177,7 +177,7 @@ func TestIdempotencyHeaderVerbatimAndStable(t *testing.T) {
 	f := newWebhookFixture(t, "bearer", "env:HOOK_TOKEN", "", "X-Idem", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	req := sampleRequest("jjukkumi:v1:sha256:abc")
+	req := sampleRequest("agent-dispatch:v1:sha256:abc")
 	for i := 0; i < 2; i++ {
 		if _, err := f.sink.Submit(context.Background(), req); err != nil {
 			t.Fatalf("Submit %d: %v", i, err)
@@ -188,7 +188,7 @@ func TestIdempotencyHeaderVerbatimAndStable(t *testing.T) {
 		t.Fatalf("requests = %d, want 2", len(got))
 	}
 	for i, r := range got {
-		if r.header.Get("X-Idem") != "jjukkumi:v1:sha256:abc" {
+		if r.header.Get("X-Idem") != "agent-dispatch:v1:sha256:abc" {
 			t.Fatalf("request %d idempotency header = %q", i, r.header.Get("X-Idem"))
 		}
 	}
@@ -392,7 +392,7 @@ func TestTimeoutAfterPossibleWrite(t *testing.T) {
 // TestUnresolvedSecretIsDefinite proves a missing secret provably sends
 // nothing and never leaks a value (SEC-006).
 func TestUnresolvedSecretIsDefinite(t *testing.T) {
-	f := newWebhookFixture(t, "bearer", "env:JJUKKUMI_MISSING_SECRET_XYZ", "", "", func(w http.ResponseWriter, r *http.Request) {
+	f := newWebhookFixture(t, "bearer", "env:AGENT_DISPATCH_MISSING_SECRET_XYZ", "", "", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 	res, err := f.sink.Submit(context.Background(), sampleRequest("k"))

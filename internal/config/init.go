@@ -9,7 +9,7 @@ import (
 
 // Example returns a disabled example configuration bound to the given
 // instance, resource root, and capability report path. It is the template
-// written by `jjukkumi init`: dispatch stays disabled until an explicit
+// written by `agent-dispatch init`: dispatch stays disabled until an explicit
 // `route enable` (cli-spec §3), and no Watchman trigger is installed.
 func Example(instanceID, resourceRoot, capabilityReport string) *Config {
 	return &Config{
@@ -30,7 +30,7 @@ func Example(instanceID, resourceRoot, capabilityReport string) *Config {
 		Targets: map[string]Target{
 			"hermes-kanban-main": {
 				Type:                 "hermes-kanban",
-				Board:                "jjukkumi",
+				Board:                "agent-dispatch",
 				Executable:           "hermes",
 				CapabilityReport:     capabilityReport,
 				RequiredCapabilities: []string{"durable_acceptance", "submit_idempotency_key", "lookup_by_external_ref"},
@@ -46,7 +46,7 @@ func Example(instanceID, resourceRoot, capabilityReport string) *Config {
 					Type:        "watchman-trigger",
 					SourceID:    "vault-main-watchman",
 					Resource:    "vault-main",
-					TriggerName: "jjukkumi.wiki-maintenance.4f8c21",
+					TriggerName: "agent-dispatch.wiki-maintenance.4f8c21",
 					Include:     []string{"**/*.md"},
 					Exclude:     []string{".git/**", ".obsidian/workspace*.json", ".obsidian/cache/**", ".trash/**"},
 				},
@@ -102,7 +102,7 @@ func WriteExample(cfg *Config, configPath string) error {
 	// Write to a private temporary file, then link it into place: the link
 	// fails atomically if the target exists, and a failed write leaves no
 	// partial configuration behind to block a later init.
-	tmp, err := os.CreateTemp(dir, ".jjukkumi-init-*")
+	tmp, err := os.CreateTemp(dir, ".agent-dispatch-init-*")
 	if err != nil {
 		return err
 	}

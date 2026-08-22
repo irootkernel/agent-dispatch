@@ -6,11 +6,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/rootkernel/jjukkumi/internal/config"
-	"github.com/rootkernel/jjukkumi/internal/platformpaths"
+	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/platformpaths"
 )
 
-// runInit implements `jjukkumi init` (cli-spec §3): it creates the state
+// runInit implements `agent-dispatch init` (cli-spec §3): it creates the state
 // directory and a disabled example configuration after checking for
 // existing files. It never installs a Watchman trigger or enables
 // dispatch; those require their own explicit commands. The state directory
@@ -61,8 +61,8 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	}
 	if configPath == "" {
 		// Same precedence as configuration loading (spec section 1): an
-		// explicit path, then JJUKKUMI_CONFIG, then the platform default.
-		if env := os.Getenv("JJUKKUMI_CONFIG"); env != "" {
+		// explicit path, then AGENT_DISPATCH_CONFIG, then the platform default.
+		if env := os.Getenv("AGENT_DISPATCH_CONFIG"); env != "" {
 			configPath = env
 		} else {
 			configPath = platformpaths.DefaultConfigPath()
@@ -72,7 +72,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		stateDir = resolveStateDirOverride("")
 	}
 	if instanceID == "" {
-		instanceID = "jjukkumi-local"
+		instanceID = "agent-dispatch-local"
 	}
 	if resourceRoot == "" {
 		home, err := os.UserHomeDir()
@@ -113,6 +113,6 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "wrote disabled example configuration: %s\n", configPath)
 	fmt.Fprintf(stdout, "state directory ready: %s\n", stateDir)
-	fmt.Fprintf(stdout, "dispatch stays disabled until 'jjukkumi route enable' is run explicitly\n")
+	fmt.Fprintf(stdout, "dispatch stays disabled until 'agent-dispatch route enable' is run explicitly\n")
 	return 0
 }

@@ -5,17 +5,17 @@
 
 ## Context
 
-An in-Hermes view of JJUKKUMI status, quarantine, and receipts could be convenient, but plugin lifecycle coupling must not affect sensing or dispatch correctness.
+An in-Hermes view of Agent Dispatch status, quarantine, and receipts could be convenient, but plugin lifecycle coupling must not affect sensing or dispatch correctness.
 
 ## Decision
 
-A Hermes plugin is future work. If introduced, it may expose status, pause/resume, route inspection, receipts, quarantine, and explicit manual actions through JJUKKUMI public APIs. It must not host the core watcher, policy engine, SQLite authority, or dispatch correctness logic.
+A Hermes plugin is future work. If introduced, it may expose status, pause/resume, route inspection, receipts, quarantine, and explicit manual actions through Agent Dispatch public APIs. It must not host the core watcher, policy engine, SQLite authority, or dispatch correctness logic.
 
 ## Consequences
 
 - v0.1 contains no plugin.
 - Core behavior works while Hermes is stopped.
-- The plugin requires authenticated JJUKKUMI management APIs or MCP and a new security review.
+- The plugin requires authenticated Agent Dispatch management APIs or MCP and a new security review.
 - Removing the plugin cannot lose source or dispatch state.
 
 ## Rejected Alternatives

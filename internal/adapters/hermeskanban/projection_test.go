@@ -3,7 +3,7 @@ package hermeskanban
 import (
 	"testing"
 
-	"github.com/rootkernel/jjukkumi/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 )
 
 // TestMapExecutionTable is the documented version-tested mapping from

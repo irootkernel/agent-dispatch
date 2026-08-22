@@ -9,7 +9,7 @@ This document records how the approved SOT resolves the discussion draft and lat
 | Primary use case | Watch one Obsidian vault and request LLM Wiki indexing, referencing, and grouping maintenance in Hermes. |
 | Hermes modification | Prohibited in v0.1. Use public CLI/webhook only. No internal database access. |
 | Hermes plugin | Deferred future management surface; never a core dependency. |
-| Allowed companion integration | JJUKKUMI CLI and Hermes companion skill in v0.1; MCP considered later. |
+| Allowed companion integration | Agent Dispatch CLI and Hermes companion skill in v0.1; MCP considered later. |
 | Primary target | Hermes Kanban public interface. |
 | Secondary target | Hermes webhook after the Kanban production gate. No automatic failover. |
 | First source | Watchman one-shot trigger. |
@@ -23,8 +23,8 @@ This document records how the approved SOT resolves the discussion draft and lat
 | Rename | Correctness relies on create/delete evidence; paired rename is optional derived evidence. |
 | Git | Optional enrichment, not mandatory and not sole provenance. |
 | Concurrent work | One unresolved Hermes maintenance task per route. Later changes become one durable dirty generation. |
-| Approval | JJUKKUMI may quarantine or release dispatch; Hermes owns agent execution approval. |
-| Agent-origin attribution | Validated work receipt from JJUKKUMI companion CLI/skill. Unknown attribution fails conservative. |
+| Approval | Agent Dispatch may quarantine or release dispatch; Hermes owns agent execution approval. |
+| Agent-origin attribution | Validated work receipt from Agent Dispatch companion CLI/skill. Unknown attribution fails conservative. |
 | Record model | Observation, batch, decision, intent, attempt, acceptance receipt, and work receipt are separate. |
 | Replay | Removed as an ambiguous operation. Use retry, reprocess, rerun, or reconcile. |
 | Retention defaults | Observations/attempts 30 days, completed receipts 180 days, unresolved records until resolution. |

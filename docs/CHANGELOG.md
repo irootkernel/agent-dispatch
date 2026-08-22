@@ -1,5 +1,15 @@
 # SOT Changelog
 
+## 1.0.14 - 2026-08-23
+
+E7-T1: documentation truth restored after the 2026-08-22 MVP compliance review:
+
+- every surviving false verification claim is corrected at its source with one accurate statement: no successful `make verify` run on a supported Linux host is recorded, hosted CI is not used, and the review's own diagnostic linux/arm64 container runs failed (exit 2). Corrected locations: the roadmap's CI-based acceptance and evidence wording (E1-T1, E6-T2, E6-T3, E6-T4, including the "all MUST requirements pass" acceptance bullet, now marked superseded by the open 14 MUST gaps under D-017), the AC-505 criterion and the charter's success definition (a supported Linux host, with the v0.1.1 exception recorded), the record-contract and examples README validation sentences, the implementation-guide CGO policy row, and the 1.0.10/1.0.11 entries below (inline markers);
+- `docs/README.md` and `docs/VALIDATION.md` align on SOT 1.0.14;
+- `docs/VALIDATION.md` is truthful about its evidence: the header and package statistics are current (12 schemas, 8 epics, 45 tasks, the archived review report included), the em-dash check is scoped to what is true (`docs/docs/00-sot/`), the G2 crash-boundary scope states which boundaries are in-process only, AC-203 and AC-207 rows carry the review's corrections (hollow fake-sink assertion; always-skipping migration test) with their E7-T2/E7-T4 restoration owners, the G4 header records the store-direct follow-up-activation bypass, the G5 section states AC-505's status and the failed diagnostic runs, and the nonexistent `TestG2MigrationInterruptedUpgrade` citation is removed;
+- the roadmap's status artifacts agree (task index, current-state counts, and epic status carry E7-T1 In Progress);
+- no source code changed; `make verify` passes with the corrected package.
+
 ## 1.0.13 - 2026-08-23
 
 D-017: the 2026-08-22 MVP compliance review is accepted in full and remediation epic E7 is registered:
@@ -21,7 +31,7 @@ E6 epic validation audit and closeout:
 
 E6-T4: v0.1.0 verification and release:
 
-- the executable G5 acceptance suite closes the gate: AC-501 (webhook auth without persistence, transport-vs-durable distinction, no Kanban fallback), AC-502 (doctor's stable actionable findings), AC-503 (prune removes resolved expired data while unresolved lineage and the audit survive), AC-504 (the clean-host macOS install→validate→dry-run dispatch→gate-acknowledged enable→scheduled reconciliation→doctor flow without manual database edits), AC-505 (the Linux CI leg of make verify), and AC-506 (the release-way build with its version envelope and the full artifact set);
+- the executable G5 acceptance suite closes the gate: AC-501 (webhook auth without persistence, transport-vs-durable distinction, no Kanban fallback), AC-502 (doctor's stable actionable findings), AC-503 (prune removes resolved expired data while unresolved lineage and the audit survive), AC-504 (the clean-host macOS install→validate→dry-run dispatch→gate-acknowledged enable→scheduled reconciliation→doctor flow without manual database edits), AC-505 (the Linux CI leg of make verify; corrected in 1.0.14: no successful Linux run is recorded, and the review's diagnostic arm64 container runs failed), and AC-506 (the release-way build with its version envelope and the full artifact set);
 - the upgrade-and-backup rehearsal is executable: built-in backup with verification, doctor, full integrity, one reconciliation, and a standalone restore that carries the lineage;
 - docs/VALIDATION.md gains the Gate G5 evidence table (G0–G5 now closed) and docs/RELEASE-NOTES-v0.1.0.md ships as the release notes artifact;
 - the requirement traceability matrix regenerates with every requirement resolved to its owning and verifying tasks (33 tasks, 15 groups);
@@ -47,12 +57,12 @@ Round 2 remediations (all roles, reports_only):
 E6-T3: packaging and scheduled reconciliation (SCP-008, OPS-006, OPS-007, OPS-009):
 
 - `make release VERSION=v0.1.0` builds byte-reproducible cross-platform binaries (darwin/arm64, linux/amd64) with `-trimpath`, the full release commit hash, and the commit's committer date as the build time, and emits a portable `LC_ALL=C`-sorted `SHA256SUMS` over the binaries under `dist/`;
-- the scheduling examples exist and are validated: the launchd LaunchAgent plist (`plutil -lint` on macOS), the systemd --user service and timer (`systemd-analyze verify` on Linux), and the uninstall script (`sh -n`), wired as `make schedule-check` inside `make verify` so each CI platform lints its own artifact (SCP-008, where possible); both schedules invoke the verified `reconcile --reason scheduled` one-shot shape with no daemon, omitting `--submit` before the production gate;
+- the scheduling examples exist and are validated: the launchd LaunchAgent plist (`plutil -lint` on macOS), the systemd --user service and timer (`systemd-analyze verify` on Linux), and the uninstall script (`sh -n`), wired as `make schedule-check` inside `make verify` so each host lints its own artifact where the tool exists (SCP-008, where possible; corrected in 1.0.14: hosted CI is not used); both schedules invoke the verified `reconcile --reason scheduled` one-shot shape with no daemon, omitting `--submit` before the production gate;
 - `agent-dispatch completion bash|zsh` emits the static v0.1 command-tree completion, completing the registered CLI tree;
 - `agent-dispatch maintenance backup --output <path>` writes the runbook §8 built-in backup: an owner-only `VACUUM INTO` snapshot with a post-write quick check that refuses to overwrite (cli-spec §11 updated);
 - `docs/docs/05-operations/installation.md` documents the install, platform config/state paths (macOS and XDG Linux), first-use clean-host scenario, daily scheduling, upgrade, backup, and uninstall procedures;
 - the uninstall example follows runbook §10 and retains SQLite and configuration by design — `--purge-state` only prints the manual backup guidance; the acceptance lines are pinned by tests (clean-host init through the default paths with owner-only perms and idempotent refusal, backup standalone-open and integrity, schedule shapes, no recursive deletion);
-- the Linux CI leg of `make verify` (existing ubuntu-latest matrix) validates the binary, configuration, SQLite, and — with this change — the systemd unit syntax.
+- the Linux CI leg of `make verify` (existing ubuntu-latest matrix) validates the binary, configuration, SQLite, and — with this change — the systemd unit syntax. (Corrected in 1.0.14: no CI run was ever recorded and no successful Linux `make verify` exists; this claim was false as written.)
 
 Review round 1 remediations (all roles, reports_only):
 

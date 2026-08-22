@@ -22,7 +22,7 @@ Use the Go standard library wherever practical. The following dependency roles a
 |---|---|
 | CLI command tree | A mature Go CLI library or a thin internal command router; do not duplicate business rules in handlers. |
 | YAML | YAML v3 parser with duplicate-key detection. |
-| SQLite | Pure-Go driver preferred for reproducible macOS/Linux builds; CGO requires an explicit ADR and CI matrix. |
+| SQLite | Pure-Go driver preferred for reproducible macOS/Linux builds; CGO requires an explicit ADR and per-platform verification coverage (hosted CI is not used, D-017). |
 | Recursive glob | Library with deterministic `**` semantics across platforms. |
 | UUIDv7 | Small pinned library behind an `IDGenerator` port. |
 | JSON Schema | Pinned Draft 2020-12 validator for schemas and examples. |

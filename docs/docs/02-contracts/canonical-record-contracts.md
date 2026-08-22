@@ -147,4 +147,4 @@ Do not fingerprint arbitrary marshaled domain structs because adding a field cou
 - `v1` producers may add optional fields only when consumers ignore them safely.
 - Required semantic changes create a new major contract version.
 - SQLite migration version and JSON contract version are independent.
-- Examples are validated in CI against schemas.
+- Examples are validated against schemas by `make schema-validation` inside `make verify` (hosted CI is not used; D-017).

@@ -12,9 +12,10 @@
 |---|---|
 | Current epic | E7 |
 | Current active task | None |
-| Next task | E7-T1 |
-| Completed tasks | 33 / 45 |
-| Planned tasks | 12 / 45 |
+| Next task | E7-T2 |
+| Completed tasks | 34 / 45 |
+| Planned tasks | 11 / 45 |
+| In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
@@ -31,7 +32,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | E4 | Hermes Kanban Durable Integration | **Completed** | 5 | G3 |
 | E5 | Feedback Loop, Quarantine, and Reconciliation | **Completed** | 5 | G4 |
 | E6 | Hermes Webhook, Operations, Packaging, and v0.1 Release | **Completed** | 4 | G5 |
-| E7 | MVP Compliance Review Remediation | Planned | 12 | MUST closure + v0.1.1 |
+| E7 | MVP Compliance Review Remediation | In Progress | 12 | MUST closure + v0.1.1 |
 
 ## 3. Task Status Index
 
@@ -70,7 +71,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 31 | E6-T2 | Completed | Doctor, status, retention, and operational observability |
 | 32 | E6-T3 | Completed | macOS/Linux packaging and scheduled reconciliation |
 | 33 | E6-T4 | Completed | v0.1 release verification and final SOT reconciliation |
-| 34 | E7-T1 | Planned | Documentation truth restored after the compliance review |
+| 34 | E7-T1 | Completed | Documentation truth restored after the compliance review |
 | 35 | E7-T2 | Planned | Crash recovery, rerun supersession, follow-up activation |
 | 36 | E7-T3 | Planned | Submit-path revalidation and durable path facts |
 | 37 | E7-T4 | Planned | Gate-evidence tests repaired and platform guards added |
@@ -297,7 +298,7 @@ Create the Go repository, package boundaries, build metadata, lint/test commands
 - Makefile with deterministic verification targets for the package checks (manifest checksums, schema/example validation, traceability regeneration) as the single verification entrypoint (D-015);
 - Go schema and example validation using a standard Draft 2020-12 validator, replacing `docs/scripts/validate-json-schemas.py` with its self-test cases migrated to Go unit tests (D-015);
 - `.gaori/tester.yaml` commands re-targeted to the Makefile verification targets (D-015);
-- CI for format, vet/static checks, unit tests, race test where supported, and schema/example validation;
+- CI for format, vet/static checks, unit tests, race test where supported, and schema/example validation (hosted CI was removed on 2026-08-22; verification is `make verify` run per platform, D-017);
 - contribution and local verification instructions.
 
 ### Requirements
@@ -310,7 +311,7 @@ E0-T4 Completed; E0-T5 Completed.
 
 ### Acceptance
 
-- clean checkout builds on macOS and Linux CI;
+- clean checkout builds on macOS and Linux CI (superseded: hosted CI was removed on 2026-08-22 and never recorded a run; verification is `make verify` per platform, D-017);
 - `agent-dispatch version --output json` follows the CLI envelope;
 - no domain behavior is stubbed with false success;
 - package dependency direction is enforceable;
@@ -1426,14 +1427,14 @@ E6-T2 Completed.
 ### Acceptance
 
 - clean-host installation scenario works on macOS;
-- Linux CI validates binary, config, SQLite, and systemd unit syntax where possible;
+- Linux CI validates binary, config, SQLite, and systemd unit syntax where possible (superseded: no successful Linux `make verify` is recorded, hosted CI is not used, and the 2026-08-22 review's diagnostic linux/arm64 container runs failed with exit 2 (review §3.2); `make schedule-check` validates the platform artifact where the tool exists, D-017);
 - uninstall does not delete SQLite or config without explicit flag;
 - trigger and schedule are idempotently inspectable;
 - no Agent Dispatch daemon is introduced.
 
 ### Evidence
 
-Delivered as the release process (`make release`: byte-reproducible darwin/arm64 and linux/amd64 binaries with the full commit hash and commit-date build time, verified by identical SHA-256 digests across consecutive builds, plus a portable `LC_ALL=C`-sorted `SHA256SUMS`; `make clean` covers `dist/`), the platform-validated scheduling artifacts (`make schedule-check` inside `make verify`: `plutil -lint` on macOS, `systemd-analyze verify` on Linux per the CI matrix, `sh -n` always), the launchd LaunchAgent and systemd --user service/timer examples invoking the verified one-shot `reconcile --reason scheduled` shape (whose `--output json` option the dispatches family now accepts, pinned by a test driving the example's exact arguments) with no daemon, the runbook §10 uninstall example that retains SQLite and configuration by design, `agent-dispatch completion bash|zsh` derived from the registered tree, `agent-dispatch maintenance backup` (Lstat symlink guard, `backup_target_exists` conflict, partial-file cleanup, the dedicated `maintenance.backed_up` event, and a verified owner-only standalone snapshot), and `docs/docs/05-operations/installation.md` (platform paths, clean-host scenario, scheduling, upgrade, backup, uninstall). Verified by `make verify` plus the e6t3 suite: the clean-host init through the default paths with owner-only permissions and fail-closed re-init refusal, the backup snapshot opening standalone with quick-check integrity, the uninstall safety pins, the schedule invocation shapes with timer properties, the completion registry invariant parsed back out of the emitted script, and the sandboxed per-command completeness proof. Reviewed through three full-target Mulgae rounds (r_01a0272c and r_01a0273e findings remediated in place; r_01a0274b as the authorized extra round whose residuals are the deferral) — all coverage complete, ci pass, zero structured findings; the round-3 residuals (backup create-vs-guard race and umask window, unsigned release artifacts, further systemd sandboxing, the duplicated no-overwrite guard, launchd output visibility, release-reproducibility automation, and the remaining prose/test notes) are recorded as the hardening deferral for the epic validation audit under run r_01a0274b (reports_only). Changelog 1.0.10.
+Delivered as the release process (`make release`: byte-reproducible darwin/arm64 and linux/amd64 binaries with the full commit hash and commit-date build time, verified by identical SHA-256 digests across consecutive builds, plus a portable `LC_ALL=C`-sorted `SHA256SUMS`; `make clean` covers `dist/`), the platform-validated scheduling artifacts (`make schedule-check` inside `make verify`: `plutil -lint` on macOS, `systemd-analyze verify` on a Linux host where the tool exists (no successful Linux `make verify` is recorded; the 2026-08-22 review's diagnostic linux/arm64 container runs failed, review §3.2, D-017), `sh -n` always), the launchd LaunchAgent and systemd --user service/timer examples invoking the verified one-shot `reconcile --reason scheduled` shape (whose `--output json` option the dispatches family now accepts, pinned by a test driving the example's exact arguments) with no daemon, the runbook §10 uninstall example that retains SQLite and configuration by design, `agent-dispatch completion bash|zsh` derived from the registered tree, `agent-dispatch maintenance backup` (Lstat symlink guard, `backup_target_exists` conflict, partial-file cleanup, the dedicated `maintenance.backed_up` event, and a verified owner-only standalone snapshot), and `docs/docs/05-operations/installation.md` (platform paths, clean-host scenario, scheduling, upgrade, backup, uninstall). Verified by `make verify` plus the e6t3 suite: the clean-host init through the default paths with owner-only permissions and fail-closed re-init refusal, the backup snapshot opening standalone with quick-check integrity, the uninstall safety pins, the schedule invocation shapes with timer properties, the completion registry invariant parsed back out of the emitted script, and the sandboxed per-command completeness proof. Reviewed through three full-target Mulgae rounds (r_01a0272c and r_01a0273e findings remediated in place; r_01a0274b as the authorized extra round whose residuals are the deferral) — all coverage complete, ci pass, zero structured findings; the round-3 residuals (backup create-vs-guard race and umask window, unsigned release artifacts, further systemd sandboxing, the duplicated no-overwrite guard, launchd output visibility, release-reproducibility automation, and the remaining prose/test notes) are recorded as the hardening deferral for the epic validation audit under run r_01a0274b (reports_only). Changelog 1.0.10.
 
 ## E6-T4: Verify and Release v0.1.0
 
@@ -1465,7 +1466,7 @@ E6-T3 Completed.
 ### Acceptance
 
 - AC-001 through AC-506 pass or every SHOULD exception is explicitly accepted;
-- all MUST requirements pass;
+- all MUST requirements pass (superseded by the 2026-08-22 compliance review: 14 MUST gaps are open under D-017 until E7 completes);
 - no later feature is partially enabled;
 - Hermes plugin remains absent;
 - production route enablement is an explicit operator action;
@@ -1478,19 +1479,19 @@ E6-T3 Completed.
 
 ### E6-T4 Evidence
 
-Delivered as the release-verification surface: the executable G5 acceptance suite (`internal/cli/e6t4_test.go`: AC-501 through AC-506 — the webhook route's auth-without-persistence, transport-vs-durable distinction, and no-fallback proof; doctor's actionable stable-coded findings; prune's resolved-expired removal preserving unresolved lineage and the append-only audit; the clean-host macOS install→dispatch→scheduled-reconciliation→doctor flow with the production-gate acknowledgement; the release-way build with the version envelope and artifact set; plus the upgrade-and-backup rehearsal restoring the snapshot standalone with its lineage), the Gate G5 evidence table in `docs/VALIDATION.md` (closing G0–G5: G0 by E0-T5, G1–G4 previously, G5 here), the regenerated requirement traceability matrix (`make traceability`, 33 tasks, 15 groups, every requirement ID resolved to its owning and verifying tasks), the release artifacts (`make release VERSION=v0.1.0`: byte-reproducible darwin/arm64 and linux/amd64 binaries with SHA256SUMS; `docs/RELEASE-NOTES-v0.1.0.md`; the SOT package manifest-verified; schemas, examples, and the companion skill in place), and the security/architecture review posture carried by the per-task Mulgae rounds and the frozen ADR set. Compatibility is frozen (config version 1, schema range 1-4, record payload versions, adapter profiles 0.19.1/2026.07.27.00 — `agent-dispatch version` reports every axis); no deferred feature is partially enabled (the future-work list stands apart); the Hermes plugin remains absent; production enablement stays the explicit computed-revision operator action. Verified by `make verify` on the release tree including the Linux CI leg for AC-505. Reviewed through two full-target Mulgae rounds (r_01a0277c and r_01a02791, both remediated in place: the delivered webhook adapter entry in `agent-dispatch version`, the doctor stable-nonzero contract with the `doctor_findings_present` registry code, the real production-gate enablement and uninstall ordering in the AC-504 evidence, the computed-revision rehearsal enable, the monotonic audit assertion, the webhook target-type and v0.1.0 version assertions, the unified doctor emission with the version adapter pin, and the documentation corrections); the epic validation audit reconciles the member-task hardening deferrals (r_01a026d2, r_01a0270a, r_01a0274b) and this task's round-2 residuals under run r_01a02791. Changelog 1.0.11.
+Delivered as the release-verification surface: the executable G5 acceptance suite (`internal/cli/e6t4_test.go`: AC-501 through AC-506 — the webhook route's auth-without-persistence, transport-vs-durable distinction, and no-fallback proof; doctor's actionable stable-coded findings; prune's resolved-expired removal preserving unresolved lineage and the append-only audit; the clean-host macOS install→dispatch→scheduled-reconciliation→doctor flow with the production-gate acknowledgement; the release-way build with the version envelope and artifact set; plus the upgrade-and-backup rehearsal restoring the snapshot standalone with its lineage), the Gate G5 evidence table in `docs/VALIDATION.md` (closing G0–G5: G0 by E0-T5, G1–G4 previously, G5 here), the regenerated requirement traceability matrix (`make traceability`, 33 tasks, 15 groups, every requirement ID resolved to its owning and verifying tasks), the release artifacts (`make release VERSION=v0.1.0`: byte-reproducible darwin/arm64 and linux/amd64 binaries with SHA256SUMS; `docs/RELEASE-NOTES-v0.1.0.md`; the SOT package manifest-verified; schemas, examples, and the companion skill in place), and the security/architecture review posture carried by the per-task Mulgae rounds and the frozen ADR set. Compatibility is frozen (config version 1, schema range 1-4, record payload versions, adapter profiles 0.19.1/2026.07.27.00 — `agent-dispatch version` reports every axis); no deferred feature is partially enabled (the future-work list stands apart); the Hermes plugin remains absent; production enablement stays the explicit computed-revision operator action. Verified by `make verify` on the release tree (darwin/arm64 only; no successful Linux run is recorded: the 2026-08-22 review's diagnostic linux/arm64 container runs failed with exit 2, and the AC-505 verification is the SCP-008 exception under D-017). Reviewed through two full-target Mulgae rounds (r_01a0277c and r_01a02791, both remediated in place: the delivered webhook adapter entry in `agent-dispatch version`, the doctor stable-nonzero contract with the `doctor_findings_present` registry code, the real production-gate enablement and uninstall ordering in the AC-504 evidence, the computed-revision rehearsal enable, the monotonic audit assertion, the webhook target-type and v0.1.0 version assertions, the unified doctor emission with the version adapter pin, and the documentation corrections); the epic validation audit reconciles the member-task hardening deferrals (r_01a026d2, r_01a0270a, r_01a0274b) and this task's round-2 residuals under run r_01a02791. Changelog 1.0.11.
 
 ---
 
 # E7: MVP Compliance Review Remediation
 
-**Epic status:** Planned  
+**Epic status:** In Progress  
 **Purpose:** Remediate every finding of the 2026-08-22 MVP compliance review (D-017): the three Blockers in the core durability and coordination user stories, the five High findings in submit-path integrity and evidence, all Medium findings, and the Low/Info dispositions; then re-verify the gates and release v0.1.1.  
 **Gate:** MUST closure — every one of the 14 GAP requirements PASS or carrying an explicit recorded exception — with gates G1-G5 re-run on the real Hermes and Watchman.
 
 ## E7-T1: Restore Documentation Truth After the Compliance Review
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -1516,6 +1517,10 @@ D-017 recorded; v0.1.0 sequence complete.
 - no living document claims a Linux verification that was not performed;
 - VALIDATION.md cites no nonexistent test and carries no internal contradiction about AC-505;
 - `make manifest-check`, `make schema-validation`, and `make traceability` pass with the report included.
+
+### Evidence
+
+Delivered as a documentation-only correction set over twelve files: every surviving false verification claim now carries one accurate statement (no successful `make verify` run on a supported Linux host is recorded, hosted CI is not used, and the review's diagnostic linux/arm64 container runs failed with exit 2) at the roadmap's E1-T1/E6-T3/E6-T4 acceptance and evidence wording plus the superseded "all MUST requirements pass" bullet, the AC-505 criterion, the charter's success definition, the record-contract and examples README validation sentences, the implementation-guide CGO policy row, and inline markers on the false CHANGELOG 1.0.10/1.0.11 claims; `docs/VALIDATION.md` is truthful about its evidence (current header and statistics: 63 manifest-basis Markdown files, 12 schemas, 8 epics, 45 tasks; the G2 crash-boundary scope naming the in-process-only boundaries; the AC-203 hollow-assertion and AC-207 always-skip corrections owned by E7-T2/E7-T4; the G4 store-direct follow-up-activation bypass note; the G5 AC-505 status; the removed nonexistent `TestG2MigrationInterruptedUpgrade` citation; the em-dash check scoped to `docs/docs/00-sot/`); `docs/README.md` and VALIDATION align on SOT 1.0.14 with CHANGELOG entry 1.0.14; and the roadmap's status artifacts (task index, current-state counts, epic status) stay mutually consistent. Verified by `make verify` on darwin/arm64 (all checks green including the manifest with the admitted review report). Reviewed through two full-target Mulgae rounds (r_01a02afe-da64: four valid report findings — inconsistent roadmap status artifacts, overbroad no-Linux-run absolutes contradicting review §3.2, residual CI wording, and the em-dash check scope with three newly introduced em dashes — all remediated in place; r_01a02b0d-3389: coverage complete, ci pass, zero structured findings, reports_only), with the round-2 residuals recorded as the hardening deferral for the epic validation audit under run r_01a02b0d-3389 (reports_only; no structured finding IDs exist; residuals: the 1.0.14 corrected-locations list naming E6-T2 though no E6-T2-owned roadmap wording changed, the platform-unqualified `make verify` claim in the 1.0.14 entry, and the pre-existing testing-strategy CI-stages section owned by E7-T10). Changelog 1.0.14.
 
 ## E7-T2: Wire Crash Recovery, Rerun Supersession, and Follow-Up Activation
 

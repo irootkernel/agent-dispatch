@@ -89,8 +89,8 @@ func TestUnknownCommandFailsClosed(t *testing.T) {
 
 func TestEveryKnownCommandClassifiesAsNotImplemented(t *testing.T) {
 	for name := range knownCommands {
-		if name == "version" || name == "init" || name == "route" || name == "dispatch" || name == "dispatches" || name == "watchman" || name == "config" || name == "receipts" || name == "work" || name == "quarantine" || name == "reconcile" {
-			continue // the implemented commands
+		if name == "version" || name == "init" || name == "route" || name == "dispatch" || name == "dispatches" || name == "watchman" || name == "config" || name == "receipts" || name == "work" || name == "quarantine" || name == "reconcile" || name == "status" || name == "doctor" || name == "maintenance" {
+			continue // the implemented commands (E6-T2 adds the operations tree)
 		}
 		var out, errb bytes.Buffer
 		if code := Run([]string{name}, &out, &errb); code != 2 {

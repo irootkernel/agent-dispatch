@@ -300,6 +300,7 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	rt := &dispatch.Runtime{
 		Store: outcome.store, Sink: sink, Now: time.Now,
 		LeaseTTL: time.Minute, Backoff: backoff, JitterUnit: jitterUnit, Actor: "dispatch",
+		Log: opsLogger(stderr, artifacts.cfg), TraceID: globalTraceID,
 	}
 	report, err := rt.SubmitOnce(requestCtx(), outcome.dispatchID, "jjukkumi-dispatch")
 	outcome.Close()

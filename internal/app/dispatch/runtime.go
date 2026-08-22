@@ -8,6 +8,7 @@ import (
 
 	"github.com/rootkernel/jjukkumi/internal/domain/records"
 	"github.com/rootkernel/jjukkumi/internal/domain/state"
+	"github.com/rootkernel/jjukkumi/internal/observability"
 	"github.com/rootkernel/jjukkumi/internal/ports"
 )
 
@@ -33,6 +34,12 @@ type Runtime struct {
 	JitterUnit func() float64
 	// Actor labels audit records from this runtime.
 	Actor string
+	// Log is the optional structured operational log (OPS-001): when
+	// set, the submit flow emits the dispatch lifecycle events with
+	// causal correlation; a nil log emits nothing.
+	Log *observability.Logger
+	// TraceID correlates this runtime's log events.
+	TraceID string
 }
 
 // SubmitReport summarizes one completed submit attempt.
@@ -86,6 +93,7 @@ func (r *Runtime) SubmitOnce(ctx context.Context, dispatchID, owner string) (Sub
 		return report, err
 	}
 	report.AttemptID = acquired
+	r.logEvent(observability.LevelInfo, observability.EventDispatchAttemptStarted, dispatchID, acquired, snap.RouteID, snap.TargetID, "attempt leased", nil)
 
 	var req ports.TaskRequest
 	if err := json.Unmarshal([]byte(snap.RequestJSON), &req); err != nil {
@@ -174,6 +182,7 @@ func (r *Runtime) SubmitOnce(ctx context.Context, dispatchID, owner string) (Sub
 	}
 	report.To = classified.To
 	report.Reason = classified.Reason
+	r.logSubmitOutcome(dispatchID, acquired, snap.RouteID, snap.TargetID, classified, res)
 	return report, nil
 }
 
@@ -272,4 +281,41 @@ func boundedPayload(p []byte) string {
 		return "{}"
 	}
 	return string(p)
+}
+
+// logSubmitOutcome emits the classified submit outcome event with its
+// causal correlation (OPS-001; levels per observability §4).
+func (r *Runtime) logSubmitOutcome(dispatchID, attemptID, routeID, targetID string, classified Classified, res ports.SubmitResult) {
+	data := map[string]any{"classification": string(res.Classification), "outcome": classified.AttemptOutcome}
+	switch classified.To {
+	case records.IntentAccepted:
+		r.logEvent(observability.LevelInfo, observability.EventDispatchAccepted, dispatchID, attemptID, routeID, targetID, "dispatch accepted", data)
+	case records.IntentRejected:
+		r.logEvent(observability.LevelWarn, observability.EventDispatchRejected, dispatchID, attemptID, routeID, targetID, "dispatch rejected by the target", data)
+	case records.IntentUnknown:
+		// Recoverable uncertainty pending operator resolution: WARN per
+		// observability §4, not ERROR.
+		r.logEvent(observability.LevelWarn, observability.EventDispatchUnknown, dispatchID, attemptID, routeID, targetID, "delivery outcome unknown", data)
+	case records.IntentRetryWait:
+		r.logEvent(observability.LevelInfo, observability.EventDispatchRetryScheduled, dispatchID, attemptID, routeID, targetID, "transport failure scheduled for retry", data)
+	}
+}
+
+// corr builds the causal correlation for one dispatch event.
+func (r *Runtime) corr(dispatchID, attemptID, routeID, targetID string) observability.Correlation {
+	return observability.Correlation{
+		TraceID:    r.TraceID,
+		DispatchID: dispatchID,
+		AttemptID:  attemptID,
+		RouteID:    routeID,
+		TargetID:   targetID,
+	}
+}
+
+// logEvent emits one structured event when the logger is present.
+func (r *Runtime) logEvent(level observability.Level, event, dispatchID, attemptID, routeID, targetID, message string, data map[string]any) {
+	if r.Log == nil {
+		return
+	}
+	r.Log.Log(level, event, r.corr(dispatchID, attemptID, routeID, targetID), message, data)
 }

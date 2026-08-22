@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/rootkernel/jjukkumi/internal/observability"
 	"github.com/rootkernel/jjukkumi/internal/version"
 )
 
@@ -69,16 +70,22 @@ var knownCommands = map[string]bool{
 }
 
 // Run executes the CLI with the given arguments and writes output to the
-// given streams. It returns the process exit code. This build implements
-// the version, init, config validate, route plan, dispatch --dry-run,
-// and watchman lifecycle commands; every other registered command is
-// reported as an explicit not-implemented error rather than silently
-// succeeding, and an unrecognized name is command_unknown.
+// given streams. It returns the process exit code. Global options
+// (--log-level, --trace-id) are scanned out before dispatch and shape
+// the stderr structured log (OPS-001). This build implements the full
+// v0.1 command tree except `completion`; every registered but
+// unimplemented command fails with command_not_implemented rather than
+// silently succeeding, and an unrecognized name is command_unknown.
 func Run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		writeError(stderr, "", "command_unknown", "usage", "usage: jjukkumi <command> [flags]; run 'jjukkumi version --output json'")
 		return 2
 	}
+	rest, ok := scanGlobalOptions(args[0], args[1:], stderr)
+	if !ok {
+		return 2
+	}
+	args = rest
 	switch args[0] {
 	case "version":
 		return runVersion(args[1:], stdout, stderr)
@@ -102,6 +109,12 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runQuarantine(args[1:], stdout, stderr)
 	case "reconcile":
 		return runReconcile(args[1:], stdout, stderr)
+	case "status":
+		return runStatus(args[1:], stdout, stderr)
+	case "doctor":
+		return runDoctor(args[1:], stdout, stderr)
+	case "maintenance":
+		return runMaintenance(args[1:], stdout, stderr)
 	default:
 		if knownCommands[args[0]] {
 			writeError(stderr, args[0], "command_not_implemented", "usage",
@@ -112,6 +125,52 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		}
 		return 2
 	}
+}
+
+// scanGlobalOptions extracts the global --log-level and --trace-id
+// options from one command's arguments, applying them to the process
+// log state, and returns the remaining arguments with the command
+// preserved in front. An unknown level or a missing option value is a
+// fail-closed usage failure.
+func scanGlobalOptions(command string, args []string, stderr io.Writer) ([]string, bool) {
+	var rest []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		take := func() (string, bool) {
+			if eq := strings.IndexByte(arg, '='); eq >= 0 {
+				return arg[eq+1:], true
+			}
+			if i+1 >= len(args) {
+				return "", false
+			}
+			i++
+			return args[i], true
+		}
+		switch {
+		case arg == "--log-level" || strings.HasPrefix(arg, "--log-level="):
+			value, ok := take()
+			if !ok {
+				usageError(stderr, command, "--log-level requires a value")
+				return nil, false
+			}
+			level, err := observability.ParseLevel(value)
+			if err != nil {
+				usageError(stderr, command, err.Error())
+				return nil, false
+			}
+			globalLogLevel = level
+		case arg == "--trace-id" || strings.HasPrefix(arg, "--trace-id="):
+			value, ok := take()
+			if !ok {
+				usageError(stderr, command, "--trace-id requires a value")
+				return nil, false
+			}
+			globalTraceID = value
+		default:
+			rest = append(rest, arg)
+		}
+	}
+	return append([]string{command}, rest...), true
 }
 
 func runVersion(args []string, stdout, stderr io.Writer) int {

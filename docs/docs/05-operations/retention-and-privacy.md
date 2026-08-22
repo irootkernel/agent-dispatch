@@ -50,7 +50,7 @@ Not stored by default:
 
 ## 4. Relative Path Privacy
 
-Relative paths may reveal note titles. Routes may set log behavior to `redacted`, causing logs to use a stable path digest and basename suppression while SQLite retains relative paths needed for operation. A future encrypted-state feature requires a separate ADR.
+Relative paths may reveal note titles. The instance may set `log_paths: redacted`, causing logs to replace path-shaped values with a stable digest while SQLite retains the relative paths needed for operation. The `log_paths` policy is instance-level in v0.1. A future encrypted-state feature requires a separate ADR.
 
 ## 5. Database Protection
 

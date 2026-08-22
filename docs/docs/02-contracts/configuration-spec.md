@@ -220,7 +220,7 @@ retention:
   unresolved: forever
 ```
 
-`forever` is valid only for unresolved classes. Pruning never deletes a parent still referenced by an unresolved child.
+`forever` is valid only for unresolved classes. Pruning never deletes a parent still referenced by an unresolved child. In v0.1 `maintenance prune` resolves the effective policy from the instance-level `retention` block; a route-level `retention` block is schema-valid and reserved for per-route pruning in a later release.
 
 ## 11. Secret References
 

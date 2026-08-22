@@ -1,5 +1,28 @@
 # SOT Changelog
 
+## 1.0.9 - 2026-08-22
+
+E6-T2: doctor, status, retention, and operational observability (OPS-001..005, OPS-008, CLI-004, CLI-007, SEC-007):
+
+- the structured operational log exists (`internal/observability`): one JSON object per line on stderr, the stable §3 event-name vocabulary, the §2 causal correlation fields, the §4 level semantics, and the path-privacy policy (relative, redacted with stable digests, full); note bodies, credentials, and authorization material never survive redaction, and the default warn level keeps successful one-shot commands quiet (CLI-002). The global `--log-level` and `--trace-id` options shape it, and the dispatch runtime emits the attempt-started and classified-outcome lifecycle events with causal IDs;
+- `jjukkumi status` reports route active/dirty state with queue counts, unresolved delivery, quarantine, the oldest unresolved record, the database size, and the offline target capability summary (the webhook's static declaration and the kanban frozen report), warning on dirty routes, pending reconciliation, held quarantine, and delivery uncertainty;
+- `jjukkumi doctor` examines configuration validity, resource roots (existence, readability, owner-only posture), the durable store (open failure, WAL journal mode, quick/integrity check, schema currency), Watchman presence and version, per-target construction gates, secret-reference resolvability without printing values, stale attempt leases, unknown and dead-lettered dispatches, stale active routes, and never-run daily reconciliation — findings carry stable code, severity, summary, details, and remediation, are data on stdout (exit 0), and emit doctor.finding log events at their severities;
+- the retention planner and prune are implemented (`internal/app/maintenance` policy resolution with the OPS-003 defaults and configured overrides; `maintenance prune` computes per-class cutoffs children-first): dry-run by default, `--yes` executes in one transaction with foreign keys enforced, `--before` only narrows horizons, unresolved lineages (unknown, retry_wait, dead_lettered, submitting, reconciling) survive intact with their ancestry, state-transition audit rows are never pruned, and the actor, policy cutoffs, and counts are recorded in the append-only audit;
+- `maintenance vacuum` requires `--yes` (CLI-007) and refuses with the new stable `maintenance_active_work` code (conflict, exit 14) while any intent is submitting or holds an unexpired lease; `maintenance integrity` reports the check mode and schema currency;
+- stale findings are first-class: expired attempt leases, stale active routes against active_stale_after, unknown/dead-lettered counts, and overdue reconciliation surface in both doctor and status;
+- the runbook's routine inspection commands (`status`, `doctor`, `doctor --probe-targets`) now exist and are exercised end to end by the CLI suite.
+
+Review round 1 remediations (all roles, reports_only):
+
+- `doctor --integrity full` is reachable (the flag parses as a value option), `--output=json` and boolean equals-forms parse for every ops command, `vacuum --dry-run` is rejected as the contradiction it is, and an invalid `--log-level` fails closed instead of being silently ignored;
+- the prune execution guards every foreign-key referencer the plan can meet: held or unresolved quarantine blocks its decision and batch, work receipts outside retention block their intent, and the route's active slot never loses its dispatch; the dry-run plan now mirrors the execution's cascade (decisions freed by pruned intents free batches, which free observations), so the counts cannot diverge;
+- `maintenance prune --reason` is recorded in the append-only audit beside the actor, cutoffs, and counts;
+- the kanban capability-report path is passed through verbatim like every other consumer (the divergent config-directory resolution rule is gone);
+- `doctor --probe-targets` no longer duplicates a target's offline gate failure, a configuration failure no longer fabricates `sqlite_open_failed`, the stale-active age comes from the last completed attempt (lease expiry as fallback), and overdue daily reconciliation (over 25 hours) joins the never-run finding;
+- the unknown-delivery lifecycle event logs at WARN per observability §4 (recoverable uncertainty), and log redaction recurses into nested map and list payloads;
+- tests pin the retention policy resolution with `--before` narrowing, every doctor finding code with severity and remediation, the prune audit row with actor and reason, plan-versus-execution consistency, held-quarantine lineage preservation, the doctor option surface, and the fail-closed log level;
+- docs: configuration-spec §10 states that v0.1 prune resolves the instance-level policy (route-level retention is reserved), and retention-and-privacy §4 names the instance-level `log_paths` policy.
+
 ## 1.0.8 - 2026-08-22
 
 E6-T1: the explicit Hermes webhook adapter (contract addition, WHK-001..005, SEC-006, SEC-007):

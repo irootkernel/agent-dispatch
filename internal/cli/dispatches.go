@@ -345,6 +345,7 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 		Store: store, Sink: sink,
 		Now: time.Now, LeaseTTL: time.Minute, Actor: "drain",
 		Backoff: backoff, JitterUnit: jitterUnit,
+		Log: opsLogger(stderr, cfg), TraceID: globalTraceID,
 	}
 	// Unknown dispatches are reconciled before due work is submitted
 	// (DUR-006). A failure to enumerate them fails closed: submitting

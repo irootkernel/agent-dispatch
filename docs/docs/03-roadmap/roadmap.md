@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E6, Hermes Webhook, Operations, Packaging, and v0.1 Release |
 | Current active task | None |
-| Next task | **E6-T2, Doctor, Status, Retention, and Operational Observability** |
-| Completed tasks | 30 / 33 |
-| Planned tasks | 3 / 33 |
+| Next task | **E6-T3, Packaging and Scheduled Reconciliation** |
+| Completed tasks | 31 / 33 |
+| Planned tasks | 2 / 33 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
@@ -66,7 +66,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 28 | E5-T4 | Completed | Protected/bulk quarantine and full reconciliation |
 | 29 | E5-T5 | Completed | Production-capable test-vault gate G4 |
 | 30 | E6-T1 | Completed | Explicit Hermes webhook adapter |
-| 31 | E6-T2 | Planned | Doctor, status, retention, and operational observability |
+| 31 | E6-T2 | Completed | Doctor, status, retention, and operational observability |
 | 32 | E6-T3 | Planned | macOS/Linux packaging and scheduled reconciliation |
 | 33 | E6-T4 | Planned | v0.1 release verification and final SOT reconciliation |
 
@@ -1348,7 +1348,7 @@ Delivered in `internal/adapters/hermeswebhook` (sink, strict client, typed error
 
 ## E6-T2: Implement Doctor, Status, Retention, and Operational Observability
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -1379,6 +1379,10 @@ E6-T1 Completed.
 - logs contain causal IDs and no note bodies/secrets;
 - vacuum refuses unsafe active conditions;
 - status reports route dirty and delivery uncertainty clearly.
+
+### Evidence
+
+Delivered in `internal/observability` (the structured log: §3 event vocabulary, §2 causal correlation, §4 levels with the warn default, path-privacy redaction recursing into nested payloads), `internal/app/doctor` (the pure findings examination over configuration, resource roots, store health, integrations, targets, and stale runtime state), `internal/app/maintenance` (OPS-003 policy resolution with configured overrides and --before narrowing), the sqlite maintenance surface (queue counters, stale leases, oldest unresolved, the FK-guarded children-first prune with its cascade-consistent dry-run plan and append-only audit record, the active-work refusal, vacuum, integrity), and the CLI `status`/`doctor`/`maintenance` commands with the global `--log-level`/`--trace-id` options and lifecycle event wiring in the dispatch runtime (OPS-001, SEC-007). Verified by `make verify` plus the e6t2 suite: status counters and warnings, every doctor finding code at unit level with severity and remediation plus the CLI failure-class slice, prune dry-run/execute consistency, unresolved-lineage and held-quarantine preservation, the audit row with actor and reason, the vacuum refusal and recovery, integrity modes, the fail-closed log level, and the causal-ID lifecycle log proof. Reviewed through two full-target Mulgae rounds (r_01a026fc remediated in place; r_01a0270a deferred) — all coverage complete, ci pass, zero structured findings; the round-2 residuals (plan/execute SQL duplication with residual count drift on cascaded classes, the --dry-run/--yes precedence, migration_pending observability under auto-migration, documented-but-unaccepted global options, the remaining test gaps) are recorded as the hardening deferral for the epic validation audit under run r_01a0270a (reports_only; role-report coordinate identities). Changelog 1.0.9.
 
 ## E6-T3: Package macOS/Linux Installation and Scheduled Reconciliation
 

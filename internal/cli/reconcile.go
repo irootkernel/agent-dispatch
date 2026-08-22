@@ -20,6 +20,7 @@ import (
 // running the Watchman plan pipeline.
 type reconcileArtifacts struct {
 	cfg        *config.Config
+	stderr     io.Writer
 	route      config.Route
 	resource   config.Resource
 	target     config.Target
@@ -74,7 +75,7 @@ func planConfigOnly(command, configPath, routeID string, stderr io.Writer) (*rec
 		writeError(stderr, command, "config_invalid", "configuration", err.Error())
 		return nil, 3
 	}
-	return &reconcileArtifacts{
+	return &reconcileArtifacts{stderr: stderr,
 		cfg: cfg, route: route, resource: resource, target: target,
 		targetID: route.Dispatch.Target, revision: revision,
 		resolver: runtime.resolver, engine: runtime.engine,
@@ -183,5 +184,6 @@ func (a *reconcileArtifacts) submitRuntime(store storeOp) (*dispatch.Runtime, er
 	return &dispatch.Runtime{
 		Store: store, Sink: sink, Now: time.Now,
 		LeaseTTL: time.Minute, Backoff: backoff, JitterUnit: jitterUnit, Actor: "reconcile",
+		Log: opsLogger(a.stderr, a.cfg), TraceID: globalTraceID,
 	}, nil
 }

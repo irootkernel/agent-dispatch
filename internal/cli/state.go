@@ -58,6 +58,18 @@ type storeOp interface {
 	ports.QuarantineStore
 	io.Closer
 	ListRoutes(ctx context.Context) ([]sqlite.RouteRow, error)
+	CountIntentsByState(ctx context.Context) (map[string]int64, error)
+	CountQuarantineByState(ctx context.Context) (map[string]int64, error)
+	OldestUnresolved(ctx context.Context) (string, error)
+	StaleLeases(ctx context.Context, now string) ([]string, error)
+	PlanPrune(ctx context.Context, cutoffs sqlite.PruneCutoffs) (sqlite.PrunePlan, error)
+	ExecutePrune(ctx context.Context, cutoffs sqlite.PruneCutoffs, actor, reason, now string) (sqlite.PruneCounts, error)
+	HasActiveWork(ctx context.Context, now string) (bool, error)
+	Vacuum(ctx context.Context) error
+	DatabaseBytes() (int64, error)
+	IntegrityCheck(full bool) error
+	SchemaVersion() (int, error)
+	LatestSchemaVersion() int
 	SetRouteActivation(ctx context.Context, routeID, activation, acknowledgeRevision, now string) error
 	LoadRouteState(ctx context.Context, routeID string) (state.RouteSnapshot, error)
 	CommitMergePending(ctx context.Context, lin ports.Lineage, actor, now string) (int, error)

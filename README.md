@@ -17,8 +17,8 @@ under [`docs/`](docs/README.md); start there.
 - `docs/` the SOT package: specification, ADRs, contracts, roadmap,
   schemas, examples, and integration evidence.
 - `Makefile` the single verification entrypoint.
-- `.github/workflows/ci.yml` CI running the same verification on macOS and
-  Linux.
+- GitHub Actions is not used; run `make verify` locally on each target
+  platform (macOS, and a supported Linux host for Linux releases).
 
 ## Build and verify
 

@@ -101,7 +101,7 @@ release:
 # E6-T3 scheduling-artifact validation: the launchd and systemd
 # examples are verified with the platform tool where it exists
 # (SCP-008 "where possible"); a missing tool is reported, not fatal,
-# because the CI matrix supplies the other platform.
+# because the other platform validates its own artifact where it is deployed.
 schedule-check:
 	@miss=0; \
 	if command -v plutil >/dev/null 2>&1; then \
@@ -111,7 +111,7 @@ schedule-check:
 	  systemd-analyze verify docs/examples/scripts/agent-dispatch-reconcile.service.example docs/examples/scripts/agent-dispatch-reconcile.timer.example || exit 1; \
 	else miss=1; fi; \
 	sh -n docs/examples/scripts/agent-dispatch-uninstall.sh.example || exit 1; \
-	if [ $$miss -eq 1 ]; then echo "schedule-check: platform validator absent; validated the shell script only (CI matrix covers the other platform)"; fi; \
+	if [ $$miss -eq 1 ]; then echo "schedule-check: platform validator absent; validated the shell script only (run on the other platform to lint its artifact)"; fi; \
 	echo "schedule-check: done"
 
 clean:

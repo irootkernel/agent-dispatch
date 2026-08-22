@@ -85,8 +85,8 @@ idempotently inspectable: `agent-dispatch status` reports
 `last_reconciled_at`, and `agent-dispatch doctor` flags
 `reconciliation_never_run` and `reconciliation_overdue` (over 25
 hours). `make verify` validates the artifacts with the platform tool
-(`plutil -lint`, `systemd-analyze verify`) on each OS of the CI matrix
-(SCP-008, where possible).
+(`plutil -lint`, `systemd-analyze verify`) with the tool present on the
+current host (SCP-008, where possible); GitHub Actions is not used.
 
 ## 5. Upgrade (OPS-009)
 

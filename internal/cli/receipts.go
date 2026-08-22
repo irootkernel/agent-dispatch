@@ -175,14 +175,15 @@ func runDispatchesRefresh(command string, args []string, stdout, stderr io.Write
 	return writeEnvelopeWithWarnings(stdout, command, result, warnings)
 }
 
-// targetBoard resolves the configured board slug for one route.
+// targetBoard resolves the configured durable target scope for one
+// route: the kanban board slug or the webhook endpoint.
 func targetBoard(cfg *config.Config, routeID string) string {
 	route, ok := cfg.Routes[routeID]
 	if !ok {
 		return ""
 	}
 	if target, ok := cfg.Targets[route.Dispatch.Target]; ok {
-		return target.Board
+		return targetScope(target)
 	}
 	return ""
 }

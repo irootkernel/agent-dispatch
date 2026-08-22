@@ -250,6 +250,14 @@
         "idempotency_header": {
           "type": "string",
           "minLength": 1
+        },
+        "required_capabilities": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/capability"
+          },
+          "description": "Capability names the route requires; the static webhook declaration fails closed on any it does not provide (HER-005)."
         }
       }
     },

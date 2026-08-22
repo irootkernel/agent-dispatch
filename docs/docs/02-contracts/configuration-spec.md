@@ -108,7 +108,7 @@ targets:
     idempotency_header: Idempotency-Key
 ```
 
-Webhook targets are explicit targets and never fallback targets.
+Webhook targets are explicit targets and never fallback targets. The endpoint must be an `https` URL; redirects are never followed (a redirecting endpoint is a definite routing rejection). `auth.type` is `bearer` (Authorization: Bearer) or `header` (a custom `header_name` carrying the secret); `auth.header_name` is required for `header` and must be empty for `bearer`. The secret reference resolves immediately before each submission and never enters SQLite or logs (SEC-006). `idempotency_header` defaults to `Idempotency-Key`; the core's idempotency key is transmitted verbatim so the same dispatch retry presents the same key (WHK-005). `submit_timeout` defaults to 30s. The optional `required_capabilities` gates against the adapter's static declaration (HER-005): the webhook declares `durable_acceptance` false — a 2xx is transport acceptance only — so requiring it fails validation.
 
 ## 6. Routes
 

@@ -1,5 +1,38 @@
 # SOT Changelog
 
+## 1.0.8 - 2026-08-22
+
+E6-T1: the explicit Hermes webhook adapter (contract addition, WHK-001..005, SEC-006, SEC-007):
+
+- the `hermes-webhook` target is wired end to end: `resolveSink` constructs the adapter after its fail-closed gates (https endpoint, bearer/header authentication shape, valid header names, HER-005 required-capability validation against the static declaration), and the unwired-adapter error is gone;
+- the capability declaration is static and offline, derived from the frozen E0-T4 §9 evidence (inbound-only receiving platform, not enabled): `durable_acceptance` false — a 2xx is transport acceptance only, never durable (WHK-004) — `submit_idempotency_key` true (the core's key transmitted verbatim under the configured header, default `Idempotency-Key`, WHK-005), every lookup and projection unsupported and never emulated, `maximum_request_bytes` 262144 enforced before transmission;
+- the structured HTTP client is the repository's first: one end-to-end submit deadline (default 30s), TLS 1.2+ with system roots and no bypass, no proxy, redirects disabled (an unfollowed 3xx is a definite routing rejection), and a conservative response mapping — definite refusal statuses (400/401/403/404/405/406/410/413/414/415/422 and 3xx) reject; 408/409/429/5xx stay unknown; transport failures provably before transmission (resolution, dial, handshake) are definite non-submission, everything after possible transmission unknown;
+- authentication secrets resolve immediately before each submission through the new `secretresolver` adapter (env, file, fd, and the controlled macOS keychain lookup; argv-only, no environment, bounded) and never enter SQLite or logs (SEC-006); every captured response byte is redacted against the resolved secret (SEC-007);
+- webhook intents record the endpoint URL as their durable target scope (the analog of the kanban board) at every intent-construction site, so drain reconciliation re-verifies the accepting identity;
+- `config validate --probe-targets` reports webhook targets with their declared capabilities and no endpoint network I/O; unknown webhook dispatches dead-letter through drain (no lookup exists) and never fall over to another sink (WHK-002, DUR-008);
+- config schema: the `hermesWebhook` target accepts optional `required_capabilities` (mirroring hermes-kanban), and semantic validation enforces the authentication shape (`header` requires `header_name`, `bearer` rejects it);
+- docs: hermes-integration §10 carries the declaration table and response mapping; configuration-spec §5 documents the webhook fields and defaults; the frozen capability report gains the append-only E6-T1 derivation note.
+
+Review round 1 remediations (all roles, reports_only):
+
+- `fd:` secret references now survive repeated resolution in one process (the WHK-005 retry posture): the read rewinds a seekable descriptor and loops to EOF so a chunked writer cannot silently truncate the credential, while the descriptor stays open because the launching process owns it;
+- every secret kind enforces the 64 KiB bound, and the keychain subprocess output is bounded to it (the comment's "bounded output" claim is now true) with the controlled invocation pinned by a stub test (argv, no inherited environment, bounded failure detail);
+- a webhook `submit_timeout` that is schema-pattern-valid but unparseable (int64 overflow) is a configuration failure (exit 3) at dispatch time, matching `config validate --probe-targets`;
+- endpoints embedding URL userinfo are rejected at construction (the userinfo would otherwise persist verbatim as the durable target scope and could surface as a Basic authorization header — SEC-006);
+- a resolved secret containing characters invalid in a header value is refused before transmission, and transport-failure diagnostics are redacted against the resolved secret (SEC-007);
+- a response body that dies mid-stream marks its captured evidence truncated — partial evidence is never presented as complete;
+- tests pin the semantic auth-shape gates (the only bearer-shape enforcement), the redirect single-delivery guarantee, the mid-body truncation marker, the userinfo and negative-timeout construction gates, and the probe surface's config_error and capability_mismatch exits;
+- docs: the secretresolver package comment no longer claims to be a skeleton, README's project status records E6-T1 complete, and the capability-report note names the public interface report instead of "this report".
+
+Review round 2 remediations (all roles, reports_only):
+
+- `fd:` references cache one `*os.File` wrapper per descriptor for the process lifetime — a transient `os.NewFile` wrapper would be finalized closed by the runtime after a GC cycle, nondeterministically closing the launching process's descriptor (and a later fd-number reuse could resolve an unrelated stream as the credential); the survival is pinned by a GC-forcing test;
+- the keychain lookup captures stderr separately from stdout: keychain notices no longer concatenate into the resolved credential (a corrupted token would have surfaced as an undiagnosable permanent 401), and the separation is pinned by a stub that writes to both streams;
+- the response-body capture never fabricates adapter text as endpoint evidence: a read error (zero-byte or mid-stream) leaves the body empty or partial, marks the capture truncated, and records the redacted read error explicitly; the oversize capture takes the same shape;
+- `file:` and `fd:` reads run under the caller's context with a 10-second default deadline and the 64 KiB bound applied during the read, so a wedged or oversized source can neither hang nor over-allocate a submission; a consumed pipe-backed descriptor reports its one-shot cause distinctly;
+- the 64 KiB bound, the dispatch-surface exit-3 timeout classification, transport-diagnostic redaction, the zero-byte capture shape, and the rerun path's endpoint target scope all gained pinning tests (the round-1 test gaps);
+- the webhook probe surfaces a Probe failure as config_error instead of reporting empty capabilities.
+
 ## 1.0.7 - 2026-08-21
 
 E5 post-closeout review remediations (no contract surface changes; behavior corrections under the existing contracts):

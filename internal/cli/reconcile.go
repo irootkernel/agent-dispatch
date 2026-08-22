@@ -161,7 +161,7 @@ func (a *reconcileArtifacts) reconcileIntentBuilder() func(routeID, reason, deci
 		}
 		return ports.IntentInput{
 			DispatchID: dispatchID, DecisionID: decisionID, RouteID: routeID, RouteRevision: a.revision,
-			TargetID: a.targetID, TargetType: a.target.Type, TargetScope: a.target.Board,
+			TargetID: a.targetID, TargetType: a.target.Type, TargetScope: targetScope(a.target),
 			ResourceID: a.resourceID, Generation: 1, IdempotencyKey: key,
 			ContentFingerprint: string(contentDigest),
 			ManifestDigest:     dispatch.ManifestDigest(changes),

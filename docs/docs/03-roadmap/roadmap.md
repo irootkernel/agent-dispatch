@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E6, Hermes Webhook, Operations, Packaging, and v0.1 Release |
 | Current active task | None |
-| Next task | **E6-T1, Explicit Hermes Webhook Adapter** |
-| Completed tasks | 29 / 33 |
-| Planned tasks | 4 / 33 |
+| Next task | **E6-T2, Doctor, Status, Retention, and Operational Observability** |
+| Completed tasks | 30 / 33 |
+| Planned tasks | 3 / 33 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
@@ -65,7 +65,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 27 | E5-T3 | Completed | Exact suppression, mixed changes, and follow-up collapse |
 | 28 | E5-T4 | Completed | Protected/bulk quarantine and full reconciliation |
 | 29 | E5-T5 | Completed | Production-capable test-vault gate G4 |
-| 30 | E6-T1 | Planned | Explicit Hermes webhook adapter |
+| 30 | E6-T1 | Completed | Explicit Hermes webhook adapter |
 | 31 | E6-T2 | Planned | Doctor, status, retention, and operational observability |
 | 32 | E6-T3 | Planned | macOS/Linux packaging and scheduled reconciliation |
 | 33 | E6-T4 | Planned | v0.1 release verification and final SOT reconciliation |
@@ -1310,7 +1310,7 @@ E5-T4 Completed.
 
 ## E6-T1: Implement Explicit Hermes Webhook Adapter
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -1341,6 +1341,10 @@ E5-T5 Completed.
 - 2xx is not called durable unless verified contract says so;
 - unknown webhook result does not create Kanban task;
 - same dispatch retry reuses idempotency key.
+
+### Evidence
+
+Delivered in `internal/adapters/hermeswebhook` (sink, strict client, typed errors) and `internal/adapters/secretresolver` (env, file, fd with the process-lifetime descriptor cache, and the controlled darwin keychain lookup): the static capability declaration is derived from the frozen E0-T4 §9 evidence (durable_acceptance false — a 2xx is transport acceptance only, WHK-004 — with the idempotency key transmitted verbatim under the configured header, WHK-005), the strict client enforces TLS 1.2+ with system roots, no proxy, one end-to-end deadline, and no redirect following, and the conservative response mapping pins the definite-refusal set, the unknown set (408/409/429/5xx), and the pre-transmission definite classification. Secrets resolve immediately before each submission and never enter SQLite or logs (SEC-006/007, with response and diagnostic redaction). The CLI wires the target behind fail-closed construction gates (resolveSink, the offline `config validate --probe-targets` declaration, and the endpoint-as-target-scope at every intent-construction site), the config schema and semantic validation gained the webhook `required_capabilities` and auth-shape gates, and `.mulgaeignore` excludes the operator-authored agent guidance from review capture. Verified by `make verify` (format, vet, staticcheck, imports, unit and race tests, manifest, schema, traceability) plus the conformance suite (httptest TLS endpoints through the verification path) and the CLI end-to-end tests (accepted submit, unknown dead-letter with no fallback, retry idempotency-key stability, rerun scope, capability and timeout gates on both surfaces). Reviewed through three full-target Mulgae rounds (r_01a026ad, r_01a026c0, r_01a026d2; all coverage complete, ci pass, zero structured findings): round 1 and round 2 report findings were remediated in place, and the round-3 residual (the fd-cache race-loser finalizer, idempotency-header collision gating, readBounded concurrent readers, documentation nits, and the remaining test gaps) is recorded as the hardening deferral for the epic validation audit under run r_01a026d2 (reports_only; no structured finding IDs exist). Changelog 1.0.8.
 
 ## E6-T2: Implement Doctor, Status, Retention, and Operational Observability
 

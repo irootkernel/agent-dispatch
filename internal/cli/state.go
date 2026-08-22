@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/rootkernel/jjukkumi/internal/adapters/hermeskanban"
+	"github.com/rootkernel/jjukkumi/internal/adapters/hermeswebhook"
 	"github.com/rootkernel/jjukkumi/internal/adapters/sqlite"
 	"github.com/rootkernel/jjukkumi/internal/app/dispatch"
 	"github.com/rootkernel/jjukkumi/internal/config"
@@ -90,12 +91,63 @@ func openOperatorStore(command string, configPath string, stderr io.Writer) (sto
 	return s, s, 0
 }
 
+// targetScope returns the durable target scope an intent records: the
+// kanban board slug for hermes-kanban targets and the endpoint URL for
+// hermes-webhook targets — in both cases the identity of the interface
+// that accepted the task, re-verified at reconciliation (migration v3).
+func targetScope(target config.Target) string {
+	if target.Type == "hermes-webhook" {
+		return target.Endpoint
+	}
+	return target.Board
+}
+
+// webhookSinkOptions maps one hermes-webhook target onto the adapter
+// options; the submit timeout parses through the one schema-exact
+// duration parser so validation and run time agree.
+func webhookSinkOptions(targetID string, target config.Target) (hermeswebhook.Options, error) {
+	opts := hermeswebhook.Options{
+		TargetID:             targetID,
+		Endpoint:             target.Endpoint,
+		IdempotencyHeader:    target.IdempotencyHeader,
+		RequiredCapabilities: target.RequiredCapabilities,
+	}
+	if target.Auth != nil {
+		opts.AuthType = target.Auth.Type
+		opts.SecretRef = target.Auth.SecretRef
+		opts.AuthHeaderName = target.Auth.HeaderName
+	}
+	if target.SubmitTimeout != "" {
+		d, err := config.ParseDuration(target.SubmitTimeout)
+		if err != nil {
+			// A schema-pattern-valid but unparseable duration (for example
+			// an int64 overflow) is a configuration defect, not target
+			// unavailability: it maps to the exit-3 class like every
+			// other webhook construction gate.
+			return opts, &hermeswebhook.ConfigError{Detail: fmt.Sprintf("submit_timeout: %v", err)}
+		}
+		opts.SubmitTimeout = time.Duration(d.Nanos)
+	}
+	return opts, nil
+}
+
+// webhookClientFactory builds the HTTP client for webhook sinks.
+// Production always uses the adapter's strict client (system roots, one
+// deadline, no redirects); it is a variable only so the CLI tests can
+// substitute a client that trusts their loopback certificate authority
+// without weakening the production transport.
+var webhookClientFactory = func(timeout time.Duration) hermeswebhook.HTTPClient {
+	return hermeswebhook.NewStrictClient(timeout)
+}
+
 // resolveSink looks up and gates the sink adapter for one route target
-// (E4-T3). The hermes-kanban sink is constructed from the operator
+// (E4-T3, E6-T1). The hermes-kanban sink is constructed from the operator
 // configuration, its frozen capability report is validated against the
 // route's required capabilities, and the read-only Probe gates the
 // installed Hermes version — all before any submission (HER-002,
-// HER-005). No automatic fallback to any other target exists (DUR-008).
+// HER-005). The hermes-webhook sink applies the same fail-closed gates
+// against its static, evidence-tied capability declaration. No
+// automatic fallback to any other target exists (DUR-008).
 func resolveSink(cfg *config.Config, target config.Target, route config.Route) (ports.Sink, error) {
 	switch target.Type {
 	case "hermes-kanban":
@@ -113,7 +165,23 @@ func resolveSink(cfg *config.Config, target config.Target, route config.Route) (
 		}
 		return sink, nil
 	case "hermes-webhook":
-		return nil, errors.New("no sink adapter is wired in this build: the Hermes Webhook adapter arrives with roadmap task E6-T1; configure it and rerun, or inspect with 'jjukkumi dispatches show'")
+		opts, err := webhookSinkOptions(route.Dispatch.Target, target)
+		if err != nil {
+			return nil, fmt.Errorf("target %s: %w", route.Dispatch.Target, err)
+		}
+		timeout := opts.SubmitTimeout
+		if timeout == 0 {
+			timeout = hermeswebhook.DefaultSubmitTimeout
+		}
+		opts.Client = webhookClientFactory(timeout)
+		sink, err := hermeswebhook.NewSink(opts)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := sink.Probe(context.Background()); err != nil {
+			return nil, fmt.Errorf("target %s: %w", route.Dispatch.Target, err)
+		}
+		return sink, nil
 	default:
 		return nil, fmt.Errorf("unknown target type %q: no sink adapter exists and no fallback is permitted (DUR-008)", target.Type)
 	}
@@ -168,13 +236,16 @@ const sinkUnavailableExit = 11
 // writeSinkError renders one resolveSink failure with the stable
 // registry code: version and executable failures are target
 // unavailability (11), capability and report defects are configuration
-// failures (3, HER-005).
+// failures (3, HER-005) — including the webhook adapter's own
+// configuration and capability gates (E6-T1).
 func writeSinkError(stderr io.Writer, command string, err error) int {
 	var version *hermeskanban.VersionUnsupportedError
 	var executable *hermeskanban.ExecutableMissingError
 	var capability *hermeskanban.CapabilityError
 	var report *hermeskanban.ReportError
 	var requirement *hermeskanban.InvalidRequirementError
+	var webhookCapability *hermeswebhook.CapabilityError
+	var webhookConfig *hermeswebhook.ConfigError
 	switch {
 	case errors.As(err, &version):
 		writeError(stderr, command, "hermes_version_unsupported", "target_unavailable", version.Error()+"; "+version.Remediation())
@@ -182,6 +253,12 @@ func writeSinkError(stderr io.Writer, command string, err error) int {
 	case errors.As(err, &executable):
 		writeError(stderr, command, "hermes_executable_missing", "target_unavailable", executable.Error()+"; "+executable.Remediation())
 		return sinkUnavailableExit
+	case errors.As(err, &webhookCapability):
+		writeError(stderr, command, "config_capability_missing", "configuration", webhookCapability.Error()+"; "+webhookCapability.Remediation())
+		return 3
+	case errors.As(err, &webhookConfig):
+		writeError(stderr, command, "config_invalid", "configuration", webhookConfig.Error())
+		return 3
 	case errors.As(err, &capability):
 		writeError(stderr, command, "config_capability_missing", "configuration", capability.Error()+"; "+capability.Remediation())
 		return 3

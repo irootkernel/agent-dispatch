@@ -390,3 +390,58 @@ func TestResolvePathPrecedence(t *testing.T) {
 		t.Error("missing explicit path must report not-existing")
 	}
 }
+
+// TestWebhookAuthShapeSemanticGates pins the two fail-closed webhook
+// authentication shapes beyond the schema (configuration-spec §5, §12):
+// header authentication requires its header name and bearer
+// authentication rejects one. These gates are the only enforcement of
+// the bearer shape, so their errors are pinned exactly.
+func TestWebhookAuthShapeSemanticGates(t *testing.T) {
+	base := func(auth Auth) *Config {
+		return &Config{
+			Version:  1,
+			Instance: Instance{ID: "test"},
+			Resources: map[string]Resource{
+				"vault": {Type: "directory", Root: "/srv/vault", FileScope: "markdown"},
+			},
+			Targets: map[string]Target{
+				"hook": {
+					Type:     "hermes-webhook",
+					Endpoint: "https://example.invalid/hook",
+					Auth:     &auth,
+				},
+			},
+			Routes: map[string]Route{},
+		}
+	}
+	cases := []struct {
+		name    string
+		auth    Auth
+		wantErr string
+	}{
+		{"header without name", Auth{Type: "header", SecretRef: "env:HOOK_TOKEN"}, "required when auth.type is header"},
+		{"bearer with name", Auth{Type: "bearer", SecretRef: "env:HOOK_TOKEN", HeaderName: "X-Hook"}, "must be empty when auth.type is bearer"},
+		{"header with name", Auth{Type: "header", SecretRef: "env:HOOK_TOKEN", HeaderName: "X-Hook"}, ""},
+		{"bearer without name", Auth{Type: "bearer", SecretRef: "env:HOOK_TOKEN"}, ""},
+	}
+	for _, tc := range cases {
+		errs, _ := SemanticValidate(base(tc.auth))
+		if tc.wantErr == "" {
+			for _, err := range errs {
+				if strings.Contains(err.Error(), "auth.header_name") {
+					t.Fatalf("%s: unexpected auth-shape error: %v", tc.name, err)
+				}
+			}
+			continue
+		}
+		found := false
+		for _, err := range errs {
+			if strings.Contains(err.Error(), tc.wantErr) {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("%s: missing error %q in %v", tc.name, tc.wantErr, errs)
+		}
+	}
+}

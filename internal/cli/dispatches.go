@@ -181,7 +181,7 @@ func runDispatchesRetry(command string, args []string, stdout, stderr io.Writer)
 		scopeResolver = func(routeID string) string {
 			if route, ok := rerunCfg.Routes[routeID]; ok {
 				if target, ok := rerunCfg.Targets[route.Dispatch.Target]; ok {
-					return target.Board
+					return targetScope(target)
 				}
 			}
 			return ""
@@ -283,7 +283,7 @@ func runDispatchesRerun(command string, args []string, stdout, stderr io.Writer)
 		scopeResolver = func(routeID string) string {
 			if route, ok := rerunCfg.Routes[routeID]; ok {
 				if target, ok := rerunCfg.Targets[route.Dispatch.Target]; ok {
-					return target.Board
+					return targetScope(target)
 				}
 			}
 			return ""
@@ -392,7 +392,7 @@ func reconcileUnknownDispatches(cfg *config.Config, store storeOp, sink ports.Si
 	scope := ""
 	if route, ok := cfg.Routes[routeID]; ok {
 		if target, ok := cfg.Targets[route.Dispatch.Target]; ok {
-			scope = target.Board
+			scope = targetScope(target)
 		}
 	}
 	for _, sum := range intents {

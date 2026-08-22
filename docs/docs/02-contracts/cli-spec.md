@@ -62,7 +62,7 @@ Creates a disabled example configuration and state directory after checking for 
 jjukkumi config validate [--probe-targets] [--output json]
 ```
 
-Performs schema and semantic validation. `--probe-targets` invokes read-only public capability probes.
+Performs schema and semantic validation. `--probe-targets` invokes read-only public capability probes; hermes-webhook targets report their static, evidence-tied capability declaration with no endpoint network I/O, because the receiving platform cannot be assumed running (E0-T4 §9).
 
 ### `config show`
 

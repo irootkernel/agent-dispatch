@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/rootkernel/jjukkumi/internal/adapters/hermeskanban"
+	"github.com/rootkernel/jjukkumi/internal/adapters/hermeswebhook"
 	"github.com/rootkernel/jjukkumi/internal/adapters/watchman"
 	"github.com/rootkernel/jjukkumi/internal/config"
 )
@@ -125,6 +126,70 @@ func probeHermesTargets(command string, cfg *config.Config, stdout, stderr io.Wr
 		target := cfg.Targets[id]
 		switch target.Type {
 		case "hermes-kanban":
+		case "hermes-webhook":
+			// The webhook adapter's capability declaration is static and
+			// offline (E0-T4 §9: the receiving platform cannot be assumed
+			// running), so the probe validates the target configuration
+			// and the required-capability gate without network I/O.
+			opts, err := webhookSinkOptions(id, target)
+			if err != nil {
+				entry := map[string]any{
+					"target_id": id,
+					"type":      "hermes-webhook",
+					"state":     "config_error",
+					"detail":    err.Error(),
+				}
+				out.summaries = append(out.summaries, entry)
+				if firstFailure == nil {
+					firstFailure = fmt.Errorf("target %s: %w", id, err)
+				}
+				continue
+			}
+			sink, err := hermeswebhook.NewSink(opts)
+			if err != nil {
+				var missing *hermeswebhook.CapabilityError
+				detail := err.Error()
+				state := "config_error"
+				if errors.As(err, &missing) {
+					state = "capability_mismatch"
+					detail = missing.Error() + "; " + missing.Remediation()
+				}
+				entry := map[string]any{
+					"target_id": id,
+					"type":      "hermes-webhook",
+					"state":     state,
+					"detail":    detail,
+				}
+				out.summaries = append(out.summaries, entry)
+				if firstFailure == nil {
+					firstFailure = err
+				}
+				continue
+			}
+			caps, err := sink.Probe(context.Background())
+			if err != nil {
+				// The declaration is static today, but a future failure
+				// mode must not report an empty capability set as
+				// available.
+				out.summaries = append(out.summaries, map[string]any{
+					"target_id": id,
+					"type":      "hermes-webhook",
+					"state":     "config_error",
+					"detail":    err.Error(),
+				})
+				if firstFailure == nil {
+					firstFailure = err
+				}
+				continue
+			}
+			out.summaries = append(out.summaries, map[string]any{
+				"target_id":    id,
+				"type":         "hermes-webhook",
+				"state":        "available",
+				"detail":       "static capability declaration; endpoint reachability is proven only by submission (E0-T4 §9)",
+				"capabilities": caps.BoolMap(),
+			})
+			continue
 		default:
 			continue
 		}
@@ -176,9 +241,13 @@ func probeHermesTargets(command string, cfg *config.Config, stdout, stderr io.Wr
 	}
 	if firstFailure != nil {
 		var missing *hermeskanban.CapabilityError
-		if errors.As(firstFailure, &missing) {
+		var webhookMissing *hermeswebhook.CapabilityError
+		switch {
+		case errors.As(firstFailure, &missing):
 			writeError(stderr, command, "config_capability_missing", "configuration", missing.Error()+"; "+missing.Remediation())
-		} else {
+		case errors.As(firstFailure, &webhookMissing):
+			writeError(stderr, command, "config_capability_missing", "configuration", webhookMissing.Error()+"; "+webhookMissing.Remediation())
+		default:
 			writeError(stderr, command, "config_invalid", "configuration", firstFailure.Error())
 		}
 		return out, 3

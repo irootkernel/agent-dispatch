@@ -98,7 +98,10 @@ func withinDir(path, dir string) bool {
 }
 
 // validateSecretRefs parses every secret reference without resolving it
-// (SEC-006): a malformed reference fails validation.
+// (SEC-006): a malformed reference fails validation. Webhook
+// authentication additionally requires its declared shape — header
+// authentication names the header, bearer authentication carries no
+// header name (configuration-spec §5, §12).
 func validateSecretRefs(cfg *Config) []error {
 	var errs []error
 	for targetID, target := range cfg.Targets {
@@ -107,6 +110,18 @@ func validateSecretRefs(cfg *Config) []error {
 		}
 		if _, err := ParseSecretRef(target.Auth.SecretRef); err != nil {
 			errs = append(errs, fmt.Errorf("target %q auth.secret_ref: %v", targetID, err))
+		}
+		if target.Type == "hermes-webhook" {
+			switch target.Auth.Type {
+			case "header":
+				if target.Auth.HeaderName == "" {
+					errs = append(errs, fmt.Errorf("target %q auth.header_name: required when auth.type is header", targetID))
+				}
+			case "bearer":
+				if target.Auth.HeaderName != "" {
+					errs = append(errs, fmt.Errorf("target %q auth.header_name: must be empty when auth.type is bearer", targetID))
+				}
+			}
 		}
 	}
 	return errs

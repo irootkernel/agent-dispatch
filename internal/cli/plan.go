@@ -559,7 +559,7 @@ func buildLineage(a *planArtifacts) (ports.Lineage, error) {
 	lin.Intent = ports.IntentInput{
 		DispatchID: string(dispatchID), DecisionID: lin.Decision.DecisionID, RouteID: a.opts.routeID,
 		RouteRevision: a.plan.Route.Revision, TargetID: a.targetID, TargetType: a.target.Type,
-		TargetScope: a.target.Board,
+		TargetScope: targetScope(a.target),
 		ResourceID:  a.route.Source.Resource, Generation: 1, IdempotencyKey: key,
 		ContentFingerprint: a.plan.ContentFingerprint, ManifestDigest: dispatch.ManifestDigest(a.batch.Changes),
 		RequestVersion: dispatch.RequestContractVersion, RequestJSON: requestJSON, CreatedAt: lin.Decision.CreatedAt,

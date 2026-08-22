@@ -159,6 +159,18 @@ The webhook adapter is implemented in E6 after Kanban is production-capable. It 
 - It maps HTTP response to transport and, only if documented, durable acceptance.
 - It is never selected automatically because Kanban submission is unknown.
 
+The v0.1 capability declaration is static and offline, derived from the frozen E0-T4 §9 evidence (the receiving platform is inbound-only and not enabled in the probed installation, so no response contract proves durable acceptance):
+
+| Capability | Declared | Reason |
+|---|---|---|
+| durable_acceptance | false | no verified response contract proves persistence |
+| submit_idempotency_key | true | the core's key is transmitted verbatim under the configured header |
+| lookup_by_idempotency_key / lookup_by_external_ref | false | no public lookup contract exists |
+| resource_mutex / execution_status / cancellation / result_receipt | false | not provided by the interface |
+| maximum_request_bytes | 262144 | JJUKKUMI's own bound (SEC-009) |
+
+The conservative response mapping (WHK-004, DUR-005): 2xx is acceptance of the transmission with `durable=false` — never durable task acceptance; the definite request-refusal statuses (400, 401, 403, 404, 405, 406, 410, 413, 414, 415, 422) and unfollowed redirects (3xx) are definite rejections; 408, 409, 429, and every 5xx are unknown because their processing semantics are undocumented. Transport failures provably before transmission — name resolution, dialing, and the TLS handshake — are definite non-submission; everything after possible transmission is unknown. Unknown webhook dispatches dead-letter for the operator: the adapter declares no lookup, so drain reconciliation cannot resolve them and never submits through another sink.
+
 ## 11. Future Hermes Plugin
 
 A future optional plugin may expose JJUKKUMI status, route pause/resume, quarantine, receipts, and manual operations inside Hermes. It remains a management surface. Sensing, SQLite state, policy, and dispatch correctness must continue to work when the plugin is absent or Hermes is stopped.

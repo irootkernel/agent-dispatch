@@ -261,7 +261,7 @@ func TestRecoverExpiredSubmitting(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	recovered, err := s.RecoverExpiredSubmitting(context.Background(), "2026-08-20T01:01:00Z")
+	recovered, err := s.RecoverExpiredSubmitting(context.Background(), "", "2026-08-20T01:01:00Z")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -281,7 +281,7 @@ func TestRecoverExpiredSubmitting(t *testing.T) {
 		t.Fatalf("recovery must audit submitting -> unknown: %q %v", to, err)
 	}
 	// A second recovery pass is a no-op.
-	if again, err := s.RecoverExpiredSubmitting(context.Background(), "2026-08-20T01:02:00Z"); err != nil || len(again) != 0 {
+	if again, err := s.RecoverExpiredSubmitting(context.Background(), "", "2026-08-20T01:02:00Z"); err != nil || len(again) != 0 {
 		t.Fatalf("second recovery must find nothing: %+v %v", again, err)
 	}
 }
@@ -297,7 +297,7 @@ func TestRecoverLeavesUnexpiredAlone(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	recovered, err := s.RecoverExpiredSubmitting(context.Background(), "2026-08-20T01:01:00Z")
+	recovered, err := s.RecoverExpiredSubmitting(context.Background(), "", "2026-08-20T01:01:00Z")
 	if err != nil {
 		t.Fatal(err)
 	}

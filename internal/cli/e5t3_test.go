@@ -319,10 +319,7 @@ func TestTemporalWindowAndLatestObservation(t *testing.T) {
 	// A receipt matching the LATEST digest on a fresh generation
 	// verifies; the same path's earlier observations are irrelevant.
 	followup, _ := completed["followup_dispatch_id"].(string)
-	store := e5t1Store(t, configPath)
-	if err := store.ActivateFollowup(context.Background(), followup, "test", "2026-08-21T00:00:00Z"); err != nil {
-		t.Fatal(err)
-	}
+	submitFollowupProductPath(t, configPath, followup)
 	out.Reset()
 	errb.Reset()
 	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", followup, "--run-id", "run-2"}, &out, &errb); code != 0 {
@@ -512,10 +509,7 @@ func TestFailureBudgetResetsAfterValidCompletion(t *testing.T) {
 		t.Fatalf("a budgeted failure must create its one follow-up: %v", failed)
 	}
 	// The follow-up completes VALIDLY, resetting the streak...
-	store := e5t1Store(t, configPath)
-	if err := store.ActivateFollowup(context.Background(), followup, "test", "2026-08-21T00:00:00Z"); err != nil {
-		t.Fatal(err)
-	}
+	submitFollowupProductPath(t, configPath, followup)
 	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", followup, "--run-id", "r2"}, &out, &errb); code != 0 {
 		t.Fatalf("begin 2: %s", errb.String())
 	}

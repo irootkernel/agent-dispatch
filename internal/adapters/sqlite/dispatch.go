@@ -145,13 +145,19 @@ func (s *Store) AcquireAttempt(ctx context.Context, req ports.AcquireAttempt) (s
 	}
 	defer tx.Rollback()
 	// Capture the from-state under the same eligibility predicates the
-	// conditional update rechecks, so the audit transition is exact.
+	// conditional update rechecks, so the audit transition is exact. The
+	// route-slot predicate is part of the transaction itself: a dispatch
+	// may never be leased beside another authoritative task (CON-001,
+	// E7-T2/B-2).
+	const slotFree = `AND NOT EXISTS (SELECT 1 FROM route_runtime_state r
+		WHERE r.route_id = dispatch_intents.route_id
+		  AND r.active_dispatch_id IS NOT NULL AND r.active_dispatch_id != ?)`
 	var fromState string
 	err = tx.QueryRow(`SELECT state FROM dispatch_intents
 		WHERE dispatch_id = ?
 		  AND state IN ('ready','retry_wait')
 		  AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
-		  AND (lease_expires_at IS NULL OR lease_expires_at < ?)`, req.DispatchID, now, now).Scan(&fromState)
+		  AND (lease_expires_at IS NULL OR lease_expires_at < ?)`+slotFree, req.DispatchID, now, now, req.DispatchID).Scan(&fromState)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", s.explainAcquireFailure(ctx, tx, req.DispatchID, now)
 	}
@@ -163,8 +169,8 @@ func (s *Store) AcquireAttempt(ctx context.Context, req ports.AcquireAttempt) (s
 		WHERE dispatch_id = ?
 		  AND state IN ('ready','retry_wait')
 		  AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
-		  AND (lease_expires_at IS NULL OR lease_expires_at < ?)`,
-		req.Owner, nullString(expires), nullString(next), now, req.DispatchID, now, now)
+		  AND (lease_expires_at IS NULL OR lease_expires_at < ?)`+slotFree,
+		req.Owner, nullString(expires), nullString(next), now, req.DispatchID, now, now, req.DispatchID)
 	if err != nil {
 		return "", err
 	}
@@ -196,9 +202,9 @@ func (s *Store) AcquireAttempt(ctx context.Context, req ports.AcquireAttempt) (s
 // explainAcquireFailure distinguishes the port errors a lost lease
 // competition produces from other refusals.
 func (s *Store) explainAcquireFailure(ctx context.Context, q queryer, dispatchID, now string) error {
-	var current string
+	var current, routeID string
 	var leaseExpires sql.NullString
-	err := q.QueryRow(`SELECT state, lease_expires_at FROM dispatch_intents WHERE dispatch_id = ?`, dispatchID).Scan(&current, &leaseExpires)
+	err := q.QueryRow(`SELECT state, lease_expires_at, route_id FROM dispatch_intents WHERE dispatch_id = ?`, dispatchID).Scan(&current, &leaseExpires, &routeID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("%w: %s", ports.ErrIntentNotFound, dispatchID)
 	}
@@ -207,6 +213,11 @@ func (s *Store) explainAcquireFailure(ctx context.Context, q queryer, dispatchID
 	}
 	if current == string(records.IntentSubmitting) && leaseExpires.Valid && leaseExpires.String >= now {
 		return fmt.Errorf("%w: dispatch %s leased to another owner until %s", ports.ErrLeaseHeld, dispatchID, leaseExpires.String)
+	}
+	var holder sql.NullString
+	if err := q.QueryRow(`SELECT active_dispatch_id FROM route_runtime_state WHERE route_id = ?`, routeID).Scan(&holder); err == nil &&
+		holder.Valid && holder.String != "" && holder.String != dispatchID {
+		return fmt.Errorf("%w: route %s holds active dispatch %s, not %s", ports.ErrRouteSlotHeld, routeID, holder.String, dispatchID)
 	}
 	return fmt.Errorf("attempt not acquirable for %s in state %s at %s: %w", dispatchID, current, now, ErrOptimisticConcurrency)
 }
@@ -278,13 +289,15 @@ func (s *Store) CompleteAttempt(ctx context.Context, res ports.AttemptResult) er
 	return tx.Commit()
 }
 
-// RecoverExpiredSubmitting moves every submitting intent whose lease
-// expired to unknown with audit evidence and closes its open attempt row;
-// an abandoned submitting state defaults to unknown (persistence §5).
-func (s *Store) RecoverExpiredSubmitting(ctx context.Context, now string) ([]ports.RecoveredLease, error) {
+// RecoverExpiredSubmitting moves every submitting intent on one route
+// whose lease expired to unknown with audit evidence and closes its open
+// attempt row; an abandoned submitting state defaults to unknown
+// (persistence §5). An empty routeID sweeps the whole store.
+func (s *Store) RecoverExpiredSubmitting(ctx context.Context, routeID, now string) ([]ports.RecoveredLease, error) {
 	now = normalizeTimestamp(now)
 	rows, err := s.QueryContext(ctx, `SELECT dispatch_id, lease_owner FROM dispatch_intents
-		WHERE state = 'submitting' AND lease_expires_at IS NOT NULL AND lease_expires_at < ?`, now)
+		WHERE state = 'submitting' AND lease_expires_at IS NOT NULL AND lease_expires_at < ?
+		  AND (? = '' OR route_id = ?)`, now, routeID, routeID)
 	if err != nil {
 		return nil, err
 	}

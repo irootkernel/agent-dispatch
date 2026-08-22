@@ -73,7 +73,7 @@ func seedUnknown(t *testing.T, s *sqlite.Store, dispatchID string) string {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.RecoverExpiredSubmitting(context.Background(), "2026-08-20T01:01:00Z"); err != nil {
+	if _, err := s.RecoverExpiredSubmitting(context.Background(), "", "2026-08-20T01:01:00Z"); err != nil {
 		t.Fatal(err)
 	}
 	return lin.Intent.IdempotencyKey

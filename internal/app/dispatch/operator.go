@@ -61,7 +61,12 @@ func (o *OperatorService) Retry(ctx context.Context, dispatchID, actor, reason s
 // Rerun creates the intentional new work request: a new dispatch ID,
 // generation, and idempotency key under one superseding decision. The
 // activation evidence (manifest, fingerprint) is retained; only the
-// identity fields change.
+// identity fields change. The original must be ready or dead-lettered:
+// in-flight work (submitting, unknown, reconciling) must be recovered
+// and reconciled first, retry_wait work belongs to retry, and accepted
+// or otherwise terminal work keeps its authoritative lineage — a rerun
+// may never create a second authoritative task beside live work
+// (CON-001, E7-T2/B-2).
 func (o *OperatorService) Rerun(ctx context.Context, dispatchID, actor, reason string) (ports.IntentSummary, error) {
 	var zero ports.IntentSummary
 	if strings.TrimSpace(reason) == "" {
@@ -70,6 +75,18 @@ func (o *OperatorService) Rerun(ctx context.Context, dispatchID, actor, reason s
 	snap, err := o.Store.LoadIntent(ctx, dispatchID)
 	if err != nil {
 		return zero, err
+	}
+	switch snap.State {
+	case records.IntentReady, records.IntentDeadLettered:
+		// The only supersede-eligible shapes: the store transitions the
+		// original to superseded through its declared edge in the same
+		// transaction that creates the rerun.
+	case records.IntentSubmitting, records.IntentUnknown, records.IntentReconciling:
+		return zero, fmt.Errorf("dispatch %s is %s; recover and reconcile it first (dispatches drain resolves expired leases and unknown work)", dispatchID, snap.State)
+	case records.IntentRetryWait:
+		return zero, fmt.Errorf("dispatch %s is retry_wait; use dispatches retry when it is due instead of rerunning it", dispatchID)
+	default:
+		return zero, fmt.Errorf("dispatch %s is %s; its lineage is authoritative and cannot be superseded by a rerun", dispatchID, snap.State)
 	}
 	var req ports.TaskRequest
 	if err := json.Unmarshal([]byte(snap.RequestJSON), &req); err != nil {

@@ -265,6 +265,28 @@ func (s *Store) RerunIntent(ctx context.Context, in ports.RerunInput) (ports.Int
 	if err := s.saveIntentTakeOverOriginal(tx, portsIntent(in.New), in.OriginalDispatchID); err != nil {
 		return sum, mapIntentConstraint(err)
 	}
+	// The original leaves its live state through the declared superseded
+	// edge in the same transaction, so exactly one authoritative request
+	// remains per route (CON-001, E7-T2/B-2).
+	var originalState string
+	if err := tx.QueryRow(`SELECT state FROM dispatch_intents WHERE dispatch_id = ?`, in.OriginalDispatchID).Scan(&originalState); err != nil {
+		return sum, err
+	}
+	supersedeContext := fmt.Sprintf(`{"actor":%q,"operator_reason":%q,"superseded_by":%q}`, in.Actor, in.Reason, in.New.DispatchID)
+	switch records.IntentState(originalState) {
+	case records.IntentReady:
+		if err := s.transitionWithin(ctx, tx, in.OriginalDispatchID, records.IntentReady, records.IntentSuperseded, state.ReasonRouteInvalidated,
+			state.IntentEvidence{Actor: in.Actor}, now, supersedeContext); err != nil {
+			return sum, err
+		}
+	case records.IntentDeadLettered:
+		if err := s.transitionWithin(ctx, tx, in.OriginalDispatchID, records.IntentDeadLettered, records.IntentSuperseded, state.ReasonReprocessOrDiscard,
+			state.IntentEvidence{Actor: in.Actor}, now, supersedeContext); err != nil {
+			return sum, err
+		}
+	default:
+		return sum, fmt.Errorf("%w: original %s is %s; rerun requires ready or dead-lettered work", ports.ErrStateNotEligible, in.OriginalDispatchID, originalState)
+	}
 	// The takeover applies the route transition matching the state it
 	// found, so the rerun holds the slot as genuinely active work.
 	snap, err := s.routeSnapshotInTx(tx, in.New.RouteID)

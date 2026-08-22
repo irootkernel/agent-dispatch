@@ -294,7 +294,7 @@ func TestCrashAfterCommitLeavesRecoverableEvidence(t *testing.T) {
 		Now:      func() time.Time { return time.Date(2026, 8, 20, 1, 2, 0, 0, time.UTC) },
 		LeaseTTL: time.Minute, Actor: "recovery",
 	}
-	recovered, err := rt.Recover(context.Background())
+	recovered, err := rt.Recover(context.Background(), "")
 	if err != nil || len(recovered) != 1 || recovered[0].DispatchID != "dispatch-1" {
 		t.Fatalf("recovery must take the expired lease: %+v %v", recovered, err)
 	}

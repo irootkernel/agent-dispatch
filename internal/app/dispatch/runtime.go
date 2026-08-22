@@ -55,6 +55,15 @@ type SubmitReport struct {
 	NextAttemptAt string
 }
 
+// RouteCoordinationView is the optional store surface the runtime uses
+// for route-slot enforcement and follow-up promotion. The durable store
+// implements it; test fakes may not, in which case the slot guard is
+// skipped (E7-T2: the production store always provides it).
+type RouteCoordinationView interface {
+	LoadRouteState(ctx context.Context, routeID string) (state.RouteSnapshot, error)
+	ActivateFollowup(ctx context.Context, dispatchID, actor, now string) error
+}
+
 // SubmitOnce runs the flow for one durable intent: it refuses terminal or
 // leased intents, commits the lease before invoking the sink, classifies
 // the adapter result, and records the outcome through the domain state
@@ -73,6 +82,20 @@ func (r *Runtime) SubmitOnce(ctx context.Context, dispatchID, owner string) (Sub
 		return report, fmt.Errorf("%w: dispatch %s is submitting under owner %q", ports.ErrLeaseHeld, dispatchID, snap.LeaseOwner)
 	default:
 		return report, fmt.Errorf("dispatch %s is %s, not submittable", dispatchID, snap.State)
+	}
+	// The route's active slot must be empty or held by exactly this
+	// dispatch before the lease commits (CON-001: a submission never runs
+	// beside another authoritative task; E7-T2). The lease transaction
+	// re-checks the same predicate, so this guard fails fast with the
+	// actionable error while the store remains the authority.
+	if view, ok := r.Store.(RouteCoordinationView); ok {
+		rs, err := view.LoadRouteState(ctx, snap.RouteID)
+		if err != nil {
+			return report, err
+		}
+		if !slotAdmissible(rs, dispatchID) {
+			return report, fmt.Errorf("%w: route %s is %s with active dispatch %q, not submittable for %s", ports.ErrStateNotEligible, snap.RouteID, rs.State, rs.ActiveDispatchID, dispatchID)
+		}
 	}
 	now := r.Now()
 	report.DispatchID = dispatchID
@@ -183,7 +206,46 @@ func (r *Runtime) SubmitOnce(ctx context.Context, dispatchID, owner string) (Sub
 	report.To = classified.To
 	report.Reason = classified.Reason
 	r.logSubmitOutcome(dispatchID, acquired, snap.RouteID, snap.TargetID, classified, res)
+	if classified.To == records.IntentAccepted {
+		// An accepted follow-up becomes the route's active task at
+		// acceptance (FOLLOWUP_READY -> ACTIVE_CLEAN, E7-T2/B-3): the
+		// work-receipt surface only admits active routes, so without this
+		// promotion a second generation could never begin work.
+		r.promoteFollowup(ctx, snap.RouteID, dispatchID)
+	}
 	return report, nil
+}
+
+// promoteFollowup activates one just-accepted dispatch when its route is
+// the pending follow-up shape. Every other route state is skipped
+// silently: the store's own activation guard is the authority, and a
+// normal first-generation dispatch already activated its route at arrival.
+func (r *Runtime) promoteFollowup(ctx context.Context, routeID, dispatchID string) {
+	view, ok := r.Store.(RouteCoordinationView)
+	if !ok {
+		return
+	}
+	rs, err := view.LoadRouteState(ctx, routeID)
+	if err != nil {
+		r.logEvent(observability.LevelWarn, observability.EventDispatchUnknown, dispatchID, "", routeID, "", "follow-up promotion skipped: route state unreadable", map[string]any{"error": err.Error()})
+		return
+	}
+	if rs.State != state.RouteFollowupReady {
+		return
+	}
+	if rs.ActiveDispatchID != "" && rs.ActiveDispatchID != dispatchID {
+		r.logEvent(observability.LevelWarn, observability.EventDispatchUnknown, dispatchID, "", routeID, "", "follow-up promotion skipped: slot held by another dispatch", map[string]any{"active": rs.ActiveDispatchID})
+		return
+	}
+	if err := view.ActivateFollowup(ctx, dispatchID, r.Actor, Timestamp(r.Now())); err != nil {
+		// The acceptance stands; a promotion failure (including a crash
+		// between the two transactions) is healed by the next drain's
+		// accepted-follow-up sweep and stays visible in the operational
+		// log (promoteAcceptedFollowup, E7-T2 round-1 review).
+		r.logEvent(observability.LevelWarn, observability.EventDispatchUnknown, dispatchID, "", routeID, "", "follow-up promotion failed after acceptance; the next drain promotes it", map[string]any{"error": err.Error()})
+		return
+	}
+	r.logEvent(observability.LevelInfo, observability.EventDispatchAccepted, dispatchID, "", routeID, "", "accepted follow-up promoted to the active slot", nil)
 }
 
 // DrainReport summarizes one bounded drain run (CLI dispatches drain).
@@ -193,11 +255,21 @@ type DrainReport struct {
 	Reports   []SubmitReport
 }
 
+// DrainLister supplies the drain loop's reads: the intent listing plus
+// the route runtime snapshot for slot enforcement (E7-T2).
+type DrainLister interface {
+	ports.InspectionStore
+	RouteCoordinationView
+}
+
 // Drain submits up to max due ready/retry_wait intents for one route.
 // The attempt budget stops automatic processing (DUR-007); an ambiguity
 // stops the drain for operator reconciliation rather than falling over
-// (DUR-008).
-func (r *Runtime) Drain(ctx context.Context, routeID string, max int, lister ports.InspectionStore) (DrainReport, error) {
+// (DUR-008). Only the dispatch holding the route's active slot (or a
+// route with an empty slot) is submitted, and an uncertain or quarantined
+// route submits nothing: reconciliation or the operator resolves first
+// (CON-001, E7-T2).
+func (r *Runtime) Drain(ctx context.Context, routeID string, max int, lister DrainLister) (DrainReport, error) {
 	var out DrainReport
 	if max < 1 {
 		return out, fmt.Errorf("drain max must be >= 1")
@@ -216,6 +288,17 @@ func (r *Runtime) Drain(ctx context.Context, routeID string, max int, lister por
 		default:
 			continue
 		}
+		rs, err := lister.LoadRouteState(ctx, routeID)
+		if err != nil {
+			return out, fmt.Errorf("drain stopped at %s: route state unreadable: %w", sum.DispatchID, err)
+		}
+		if !slotAdmissible(rs, sum.DispatchID) {
+			// The slot belongs to another authoritative dispatch (or the
+			// route must be reconciled first); this intent waits or was
+			// superseded and must never run beside it (CON-001, E7-T2/B-2).
+			out.Skipped++
+			continue
+		}
 		if sum.NextAttemptAt != "" && sum.NextAttemptAt > now {
 			out.Skipped++
 			continue
@@ -231,13 +314,57 @@ func (r *Runtime) Drain(ctx context.Context, routeID string, max int, lister por
 		out.Processed++
 		out.Reports = append(out.Reports, report)
 	}
+	// Self-healing close of the promotion crash window (round-1 review):
+	// a process that died between an accepted follow-up's receipt commit
+	// and its route promotion leaves FOLLOWUP_READY with an accepted
+	// follow-up that no submit path revisits — the drain promotes it here
+	// without manual edits (DUR-010 posture).
+	r.promoteAcceptedFollowup(ctx, routeID, lister)
 	return out, nil
 }
 
-// Recover takes over every submitting intent whose attempt lease expired,
-// defaulting it to unknown with audit evidence (persistence §5).
-func (r *Runtime) Recover(ctx context.Context) ([]ports.RecoveredLease, error) {
-	return r.Store.RecoverExpiredSubmitting(ctx, Timestamp(r.Now()))
+// promoteAcceptedFollowup promotes an accepted follow-up whose route was
+// left in FOLLOWUP_READY (a crash or transient failure between the
+// acceptance commit and the promotion). Every other shape is skipped:
+// the store's activation guard stays the authority.
+func (r *Runtime) promoteAcceptedFollowup(ctx context.Context, routeID string, lister DrainLister) {
+	rs, err := lister.LoadRouteState(ctx, routeID)
+	if err != nil || rs.State != state.RouteFollowupReady {
+		return
+	}
+	intents, err := lister.ListIntents(ctx, ports.IntentFilter{RouteID: routeID, State: records.IntentAccepted, Limit: 10})
+	if err != nil {
+		return
+	}
+	for _, sum := range intents {
+		if rs.ActiveDispatchID != "" && rs.ActiveDispatchID != sum.DispatchID {
+			continue
+		}
+		if err := lister.ActivateFollowup(ctx, sum.DispatchID, r.Actor, Timestamp(r.Now())); err != nil {
+			r.logEvent(observability.LevelWarn, observability.EventDispatchUnknown, sum.DispatchID, "", routeID, "", "drain-time follow-up promotion failed", map[string]any{"error": err.Error()})
+			continue
+		}
+		r.logEvent(observability.LevelInfo, observability.EventDispatchAccepted, sum.DispatchID, "", routeID, "", "accepted follow-up promoted to the active slot by the drain", nil)
+		return
+	}
+}
+
+// slotAdmissible is the one route-slot admission rule shared by every
+// submit-path site (E7-T2/B-2): an uncertain or quarantined route
+// submits nothing, and a dispatch may only run when the active slot is
+// empty or its own.
+func slotAdmissible(rs state.RouteSnapshot, dispatchID string) bool {
+	if rs.State == state.RouteUncertain || rs.State == state.RouteQuarantined {
+		return false
+	}
+	return rs.ActiveDispatchID == "" || rs.ActiveDispatchID == dispatchID
+}
+
+// Recover takes over every submitting intent on one route (or the whole
+// store when routeID is empty) whose attempt lease expired, defaulting
+// it to unknown with audit evidence (persistence §5).
+func (r *Runtime) Recover(ctx context.Context, routeID string) ([]ports.RecoveredLease, error) {
+	return r.Store.RecoverExpiredSubmitting(ctx, routeID, Timestamp(r.Now()))
 }
 
 // receipt builds the durable acceptance evidence for one submit result.

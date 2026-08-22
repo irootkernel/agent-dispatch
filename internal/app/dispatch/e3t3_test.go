@@ -266,8 +266,9 @@ func TestOperatorRetryDeadLettered(t *testing.T) {
 }
 
 // TestOperatorRerunCreatesNewLineageAndKey proves rerun creates a new
-// dispatch, generation, and idempotency key while the original stays
-// untouched.
+// dispatch, generation, and idempotency key while the original moves to
+// superseded: exactly one authoritative request remains (CON-001,
+// E7-T2/B-2).
 func TestOperatorRerunCreatesNewLineageAndKey(t *testing.T) {
 	s := openE3T3Store(t)
 	seedReadyIntent(t, s, "dispatch-1")
@@ -285,9 +286,49 @@ func TestOperatorRerunCreatesNewLineageAndKey(t *testing.T) {
 	if summary.IdempotencyKey == "" {
 		t.Fatal("rerun must derive a new idempotency key")
 	}
-	// The route slot moved to the rerun; the original intent is intact.
+	// The route slot moved to the rerun; the original is superseded
+	// through its declared edge, never left ready beside the new work.
 	original, _ := s.LoadIntent(context.Background(), "dispatch-1")
-	if original.State != records.IntentReady || original.Generation != 1 {
-		t.Fatalf("original intent must be untouched: %+v", original)
+	if original.State != records.IntentSuperseded || original.Generation != 1 {
+		t.Fatalf("original intent must be superseded: %+v", original)
+	}
+	lin, err := s.LoadIntentLineage(context.Background(), "dispatch-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, tr := range lin.Transitions {
+		if tr.ToState == string(records.IntentSuperseded) {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("the superseded transition must be audited: %+v", lin.Transitions)
+	}
+}
+
+// TestOperatorRerunRefusesInFlightAndTerminalWork proves the rerun state
+// guard: in-flight and terminal intents keep their authoritative lineage
+// and rerunning them is refused with actionable guidance (E7-T2/B-2).
+func TestOperatorRerunRefusesInFlightAndTerminalWork(t *testing.T) {
+	s := openE3T3Store(t)
+	seedReadyIntent(t, s, "dispatch-1")
+	op := &OperatorService{Store: s, Now: func() string { return "2026-08-20T01:02:00Z" }}
+	// submitting under an unexpired lease.
+	if _, err := s.AcquireAttempt(context.Background(), ports.AcquireAttempt{
+		DispatchID: "dispatch-1", AttemptID: "a1", Owner: "victim",
+		Now: "2026-08-20T01:02:00Z", LeaseExpiresAt: "2026-08-20T09:02:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := op.Rerun(context.Background(), "dispatch-1", "operator", "must refuse"); err == nil {
+		t.Fatal("rerunning submitting work must be refused")
+	}
+	// unknown delivery.
+	if _, err := s.RecoverExpiredSubmitting(context.Background(), "", "2026-08-20T09:03:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := op.Rerun(context.Background(), "dispatch-1", "operator", "must refuse"); err == nil {
+		t.Fatal("rerunning unknown work must be refused")
 	}
 }

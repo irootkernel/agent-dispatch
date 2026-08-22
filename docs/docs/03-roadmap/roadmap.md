@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E7 |
 | Current active task | None |
-| Next task | E7-T2 |
-| Completed tasks | 34 / 45 |
-| Planned tasks | 11 / 45 |
+| Next task | E7-T3 |
+| Completed tasks | 35 / 45 |
+| Planned tasks | 10 / 45 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -72,7 +72,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 32 | E6-T3 | Completed | macOS/Linux packaging and scheduled reconciliation |
 | 33 | E6-T4 | Completed | v0.1 release verification and final SOT reconciliation |
 | 34 | E7-T1 | Completed | Documentation truth restored after the compliance review |
-| 35 | E7-T2 | Planned | Crash recovery, rerun supersession, follow-up activation |
+| 35 | E7-T2 | Completed | Crash recovery, rerun supersession, follow-up activation |
 | 36 | E7-T3 | Planned | Submit-path revalidation and durable path facts |
 | 37 | E7-T4 | Planned | Gate-evidence tests repaired and platform guards added |
 | 38 | E7-T5 | Planned | CLI inspection contract completed |
@@ -1524,7 +1524,7 @@ Delivered as a documentation-only correction set over twelve files: every surviv
 
 ## E7-T2: Wire Crash Recovery, Rerun Supersession, and Follow-Up Activation
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -1554,6 +1554,10 @@ E7-T1 Completed.
 - rerunning an in-flight intent is refused and rerunning a ready intent supersedes it, leaving exactly one authoritative task;
 - a second generation reaches Hermes, activates, and completes through `work begin`/`work complete` unaided;
 - gates G2 and G4 re-run green against the real Hermes.
+
+### Evidence
+
+Delivered as the three Blocker fixes in the product path (B-1): `dispatches drain` now runs `Runtime.Recover` before unknown reconciliation and reports the recovered leases in its envelope (`internal/cli/dispatches.go`), so an expired submitting intent heals through the drain alone — proven by `TestG2DuringSubmitProcessDeathRecovers` (a real `crashbin lease --die` process death inside the submit window, recovery to unknown with audit) and `TestDrainRecoversExpiredSubmittingWithoutManualEdits` (CLI level); the doctor remediation texts now name the actual exits (`internal/app/doctor/doctor.go`). (B-2): `OperatorService.Rerun` refuses submitting/unknown/reconciling, retry_wait, and terminal-authoritative originals with actionable guidance; `Store.RerunIntent` supersedes the ready or dead-lettered original through its declared edge in the same transaction; `Runtime.SubmitOnce` and `Runtime.Drain` enforce the route's active slot (a dispatch never submits beside another authoritative task, and uncertain/quarantined routes submit nothing) — proven by `TestOperatorRerunCreatesNewLineageAndKey` (supersession audited), `TestOperatorRerunRefusesInFlightAndTerminalWork`, and `TestRerunSupersedesReadyLeavingOneAuthoritativeTask` (CLI level, drain submits exactly one). (B-3): acceptance inside the submit flow promotes a pending follow-up (`Runtime.promoteFollowup`, FOLLOWUP_READY to ACTIVE_CLEAN with the store's activation guard), and the scheduled `reconcile --submit` path now drains due work behind the enabled-route gate, so a follow-up generation reaches the target and becomes beginnable without any manual step — proven by `TestScheduledReconcileSubmitsDueFollowup` and by the rewritten G4/E5 suites: every multi-generation scenario (`g4_test.go`, `e5t1/e5t3/e5t4`) drives drain submission, acceptance-time activation, and `work begin/complete` through the CLI with the store-direct activation bypass removed (`submitFollowupProductPath`); `TestG2AC203` was rewritten with a real sink baseline (exactly one submission, then the receipt-loss crash window). The round-1 Mulgae review remediations are folded in (run r_01a02b3b-1932, reports_only): the promotion crash window is self-healing (the drain promotes an accepted follow-up left in FOLLOWUP_READY, `promoteAcceptedFollowup`), the route-slot predicate is enforced inside the lease transaction itself (`AcquireAttempt` SQL plus the `ErrRouteSlotHeld` explanation, with the runtime pre-check as the fast path), the expired-lease sweep is route-scoped, the crashbin `--die` flag parsing was fixed with a hard-death marker the test asserts, the scheduled drain bound is a named constant with its committed-mutation note on failure, the cli-spec drain/rerun/reconcile contracts state the new behavior, and the coverage gaps are closed (`TestSubmitRefusedWhenSlotHeldByAnother`, `TestRerunDeadLetteredOriginalSuperseded`, `TestRerunIntentStoreBackstopRefusesInFlight`, and the rewritten `TestReconcileSubmitSkippedWarning` proving the disabled-route gate). Verified by `make verify` on darwin/arm64 and gate re-runs: G2 (`internal/app/dispatch/g2_test.go`) and the G1/G3/G4/G5 CLI suites including the real Hermes and Watchman legs all green. Changelog 1.0.15.
 
 ## E7-T3: Enforce Submit-Path Revalidation and Durable Path Facts
 

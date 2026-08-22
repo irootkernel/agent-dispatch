@@ -582,14 +582,21 @@ func TestWebhookConfigErrorFailsClosedAtDispatch(t *testing.T) {
 
 // TestWebhookRerunRecordsEndpointScope proves the rerun path's scope
 // resolver carries the webhook endpoint as the durable target scope,
-// mirroring dispatch and retry.
+// mirroring dispatch and retry. The predecessor is persisted without
+// submission: rerun requires ready or dead-lettered work (E7-T2/B-2).
 func TestWebhookRerunRecordsEndpointScope(t *testing.T) {
 	capture := &e6t1Capture{}
 	configPath, vault, server := e6t1Fixture(t, func(w http.ResponseWriter, r *http.Request) {
 		capture.add(r)
 		w.WriteHeader(http.StatusOK)
 	})
-	res, _ := e6t1Dispatch(t, configPath, vault)
+	setPlanEnv(t, vault, false)
+	e6t1RegisterRoute(t, configPath, "")
+	var dispatchOut, dispatchErr bytes.Buffer
+	withStdin(t, `[{"name":"Inbox/new.md","exists":true,"new":true,"size":5,"type":"f"}]`, func() {
+		Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman", "--no-submit"}, &dispatchOut, &dispatchErr)
+	})
+	res := decodeEnvelope(t, &dispatchOut)
 	dispatchID, _ := res["dispatch_id"].(string)
 
 	var out, errb bytes.Buffer

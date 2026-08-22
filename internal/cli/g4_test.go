@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -115,7 +114,7 @@ func TestG4FeedbackLoopGate(t *testing.T) {
 	// --- AC-403 through AC-405: the follow-up generation runs with a
 	// cooperative receipt; agent and human edits mix.
 	followup, _ := completed["followup_dispatch_id"].(string)
-	g4Activate(t, configPath, followup)
+	submitFollowupProductPath(t, configPath, followup)
 	if code := g4Run0(t, "work", "begin", "--config", configPath, "--dispatch-id", followup, "--run-id", "run-2"); code != 0 {
 		t.Fatal("follow-up begin failed")
 	}
@@ -147,7 +146,7 @@ func TestG4FeedbackLoopGate(t *testing.T) {
 	// follow-up (AC-405), and the exact path suppresses with audit
 	// (AC-403) once the human edit is also reported exactly.
 	gen3, _ := mismatch["followup_dispatch_id"].(string)
-	g4Activate(t, configPath, gen3)
+	submitFollowupProductPath(t, configPath, gen3)
 	if code := g4Run0(t, "work", "begin", "--config", configPath, "--dispatch-id", gen3, "--run-id", "run-3"); code != 0 {
 		t.Fatal("generation-3 begin failed")
 	}
@@ -175,11 +174,12 @@ func TestG4FeedbackLoopGate(t *testing.T) {
 		t.Fatalf("AC-403: audited suppression missing: %d %v", audit, err)
 	}
 	// No infinite loop: two follow-up-needing completions created exactly
-	// two bounded follow-ups (each at most one), the suppressed
-	// completion created none, and the route is idle with no pending
-	// reconciliation — the recursion is bounded by construction.
-	if n := g4StoreInt(t, configPath, `SELECT COUNT(*) FROM dispatch_intents WHERE state='ready'`); n != 2 {
-		t.Fatalf("stress: exactly the two bounded follow-ups may be pending, got %d", n)
+	// two bounded follow-ups (each at most one), both were submitted and
+	// accepted through the product path rather than left pending, the
+	// suppressed completion created none, and the route is idle with no
+	// pending reconciliation — the recursion is bounded by construction.
+	if n := g4StoreInt(t, configPath, `SELECT COUNT(*) FROM dispatch_intents WHERE state='ready'`); n != 0 {
+		t.Fatalf("stress: no follow-up may be left unsubmitted, got %d", n)
 	}
 	if n := g4StoreInt(t, configPath, `SELECT COUNT(*) FROM dispatch_intents`); n != 3 {
 		t.Fatalf("stress: one dispatch per generation, got %d", n)
@@ -205,13 +205,24 @@ func enableRouteAck(t *testing.T, configPath, routeID string) int {
 	return Run([]string{"route", "enable", "--config", configPath, "--route", routeID, "--acknowledge-production-gate", revision, "--yes"}, &out, &errb)
 }
 
-// g4Activate promotes one ready follow-up to the active slot (the
-// production activation happens at target acceptance).
-func g4Activate(t *testing.T, configPath, dispatchID string) {
+// submitFollowupProductPath drives one pending follow-up through the
+// product path (E7-T2/B-3): the CLI drain submits the due intent to the
+// target, and the acceptance promotes it to the route's active task.
+// The earlier store-direct activation bypass is gone from every
+// multi-generation test.
+func submitFollowupProductPath(t *testing.T, configPath, dispatchID string) {
 	t.Helper()
+	res := g4Run(t, "dispatches", "drain", "--route", "wiki", "--config", configPath)
+	if n, _ := res["processed"].(float64); n != 1 {
+		t.Fatalf("follow-up %s must submit exactly once through drain: %v", dispatchID, res)
+	}
 	store := e5t1Store(t, configPath)
-	if err := store.ActivateFollowup(context.Background(), dispatchID, "g4", "2026-08-21T00:00:00Z"); err != nil {
-		t.Fatalf("activating follow-up %s: %v", dispatchID, err)
+	var state, routeState string
+	if err := store.QueryRow(`SELECT state FROM dispatch_intents WHERE dispatch_id=?`, dispatchID).Scan(&state); err != nil || state != "accepted" {
+		t.Fatalf("follow-up %s must reach accepted through the product path: %s %v", dispatchID, state, err)
+	}
+	if err := store.QueryRow(`SELECT route_state FROM route_runtime_state WHERE route_id='wiki'`).Scan(&routeState); err != nil || routeState != "ACTIVE_CLEAN" {
+		t.Fatalf("the accepted follow-up must activate the route (B-3): %s %v", routeState, err)
 	}
 }
 
@@ -298,11 +309,19 @@ func TestG4StructuralScenarios(t *testing.T) {
 
 // TestG4DistinctOperatorOperations proves AC-409: retry, reprocess,
 // rerun, and reconcile keep their distinct id and lineage semantics.
+// The arrival is persisted without submission so the rerun leg runs
+// against ready work, the only supersede-eligible shape beside
+// dead-lettered work (E7-T2/B-2).
 func TestG4DistinctOperatorOperations(t *testing.T) {
 	configPath, vault := e4t3Fixture(t)
-	res, raw := e4t3Dispatch(t, configPath, vault)
+	setPlanEnv(t, vault, false)
+	e4t3RegisterRoute(t, configPath)
+	var dispatchOut, dispatchErr bytes.Buffer
+	withStdin(t, `[{"name":"Inbox/new.md","exists":true,"new":true,"size":5,"type":"f"}]`, func() {
+		Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman", "--no-submit"}, &dispatchOut, &dispatchErr)
+	})
+	res := decodeEnvelope(t, &dispatchOut)
 	dispatchID, _ := res["dispatch_id"].(string)
-	_ = raw
 
 	// Locate the batch for reprocess through the receipts surface.
 	store := e5t1Store(t, configPath)

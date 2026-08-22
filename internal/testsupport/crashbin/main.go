@@ -62,11 +62,19 @@ func main() {
 	}
 }
 
+// flag returns the value of "--name value" or, for a bare trailing
+// "--name" (the last argument), the literal "true" so boolean flags work
+// in both spellings (E7-T2 round-1 review: a trailing bare --die was
+// previously invisible to this parser).
 func flag(name string) string {
-	for i := 2; i < len(os.Args)-1; i++ {
-		if os.Args[i] == "--"+name {
+	for i := 2; i < len(os.Args); i++ {
+		if os.Args[i] != "--"+name {
+			continue
+		}
+		if i+1 < len(os.Args) {
 			return os.Args[i+1]
 		}
+		return "true"
 	}
 	return ""
 }
@@ -259,7 +267,9 @@ func acquire(db, owner, ttl string, die bool) error {
 	}
 	if die {
 		// Hard exit with the lease transaction committed and no attempt
-		// completion: the crash-after-lease window.
+		// completion: the crash-after-lease window. The marker lets tests
+		// assert the die path actually ran (E7-T2 round-1 review).
+		fmt.Fprintln(os.Stderr, "crashbin: hard death after lease commit")
 		os.Exit(0)
 	}
 	return nil

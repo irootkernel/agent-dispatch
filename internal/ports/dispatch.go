@@ -39,11 +39,12 @@ type DispatchStore interface {
 	// machine's guards for the given reason and evidence.
 	CompleteAttempt(ctx context.Context, res AttemptResult) error
 
-	// RecoverExpiredSubmitting moves every submitting intent whose lease
-	// expired at now to unknown with audit evidence and closes its open
-	// attempt row (persistence §5: an abandoned submitting state defaults
-	// to unknown, never to success or failure).
-	RecoverExpiredSubmitting(ctx context.Context, now string) ([]RecoveredLease, error)
+	// RecoverExpiredSubmitting moves every submitting intent on one route
+	// whose lease expired at now to unknown with audit evidence and closes
+	// its open attempt row (persistence §5: an abandoned submitting state
+	// defaults to unknown, never to success or failure). An empty routeID
+	// sweeps the whole store.
+	RecoverExpiredSubmitting(ctx context.Context, routeID, now string) ([]RecoveredLease, error)
 }
 
 // Lineage is the full observation-to-intent persistence unit of one

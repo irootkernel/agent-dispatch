@@ -2,11 +2,13 @@ package dispatch
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -133,7 +135,9 @@ func TestG2AC202(t *testing.T) {
 
 // TestG2AC203 proves remote acceptance followed by a crash before the
 // local receipt commit leaves unknown work that reconciliation resolves
-// by lookup without creating a second task.
+// by lookup without creating a second task (E7-T2 rewrite: the target
+// genuinely receives exactly one submission before the crash window, so
+// the no-second-task assertion has a real baseline).
 func TestG2AC203(t *testing.T) {
 	db := g2Seed(t)
 	s := g2Open(t, db)
@@ -141,9 +145,25 @@ func TestG2AC203(t *testing.T) {
 	if err := s.CommitLineage(context.Background(), lin); err != nil {
 		t.Fatal(err)
 	}
+	snap, err := s.LoadIntent(context.Background(), "dispatch-1")
+	if err != nil {
+		t.Fatal(err)
+	}
 	fake := fakesink.New("fake-main", fakesink.Step{Result: fakesink.Accepted("task-1")})
-	// The process reaches the target and dies before recording the
-	// receipt: the lease is held, the acceptance exists only remotely.
+	// The target is really reached once and accepts: the submission is
+	// recorded by the sink. The process then dies inside the submit
+	// window before the receipt transaction: the lease is committed with
+	// the acceptance existing only remotely.
+	var req ports.TaskRequest
+	if err := json.Unmarshal([]byte(snap.RequestJSON), &req); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fake.Submit(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.Submissions()) != 1 {
+		t.Fatalf("the crashed submitter must have reached the target exactly once: %d", len(fake.Submissions()))
+	}
 	if _, err := s.AcquireAttempt(context.Background(), ports.AcquireAttempt{
 		DispatchID: "dispatch-1", AttemptID: "attempt-1", Owner: "victim",
 		Now: "2026-08-20T01:00:00Z", LeaseExpiresAt: "2026-08-20T01:00:05Z",
@@ -154,11 +174,11 @@ func TestG2AC203(t *testing.T) {
 
 	restart := g2Open(t, db)
 	rt := &Runtime{Store: restart, Sink: fake, Now: func() time.Time { return time.Date(2026, 8, 20, 1, 0, 10, 0, time.UTC) }, LeaseTTL: time.Minute, Actor: "recovery"}
-	recovered, err := rt.Recover(context.Background())
+	recovered, err := rt.Recover(context.Background(), "")
 	if err != nil || len(recovered) != 1 || recovered[0].DispatchID != "dispatch-1" {
 		t.Fatalf("expired submitting lease must recover to unknown: %+v %v", recovered, err)
 	}
-	snap, _ := restart.LoadIntent(context.Background(), "dispatch-1")
+	snap, _ = restart.LoadIntent(context.Background(), "dispatch-1")
 	if snap.State != records.IntentUnknown {
 		t.Fatalf("recovered state: %+v", snap)
 	}
@@ -169,8 +189,55 @@ func TestG2AC203(t *testing.T) {
 	if err != nil || res.To != records.IntentAccepted {
 		t.Fatalf("lookup must prove acceptance: %+v %v", res, err)
 	}
-	if len(fake.Submissions()) != 0 {
+	if len(fake.Submissions()) != 1 {
 		t.Fatalf("reconciliation must not submit again: %d", len(fake.Submissions()))
+	}
+}
+
+// TestG2DuringSubmitProcessDeathRecovers proves the during-submit crash
+// boundary with a real process death (TST-004, E7-T2/B-1): a separate
+// process acquires the attempt lease and dies hard immediately after
+// the lease transaction commits, before any sink call or completion.
+// The production recovery sweep moves the expired submitting intent to
+// unknown with audit evidence and the lookup resolves it, so the next
+// drain heals the route without manual database edits (DUR-010).
+func TestG2DuringSubmitProcessDeathRecovers(t *testing.T) {
+	db := g2Seed(t)
+	// A first real process commits the full lineage and dies; a second
+	// real process then acquires the attempt lease and dies hard
+	// immediately after the lease transaction commits, before any sink
+	// call or completion (the marker proves the die path actually ran).
+	if out, err := exec.Command(crashbin(t), "commit", "--db", db, "--stage", "after-commit").CombinedOutput(); err != nil {
+		t.Fatalf("commit after-commit crash: %v: %s", err, out)
+	}
+	dieOut, err := exec.Command(crashbin(t), "lease", "--db", db, "--owner", "victim", "--ttl-seconds", "1", "--die").CombinedOutput()
+	if err != nil {
+		t.Fatalf("lease --die: %v: %s", err, dieOut)
+	}
+	if !strings.Contains(string(dieOut), "hard death after lease commit") {
+		t.Fatalf("the hard-death path must be the one that ran: %s", dieOut)
+	}
+	s := g2Open(t, db)
+	snap, err := s.LoadIntent(context.Background(), "dispatch-1")
+	if err != nil || snap.State != records.IntentSubmitting {
+		t.Fatalf("the dead process must leave submitting work: %+v %v", snap, err)
+	}
+	// The one-second lease expires on the wall clock; recovery is then
+	// taken over exactly once with audit evidence (the extra margin
+	// keeps the second-truncated timestamps strictly past the expiry).
+	time.Sleep(2500 * time.Millisecond)
+	rt := &Runtime{Store: s, Sink: fakesink.New("fake-main"), Now: time.Now, LeaseTTL: time.Minute, Actor: "recovery"}
+	recovered, err := rt.Recover(context.Background(), "")
+	if err != nil || len(recovered) != 1 || recovered[0].DispatchID != "dispatch-1" {
+		t.Fatalf("expired submitting lease must recover to unknown: %+v %v", recovered, err)
+	}
+	snap, err = s.LoadIntent(context.Background(), "dispatch-1")
+	if err != nil || snap.State != records.IntentUnknown {
+		t.Fatalf("recovered state must be unknown: %+v %v", snap, err)
+	}
+	var transitions int
+	if err := s.QueryRow(`SELECT COUNT(*) FROM state_transitions WHERE entity_type='dispatch_intent' AND entity_id='dispatch-1' AND to_state='unknown'`).Scan(&transitions); err != nil || transitions < 1 {
+		t.Fatalf("the recovery must be audited: %d %v", transitions, err)
 	}
 }
 

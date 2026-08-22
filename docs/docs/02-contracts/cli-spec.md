@@ -151,7 +151,7 @@ Evaluates a retained batch against the current route policy and creates a new de
 
 ### `dispatches rerun <dispatch-id>`
 
-Creates an intentional new work request with new dispatch ID and idempotency key. Requires `--reason` and `--yes` in non-interactive mode.
+Creates an intentional new work request with new dispatch ID and idempotency key. Requires `--reason` and `--yes` in non-interactive mode. Eligibility (E7-T2): the original must be `ready` or `dead_lettered`; the rerun supersedes it through its declared state-machine edge in the same transaction, so exactly one authoritative request remains. In-flight work (`submitting`, `unknown`, `reconciling`) is refused with recovery guidance (`dispatches drain` resolves expired leases and unknown delivery), `retry_wait` work belongs to `dispatches retry`, and `accepted` or otherwise terminal work keeps its authoritative lineage.
 
 ### `dispatches drain`
 
@@ -159,7 +159,7 @@ Creates an intentional new work request with new dispatch ID and idempotency key
 agent-dispatch dispatches drain --route <id> --max <N>
 ```
 
-Operator command for bounded ready/retry work. First reconciles the route's `unknown` dispatches (lookup by idempotency key then external reference; on Hermes Kanban the by-key read does not exist, so unresolved ambiguity dead-letters for the operator, whose `dispatches retry` resubmits the same idempotency key through the dedup-safe path); the envelope reports each reconciliation under `reconciled` and per-dispatch failures as warnings without blocking the route's due work. Not installed as a Watchman trigger.
+Operator command for bounded ready/retry work, in a fixed order: first the route's expired `submitting` leases are recovered to `unknown` (the `recovered` envelope field lists each), then the route's `unknown` dispatches are reconciled (lookup by idempotency key then external reference; on Hermes Kanban the by-key read does not exist, so unresolved ambiguity dead-letters for the operator, whose `dispatches retry` resubmits the same idempotency key through the dedup-safe path; the envelope reports each reconciliation under `reconciled` and per-dispatch failures as warnings without blocking the route's due work), then the due `ready`/`retry_wait` intents are submitted — only the dispatch holding the route's active slot, never beside another authoritative task, and never on an `uncertain` or `quarantined` route (CON-001). A route left in `FOLLOWUP_READY` with an already accepted follow-up (a crash between acceptance and promotion) is promoted by this command. Not installed as a Watchman trigger.
 
 ## 7. Receipt Commands
 
@@ -236,7 +236,7 @@ agent-dispatch reconcile \
   [--submit]
 ```
 
-Default behavior persists the current-state reconciliation decision. `--submit` attempts an eligible intent. Installed scheduled recipes may include `--submit` only after the production gate.
+Default behavior persists the current-state reconciliation decision. `--submit` attempts an eligible intent and then drains the route's other due work (bounded), so a pending follow-up generation reaches the target on the scheduled path without a manual drain (E7-T2); an accepted follow-up is promoted to the route's active task at acceptance. The automatic-write gate applies: a route whose activation state is not `enabled` submits nothing and reports the skip as a warning. Installed scheduled recipes may include `--submit` only after the production gate.
 
 ## 10. Status and Doctor
 

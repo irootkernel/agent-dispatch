@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -370,9 +369,7 @@ func TestWorkFailNeverErasesDirtyState(t *testing.T) {
 	// Exhausting the budget (budget 1, one failure recorded) moves the
 	// route to UNCERTAIN on the next failure: activate the follow-up and
 	// fail it too.
-	if err := store.ActivateFollowup(context.Background(), followup, "test", "2026-08-21T00:00:00Z"); err != nil {
-		t.Fatalf("activate follow-up: %v", err)
-	}
+	submitFollowupProductPath(t, configPath, followup)
 	var activeDispatch string
 	if err := store.QueryRow(`SELECT active_dispatch_id FROM route_runtime_state WHERE route_id = 'wiki'`).Scan(&activeDispatch); err != nil || activeDispatch != followup {
 		t.Fatalf("follow-up must hold the slot: %q %v", activeDispatch, err)

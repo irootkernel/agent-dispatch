@@ -156,6 +156,10 @@ func quarantineErr(stderr io.Writer, command, sub string, err error) int {
 	}
 }
 
+// maxScheduledDrainIntents bounds the due-work drain the scheduled
+// --submit path performs after its own reconciliation intent.
+const maxScheduledDrainIntents = 100
+
 // runReconcile implements `reconcile --route <id> --reason ... [--submit]`
 // (cli-spec §9, OPS-006): full-scope enumeration, path-fact comparison,
 // and the single pending reconciliation generation.
@@ -205,25 +209,47 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return reconcileErr(stderr, command, err)
 	}
-	if submit && result.ReconcileDispatch == "" {
-		warnings := []string{"--submit skipped: no eligible reconciliation intent (the route was not idle or no work was due); the pending generation is recorded"}
+	if !submit {
+		return writeEnvelope(stdout, command, result)
+	}
+	// --submit drives the scheduled delivery path (OPS-007): the
+	// reconciliation's own intent when one was created, then the route's
+	// other due work so a pending follow-up generation reaches the target
+	// without a manual drain (CON-003, E7-T2/B-3). The automatic-write
+	// gate still applies: a route that is not enabled submits nothing.
+	rt, rtErr := artifacts.submitRuntime(store)
+	if rtErr != nil {
+		writeError(stderr, command, "config_invalid", "configuration", rtErr.Error())
+		return 3
+	}
+	if rs, rsErr := store.LoadRouteState(requestCtx(), routeID); rsErr != nil {
+		writeError(stderr, command, "sqlite_query_failed", "storage", rsErr.Error())
+		return 20
+	} else if rs.ActivationState != "enabled" {
+		warnings := []string{fmt.Sprintf("--submit skipped: route %s activation state is %q, not enabled", routeID, rs.ActivationState)}
 		return writeEnvelopeWithWarnings(stdout, command, result, warnings)
 	}
-	if submit && result.ReconcileDispatch != "" {
-		rt, rtErr := artifacts.submitRuntime(store)
-		if rtErr != nil {
-			writeError(stderr, command, "config_invalid", "configuration", rtErr.Error())
-			return 3
-		}
+	envelope := map[string]any{"result": result, "submitted": false}
+	if result.ReconcileDispatch != "" {
 		report, err := rt.SubmitOnce(requestCtx(), result.ReconcileDispatch, "agent-dispatch-reconcile")
 		if err != nil {
 			return intentErr(stderr, command, err)
 		}
-		return writeEnvelope(stdout, command, map[string]any{
-			"result": result, "submitted_state": string(report.To), "submitted": true,
-		})
+		envelope["submitted"] = true
+		envelope["submitted_state"] = string(report.To)
 	}
-	return writeEnvelope(stdout, command, result)
+	drained, err := rt.Drain(requestCtx(), routeID, maxScheduledDrainIntents, store)
+	if err != nil {
+		// The reconciliation and its own submission (when one ran) are
+		// already committed; surface them inside the single failure
+		// envelope so the operator sees what changed (round-1 review).
+		if result.ReconcileDispatch != "" {
+			err = fmt.Errorf("%w (note: the reconciliation intent %s was already submitted before this failure)", err, result.ReconcileDispatch)
+		}
+		return intentErr(stderr, command, err)
+	}
+	envelope["drained"] = map[string]any{"processed": drained.Processed, "skipped": drained.Skipped}
+	return writeEnvelope(stdout, command, envelope)
 }
 
 // reconcileErr maps one full-reconciliation failure onto the stable exit

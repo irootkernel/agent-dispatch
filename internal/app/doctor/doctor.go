@@ -251,7 +251,7 @@ func Examine(in Input) []Finding {
 				Code: "stale_active_route", Severity: SeverityWarning,
 				Summary:     fmt.Sprintf("route %s holds an active dispatch older than active_stale_after", r.RouteID),
 				Details:     "active dispatch " + r.ActiveDispatchID + ", age " + r.ActiveDispatchAge.String(),
-				Remediation: "inspect the dispatch and recover it through dispatches drain or operator retry",
+				Remediation: "inspect the dispatch (dispatches show): drain recovers expired leases and reconciles unknown delivery, dispatches retry re-arms dead-lettered work, and accepted work is completed through work begin/work complete",
 			})
 		}
 		switch {

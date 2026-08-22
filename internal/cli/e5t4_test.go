@@ -338,8 +338,9 @@ func TestIdleNoDiffReconcileClearsPending(t *testing.T) {
 	e4t3RegisterRoute(t, configPath)
 	// Store the snapshot so the comparison finds no diff, then mark a
 	// pending generation directly (the quarantine-release aftermath).
-	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "initial"}, &bytes.Buffer{}, &bytes.Buffer{}); code != 0 {
-		t.Fatal("initial reconcile failed")
+	var initOut, initErr bytes.Buffer
+	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "initial"}, &initOut, &initErr); code != 0 {
+		t.Fatalf("initial reconcile failed (exit %d): %s", code, initErr.String())
 	}
 	// Complete the created reconciliation intent through the receipt
 	// loop so the route returns to idle with the snapshot current: the
@@ -367,9 +368,7 @@ func TestIdleNoDiffReconcileClearsPending(t *testing.T) {
 	if followup == "" {
 		t.Fatalf("the pending generation must collapse into a follow-up: %v", first)
 	}
-	if err := store.ActivateFollowup(context.Background(), followup, "test", "2026-08-21T00:00:00Z"); err != nil {
-		t.Fatal(err)
-	}
+	submitFollowupProductPath(t, configPath, followup)
 	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", followup, "--run-id", "r2"}, &out, &errb); code != 0 {
 		t.Fatalf("follow-up begin: %s", errb.String())
 	}
@@ -436,41 +435,39 @@ func TestDropDispositionPersistsEvidence(t *testing.T) {
 	}
 }
 
-// TestReconcileSubmitSkippedWarning proves --submit on a reconciliation
-// with no eligible intent reports the skip as a warning instead of
-// silently passing (E5 audit round 5, F008).
+// TestReconcileSubmitSkippedWarning proves --submit on a route that is
+// not enabled reports the skip as a warning instead of silently
+// passing (E5 audit round 5, F008; rewritten by E7-T2: the automatic
+// gate now lives on the --submit path itself, so the disabled route is
+// the skip scenario and the warning names the gate).
 func TestReconcileSubmitSkippedWarning(t *testing.T) {
 	configPath, vault := e4t3Fixture(t)
 	e4t3RegisterRoute(t, configPath)
 	// A first reconciliation stores the snapshot and schedules the
-	// intent, activating the route; a second, unchanged reconciliation
-	// has no eligible intent for --submit.
-	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "initial"}, &bytes.Buffer{}, &bytes.Buffer{}); code != 0 {
-		t.Fatal("initial reconcile failed")
+	// intent; the automatic-write gate then closes: with the route
+	// disabled, --submit must refuse the write path while the audit
+	// result stays visible.
+	var initOut, initErr bytes.Buffer
+	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "initial"}, &initOut, &initErr); code != 0 {
+		t.Fatalf("initial reconcile failed (exit %d): %s", code, initErr.String())
 	}
-	store := e5t1Store(t, configPath)
-	var dispatchID string
-	if err := store.QueryRow(`SELECT dispatch_id FROM dispatch_intents ORDER BY created_at DESC LIMIT 1`).Scan(&dispatchID); err != nil {
-		t.Fatal(err)
+	if code := Run([]string{"route", "disable", "--config", configPath, "--route", "wiki"}, &bytes.Buffer{}, &bytes.Buffer{}); code != 0 {
+		t.Fatal("route disable failed")
 	}
-	var out, errb bytes.Buffer
-	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "r1"}, &out, &errb); code != 0 {
-		t.Fatalf("begin: %s", errb.String())
-	}
-	out.Reset()
-	errb.Reset()
-	withStdin(t, `[]`, func() {
-		Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "r1", "--manifest", "-"}, &out, &errb)
-	})
-	_ = decodeEnvelope(t, &out)
-	// Route is now FOLLOWUP_READY: --submit has no eligible intent.
 	var out2, errb2 bytes.Buffer
 	code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "scheduled", "--submit"}, &out2, &errb2)
 	if code != 0 {
 		t.Fatalf("skipped submit must still succeed: %s", errb2.String())
 	}
-	if !strings.Contains(out2.String(), "skipped") {
-		t.Fatalf("the skipped submission must be warned: %s", out2.String())
+	body := out2.String() + errb2.String()
+	if !strings.Contains(body, "--submit skipped") || !strings.Contains(body, "not enabled") {
+		t.Fatalf("the gated skip must be warned with its reason: %s", body)
+	}
+	store := e5t1Store(t, configPath)
+	defer store.Close()
+	var submitted int
+	if err := store.QueryRow(`SELECT COUNT(*) FROM dispatch_intents WHERE state IN ('submitting','accepted')`).Scan(&submitted); err != nil || submitted != 0 {
+		t.Fatalf("a disabled route must not submit through --submit: %d %v", submitted, err)
 	}
 	_ = vault
 }
@@ -553,8 +550,9 @@ func TestReconcileRemovedDiffAndQuarantineNotFound(t *testing.T) {
 	e4t3RegisterRoute(t, configPath)
 	// Baseline snapshot; complete the reconciliation generation's
 	// intents so the route returns to idle before the removal.
-	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "initial"}, &bytes.Buffer{}, &bytes.Buffer{}); code != 0 {
-		t.Fatal("initial reconcile failed")
+	var initOut, initErr bytes.Buffer
+	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "initial"}, &initOut, &initErr); code != 0 {
+		t.Fatalf("initial reconcile failed (exit %d): %s", code, initErr.String())
 	}
 	store := e5t1Store(t, configPath)
 	var dispatchID string
@@ -575,9 +573,7 @@ func TestReconcileRemovedDiffAndQuarantineNotFound(t *testing.T) {
 	if followup == "" {
 		t.Fatalf("the pending generation must collapse into a follow-up: %v", first)
 	}
-	if err := store.ActivateFollowup(context.Background(), followup, "test", "2026-08-21T00:00:00Z"); err != nil {
-		t.Fatal(err)
-	}
+	submitFollowupProductPath(t, configPath, followup)
 	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", followup, "--run-id", "r2"}, &out, &errb); code != 0 {
 		t.Fatalf("follow-up begin: %s", errb.String())
 	}
@@ -663,10 +659,7 @@ func TestUncertainResolvedByReconcile(t *testing.T) {
 	if followup == "" {
 		t.Fatalf("failure with budget must create one follow-up: %v", failed)
 	}
-	store := e5t1Store(t, configPath)
-	if err := store.ActivateFollowup(context.Background(), followup, "test", "2026-08-21T00:00:00Z"); err != nil {
-		t.Fatalf("activate follow-up: %v", err)
-	}
+	submitFollowupProductPath(t, configPath, followup)
 	out.Reset()
 	errb.Reset()
 	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", followup, "--run-id", "run-2"}, &out, &errb); code != 0 {
@@ -694,6 +687,7 @@ func TestUncertainResolvedByReconcile(t *testing.T) {
 	if resolvedRun["pending_reconcile"] != true || resolvedDispatch == "" {
 		t.Fatalf("the uncertain resolution must schedule one intent: %v", resolvedRun)
 	}
+	store := e5t1Store(t, configPath)
 	var routeState, activeDispatch string
 	var dirty int
 	if err := store.QueryRow(`SELECT route_state, COALESCE(active_dispatch_id, ''), dirty_generation FROM route_runtime_state WHERE route_id = 'wiki'`).Scan(&routeState, &activeDispatch, &dirty); err != nil ||
@@ -708,9 +702,7 @@ func TestUncertainResolvedByReconcile(t *testing.T) {
 	// The loop closes: the resolved dispatch completes (the pending
 	// generation forces its one follow-up), and that follow-up completes
 	// clean back to IDLE — the route never re-enters UNCERTAIN.
-	if err := store.ActivateFollowup(context.Background(), resolvedDispatch, "test", "2026-08-21T00:01:00Z"); err != nil {
-		t.Fatalf("activate resolved dispatch: %v", err)
-	}
+	submitFollowupProductPath(t, configPath, resolvedDispatch)
 	out.Reset()
 	errb.Reset()
 	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", resolvedDispatch, "--run-id", "run-r"}, &out, &errb); code != 0 {
@@ -729,9 +721,7 @@ func TestUncertainResolvedByReconcile(t *testing.T) {
 	if secondFollowup == "" {
 		t.Fatalf("the pending generation must force one follow-up: %v", resolvedDone)
 	}
-	if err := store.ActivateFollowup(context.Background(), secondFollowup, "test", "2026-08-21T00:02:00Z"); err != nil {
-		t.Fatalf("activate second follow-up: %v", err)
-	}
+	submitFollowupProductPath(t, configPath, secondFollowup)
 	out.Reset()
 	errb.Reset()
 	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", secondFollowup, "--run-id", "run-r2"}, &out, &errb); code != 0 {
@@ -830,9 +820,7 @@ func TestReconcileUnreadableSubtreeKeepsStoredFacts(t *testing.T) {
 	if secondDispatch == "" {
 		t.Fatal("the pending generation must force one follow-up")
 	}
-	if err := store.ActivateFollowup(context.Background(), secondDispatch, "test", "2026-08-21T00:01:00Z"); err != nil {
-		t.Fatal(err)
-	}
+	submitFollowupProductPath(t, configPath, secondDispatch)
 	out.Reset()
 	errb.Reset()
 	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", secondDispatch, "--run-id", "run-2"}, &out, &errb); code != 0 {
@@ -912,9 +900,7 @@ func TestUncertainNoWorkResolutionLandsIdle(t *testing.T) {
 	if d2 == "" {
 		t.Fatalf("the budgeted failure must schedule its follow-up: %v", failed)
 	}
-	if err := store.ActivateFollowup(context.Background(), d2, "test", "2026-08-21T00:00:00Z"); err != nil {
-		t.Fatal(err)
-	}
+	submitFollowupProductPath(t, configPath, d2)
 	out.Reset()
 	errb.Reset()
 	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", d2, "--run-id", "run-2"}, &out, &errb); code != 0 {

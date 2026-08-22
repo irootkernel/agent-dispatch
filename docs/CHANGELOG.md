@@ -1,5 +1,15 @@
 # SOT Changelog
 
+## 1.0.15 - 2026-08-23
+
+E7-T2: the compliance review's three Blockers closed in the product path (DUR-010, CON-001, CON-003, FBK-005):
+
+- B-1: `dispatches drain` invokes the expired-submitting recovery sweep before unknown reconciliation and reports the recovered leases (`recovered` in the envelope); the during-submit crash boundary now has real process-death coverage (`TestG2DuringSubmitProcessDeathRecovers` through the crashbin lease hook), `TestG2AC203` was rewritten with a real sink baseline, and the doctor remediation texts name the actual exits;
+- B-2: rerun requires ready or dead-lettered work (in-flight, retry_wait, and terminal-authoritative originals are refused with guidance), the store supersedes the original through its declared edge in the rerun transaction, and both the submit and drain paths enforce the route's active slot (one authoritative task per route; uncertain and quarantined routes submit nothing);
+- B-3: an accepted follow-up is promoted to the route's active task at acceptance (`Runtime.promoteFollowup`), the scheduled `reconcile --submit` path drains due follow-up work behind the enabled-route gate, and every G4/E5 multi-generation scenario now drives the full product path (drain, acceptance-time activation, work begin/complete) with the store-direct activation bypass removed;
+- round-1 review remediations: the promotion crash window heals on the next drain (accepted follow-ups left in FOLLOWUP_READY are promoted), the route-slot predicate is enforced inside the lease transaction (`ErrRouteSlotHeld`), the expired-lease sweep is route-scoped, the crashbin `--die` parsing bug is fixed with an asserted hard-death marker, the cli-spec drain/rerun/reconcile contracts state the new behavior, and the disabled-route `--submit` gate has its proof;
+- gates G2 and G4 (plus G1/G3/G5 with the real Hermes and Watchman) re-run green on darwin/arm64 with `make verify`.
+
 ## 1.0.14 - 2026-08-23
 
 E7-T1: documentation truth restored after the 2026-08-22 MVP compliance review:

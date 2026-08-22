@@ -365,6 +365,15 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 		Backoff: backoff, JitterUnit: jitterUnit,
 		Log: opsLogger(stderr, cfg), TraceID: globalTraceID,
 	}
+	// Expired submitting leases are recovered before unknown
+	// reconciliation so the DUR-006 lookup ordering covers them (DUR-010,
+	// E7-T2/B-1): a process that died mid-submit leaves submitting work
+	// that only this sweep moves to unknown. A failure to enumerate the
+	// expired leases fails closed, exactly like the unknown enumeration.
+	recovered, err := rt.Recover(requestCtx(), routeID)
+	if err != nil {
+		return intentErr(stderr, command, err)
+	}
 	// Unknown dispatches are reconciled before due work is submitted
 	// (DUR-006). A failure to enumerate them fails closed: submitting
 	// more work without the required lookup ordering is never allowed.
@@ -376,17 +385,17 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 	}
 	report, err := rt.Drain(requestCtx(), routeID, max, store)
 	if err != nil {
-		// The reconciliation mutations already committed; surface them
+		// The recovery and reconciliation mutations already committed; surface them
 		// inside the single failure envelope so the operator sees what
 		// changed without a second, mislabeled error document.
-		if len(reconciled) > 0 || len(reconcileErrors) > 0 {
-			err = fmt.Errorf("%w (note: %d unknown dispatch(es) were reconciled and %d were skipped or failed before this failure; inspect with 'agent-dispatch dispatches list --route %s')", err, len(reconciled), len(reconcileErrors), routeID)
+		if len(recovered) > 0 || len(reconciled) > 0 || len(reconcileErrors) > 0 {
+			err = fmt.Errorf("%w (note: %d expired lease(s) were recovered, %d unknown dispatch(es) were reconciled, and %d were skipped or failed before this failure; inspect with 'agent-dispatch dispatches list --route %s')", err, len(recovered), len(reconciled), len(reconcileErrors), routeID)
 		}
 		return intentErr(stderr, command, err)
 	}
 	return writeEnvelopeWithWarnings(stdout, command, map[string]any{
 		"processed": report.Processed, "skipped": report.Skipped,
-		"reports": report.Reports, "reconciled": reconciled,
+		"reports": report.Reports, "reconciled": reconciled, "recovered": recovered,
 	}, reconcileErrors)
 }
 

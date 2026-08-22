@@ -638,12 +638,17 @@ func TestReconcileSkipsRepointedScope(t *testing.T) {
 
 // TestRerunPreservesTargetScope proves rerun intents carry the
 // predecessor's target scope so the reconciliation guard stays
-// effective across reruns.
+// effective across reruns. The predecessor is persisted without
+// submission: rerun requires ready or dead-lettered work (E7-T2/B-2).
 func TestRerunPreservesTargetScope(t *testing.T) {
 	configPath, vault := e4t3Fixture(t)
 	setPlanEnv(t, vault, false)
 	e4t3RegisterRoute(t, configPath)
-	res := e4t3DispatchNoRegister(t, configPath, vault)
+	var dispatchOut, dispatchErr bytes.Buffer
+	withStdin(t, `[{"name":"Inbox/new.md","exists":true,"new":true,"size":5,"type":"f"}]`, func() {
+		Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman", "--no-submit"}, &dispatchOut, &dispatchErr)
+	})
+	res := decodeEnvelope(t, &dispatchOut)
 	dispatchID, _ := res["dispatch_id"].(string)
 
 	var out, errb bytes.Buffer

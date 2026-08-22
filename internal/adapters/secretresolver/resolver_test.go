@@ -3,12 +3,14 @@ package secretresolver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/rootkernel/jjukkumi/internal/config"
@@ -297,5 +299,45 @@ printf 'the-real-token\n'
 	}
 	if string(out) != "the-real-token\n" {
 		t.Fatalf("credential contaminated by stderr: %q", out)
+	}
+}
+
+// TestResolveFDConcurrentFirstResolution proves the serialized cache
+// under the round-3 audit fix: two goroutines resolving the same
+// first-time descriptor leave exactly one wrapper (the loser's wrapper
+// would have finalized the shared descriptor closed).
+func TestResolveFDConcurrentFirstResolution(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "fdtoken")
+	if err := os.WriteFile(path, []byte("fd-value"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	refText := "fd:" + strconv.Itoa(int(f.Fd()))
+	var wg sync.WaitGroup
+	errs := make(chan error, 8)
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			value, err := Resolve(context.Background(), ref(t, refText))
+			if err != nil || value != "fd-value" {
+				errs <- fmt.Errorf("concurrent resolution = %q, %v", value, err)
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	runtime.GC()
+	runtime.GC()
+	value, err := Resolve(context.Background(), ref(t, refText))
+	if err != nil || value != "fd-value" {
+		t.Fatalf("post-GC resolution = %q, %v (the race loser's finalizer closed the descriptor)", value, err)
 	}
 }

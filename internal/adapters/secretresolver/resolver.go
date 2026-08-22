@@ -24,15 +24,19 @@ var keychainCommand = func(ctx context.Context, ref string) ([]byte, error) {
 }
 
 // fdFiles caches one *os.File wrapper per open descriptor for the
-// process lifetime. os.NewFile registers a runtime finalizer that
-// closes the wrapped descriptor once the wrapper becomes unreachable,
-// so a transient wrapper per resolution would nondeterministically
-// close the launching process's descriptor (and a later open could
-// reuse the number, resolving a different stream as the credential).
-// The cache holds the only wrapper, keeping the finalizer untriggered;
-// descriptors are never closed here because their owning process
-// controls their lifetime.
-var fdFiles sync.Map // map[int]*os.File
+// process lifetime, and fdCreate serializes wrapper creation: the
+// loser of a naive LoadOrStore race would drop its own just-created
+// wrapper, whose runtime finalizer then closes the shared descriptor
+// on the next GC cycle — the exact defect the cache exists to prevent.
+// With creation serialized, exactly one wrapper per descriptor ever
+// exists, its finalizer never triggers while cached, and descriptors
+// are never closed here because their owning process controls their
+// lifetime.
+var (
+	fdFiles  sync.Map // map[int]*os.File
+	fdCreate sync.Mutex
+	fdReadMu sync.Mutex
+)
 
 // readDeadline bounds every descriptor- and file-backed read so a
 // wedged writer cannot hang a submission (SEC-009); the caller's
@@ -109,30 +113,46 @@ func resolveFD(ctx context.Context, ref *config.SecretRef) (string, error) {
 	if err != nil {
 		return "", &UnresolvedError{Ref: ref, Cause: fmt.Sprintf("invalid descriptor %q", ref.Name)}
 	}
+	fdCreate.Lock()
 	wrapped, loaded := fdFiles.Load(fd)
 	if !loaded {
 		file := os.NewFile(uintptr(fd), ref.Text)
 		if file == nil {
+			fdCreate.Unlock()
 			return "", &UnresolvedError{Ref: ref, Cause: fmt.Sprintf("descriptor %d is not open", fd)}
 		}
-		wrapped, loaded = fdFiles.LoadOrStore(fd, file)
-		if !loaded {
-			// Another goroutine won the race; drop our wrapper without
-			// closing the shared descriptor — the winner's cache entry
-			// keeps the finalizer untriggered.
-			_ = wrapped
-		}
+		fdFiles.Store(fd, file)
+		wrapped = file
 	}
+	fdCreate.Unlock()
 	file := wrapped.(*os.File)
-	_, seekErr := file.Seek(0, io.SeekStart)
-	data, readErr := readBounded(ctx, file)
-	switch {
-	case readErr != nil && len(data) == 0:
-		return "", &UnresolvedError{Ref: ref, Cause: fmt.Sprintf("reading fd %d: %v", fd, readErr)}
-	case readErr != nil:
-		return "", &UnresolvedError{Ref: ref, Cause: fmt.Sprintf("reading fd %d stopped after %d bytes: %v", fd, len(data), readErr)}
+	// ReadAt is offset-based and leaves the wrapper's seek state
+	// untouched, so the cached descriptor is safe for repeated and
+	// concurrent resolutions without interleaving seeks. A pipe or
+	// socket rejects ReadAt (ESPIPE): that is the documented one-shot
+	// reference, consumed through the deadline-bounded sequential read
+	// under the dedicated read lock (fdReadMu) so concurrent
+	// resolutions cannot interleave on it.
+	buf := make([]byte, maxSecretBytes+1)
+	n, readErr := file.ReadAt(buf, 0)
+	if readErr == nil || readErr == io.EOF {
+		return trimTrailingNewline(string(buf[:n])), nil
 	}
-	if len(data) == 0 && seekErr != nil {
+	if !errors.Is(readErr, os.ErrInvalid) && !strings.Contains(readErr.Error(), "illegal seek") {
+		return "", &UnresolvedError{Ref: ref, Cause: fmt.Sprintf("reading fd %d: %v", fd, readErr)}
+	}
+	fdReadMu.Lock()
+	defer fdReadMu.Unlock()
+	if _, seekErr := file.Seek(0, io.SeekStart); seekErr != nil {
+		// A pipe cannot rewind; the read proceeds from the current
+		// position (one-shot semantics).
+		_ = seekErr
+	}
+	data, seqErr := readBounded(ctx, file)
+	if seqErr != nil {
+		return "", &UnresolvedError{Ref: ref, Cause: fmt.Sprintf("reading fd %d: %v", fd, seqErr)}
+	}
+	if len(data) == 0 {
 		return "", &UnresolvedError{Ref: ref, Cause: fmt.Sprintf("descriptor %d yielded no data; a pipe-backed reference is consumed by its first read (one-shot)", fd)}
 	}
 	return trimTrailingNewline(string(data)), nil

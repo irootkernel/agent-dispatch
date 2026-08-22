@@ -174,25 +174,38 @@ func (s *Store) PlanPrune(ctx context.Context, cutoffs PruneCutoffs) (PrunePlan,
 // and resolved quarantine for the plan.
 func (s *Store) planRemaining(ctx context.Context, plan *PrunePlan, terminal string) error {
 	c := plan.Cutoffs
-	// The plan mirrors the execution's cascade: decisions freed by the
-	// intent step free batches, which free observations, so each class
-	// counts what the execution would actually delete in order.
-	if err := s.QueryRowContext(ctx, `SELECT COUNT(*) FROM policy_decisions d WHERE d.created_at < ?
-		 AND NOT EXISTS (SELECT 1 FROM dispatch_intents i WHERE i.decision_id = d.decision_id)
-		 AND NOT EXISTS (SELECT 1 FROM policy_decisions newer WHERE newer.supersedes_decision_id = d.decision_id)
-		 AND NOT EXISTS (SELECT 1 FROM quarantine_items q WHERE q.decision_id = d.decision_id)`, c.Attempts).Scan(&plan.Counts.Decisions); err != nil {
+	// The plan mirrors the execution's cascade through one shared CTE
+	// chain: the intents the execution would delete free their
+	// decisions, whose deletion frees their batches, whose deletion
+	// frees the observations only those batches referenced. Each class
+	// therefore counts exactly what the ordered execution deletes.
+	prunable := `WITH prunable_intents AS (
+			SELECT dispatch_id FROM dispatch_intents WHERE state IN ` + terminal + ` AND updated_at < ?
+			 AND NOT EXISTS (SELECT 1 FROM dispatch_attempts a WHERE a.dispatch_id = dispatch_intents.dispatch_id AND (a.completed_at IS NULL OR a.completed_at >= ?))
+			 AND NOT EXISTS (SELECT 1 FROM dispatch_receipts r WHERE r.dispatch_id = dispatch_intents.dispatch_id AND r.received_at >= ?)
+			 AND NOT EXISTS (SELECT 1 FROM work_receipts w WHERE w.dispatch_id = dispatch_intents.dispatch_id AND w.submitted_at >= ?)
+			 AND dispatch_id NOT IN (SELECT active_dispatch_id FROM route_runtime_state WHERE active_dispatch_id IS NOT NULL)),
+		prunable_decisions AS (
+			SELECT d.decision_id, d.batch_id FROM policy_decisions d WHERE d.created_at < ?
+			 AND NOT EXISTS (SELECT 1 FROM dispatch_intents i WHERE i.decision_id = d.decision_id AND i.dispatch_id NOT IN (SELECT dispatch_id FROM prunable_intents))
+			 AND NOT EXISTS (SELECT 1 FROM policy_decisions newer WHERE newer.supersedes_decision_id = d.decision_id)
+			 AND NOT EXISTS (SELECT 1 FROM quarantine_items q WHERE q.decision_id = d.decision_id)),
+		prunable_batches AS (
+			SELECT b.batch_id FROM change_batches b WHERE b.created_at < ?
+			 AND NOT EXISTS (SELECT 1 FROM policy_decisions d WHERE d.batch_id = b.batch_id AND d.decision_id NOT IN (SELECT decision_id FROM prunable_decisions))
+			 AND NOT EXISTS (SELECT 1 FROM quarantine_items q WHERE q.batch_id = b.batch_id))
+		`
+	args := []any{c.Attempts, c.Attempts, c.CompletedReceipts, c.CompletedReceipts, c.Attempts, c.Observations}
+	if err := s.QueryRowContext(ctx, prunable+`SELECT COUNT(*) FROM prunable_decisions`, args...).Scan(&plan.Counts.Decisions); err != nil {
 		return fmt.Errorf("planning decision prune: %w", err)
 	}
-	if err := s.QueryRowContext(ctx, `SELECT COUNT(*) FROM change_batches b WHERE b.created_at < ?
-		 AND NOT EXISTS (SELECT 1 FROM policy_decisions d WHERE d.batch_id = b.batch_id)
-		 AND NOT EXISTS (SELECT 1 FROM quarantine_items q WHERE q.batch_id = b.batch_id)`, c.Observations).Scan(&plan.Counts.Batches); err != nil {
+	if err := s.QueryRowContext(ctx, prunable+`SELECT COUNT(*) FROM prunable_batches`, args...).Scan(&plan.Counts.Batches); err != nil {
 		return fmt.Errorf("planning batch prune: %w", err)
 	}
-	if err := s.QueryRowContext(ctx, `SELECT COUNT(*) FROM source_observations o WHERE o.observed_at < ?
-		 AND NOT EXISTS (SELECT 1 FROM batch_observations bo JOIN change_batches b ON b.batch_id = bo.batch_id
-		                  WHERE bo.observation_id = o.observation_id
-		                  AND (b.created_at >= ? OR EXISTS (SELECT 1 FROM policy_decisions d WHERE d.batch_id = b.batch_id) OR EXISTS (SELECT 1 FROM quarantine_items q WHERE q.batch_id = b.batch_id)))`,
-		c.Observations, c.Observations).Scan(&plan.Counts.Observations); err != nil {
+	if err := s.QueryRowContext(ctx, prunable+`SELECT COUNT(*) FROM source_observations o WHERE o.observed_at < ?
+		 AND NOT EXISTS (SELECT 1 FROM batch_observations bo WHERE bo.observation_id = o.observation_id
+		                  AND bo.batch_id NOT IN (SELECT batch_id FROM prunable_batches))`,
+		append(append([]any{}, args...), c.Observations)...).Scan(&plan.Counts.Observations); err != nil {
 		return fmt.Errorf("planning observation prune: %w", err)
 	}
 	if err := s.QueryRowContext(ctx, `SELECT COUNT(*) FROM path_facts WHERE observed_at < ?`, c.Observations).Scan(&plan.Counts.PathFacts); err != nil {

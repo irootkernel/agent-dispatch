@@ -30,12 +30,9 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 			}
 			i++
 			configPath = args[i]
-		case "--state-dir":
-			if i+1 >= len(args) {
-				return usageError(stderr, "init", "--state-dir requires a path")
-			}
-			i++
-			stateDir = args[i]
+		// --state-dir is a global option (cli-spec s1): the global scan
+		// consumes it before dispatch and resolveStateDirOverride
+		// applies it, so init has no per-command branch for it.
 		case "--instance-id":
 			if i+1 >= len(args) {
 				return usageError(stderr, "init", "--instance-id requires a value")
@@ -72,7 +69,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	if stateDir == "" {
-		stateDir = platformpaths.ResolveStateDir("")
+		stateDir = resolveStateDirOverride("")
 	}
 	if instanceID == "" {
 		instanceID = "jjukkumi-local"

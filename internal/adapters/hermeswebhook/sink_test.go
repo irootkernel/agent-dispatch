@@ -690,3 +690,34 @@ type erroringClient struct{ message string }
 func (c *erroringClient) Do(*http.Request) (*http.Response, error) {
 	return nil, errors.New(c.message)
 }
+
+// TestIdempotencyHeaderCollisionRefused proves the audit fix: the
+// idempotency header may not collide with the authentication or
+// transport headers (the later Set would silently drop the key).
+func TestIdempotencyHeaderCollisionRefused(t *testing.T) {
+	cases := []struct {
+		name   string
+		auth   string
+		header string
+		idem   string
+	}{
+		{"collides with Authorization", "bearer", "", "Authorization"},
+		{"collides with Content-Type", "bearer", "", "Content-Type"},
+		{"collides with Host", "bearer", "", "Host"},
+		{"collides with custom auth header", "header", "X-Hook-Auth", "X-Hook-Auth"},
+	}
+	for _, tc := range cases {
+		_, err := NewSink(Options{
+			TargetID: "hook", Endpoint: "https://example.invalid/hook",
+			AuthType: tc.auth, SecretRef: "env:X",
+			AuthHeaderName: tc.header, IdempotencyHeader: tc.idem,
+		})
+		var configErr *ConfigError
+		if err == nil || !errors.As(err, &configErr) {
+			t.Fatalf("%s: expected a ConfigError, got %v", tc.name, err)
+		}
+		if !strings.Contains(err.Error(), "collides") {
+			t.Fatalf("%s: error does not name the collision: %v", tc.name, err)
+		}
+	}
+}

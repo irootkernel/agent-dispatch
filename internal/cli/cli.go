@@ -10,9 +10,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
+	"github.com/rootkernel/jjukkumi/internal/config"
 	"github.com/rootkernel/jjukkumi/internal/observability"
 	"github.com/rootkernel/jjukkumi/internal/version"
 )
@@ -58,6 +62,10 @@ type VersionResult struct {
 	AdapterVersions map[string]string `json:"adapter_versions"`
 }
 
+// globalOptionsMu guards the global option resets under concurrent
+// test invocations of Run.
+var globalOptionsMu sync.Mutex
+
 // knownCommands lists the top-level commands of the v0.1 CLI tree
 // (cli-spec §2). Every command in this set is implemented; the default
 // Run branch keeps its not-implemented guard as a safety net for future
@@ -80,6 +88,17 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		writeError(stderr, "", "command_unknown", "usage", "usage: jjukkumi <command> [flags]; run 'jjukkumi version --output json'")
 		return 2
 	}
+	// One process invocation carries one set of global options; the
+	// reset keeps repeated in-process invocations (tests) from
+	// inheriting a previous call's overrides. The guard makes the reset
+	// itself race-clean; truly concurrent Run calls in one process are
+	// not a supported CLI shape (one command per process).
+	globalOptionsMu.Lock()
+	globalLogLevel = observability.LevelWarn
+	globalTraceID = ""
+	globalStateDir = ""
+	globalRequestTimeout = 0
+	globalOptionsMu.Unlock()
 	rest, ok := scanGlobalOptions(args[0], args[1:], stderr)
 	if !ok {
 		return 2
@@ -167,6 +186,29 @@ func scanGlobalOptions(command string, args []string, stderr io.Writer) ([]strin
 				return nil, false
 			}
 			globalTraceID = value
+		case arg == "--state-dir" || strings.HasPrefix(arg, "--state-dir="):
+			value, ok := take()
+			if !ok {
+				usageError(stderr, command, "--state-dir requires a value")
+				return nil, false
+			}
+			if !filepath.IsAbs(value) {
+				usageError(stderr, command, "--state-dir requires an absolute path")
+				return nil, false
+			}
+			globalStateDir = value
+		case arg == "--timeout" || strings.HasPrefix(arg, "--timeout="):
+			value, ok := take()
+			if !ok {
+				usageError(stderr, command, "--timeout requires a value")
+				return nil, false
+			}
+			d, err := config.ParseDuration(value)
+			if err != nil {
+				usageError(stderr, command, "--timeout: "+err.Error())
+				return nil, false
+			}
+			globalRequestTimeout = time.Duration(d.Nanos)
 		default:
 			rest = append(rest, arg)
 		}

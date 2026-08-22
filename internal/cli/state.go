@@ -30,12 +30,23 @@ var errConfigurationClass = errors.New("configuration")
 // openStateStore resolves the state directory with the shared precedence
 // (config instance.state_dir, then JJUKKUMI_STATE_DIR, then the platform
 // default), opens the SQLite store, and applies pending migrations.
+// globalStateDir is the explicit --state-dir override (cli-spec §1),
+// taking precedence over the configured and environment values.
+var globalStateDir string
+
+func resolveStateDirOverride(configured string) string {
+	if globalStateDir != "" {
+		return globalStateDir
+	}
+	return platformpaths.ResolveStateDir(configured)
+}
+
 func openStateStore(configPath string) (*sqlite.Store, error) {
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errConfigurationClass, err)
 	}
-	stateDir := platformpaths.ResolveStateDir(cfg.Instance.StateDir)
+	stateDir := resolveStateDirOverride(cfg.Instance.StateDir)
 	s, err := sqlite.Open(filepath.Join(stateDir, StateDBName))
 	if err != nil {
 		return nil, err
@@ -45,6 +56,18 @@ func openStateStore(configPath string) (*sqlite.Store, error) {
 		return nil, err
 	}
 	return s, nil
+}
+
+// openUnmigratedStore opens the SQLite store without applying
+// migrations — the doctor examination path, where the schema version
+// must be observed as it stands (OPS-005) rather than advanced.
+func openUnmigratedStore(configPath string) (*sqlite.Store, error) {
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errConfigurationClass, err)
+	}
+	stateDir := resolveStateDirOverride(cfg.Instance.StateDir)
+	return sqlite.Open(filepath.Join(stateDir, StateDBName))
 }
 
 // storeOp is one durable dispatch store with its full E3-T3 surface.

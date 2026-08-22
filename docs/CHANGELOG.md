@@ -1,5 +1,13 @@
 # SOT Changelog
 
+## 1.0.12 - 2026-08-22
+
+E6 epic validation audit and closeout:
+
+- every member-task hardening deferral was revalidated against its native Mulgae authority and the valid findings were remediated: the secretresolver fd cache serializes wrapper creation and reads seek-state-free through ReadAt with the deadline-bounded pipe one-shot fallback (the race-loser finalizer can no longer close the shared descriptor; concurrent-first-resolution and post-GC tests pin it), the webhook construction gate refuses idempotency-header collisions with the authentication and transport headers (four-case refusal test), the prune dry-run plan mirrors the executed cascade through one shared CTE chain (freed-chain dry-run test), doctor opens the store unmigrated so migration_pending is observable (downgrade regression test), and the documented global --state-dir and --timeout options are implemented with fail-closed validation, per-invocation reset, and store-context bounding (behavior tests);
+- three whole-epic review rounds converged to r_01a027d2 returning reports_only with zero structured findings; the residual low/info items are the documented v0.1.0 hardening posture (release notes) or were fixed in place (the lock-name comment, the unreachable init branch, the timeout claim wording);
+- the roadmap records the E6 epic Completed with the closeout narrative; the v0.1 sequence is complete (33/33 tasks, gates G0-G5 closed).
+
 ## 1.0.11 - 2026-08-22
 
 E6-T4: v0.1.0 verification and release:

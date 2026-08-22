@@ -46,7 +46,7 @@ retention: {}
 | `instance.state_dir` | no | Override for local state directory. Must be local filesystem. |
 | `instance.log_paths` | no | `relative`, `redacted`, or `full`. Default `relative`. |
 
-`state_dir` must not be inside the watched vault by default. Validation warns if it is.
+`state_dir` must not be inside the watched vault by default. Validation warns if it is. The global `--state-dir` option overrides the configured and platform-default state directory for one invocation (an absolute local path, fail-closed otherwise); the global `--timeout` option bounds the command's context-taking store operations through the schema-exact duration grammar and fails closed on an invalid value (context-free engine operations such as VACUUM and the backup snapshot are not interruptible and are not claimed).
 
 ## 4. Resources
 
@@ -108,7 +108,11 @@ targets:
     idempotency_header: Idempotency-Key
 ```
 
-Webhook targets are explicit targets and never fallback targets. The endpoint must be an `https` URL; redirects are never followed (a redirecting endpoint is a definite routing rejection). `auth.type` is `bearer` (Authorization: Bearer) or `header` (a custom `header_name` carrying the secret); `auth.header_name` is required for `header` and must be empty for `bearer`. The secret reference resolves immediately before each submission and never enters SQLite or logs (SEC-006). `idempotency_header` defaults to `Idempotency-Key`; the core's idempotency key is transmitted verbatim so the same dispatch retry presents the same key (WHK-005). `submit_timeout` defaults to 30s. The optional `required_capabilities` gates against the adapter's static declaration (HER-005): the webhook declares `durable_acceptance` false — a 2xx is transport acceptance only — so requiring it fails validation.
+Webhook targets are explicit targets and never fallback targets. The
+`idempotency_header` must not collide with `Authorization`,
+`Content-Type`, `Host`, `Content-Length`, or the configured
+`auth.header_name` — the target fails validation on a collision (the
+later header write would silently drop the idempotency key). The endpoint must be an `https` URL; redirects are never followed (a redirecting endpoint is a definite routing rejection). `auth.type` is `bearer` (Authorization: Bearer) or `header` (a custom `header_name` carrying the secret); `auth.header_name` is required for `header` and must be empty for `bearer`. The secret reference resolves immediately before each submission and never enters SQLite or logs (SEC-006). `idempotency_header` defaults to `Idempotency-Key`; the core's idempotency key is transmitted verbatim so the same dispatch retry presents the same key (WHK-005). `submit_timeout` defaults to 30s. The optional `required_capabilities` gates against the adapter's static declaration (HER-005): the webhook declares `durable_acceptance` false — a 2xx is transport acceptance only — so requiring it fails validation.
 
 ## 6. Routes
 

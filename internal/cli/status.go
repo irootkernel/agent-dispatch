@@ -39,7 +39,7 @@ func runStatus(args []string, stdout, stderr io.Writer) int {
 		return exit
 	}
 	defer closer.Close()
-	ctx := context.Background()
+	ctx := requestCtx()
 
 	routes, err := store.ListRoutes(ctx)
 	if err != nil {
@@ -172,7 +172,7 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 		input.SemanticErrors = errorTexts(errs)
 	}
 	input.Resources = resourceFacts(cfg)
-	input.Watchman = watchmanFact(context.Background())
+	input.Watchman = watchmanFact(requestCtx())
 	input.Targets = targetFacts(cfg)
 	if probeTargets {
 		// The probe surface already reports per-target construction
@@ -191,15 +191,19 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	store, storeErr := openStateStore(resolveConfigPath(flags.val("--config")))
+	// Doctor examines the store WITHOUT auto-migrating (OPS-005: the
+	// migration state must be observable): a schema behind the build's
+	// ledger surfaces as the migration_pending finding instead of
+	// being silently advanced.
+	store, storeErr := openUnmigratedStore(resolveConfigPath(flags.val("--config")))
 	if storeErr != nil {
 		input.Store = doctor.StoreFact{OpenError: storeErr.Error()}
 		input.StoreExamined = true
 	} else {
 		defer store.Close()
-		input.Store = storeFacts(context.Background(), store, integrityFull)
+		input.Store = storeFacts(requestCtx(), store, integrityFull)
 		input.StoreExamined = true
-		input.Routes = routeFacts(context.Background(), cfg, store)
+		input.Routes = routeFacts(requestCtx(), cfg, store)
 	}
 
 	findings := doctor.Examine(input)

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
@@ -177,7 +176,7 @@ func runMaintenancePrune(command string, args []string, stdout, stderr io.Writer
 		return exit
 	}
 	defer closer.Close()
-	ctx := context.Background()
+	ctx := requestCtx()
 	now := time.Now().UTC()
 	cutoffs := sqlite.PruneCutoffs{
 		Observations:       dispatch.Timestamp(now.Add(-policy.Observations)),
@@ -234,7 +233,7 @@ func runMaintenanceVacuum(command string, args []string, stdout, stderr io.Write
 		return exit
 	}
 	defer closer.Close()
-	ctx := context.Background()
+	ctx := requestCtx()
 	active, err := store.HasActiveWork(ctx, dispatch.Timestamp(time.Now()))
 	if err != nil {
 		return planErr(stderr, command, "sqlite_query_failed", "storage", err.Error(), 20)

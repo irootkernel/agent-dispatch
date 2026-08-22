@@ -8,7 +8,7 @@ Global options:
 
 ```text
 --config <path>
---state-dir <path>
+--state-dir <absolute-path>
 --output human|json
 --log-level error|warn|info|debug
 --trace-id <id>

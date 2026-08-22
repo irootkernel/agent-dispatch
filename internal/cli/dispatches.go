@@ -23,7 +23,22 @@ var knownDispatchesSubcommands = map[string]bool{
 	"list": true, "show": true, "retry": true, "reprocess": true, "rerun": true, "refresh": true, "drain": true,
 }
 
-func requestCtx() context.Context { return context.Background() }
+// requestCtx carries the global --timeout bound when one was given
+// (cli-spec §1): a bounded command deadline for store operations.
+var globalRequestTimeout time.Duration
+
+func requestCtx() context.Context {
+	if globalRequestTimeout > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), globalRequestTimeout)
+		// The deadline covers the command's store operations; the
+		// process exits with the command, so the cancel is a safety
+		// valve for the goroutine leak checker rather than control
+		// flow.
+		_ = cancel
+		return ctx
+	}
+	return context.Background()
+}
 
 // dispatchesFlags is the parsed common flag set plus the first bare
 // positional operand (the dispatch or batch ID).

@@ -150,6 +150,14 @@ func NewSink(opts Options) (*Sink, error) {
 	if !validHeaderName(idempotencyHeader) {
 		return nil, &ConfigError{Detail: fmt.Sprintf("idempotency_header %q is not a valid header name", idempotencyHeader)}
 	}
+	// The idempotency header must not collide with the authentication
+	// or transport headers: the later Set would silently overwrite the
+	// key, breaking endpoint-side dedup (WHK-005).
+	reserved := map[string]bool{"authorization": true, "content-type": true, "host": true, "content-length": true}
+	collides := reserved[strings.ToLower(idempotencyHeader)] || (authKind == AuthHeader && strings.EqualFold(idempotencyHeader, headerName))
+	if collides {
+		return nil, &ConfigError{Detail: fmt.Sprintf("idempotency_header %q collides with the authentication or transport headers; choose a dedicated header", idempotencyHeader)}
+	}
 	timeout := opts.SubmitTimeout
 	if timeout == 0 {
 		timeout = DefaultSubmitTimeout

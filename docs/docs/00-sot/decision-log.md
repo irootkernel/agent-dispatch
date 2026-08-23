@@ -207,3 +207,55 @@ Post-baseline decisions and documented errata. Entries amend completed E0 output
 - T6/Low the json-only command list undocumented in cli-spec / `watchman *` refusing `--output`: ACCEPTED - the completion registry is the machine-readable command surface; the doc gap is cosmetic.
 - T7/Low `definiteNotSubmitted` diagnostic and the receipts-service bounded-payload boundary: ACCEPTED - the diagnostics are bounded by the sink contract; the payload bound is enforced at the store column.
 - T8/Info doctor does not inspect trigger-definition drift: ACCEPTED - the lifecycle commands are idempotent and inspectable (watchman status); drift detection is post-v0.1.
+
+
+## D-019 - 2026-08-23 - Compliance review report retired; the finding index moves into the decision record
+
+**Decision.** The archived review report `docs/reports/mvp-compliance-review-2026-08-22.md` is removed from the SOT package and the manifest. Its normative content already lives in the SOT records: D-017 (the acceptance, the remediation scope, the SCP-008 exception, and the Linux diagnostic-run facts - the linux/arm64 container runs failed `make verify` with exit 2 on two darwin-only keychain tests without platform guards, with 506 passes as non-root), D-018 (the Low/Info disposition inventory), the E7 task Evidence sections in the roadmap (each remediated finding described with its fix), and the MUST-closure matrix in `docs/VALIDATION.md`. The severity-classified finding index below preserves the review's numbering for citation; the roadmap's evidence sections reference these IDs.
+
+**Context.** The report served as the audit input for epic E7; with the epic complete, the four-round whole-epic review converged, and every finding fixed or dispositioned, the 45 KB forensic working paper duplicated content now distributed across the SOT records. Citations of the report now cite D-017; historical mentions inside D-017 and the changelog remain as written.
+
+**Consequences.** The manifest and traceability regenerate without the report; `docs/reports/` returns to its documented role (versioned task evidence under the repository layout). The finding index (owner mapping):
+
+| ID | One-line substance | Disposition |
+|---|---|---|
+| B-1 | Mid-submit process death wedged the route; no recovery wiring | Fixed: E7-T2 |
+| B-2 | Rerun had no state guard; a second authoritative task per route was possible | Fixed: E7-T2 |
+| B-3 | Follow-up intents were never activated or auto-submitted | Fixed: E7-T2 |
+| H-1 | Submit-path revision/target revalidation was tautological | Fixed: E7-T3 |
+| H-2 | Durable path facts never fed the dispatch path | Fixed: E7-T3 |
+| H-3 | False Linux verification claims; unguarded platform tests | Claims fixed: E7-T1/E7-T4; runtime verification excepted (D-017) |
+| H-4 | Always-skipping or hollow gate-evidence tests | Fixed: E7-T4 |
+| H-5 | `config show` unimplemented; lineage and filters missing | Fixed: E7-T5 |
+| M-1 | Drain submitted on disabled routes | Fixed: E7-T6 |
+| M-2 | YAML `enabled` key never read | Fixed: E7-T6 |
+| M-3 | Route transition audit rows unwritten | Fixed: E7-T6 |
+| M-4 | Concurrent first-open migration failures | Fixed: E7-T7 |
+| M-5 | WAL-open busy misclassified as fatal | Fixed: E7-T7 |
+| M-6 | Stale-route edges without writers or operator exit | Fixed: E7-T7 |
+| M-7 | Dead-letter work had no closure path | Fixed: E7-T7 |
+| M-8 | Stored payload versions unvalidated on read | Fixed: E7-T8 |
+| M-9 | Acceptance criteria unrendered in Kanban tasks | Fixed: E7-T8 |
+| M-10 | `file_scope: markdown` unenforced at ingest | Fixed: E7-T9 |
+| M-11 | flags_json schema violation; source position unpersisted | Fixed: E7-T8 |
+| M-12 | State DB file permission posture | Posture: E7-T9 (owner-only state documented and checked; permissive file secrets fail closed) |
+| M-13 | List filters and pagination missing | Fixed: E7-T5 |
+| M-14 | `trace_id` never reached the envelope | Fixed: E7-T5 |
+| M-15 | Retry reason misclassification | Fixed: E7-T5 |
+| M-16 | `*_not_found` category mismatch | Fixed: E7-T5 |
+| M-17 | Documented log events partially unemitted | Accepted posture: the vocabulary is declarative; the emitted lifecycle events carry the causal audit |
+| M-18 | `merge_pending` not persisted on decisions | Fixed: E7-T6 |
+| M-19 | Reprocess hardcoded its disposition | Fixed: E7-T6 |
+| M-20 | Prune deleted begun work receipts | Fixed: E7-T9 |
+| M-21 | Disabled-route reconciliation misclassified as storage | Fixed: E7-T9 |
+| M-22 | Required capabilities unchecked at enable | Fixed: E7-T9 |
+| M-23 | Doctor probe constructed with a zero manifest bound | Fixed: E7-T9 |
+| M-24 | Unclassifiable filenames aborted the reconciliation | Fixed: E7-T9 |
+| M-25 | File secret references without permission checks | Fixed: E7-T9 |
+| M-26 | Redaction missed credential value patterns | Fixed: E7-T9 |
+| M-27 | No LICENSE; no dependency-license review | Fixed: E7-T10 |
+| M-28 | Probe timeouts flaked under load | Fixed: E7-T9 (test fixtures raised; configured limits unchanged) |
+| M-29 | `init --state-dir` not persisted | Fixed: E7-T9 |
+| M-30 | Crash-boundary coverage gaps | Fixed: E7-T4 |
+| M-31 | Documentation consistency bundle | Fixed: E7-T10 |
+| M-32 | Unusable-position handling conservative; signal unemitted | Position fixed: E7-T8; the conservative posture is accepted |

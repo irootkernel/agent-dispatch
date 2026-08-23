@@ -1,5 +1,13 @@
 # SOT Changelog
 
+## 1.0.26 - 2026-08-23
+
+D-019: the compliance review report is retired from the SOT package:
+
+- `docs/reports/mvp-compliance-review-2026-08-22.md` is removed and the manifest regenerates without it;
+- the review's severity-classified finding index (B/H/M, 40 entries with owners and dispositions) is recorded in the decision log (D-019), and the Low/Info inventory remains in D-018;
+- the living documents now cite D-017/D-018 where they cited the report path; the package statistics drop to 62 Markdown files.
+
 ## 1.0.25 - 2026-08-23
 
 E7-T12: the MUST-closure re-verification and the v0.1.1 release:

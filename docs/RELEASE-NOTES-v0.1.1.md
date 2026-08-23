@@ -1,9 +1,8 @@
 # Agent Dispatch v0.1.1
 
 Released 2026-08-23. This is the MVP compliance remediation release
-(D-017): every finding of the 2026-08-22 review
-(`docs/reports/mvp-compliance-review-2026-08-22.md`) is fixed or carries
-a recorded disposition.
+(D-017): every finding of the 2026-08-22 review is fixed or carries
+a recorded disposition (the finding index is recorded in D-019).
 
 ## What changed
 

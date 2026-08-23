@@ -1,6 +1,6 @@
 # SOT Package Validation
 
-> **Validated:** 2026-08-23 (post E7 registration; the findings of the 2026-08-22 MVP compliance review, `reports/mvp-compliance-review-2026-08-22.md`, are open remediation items under D-017 and epic E7)  
+> **Validated:** 2026-08-23 (post E7 closeout; every finding of the 2026-08-22 MVP compliance review is fixed or dispositioned under D-017/D-018 and epic E7 - the report itself is retired, D-019)  
 > **Package target:** Agent Dispatch SOT 1.0.25 / implementation v0.1.1 (the E7 compliance remediation release)
 
 ## Completed Checks
@@ -21,11 +21,11 @@
 - The v0.1 sequence is fully Completed; the E7 remediation tasks are tracked live in the task status index (see the compliance review and D-017).
 - Required-spec IDs are unique.
 - Acceptance-scenario IDs are unique.
-- `docs/docs/00-sot/` contains no em dash characters (the rest of the package and the archived review report under `reports/` preserve their original formatting).
+- `docs/docs/00-sot/` contains no em dash characters (the rest of the package preserves its original formatting).
 
 ## Package Statistics at Validation
 
-- Markdown files: 63 on the manifest basis (every file under this package, including this report and the archived compliance review under `reports/`)
+- Markdown files: 62 on the manifest basis (every file under this package, including this report; the retired review report was removed by D-019)
 - JSON Schemas: 12
 - Example files: 12
 - Integration reports: 2 (Hermes public interface E0-T4, Watchman public interface E0-T5)
@@ -145,7 +145,7 @@ Production-enable review (explicit gate review, E5-T5): the automatic-write path
 
 ## Gate G5: Operations and Release (E6)
 
-Verified 2026-08-22 by executable acceptance tests in `internal/cli/e6t4_test.go` (the G5 suite and the upgrade/backup rehearsal), `internal/cli/e6t3_test.go`, `internal/cli/e6t2_test.go`, and `internal/app/doctor/doctor_test.go` on macOS (Watchman 2026.07.27.00, Hermes CLI absent for the webhook cases by design — the webhook target is an explicit HTTPS delivery, not a local Kanban invocation). AC-505 has no recorded verification: no successful `make verify` run on a supported Linux host exists, hosted CI is not used, and the status is the explicit SCP-008 exception under D-017 for v0.1.1. The 2026-08-22 compliance review's diagnostic linux/arm64 container runs failed (`make verify` exit 2: two darwin-only keychain tests without platform guards; 506 passes as non-root, review §3.2). `make schedule-check` validates the systemd units only where `systemd-analyze` exists.
+Verified 2026-08-22 by executable acceptance tests in `internal/cli/e6t4_test.go` (the G5 suite and the upgrade/backup rehearsal), `internal/cli/e6t3_test.go`, `internal/cli/e6t2_test.go`, and `internal/app/doctor/doctor_test.go` on macOS (Watchman 2026.07.27.00, Hermes CLI absent for the webhook cases by design — the webhook target is an explicit HTTPS delivery, not a local Kanban invocation). AC-505 has no recorded verification: no successful `make verify` run on a supported Linux host exists, hosted CI is not used, and the status is the explicit SCP-008 exception under D-017 for v0.1.1. The 2026-08-22 compliance review's diagnostic linux/arm64 container runs failed (`make verify` exit 2: two darwin-only keychain tests without platform guards; 506 passes as non-root; D-017). `make schedule-check` validates the systemd units only where `systemd-analyze` exists.
 
 | Criterion | Evidence |
 |---|---|

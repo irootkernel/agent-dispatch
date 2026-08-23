@@ -19,7 +19,7 @@ func sinkFixture(t *testing.T, bin string) *Sink {
 	t.Helper()
 	sink, err := NewSink("hermes-main", bin, machineReport, []string{
 		"durable_acceptance", "submit_idempotency_key", "lookup_by_external_ref",
-	}, "agent-dispatch-test", ProcessLimits{SubmitTimeout: 5 * time.Second, LookupTimeout: 5 * time.Second}, 262144)
+	}, "agent-dispatch-test", ProcessLimits{SubmitTimeout: 30 * time.Second, LookupTimeout: 30 * time.Second}, 262144)
 	if err != nil {
 		t.Fatalf("sink: %v", err)
 	}

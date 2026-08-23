@@ -250,7 +250,7 @@ agent-dispatch reconcile \
   [--submit]
 ```
 
-Default behavior persists the current-state reconciliation decision. `--submit` attempts an eligible intent and then drains the route's other due work (bounded), so a pending follow-up generation reaches the target on the scheduled path without a manual drain (E7-T2); an accepted follow-up is promoted to the route's active task at acceptance. The automatic-write gate applies: a route whose activation state is not `enabled` submits nothing and reports the skip as a warning. Installed scheduled recipes may include `--submit` only after the production gate.
+Default behavior persists the current-state reconciliation decision. `--submit` attempts an eligible intent and then drains the route's other due work (bounded), so a pending follow-up generation reaches the target on the scheduled path without a manual drain (E7-T2); an accepted follow-up is promoted to the route's active task at acceptance. A route whose activation state is not `enabled` fails closed with the state-conflict classification (`transition_invalid`, exit 14), never a storage failure. Installed scheduled recipes may include `--submit` only after the production gate.
 
 ## 10. Status and Doctor
 

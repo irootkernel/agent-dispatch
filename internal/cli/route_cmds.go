@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irootkernel/agent-dispatch/internal/adapters/hermeskanban"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
 	"github.com/irootkernel/agent-dispatch/internal/app/receipts"
@@ -196,12 +197,40 @@ func runRouteEnable(command string, args []string, stdout, stderr io.Writer) int
 		return exit
 	}
 	defer closer.Close()
+	// HER-005 (E7-T9/M-22): the enablement gate verifies the route's
+	// required capabilities against the configured capability report when
+	// the local report is readable; an unreadable report path (the
+	// shipped example resolves only in deployment context) defers to the
+	// submit path's fail-closed construction gate.
+	if route, ok := cfg.Routes[routeID]; ok {
+		if target, ok := cfg.Targets[route.Dispatch.Target]; ok && target.Type == "hermes-kanban" {
+			if report, rerr := hermeskanban.LoadReport(target.CapabilityReport); rerr == nil {
+				if cerr := hermeskanban.ValidateRequired(route.Dispatch.Target, report.PortCapabilities(), target.RequiredCapabilities); cerr != nil {
+					return planErr(stderr, command, "config_capability_missing", "configuration", cerr.Error(), 3)
+				}
+			}
+		}
+	}
 	if err := store.SetRouteActivation(requestCtx(), routeID, "enabled", revision, dispatch.Timestamp(time.Now())); err != nil {
 		if errors.Is(err, sqlite.ErrOptimisticConcurrency) {
 			// First use: materialize the registration from the
 			// configuration and retry the activation once.
 			if regErr := registerRouteState(requestCtx(), closer, cfg, routeID); regErr != nil {
 				return planErr(stderr, command, "route_not_registered", "conflict", regErr.Error(), 14)
+			}
+			// HER-005 (E7-T9/M-22): the enablement gate verifies the route's
+			// required capabilities against the configured capability report when
+			// the local report is readable; an unreadable report path (the
+			// shipped example resolves only in deployment context) defers to the
+			// submit path's fail-closed construction gate.
+			if route, ok := cfg.Routes[routeID]; ok {
+				if target, ok := cfg.Targets[route.Dispatch.Target]; ok && target.Type == "hermes-kanban" {
+					if report, rerr := hermeskanban.LoadReport(target.CapabilityReport); rerr == nil {
+						if cerr := hermeskanban.ValidateRequired(route.Dispatch.Target, report.PortCapabilities(), target.RequiredCapabilities); cerr != nil {
+							return planErr(stderr, command, "config_capability_missing", "configuration", cerr.Error(), 3)
+						}
+					}
+				}
 			}
 			if err := store.SetRouteActivation(requestCtx(), routeID, "enabled", revision, dispatch.Timestamp(time.Now())); err != nil {
 				return planErr(stderr, command, "transition_invalid", "conflict", err.Error(), 14)

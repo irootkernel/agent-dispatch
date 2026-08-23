@@ -64,6 +64,13 @@ func Resolve(ctx context.Context, ref *config.SecretRef) (string, error) {
 		}
 		value = v
 	case config.RefFile:
+		// A secret file readable by others is a configuration defect
+		// (SEC-006, E7-T9/M-25): fail closed with the mode named so the
+		// operator can chmod it, instead of silently reading a
+		// world-readable credential.
+		if info, statErr := os.Stat(ref.Path); statErr == nil && info.Mode().Perm()&0o077 != 0 {
+			return "", &UnresolvedError{Ref: ref, Cause: fmt.Sprintf("secret file %s has permissive mode %v (chmod 600)", ref.Path, info.Mode().Perm())}
+		}
 		file, err := os.Open(ref.Path)
 		if err != nil {
 			return "", &UnresolvedError{Ref: ref, Cause: fmt.Sprintf("reading %s: %v", ref.Path, err)}

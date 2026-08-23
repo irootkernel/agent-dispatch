@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -284,6 +285,11 @@ func sanitizeValue(v any, policy PathPolicy) any {
 // (the caller supplies root-relative paths; absolute vault paths never
 // reach the log).
 func RenderPath(s string, policy PathPolicy) string {
+	// Credential-shaped values are redacted regardless of their key or
+	// the path policy (SEC-007, E7-T9/M-26).
+	if credentialPattern.MatchString(s) {
+		return credentialPattern.ReplaceAllString(s, "${1}${2}[redacted]")
+	}
 	if policy != PathsRedacted || s == "" {
 		return s
 	}
@@ -299,3 +305,9 @@ func stableDigest(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:16])
 }
+
+// credentialPattern matches credential-shaped values regardless of their
+// key: bearer tokens and query-string tokens are redacted even when the
+// emitter did not label them (SEC-007, E7-T9/M-26). The patterns are
+// anchored to the credential fragment, never the whole containing path.
+var credentialPattern = regexp.MustCompile(`(?i)(bearer\s+)[A-Za-z0-9._~+/-]{8,}|((?:^|[?&])(?:token|access_token|api_key|secret)=)[^&\s]*`)

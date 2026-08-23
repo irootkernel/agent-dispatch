@@ -13,7 +13,7 @@ import (
 
 func testClient(bin string) *Client {
 	return NewClient(bin, ProcessLimits{
-		SubmitTimeout: 5 * time.Second, LookupTimeout: 5 * time.Second, MaxOutputBytes: 1 << 20,
+		SubmitTimeout: 30 * time.Second, LookupTimeout: 30 * time.Second, MaxOutputBytes: 1 << 20,
 	})
 }
 

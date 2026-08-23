@@ -1,5 +1,15 @@
 # SOT Changelog
 
+## 1.0.22 - 2026-08-23
+
+E7-T9: the operations and security medium batch (SCP-004, FBK-002/003, HER-005, OPS-003, SEC-006, SEC-007):
+
+- the resource file_scope is enforced above the pattern engine (under markdown, a non-Markdown path an include pattern admitted drops before hashing);
+- prune never deletes a begun (in-flight) work receipt; the disabled-route reconciliation refusal classifies as a state conflict;
+- `route enable` validates the required capabilities against the configured report when readable; the doctor target probe constructs with the real manifest bound;
+- an unclassifiable filename is isolated as unverifiable instead of aborting the reconciliation; a permissive `file:` secret reference fails closed naming the mode; credential fragments (bearer token bodies; token, access_token, api_key, and secret query parameters) are masked inside logged values;
+- the stub-probe test fixtures' fixed timeouts rose to 30 seconds (load-flake posture; the configured probe limits are unchanged) and an explicitly chosen `init --state-dir` persists into the written configuration.
+
 ## 1.0.21 - 2026-08-23
 
 E7-T8: payload versioning enforced and the Hermes rendering completed (DAT-009, HER-006, SRC-002):

@@ -357,7 +357,7 @@ func probeTargetWarnings(cfg *config.Config) []probeTargetWarning {
 			limits, err := hermesProcessLimits(cfg, target)
 			if err != nil {
 				out = append(out, probeTargetWarning{id, target.Type, err.Error()})
-			} else if _, err := hermeskanban.NewSink(id, target.Executable, target.CapabilityReport, target.RequiredCapabilities, target.Board, limits, 0); err != nil {
+			} else if _, err := hermeskanban.NewSink(id, target.Executable, target.CapabilityReport, target.RequiredCapabilities, target.Board, limits, DefaultMaxManifestBytes); err != nil {
 				out = append(out, probeTargetWarning{id, target.Type, err.Error()})
 			}
 		}

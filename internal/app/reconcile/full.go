@@ -202,6 +202,13 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 		intent.DecisionID = out.DecisionID
 		intent.CreatedAt = now
 		if err := s.Store.CommitReconcileIntent(ctx, intent, "reconcile", now); err != nil {
+			// A route-guard refusal (for example the disabled
+			// activation state) is a state conflict, never a storage
+			// failure (E7-T9/M-21).
+			var terr *state.TransitionError
+			if errors.As(err, &terr) {
+				return FullResult{}, fmt.Errorf("%w: %v", ports.ErrStateNotEligible, err)
+			}
 			return FullResult{}, ports.WrapStore(err)
 		}
 		out.ReconcileDispatch = intent.DispatchID
@@ -350,6 +357,10 @@ func digestStatusOf(digest string) records.DigestStatus {
 func (s *FullService) enumerate() ([]ports.PathFact, []string, error) {
 	var facts []ports.PathFact
 	var skippedPrefixes []string
+	// Unclassifiable paths (over-long, non-UTF-8) isolated as
+	// exists-but-unverifiable facts rather than aborting the pass
+	// (E7-T9/M-24).
+	var unverifiable []ports.PathFact
 	root := s.Resolver.Root()
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -378,13 +389,22 @@ func (s *FullService) enumerate() ([]ports.PathFact, []string, error) {
 		}
 		status, clsErr := s.Engine.Classify(relPath)
 		if clsErr != nil {
-			return fmt.Errorf("classifying %q: %w", relPath, clsErr)
+			// One unclassifiable path (over-long, non-UTF-8) is
+			// isolated as an exists-but-unverifiable fact: the
+			// reconciliation reports it and continues instead of
+			// aborting the whole recovery pass (E7-T9/M-24; the
+			// adjacent unresolvable branch already had this posture).
+			unverifiable = append(unverifiable, ports.PathFact{Path: relPath, Exists: true})
+			return nil
 		}
 		if status == policy.StatusExcluded || status == policy.StatusProtected || status == policy.StatusImmutable {
 			return nil
 		}
-		if s.FileScope == "markdown" && !strings.HasSuffix(relPath, ".md") && !strings.HasSuffix(relPath, ".markdown") {
-			return nil
+		if s.FileScope == "markdown" {
+			lower := strings.ToLower(relPath)
+			if !strings.HasSuffix(lower, ".md") && !strings.HasSuffix(lower, ".markdown") {
+				return nil
+			}
 		}
 		fact := ports.PathFact{Path: relPath, Exists: true, ObservedAt: ""}
 		if _, resErr := s.Resolver.Resolve(relPath); resErr != nil {
@@ -405,7 +425,7 @@ func (s *FullService) enumerate() ([]ports.PathFact, []string, error) {
 		return nil, nil, err
 	}
 	sort.Slice(facts, func(i, j int) bool { return facts[i].Path < facts[j].Path })
-	return facts, skippedPrefixes, nil
+	return append(facts, unverifiable...), skippedPrefixes, nil
 }
 
 func (s *FullService) hash(rel string) (string, bool) {

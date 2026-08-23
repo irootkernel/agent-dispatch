@@ -90,6 +90,11 @@ func resolveConfigPath(explicit string) string {
 // configuration-spec example envelope (16 MiB).
 const DefaultMaxHashFileBytes int64 = 16 << 20
 
+// DefaultMaxManifestBytes is the fallback manifest bound (the example
+// configuration's value) used where no route batching context exists,
+// such as the doctor target probe (E7-T9/M-23).
+const DefaultMaxManifestBytes int64 = 262144
+
 // planArtifacts is one evaluated invocation: the loaded configuration,
 // the trusted environment binding, the normalized batch, and the plan.
 type planArtifacts struct {
@@ -181,7 +186,7 @@ func planPipeline(command string, args []string, stderr io.Writer, facts factsSo
 			factsFor = loaded
 		}
 	}
-	batch, err := ingest.BuildBatch(input.Entries, engine, resolver, factsFor, env.Flags(), route.Source.Resource, ingest.Options{MaxHashBytes: maxHash})
+	batch, err := ingest.BuildBatch(input.Entries, engine, resolver, factsFor, env.Flags(), route.Source.Resource, ingest.Options{MaxHashBytes: maxHash, FileScope: resource.FileScope})
 	if err != nil {
 		if errors.Is(err, ingest.ErrUnsafePath) {
 			return nil, planErr(stderr, command, "source_unsafe_path", "security", err.Error(), 30)

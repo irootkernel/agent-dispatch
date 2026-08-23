@@ -97,6 +97,14 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 		warnings = append(warnings, w)
 	}
 	cfg := config.Example(instanceID, resourceRoot, platformpaths.DefaultCapabilityReportPath())
+	// An explicitly chosen state directory persists into the written
+	// configuration so later invocations honor it (E7-T9/M-29: recording
+	// an empty state_dir silently redirected subsequent commands to the
+	// platform default). An environment-derived default stays dynamic:
+	// freezing it would defeat AGENT_DISPATCH_STATE_DIR overrides.
+	if globalStateDir != "" {
+		cfg.Instance.StateDir = stateDir
+	}
 	if err := config.WriteExample(cfg, configPath); err != nil {
 		writeError(stderr, "init", "config_invalid", "configuration", err.Error())
 		return 3

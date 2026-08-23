@@ -16,6 +16,7 @@ import (
 	"io/fs"
 	"math"
 	"sort"
+	"strings"
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/localfs"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
@@ -107,6 +108,10 @@ type Options struct {
 	// MaxHashBytes is limits.max_hash_file_bytes; files above it stay
 	// structurally unknown (PTH-006 fail-closed direction).
 	MaxHashBytes int64
+	// FileScope is the resource's file_scope; "markdown" admits only
+	// .md/.markdown paths whatever the include patterns say (SCP-004,
+	// E7-T9/M-10).
+	FileScope string
 }
 
 // BuildBatch normalizes entries into one canonical batch. classify comes
@@ -170,12 +175,22 @@ func BuildBatch(entries []watchman.Entry, engine *policy.Engine, resolver *local
 		}
 		// Protected and immutable status applies to every operation,
 		// including deletes: the planner quarantines regardless of the
-		// coalesced operation.
+		// coalesced operation, and the record survives the scope drop
+		// below (E7-T9 round-1: the scope check ran first and silenced
+		// protected reporting for non-Markdown paths).
 		switch status {
 		case policy.StatusProtected:
 			res.Protected = append(res.Protected, path)
 		case policy.StatusImmutable:
 			res.Immutable = append(res.Immutable, path)
+		}
+		// The resource file scope bounds the batch above the pattern
+		// engine: under file_scope markdown, a non-Markdown path an
+		// include pattern admitted is dropped, never hashed or
+		// dispatched (SCP-004, E7-T9/M-10).
+		if opts.FileScope == "markdown" && !isMarkdownPath(path) {
+			res.Dropped = append(res.Dropped, DropRecord{Path: path, Reason: ReasonExcluded})
+			continue
 		}
 		prior, hadPrior, err := facts.PriorDigest(path)
 		if err != nil {
@@ -403,3 +418,10 @@ func projection(changes []records.ChangeItem) []records.FingerprintChange {
 type NoGit struct{}
 
 func (NoGit) Enrich([]string) (map[string]GitPathFacts, error) { return nil, nil }
+
+// isMarkdownPath reports whether the path carries a Markdown suffix,
+// case-insensitively (E7-T9/M-10).
+func isMarkdownPath(path string) bool {
+	lower := strings.ToLower(path)
+	return strings.HasSuffix(lower, ".md") || strings.HasSuffix(lower, ".markdown")
+}

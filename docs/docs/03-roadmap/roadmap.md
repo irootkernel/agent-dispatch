@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E7 |
 | Current active task | None |
-| Next task | E7-T9 |
-| Completed tasks | 41 / 45 |
-| Planned tasks | 4 / 45 |
+| Next task | E7-T10 |
+| Completed tasks | 42 / 45 |
+| Planned tasks | 3 / 45 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -79,7 +79,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 39 | E7-T6 | Completed | Write gates, audit rows, and decision records closed |
 | 40 | E7-T7 | Completed | Migration lock, WAL classification, operator exits |
 | 41 | E7-T8 | Completed | Payload versioning enforced and Hermes rendering completed |
-| 42 | E7-T9 | Planned | Operations and security medium batch remediated |
+| 42 | E7-T9 | Completed | Operations and security medium batch remediated |
 | 43 | E7-T10 | Planned | Licensing, layout, and documentation consistency |
 | 44 | E7-T11 | Planned | Low and informational findings dispositioned |
 | 45 | E7-T12 | Planned | MUST closure re-verified and v0.1.1 prepared |
@@ -1802,6 +1802,10 @@ E7-T8 Completed.
 - an in-flight work receipt survives pruning;
 - world-readable secret files and unredacted credential values are rejected or redacted;
 - a fresh `init --state-dir` is honored by every later invocation.
+
+### Evidence
+
+Delivered as the operations and security batch (M-10): `BuildBatch` enforces the resource `file_scope` above the pattern engine - under `markdown`, a non-Markdown path an include pattern admitted drops before hashing whatever the include patterns say (`ingest.Options.FileScope` wired from the pipeline; `TestMarkdownScopeBeatsIncludePatterns`). (M-20): the prune's work-receipt delete excludes `begun` rows, so the in-flight attribution anchor survives any age (`TestPrunePreservesBegunReceipts`). (M-21): a route-guard refusal during reconciliation (the disabled activation state) classifies as a state conflict (`transition_invalid` posture) instead of storage. (M-22): `route enable` validates the required capabilities against the configured report when the local report is readable (an unreadable report path defers to the submit path's fail-closed gate). (M-23): the doctor target probe constructs the sink with the real manifest bound instead of zero. (M-24): an unclassifiable filename is isolated as an exists-but-unverifiable fact instead of aborting the full reconciliation (mirroring the adjacent unresolvable branch). (M-25): a `file:` secret reference with permissive group/other bits fails closed naming the mode. (M-26): redaction masks credential-shaped fragments (bearer tokens, query-string credential parameters) inside logged values. (M-28): the stub-probe test fixtures' fixed timeouts rose to 30s (load-flake posture; the configured probe limits are unchanged). (M-29): an explicitly chosen `init --state-dir` persists into the written configuration while an environment-derived default stays dynamic (`TestInitStateDirPersists`). The round-1 Mulgae remediations are folded in (run r_01a02cdc-e8dc, reports_only): the file-scope check moved after the protected/immutable classification (a protected non-Markdown path is reported, not silently dropped) and is case-insensitive, an environment-derived state directory stays dynamic instead of being frozen into the config, the credential redaction masks only the credential fragment (never the whole containing value) with the common credential parameter names included, the configuration spec documents the owner-only `file:` gate, and the M-21/M-22 tests landed (`TestDisabledReconcileRefusalClassified`, `TestRouteEnableValidatesCapabilities`); the round-2 review's bearer-body redaction gap was fixed with the credential-fragment and owner-only-file tests added (`TestCredentialFragmentRedaction`, `TestOwnerOnlySecretFileGate`) and the reconcile scope made case-insensitive to match the batch path. Verified by `make verify` on darwin/arm64. Changelog 1.0.22.
 
 ## E7-T10: Licensing, Layout, and Documentation Consistency
 

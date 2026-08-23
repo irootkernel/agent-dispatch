@@ -249,8 +249,11 @@ func (s *Store) ExecutePrune(ctx context.Context, cutoffs PruneCutoffs, actor, r
 		`DELETE FROM dispatch_receipts WHERE received_at < ? AND dispatch_id IN (SELECT dispatch_id FROM dispatch_intents WHERE state IN `+terminal+`)`, c.CompletedReceipts); err != nil {
 		return counts, err
 	}
+	// A begun receipt is the attribution anchor of an in-flight run:
+	// it is never pruned, whatever its age (FBK-002/FBK-003,
+	// E7-T9/M-20).
 	if counts.WorkReceipts, err = exec("work receipts",
-		`DELETE FROM work_receipts WHERE submitted_at < ?`, c.CompletedReceipts); err != nil {
+		`DELETE FROM work_receipts WHERE submitted_at < ? AND status != 'begun'`, c.CompletedReceipts); err != nil {
 		return counts, err
 	}
 	// Intents only when nothing remains to orphan: no surviving

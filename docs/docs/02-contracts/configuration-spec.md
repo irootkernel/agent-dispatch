@@ -239,6 +239,8 @@ fd:<positive-integer>
 
 The config loader parses the reference but resolves its value only immediately before use. JSON display redacts the resolved value and may display the reference identifier.
 
+A `file:` reference must be owner-only (mode 600): a file with group or other permission bits fails closed with the mode named, before any read (SEC-006, E7-T9).
+
 ## 12. Semantic Validation
 
 Beyond schema validation, the validator must check:

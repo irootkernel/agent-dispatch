@@ -42,6 +42,12 @@ func (s *Store) CommitLineage(ctx context.Context, lin ports.Lineage) error {
 	if err := s.upsertPathFacts(tx, lin.Observation.ResourceID, lin.Observation.Changes, lin.Observation.ReceivedAt); err != nil {
 		return err
 	}
+	// The intent's creation lands in the audit history in the same
+	// transaction (DUR-011, E7-T6/M-3).
+	if err := s.AppendTransition(tx, lin.Intent.DispatchID+":created", "dispatch_intent", lin.Intent.DispatchID, "", "ready", lin.Intent.CreatedAt,
+		fmt.Sprintf(`{"reason":"arrival","route_id":%q,"route_revision":%q,"generation":%d}`, lin.Intent.RouteID, lin.Intent.RouteRevision, lin.Intent.Generation)); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 

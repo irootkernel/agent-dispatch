@@ -174,7 +174,9 @@ func TestAcquireAttemptAuditsTransition(t *testing.T) {
 		t.Fatal(err)
 	}
 	var from, to string
-	if err := s.QueryRow(`SELECT from_state, to_state FROM state_transitions WHERE entity_id = 'dispatch-1' ORDER BY recorded_at DESC LIMIT 1`).Scan(&from, &to); err != nil {
+	// The creation row (E7-T6/M-3) shares the arrival's second, so the
+	// lease transition is selected by its target state.
+	if err := s.QueryRow(`SELECT from_state, to_state FROM state_transitions WHERE entity_id = 'dispatch-1' AND to_state = 'submitting' LIMIT 1`).Scan(&from, &to); err != nil {
 		t.Fatal(err)
 	}
 	if from != "ready" || to != "submitting" {

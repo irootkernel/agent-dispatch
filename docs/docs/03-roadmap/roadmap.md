@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E7 |
 | Current active task | None |
-| Next task | E7-T6 |
-| Completed tasks | 38 / 45 |
-| Planned tasks | 7 / 45 |
+| Next task | E7-T7 |
+| Completed tasks | 39 / 45 |
+| Planned tasks | 6 / 45 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -76,7 +76,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 36 | E7-T3 | Completed | Submit-path revalidation and durable path facts |
 | 37 | E7-T4 | Completed | Gate-evidence tests repaired and platform guards added |
 | 38 | E7-T5 | Completed | CLI inspection contract completed |
-| 39 | E7-T6 | Planned | Write gates, audit rows, and decision records closed |
+| 39 | E7-T6 | Completed | Write gates, audit rows, and decision records closed |
 | 40 | E7-T7 | Planned | Migration lock, WAL classification, operator exits |
 | 41 | E7-T8 | Planned | Payload versioning enforced and Hermes rendering completed |
 | 42 | E7-T9 | Planned | Operations and security medium batch remediated |
@@ -1666,7 +1666,7 @@ Delivered as the CLI inspection completion (H-5, M-13 through M-16): `config sho
 
 ## E7-T6: Close Write Gates, Audit Rows, and Decision Records
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -1694,6 +1694,10 @@ E7-T2 Completed.
 - a disabled route never receives automatic submissions through any path;
 - route transitions are fully reconstructable from the audit table alone;
 - merged bursts record `merge_pending` and reprocessed records carry evaluated dispositions.
+
+### Evidence
+
+Delivered as the write-gate and audit closures (M-1, M-2): the shared `slotAdmissible` admission rule now requires the store activation state to be enabled - drain never submits on a disabled route - and the YAML `routes.<id>.enabled` key participates on both ends of the two-key gate: `route enable` refuses while the configuration key is off, and both the drain and the dispatch submit phase refuse automatic submission while it is off (the AC-504 clean-host flow now flips the key as part of the reviewed enable). (M-3): `applyRouteTransition` appends the route-entity audit row inside the same transaction for every transition (deduplicated by transition id), `CommitLineage` records the intent's `:created` arrival row, and the previously manual duplicate resolution row was removed. (M-18): `CommitMergePending` persists `merge_pending` on the durable decision instead of the planner's optimistic `dispatch` disposition. (M-19): `dispatches reprocess` reclassifies every retained path through the active pattern engine and records the evaluated disposition, classification, and reason codes instead of the hardcoded `dispatch`/`normal`. Proven by `internal/cli/e7t6_test.go` (TestDisabledRouteNeverAutoSubmits, TestRouteTransitionsFullyAudited, TestMergePendingPersistedOnDecision) plus the updated audit determinism and runtime fixtures. The round-1 Mulgae remediations are folded in (run r_01a02c13-43e2, reports_only): reprocess delegates to the planner itself (the retained batch is reclassified and evaluated through `dispatch.Evaluate`, so the recorded disposition, classification, and reasons match the active policy for the retained evidence, with classification errors surfaced and unique per-invocation decision ids; the overflow and fresh-instance signals cannot fire on retained evidence, and the active-dispatch merge precedence belongs to the arrival path), `--no-submit` no longer emits the disabled-route warning, `route enable` distinguishes an undefined route from a disabled key, the transition auditer is a store method reusing AppendTransition, the cli-spec drain section states the gate, and the store-activation and reprocess-parity tests were added. Verified by `make verify` on darwin/arm64. Changelog 1.0.19.
 
 ## E7-T7: Migration Lock, WAL Classification, and Operator Exits
 

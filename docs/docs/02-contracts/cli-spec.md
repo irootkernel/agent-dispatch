@@ -155,6 +155,8 @@ Creates an intentional new work request with new dispatch ID and idempotency key
 
 ### `dispatches drain`
 
+The automatic-write gate applies: a route whose activation state or whose configuration `enabled` key is off submits nothing (the expired-lease recovery sweep still runs; the skip is visible in the envelope's skipped count, and a configuration-disabled route reports the skip as a warning).
+
 ```text
 agent-dispatch dispatches drain --route <id> --max <N>
 ```

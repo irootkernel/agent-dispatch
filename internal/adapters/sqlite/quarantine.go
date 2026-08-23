@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/irootkernel/agent-dispatch/internal/domain/ids"
 	"github.com/irootkernel/agent-dispatch/internal/domain/state"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
@@ -275,17 +274,9 @@ func (s *Store) ResolveUncertainReconciliation(ctx context.Context, routeID stri
 		return fmt.Errorf("%w: route %s changed during reconciliation (dirty %d, expected %d; pending %v, expected %v)",
 			ErrOptimisticConcurrency, routeID, snap.DirtyGeneration, expectedDirty, snap.PendingReconcile, expectedPending)
 	}
-	if err := applyRouteTransition(tx, snap, state.RouteFollowupReady, state.ReasonReconciliationResolved,
+	if err := s.applyRouteTransition(tx, snap, state.RouteFollowupReady, state.ReasonReconciliationResolved,
 		state.RouteEvidence{Actor: actor}, now,
 		auditJSON("reason", "reconciliation_resolved", "actor", actor, "dirty_generation", snap.DirtyGeneration, "pending_reconcile", snap.PendingReconcile)); err != nil {
-		return err
-	}
-	// The operator resolution is a route-entity audit event (the same
-	// visible-lineage posture as reconcile_pending and quarantine
-	// resolutions).
-	if err := s.AppendTransition(tx, "route-uncertain-resolved-"+routeID+"-"+now+"-"+ids.RandomSuffix(), "route", routeID,
-		string(snap.State), string(state.RouteFollowupReady), now,
-		auditJSON("reason", "reconciliation_resolved", "actor", actor, "dirty_generation", snap.DirtyGeneration)); err != nil {
 		return err
 	}
 	// The resolved dispatch releases the active slot; its record and audit
@@ -311,7 +302,7 @@ func (s *Store) ResolveUncertainReconciliation(ctx context.Context, routeID stri
 			auditJSON("reason", "reconcile", "route_id", routeID, "latest_state", true, "resolved_from", "uncertain")); err != nil {
 			return err
 		}
-	} else if err := applyRouteTransition(tx, state.RouteSnapshot{RouteID: routeID, State: state.RouteFollowupReady},
+	} else if err := s.applyRouteTransition(tx, state.RouteSnapshot{RouteID: routeID, State: state.RouteFollowupReady},
 		state.RouteIdle, state.ReasonFollowupDropped,
 		state.RouteEvidence{Actor: actor, ReconciledNoWork: true}, now,
 		auditJSON("reason", "followup_dropped_after_reconciliation", "actor", actor)); err != nil {
@@ -453,7 +444,7 @@ func (s *Store) CommitReconcileIntent(ctx context.Context, intent ports.IntentIn
 	if err != nil {
 		return err
 	}
-	if err := applyRouteTransition(tx, snap, state.RouteActiveClean, state.ReasonDispatchAccepted,
+	if err := s.applyRouteTransition(tx, snap, state.RouteActiveClean, state.ReasonDispatchAccepted,
 		state.RouteEvidence{Actor: actor, ActivatingDispatchID: intent.DispatchID}, now,
 		auditJSON("reason", "dispatch_accepted", "dispatch_id", intent.DispatchID, "origin", "reconcile")); err != nil {
 		return err

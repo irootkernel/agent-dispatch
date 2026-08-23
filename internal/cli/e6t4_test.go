@@ -219,6 +219,10 @@ func TestG5AC504CleanHostInstallDispatchScheduleUninstall(t *testing.T) {
 	}
 	out.Reset()
 	errb.Reset()
+	// The two-key gate (E7-T6/M-2): the operator flips the YAML key as
+	// part of the reviewed enable, then acknowledges the computed
+	// revision.
+	e5t4Rewrite(t, cfgPath, "enabled: false", "enabled: true")
 	if code := Run([]string{"route", "enable", "--route", "wiki-maintenance", "--config", cfgPath, "--acknowledge-production-gate", revision, "--yes"}, &out, &errb); code != 0 {
 		t.Fatalf("AC-504 gate-acknowledged route enable failed: %s", errb.String())
 	}

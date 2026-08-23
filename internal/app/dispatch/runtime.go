@@ -414,6 +414,11 @@ func slotAdmissible(rs state.RouteSnapshot, dispatchID string) bool {
 	if rs.State == state.RouteUncertain || rs.State == state.RouteQuarantined {
 		return false
 	}
+	// The automatic-write gate (TST-008, E7-T6/M-1): a route whose
+	// activation state is not enabled never submits automatically.
+	if rs.ActivationState != "enabled" {
+		return false
+	}
 	return rs.ActiveDispatchID == "" || rs.ActiveDispatchID == dispatchID
 }
 

@@ -304,6 +304,15 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 			"state": "ready", "submitted": false,
 		})
 	}
+	// The YAML key half of the two-key gate (E7-T6/M-2): a configuration
+	// disabled route persists its arrival but never submits it.
+	if !artifacts.route.Enabled {
+		outcome.Close()
+		return writeEnvelopeWithWarnings(stdout, command, map[string]any{
+			"route_id": artifacts.opts.routeID, "dispatch_id": outcome.dispatchID,
+			"state": "ready", "submitted": false,
+		}, []string{fmt.Sprintf("route %q is disabled in configuration; the intent stays ready until the route is enabled", artifacts.opts.routeID)})
+	}
 	// The submit phase needs the E4 sink adapter; the intent is durable
 	// and ready, and no automatic target fallback exists (DUR-008).
 	sink, err := resolveSink(artifacts.cfg, artifacts.target, artifacts.route)

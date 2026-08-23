@@ -164,6 +164,15 @@ func runRouteEnable(command string, args []string, stdout, stderr io.Writer) int
 		return usageError(stderr, command, "route enable requires --route")
 	}
 	cfg, err := config.Load(resolveConfigPath(flags.val("--config")))
+	if err == nil {
+		if _, defined := cfg.Routes[routeID]; !defined {
+			return planErr(stderr, command, "config_route_not_found", "configuration", fmt.Sprintf("route %q is not defined", routeID), 3)
+		}
+		if !cfg.Routes[routeID].Enabled {
+			return planErr(stderr, command, "config_invalid", "configuration",
+				fmt.Sprintf("route %q is disabled in configuration (routes.%s.enabled: false); the two-key gate requires both keys", routeID, routeID), 3)
+		}
+	}
 	if err != nil {
 		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
 	}

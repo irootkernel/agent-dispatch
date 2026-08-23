@@ -2,17 +2,22 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
+	"github.com/irootkernel/agent-dispatch/internal/app/ingest"
 	"github.com/irootkernel/agent-dispatch/internal/app/reconcile"
 	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/domain/ids"
+	"github.com/irootkernel/agent-dispatch/internal/domain/policy"
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
@@ -306,20 +311,74 @@ func runDispatchesReprocess(command string, args []string, stdout, stderr io.Wri
 	if !ok {
 		return planErr(stderr, command, "internal_unclassified", "internal", "route revision could not be computed", 40)
 	}
-	disposition := "dispatch"
-	if len(batch.Changes) == 0 {
-		disposition = "drop"
+	// The retained batch is evaluated through the planner itself
+	// (E7-T6/M-19 round-1 remediation): the reprocess decision records
+	// exactly what the active policy would do, with the planner's own
+	// precedence instead of a re-implementation.
+	route := cfg.Routes[batch.RouteID]
+	resource := cfg.Resources[route.Source.Resource]
+	runtime, rtErr := newRouteRuntime(cfg, route, resource)
+	if rtErr != nil {
+		return planErr(stderr, command, "config_invalid", "configuration", rtErr.Error(), 3)
 	}
+	target := cfg.Targets[route.Dispatch.Target]
+	changes := make([]records.ChangeItem, 0, len(batch.Changes))
+	var protected, immutable []string
+	for _, c := range batch.Changes {
+		op, oerr := records.ParseOperation(c.Operation)
+		if oerr != nil {
+			return planErr(stderr, command, "internal_unclassified", "internal", oerr.Error(), 40)
+		}
+		item := records.ChangeItem{
+			Path: c.Path, Operation: op, ExistsAfter: c.ExistsAfter, FileType: records.FileType(c.FileType),
+			BeforeDigest: records.Digest(c.BeforeDigest), AfterDigest: records.Digest(c.AfterDigest), DigestStatus: records.DigestStatus(c.DigestStatus),
+		}
+		st, cerr := runtime.engine.Classify(c.Path)
+		if cerr != nil {
+			return planErr(stderr, command, "internal_unclassified", "internal", cerr.Error(), 40)
+		}
+		switch st {
+		case policy.StatusProtected:
+			protected = append(protected, c.Path)
+		case policy.StatusImmutable:
+			immutable = append(immutable, c.Path)
+		}
+		changes = append(changes, item)
+	}
+	plan, perr := dispatch.Evaluate(dispatch.RoutePolicy{
+		RouteID:              batch.RouteID,
+		RouteRevision:        revision,
+		ResourceID:           route.Source.Resource,
+		AutomaticThreshold:   route.Batching.AutomaticThreshold,
+		HardLimit:            route.Batching.HardLimit,
+		MaxManifestBytes:     route.Batching.MaxManifestBytes,
+		BulkAction:           route.Policy.BulkAction,
+		OverflowAction:       route.Policy.OverflowAction,
+		FreshInstanceAction:  route.Policy.FreshInstanceAction,
+		RequiredCapabilities: target.RequiredCapabilities,
+	}, dispatch.Input{Batch: &ingest.Result{Changes: changes, Protected: protected, Immutable: immutable}})
+	if perr != nil {
+		return planErr(stderr, command, "internal_unclassified", "internal", perr.Error(), 40)
+	}
+	disposition := plan.Disposition
+	classification := "normal"
+	if len(plan.Classification) > 0 {
+		classification = plan.Classification[0]
+	}
+	reasons := append([]string{"operator_reprocess"}, plan.ReasonCodes...)
+	sortedReasons := append([]string(nil), reasons...)
+	sort.Strings(sortedReasons)
+	encoded, _ := json.Marshal(sortedReasons)
 	now := dispatch.Timestamp(time.Now())
 	decision := sqlite.DecisionRecord{
-		DecisionID:      "dec-reprocess-" + flags.positional + "-" + strings.ReplaceAll(now, ":", ""),
+		DecisionID:      "dec-reprocess-" + flags.positional + "-" + strings.ReplaceAll(now, ":", "") + "-" + ids.RandomSuffix(),
 		BatchID:         flags.positional,
 		RouteID:         batch.RouteID,
 		RouteRevision:   revision,
 		PolicyRevision:  revision,
 		Disposition:     disposition,
-		Classification:  "normal",
-		ReasonCodesJSON: `["operator_reprocess"]`,
+		Classification:  classification,
+		ReasonCodesJSON: string(encoded),
 		CreatedAt:       now,
 		Actor:           "operator",
 	}
@@ -455,6 +514,20 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 	// E7-T2/B-1): a process that died mid-submit leaves submitting work
 	// that only this sweep moves to unknown. A failure to enumerate the
 	// expired leases fails closed, exactly like the unknown enumeration.
+	// The YAML key half of the two-key gate (E7-T6/M-2): a route whose
+	// configuration key is off never submits automatically even when the
+	// store activation was previously acknowledged; recovery and
+	// reconciliation still run.
+	if !route.Enabled {
+		recovered, recErr := rt.Recover(requestCtx(), routeID)
+		if recErr != nil {
+			return intentErr(stderr, command, recErr)
+		}
+		warnings := []string{fmt.Sprintf("route %q is disabled in configuration (routes.%s.enabled: false); nothing was submitted", routeID, routeID)}
+		return writeEnvelopeWithWarnings(stdout, command, map[string]any{
+			"processed": 0, "skipped": 0, "recovered": recovered, "reconciled": nil,
+		}, warnings)
+	}
 	recovered, err := rt.Recover(requestCtx(), routeID)
 	if err != nil {
 		return intentErr(stderr, command, err)

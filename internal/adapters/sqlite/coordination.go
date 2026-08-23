@@ -52,7 +52,14 @@ func (s *Store) CommitMergePending(ctx context.Context, lin ports.Lineage, actor
 		lin.Batch.ResourceID, lin.Batch.CreatedAt, lin.Batch.ContentFingerprint, lin.Batch.ObservationIDs); err != nil {
 		return 0, err
 	}
-	if err := s.SaveDecision(tx, portsDecision(lin.Decision)); err != nil {
+	// The merge is the outcome this transaction persists: the decision
+	// records merge_pending, never the planner's optimistic dispatch
+	// disposition (POL-006, E7-T6/M-18).
+	merged := lin.Decision
+	if merged.Disposition == "dispatch" {
+		merged.Disposition = "merge_pending"
+	}
+	if err := s.SaveDecision(tx, portsDecision(merged)); err != nil {
 		return 0, err
 	}
 	snap, err := s.routeSnapshotInTx(tx, lin.Decision.RouteID)
@@ -69,7 +76,7 @@ func (s *Store) CommitMergePending(ctx context.Context, lin ports.Lineage, actor
 	if snap.State == state.RouteIdle && snap.ActiveDispatchID != "" {
 		// A reserved-but-not-yet-activated dispatch still implies route
 		// activity for coordination: consume its own reservation first.
-		if err := applyRouteTransition(tx, snap, state.RouteActiveClean, state.ReasonDispatchAccepted,
+		if err := s.applyRouteTransition(tx, snap, state.RouteActiveClean, state.ReasonDispatchAccepted,
 			state.RouteEvidence{Actor: actor, ActivatingDispatchID: snap.ActiveDispatchID}, now,
 			fmt.Sprintf(`{"reason":%q,"dispatch_id":%q,"note":"reservation activation before merge"}`, state.ReasonDispatchAccepted, snap.ActiveDispatchID)); err != nil {
 			return 0, err
@@ -83,7 +90,7 @@ func (s *Store) CommitMergePending(ctx context.Context, lin ports.Lineage, actor
 		if snap.State == state.RouteActiveDirty {
 			reason = state.ReasonMoreChangesMerged
 		}
-		if err := applyRouteTransition(tx, snap, state.RouteActiveDirty, reason, state.RouteEvidence{
+		if err := s.applyRouteTransition(tx, snap, state.RouteActiveDirty, reason, state.RouteEvidence{
 			Actor: actor, DirtyGenerationAfter: dirtyAfter,
 		}, now, fmt.Sprintf(`{"reason":%q,"batch_id":%q,"dirty_generation_after":%d}`, reason, lin.Batch.BatchID, dirtyAfter)); err != nil {
 			return 0, err
@@ -185,7 +192,7 @@ func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.Acti
 		}
 	}
 	evidence := state.RouteEvidence{Actor: req.Actor, ReceiptRef: req.ReceiptRef}
-	if err := applyRouteTransition(tx, snap, to, reason, evidence, now,
+	if err := s.applyRouteTransition(tx, snap, to, reason, evidence, now,
 		fmt.Sprintf(`{"reason":%q,"dispatch_id":%q,"dirty_generation":%d,"failed":%v}`, reason, req.DispatchID, snap.DirtyGeneration, req.Failed)); err != nil {
 		return out, err
 	}
@@ -270,7 +277,7 @@ func (s *Store) ActivateDispatch(ctx context.Context, dispatchID, actor, now str
 		}
 		return fmt.Errorf("%w: route %s is active with %s", ports.ErrStateNotEligible, routeID, snap.ActiveDispatchID)
 	}
-	if err := applyRouteTransition(tx, snap, state.RouteActiveClean, state.ReasonDispatchAccepted,
+	if err := s.applyRouteTransition(tx, snap, state.RouteActiveClean, state.ReasonDispatchAccepted,
 		state.RouteEvidence{Actor: actor, ActivatingDispatchID: dispatchID}, now,
 		fmt.Sprintf(`{"reason":%q,"dispatch_id":%q}`, state.ReasonDispatchAccepted, dispatchID)); err != nil {
 		return err
@@ -302,7 +309,7 @@ func (s *Store) ActivateFollowup(ctx context.Context, dispatchID, actor, now str
 	if err != nil {
 		return err
 	}
-	if err := applyRouteTransition(tx, snap, state.RouteActiveClean, state.ReasonFollowupAccepted,
+	if err := s.applyRouteTransition(tx, snap, state.RouteActiveClean, state.ReasonFollowupAccepted,
 		state.RouteEvidence{Actor: actor, ActivatingDispatchID: dispatchID}, now,
 		fmt.Sprintf(`{"reason":%q,"dispatch_id":%q}`, state.ReasonFollowupAccepted, dispatchID)); err != nil {
 		return err
@@ -341,7 +348,7 @@ func (s *Store) routeSnapshotInTx(tx *sql.Tx, routeID string) (state.RouteSnapsh
 // applyRouteTransition validates the E3-T1 guards and applies one route
 // state transition inside the caller's transaction, bumping the version;
 // dirty-count changes stay with the callers' explicit updates.
-func applyRouteTransition(tx *sql.Tx, snap state.RouteSnapshot, to state.RouteState, reason state.RouteReason, evidence state.RouteEvidence, now, contextJSON string) error {
+func (s *Store) applyRouteTransition(tx *sql.Tx, snap state.RouteSnapshot, to state.RouteState, reason state.RouteReason, evidence state.RouteEvidence, now, contextJSON string) error {
 	if err := state.ValidateRouteTransition(snap, to, reason, evidence); err != nil {
 		return err
 	}
@@ -354,7 +361,15 @@ func applyRouteTransition(tx *sql.Tx, snap state.RouteSnapshot, to state.RouteSt
 	if n, _ := res.RowsAffected(); n == 0 {
 		return fmt.Errorf("route %s left %s concurrently: %w", snap.RouteID, snap.State, ErrOptimisticConcurrency)
 	}
-	return nil
+	// Every route transition lands in the audit history inside the same
+	// transaction (DUR-011, E7-T6/M-3): the route timeline is fully
+	// reconstructable from state_transitions alone.
+	var version int64
+	if err := tx.QueryRow(`SELECT version FROM route_runtime_state WHERE route_id = ?`, snap.RouteID).Scan(&version); err != nil {
+		return err
+	}
+	transitionID := fmt.Sprintf("%s:%s:v%d", snap.RouteID, reason, version)
+	return s.AppendTransition(tx, transitionID, "route", snap.RouteID, string(snap.State), string(to), now, contextJSON)
 }
 
 func lineageOr(json string) string {

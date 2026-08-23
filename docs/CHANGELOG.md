@@ -1,5 +1,14 @@
 # SOT Changelog
 
+## 1.0.19 - 2026-08-23
+
+E7-T6: write gates, audit rows, and decision records (TST-008, DUR-011, POL-006, OPS-004, PTH-008):
+
+- the automatic-write gate is closed: drain requires the store activation to be enabled, and the YAML `routes.<id>.enabled` key participates in the two-key gate on both ends (`route enable` refuses while the key is off; drain and dispatch refuse automatic submission while it is off);
+- every route transition appends its audit row inside the transition transaction (the route timeline is reconstructable from state_transitions alone) and intent creation records its arrival row;
+- merged bursts persist `merge_pending` on the durable decision;
+- `dispatches reprocess` evaluates the retained batch against the active pattern engine and records the evaluated disposition, classification, and reasons.
+
 ## 1.0.18 - 2026-08-23
 
 E7-T5: the CLI inspection contract completed (CLI-004, CLI-008, OPS-002):

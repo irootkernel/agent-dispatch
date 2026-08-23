@@ -391,7 +391,7 @@ func (s *Store) RerunIntent(ctx context.Context, in ports.RerunInput) (ports.Int
 	}
 	switch snap.State {
 	case state.RouteIdle:
-		if err := applyRouteTransition(tx, snap, state.RouteActiveClean, state.ReasonDispatchAccepted,
+		if err := s.applyRouteTransition(tx, snap, state.RouteActiveClean, state.ReasonDispatchAccepted,
 			state.RouteEvidence{Actor: in.Actor, ActivatingDispatchID: in.New.DispatchID}, now,
 			fmt.Sprintf(`{"reason":%q,"dispatch_id":%q,"operator_rerun":true}`, state.ReasonDispatchAccepted, in.New.DispatchID)); err != nil {
 			return sum, err

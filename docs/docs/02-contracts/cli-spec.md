@@ -151,7 +151,7 @@ Uses the same dispatch request and idempotency key. Allowed only when state and 
 
 ### `dispatches discard <dispatch-id>`
 
-Closes one dead-lettered dispatch as superseded through the declared edge, releasing the route slot while keeping the record and its audit history inspectable; the closed lineage becomes retention-resolvable. Requires `--reason` (DUR-009, E7-T7/M-7).
+Closes one dead-lettered dispatch as superseded through the declared edge while keeping the record and its audit history inspectable; the closed lineage becomes retention-resolvable. The envelope reports the measured outcome (`slot_released`, `route_to_idle`, `dirty_generation_retained`): a clean active route whose only work was the closed letter moves to IDLE, and a dirty route retains its generation for reconciliation. Requires `--reason` (DUR-009, E7-T7/M-7).
 
 ### `dispatches refresh <id>`
 

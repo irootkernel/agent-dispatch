@@ -1485,7 +1485,7 @@ Delivered as the release-verification surface: the executable G5 acceptance suit
 
 # E7: MVP Compliance Review Remediation
 
-**Epic status:** In Progress  
+**Epic status:** Completed  
 **Purpose:** Remediate every finding of the 2026-08-22 MVP compliance review (D-017): the three Blockers in the core durability and coordination user stories, the five High findings in submit-path integrity and evidence, all Medium findings, and the Low/Info dispositions; then re-verify the gates and release v0.1.1.  
 **Gate:** MUST closure — every one of the 14 GAP requirements PASS or carrying an explicit recorded exception — with gates G1-G5 re-run on the real Hermes and Watchman.
 

@@ -338,6 +338,24 @@ func runRouteStale(command string, args []string, stdout, stderr io.Writer) int 
 		return exit
 	}
 	defer closer.Close()
+	// cli-spec section 3 documents the precondition: the active dispatch
+	// must be older than the route's active_stale_after before an
+	// operator may stale it (E8-T4, M-23 — a minutes-old dispatch with a
+	// 2h bound is live work, not stale evidence).
+	cfg, cfgErr := config.Load(resolveConfigPath(flags.val("--config")))
+	if cfgErr == nil {
+		if route, ok := cfg.Routes[routeID]; ok && route.Dispatch.ActiveStaleAfter != "" {
+			if d, derr := config.ParseDuration(route.Dispatch.ActiveStaleAfter); derr == nil {
+				if snap, serr := closer.LoadRouteState(requestCtx(), routeID); serr == nil && snap.ActiveDispatchID != "" {
+					if age, aerr := closer.ActiveDispatchAgeNanos(requestCtx(), routeID); aerr == nil && age < d.Nanos {
+						return planErr(stderr, command, "transition_invalid", "conflict",
+							fmt.Sprintf("active dispatch %s is inside the route's active_stale_after bound (%s); live work is not stale",
+								snap.ActiveDispatchID, route.Dispatch.ActiveStaleAfter), 14)
+					}
+				}
+			}
+		}
+	}
 	if err := closer.MarkRouteStaleWithReason(requestCtx(), routeID, "operator", flags.val("--reason"), dispatch.Timestamp(time.Now())); err != nil {
 		if errors.Is(err, ports.ErrStateNotEligible) {
 			return planErr(stderr, command, "transition_invalid", "conflict", err.Error(), 14)

@@ -15,7 +15,7 @@ func planFixture(t *testing.T) (configPath, vault string) {
 	t.Helper()
 	dir := t.TempDir()
 	vault = filepath.Join(dir, "vault")
-	if err := os.MkdirAll(filepath.Join(vault, "Notes"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(vault, "Notes"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(vault, "Notes", "a.md"), []byte("hello"), 0o644); err != nil {
@@ -36,7 +36,7 @@ targets:
   hermes-main:
     type: hermes-kanban
     board: agent-dispatch
-    executable: hermes
+    executable: ` + filepath.Join(dir, "hermes-stub") + `
     capability_report: "` + filepath.Join(dir, "cap.json") + `"
     required_capabilities: [durable_acceptance, submit_idempotency_key]
 routes:
@@ -84,6 +84,9 @@ routes:
 	// capability_report is only referenced, not read during planning.
 	configPath = filepath.Join(dir, "agent-dispatch.yaml")
 	if err := os.WriteFile(configPath, []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "hermes-stub"), []byte("#!/bin/sh\nexit 3\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	// The capability report the fixture's target references: the real

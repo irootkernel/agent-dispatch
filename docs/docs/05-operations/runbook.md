@@ -155,6 +155,13 @@ Uninstall order:
   dispatch due and resets its attempt budget in one audited transaction
   (`explicit_retry_reset` in the transition history), so the next drain
   submits it under a fresh budget.
+- **Startup uncertainty.** After an unclean shutdown or an unexplained
+  gap in the structured log, run `reconcile --route <id> --reason
+  startup` (OPS-006): the reconciliation rebuilds the latest-state
+  comparison from the enumerated vault, collapses any observed drift
+  into the single pending generation, and never assumes partial
+  delivery. The `startup` reason distinguishes this operator decision
+  from a manual re-evaluation in the audit history.
 - **Over-budget follow-up chain (UNCERTAIN).** A route whose consecutive
   follow-up chain passed `MaxConsecutiveFollowups` resolves through
   UNCERTAIN instead of scheduling another generation: run

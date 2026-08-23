@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"sort"
 	"time"
 
@@ -161,8 +163,15 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		// The store, integrations, and targets were never examined: a
 		// configuration that fails to load produces exactly the
-		// configuration finding set, nothing fabricated.
-		findings := doctor.Examine(doctor.Input{SemanticErrors: []string{err.Error()}})
+		// configuration finding set, nothing fabricated — and the
+		// unexamined Watchman fact is explicitly marked so its
+		// unavailable posture is suppressed rather than invented
+		// (E8-T4 round-1 F002).
+		findings := doctor.Examine(doctor.Input{
+			SemanticErrors: []string{err.Error()},
+			// WatchmanExamined stays false: the probe never ran, so the
+			// unavailable finding must not fire (E8-T4 round-1 F002).
+		})
 		emitFindings(opsLogger(stderr, nil), findings)
 		return writeDoctorResult(stdout, stderr, command, findings)
 	}
@@ -173,6 +182,8 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 	}
 	input.Resources = resourceFacts(cfg)
 	input.Watchman = watchmanFact(requestCtx())
+	// The probe ran: its unavailable posture is real evidence now.
+	input.WatchmanExamined = true
 	input.Targets = targetFacts(cfg)
 	if probeTargets {
 		// The probe surface already reports per-target construction
@@ -269,6 +280,17 @@ func resourceFacts(cfg *config.Config) []doctor.ResourceFact {
 			out = append(out, fact)
 			continue
 		}
+		// A real access probe (E8-T4, H-4): mode bits pass under
+		// chmod 000 while the directory is actually unreadable, and
+		// doctor must say so before the next reconcile fails.
+		if d, derr := os.Open(root); derr == nil {
+			if _, rerr := d.Readdirnames(1); rerr != nil {
+				fact.NotReadable = true
+			}
+			d.Close()
+		} else {
+			fact.NotReadable = true
+		}
 		if fi.IsDir() && fi.Mode().Perm()&0o077 != 0 {
 			fact.NotOwnerOnly = true
 		}
@@ -323,15 +345,32 @@ func targetFacts(cfg *config.Config) []doctor.TargetFact {
 		case "hermes-kanban":
 			if target.Executable == "" {
 				fact.GateError = "executable is not configured"
-			} else if _, err := os.Stat(target.Executable); err != nil {
-				fact.GateError = fmt.Sprintf("executable %q is not present: %v", target.Executable, err)
-			} else if _, err := hermeskanban.LoadReport(target.CapabilityReport); err != nil {
-				fact.GateError = err.Error()
+			} else if !executablePresent(target.Executable) {
+				fact.GateError = fmt.Sprintf("executable %q is not present", target.Executable)
+			} else if report, lerr := hermeskanban.LoadReport(target.CapabilityReport); lerr != nil {
+				fact.GateError = lerr.Error()
+			} else if verr := hermeskanban.ValidateRequired(id, report.PortCapabilities(), target.RequiredCapabilities); verr != nil {
+				// The offline capability gate the doctor previously
+				// skipped: a report without a required capability is an
+				// actionable target failure (E8-T4, H-4).
+				fact.GateError = verr.Error()
 			}
 		}
 		out = append(out, fact)
 	}
 	return out
+}
+
+// executablePresent resolves a PATH-relative executable name through
+// exec.LookPath and an absolute path through stat (E8-T4: the doctor
+// gate previously failed every PATH-named executable).
+func executablePresent(name string) bool {
+	if filepath.IsAbs(name) {
+		_, err := os.Stat(name)
+		return err == nil
+	}
+	_, err := exec.LookPath(name)
+	return err == nil
 }
 
 // probeTargetWarnings describes per-target probe failures surfaced by

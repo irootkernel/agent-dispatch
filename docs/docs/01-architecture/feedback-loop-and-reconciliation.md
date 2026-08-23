@@ -124,7 +124,7 @@ A task that remains unresolved beyond `active_stale_after` is not automatically 
 | Route reconciliation | stale active state or configuration drift | compare local route state with public Hermes state |
 | Content reconciliation | scheduled daily or manual | one latest-state maintenance generation |
 
-The `reconcile --reason` CLI values map to these types: `initial`, `scheduled`, `overflow`, `fresh-instance`, `lost-cursor` (lost cursor), `manual`, `delivery` (unknown submit), and `stale-active` (stale active state or configuration drift).
+The `reconcile --reason` CLI values map to these types: `initial`, `scheduled`, `overflow`, `fresh-instance`, `lost-cursor` (lost cursor), `manual`, `delivery` (unknown submit), `stale-active` (stale active state or configuration drift), and `startup` (post-shutdown uncertainty; OPS-006, E8-T4).
 
 ## 10. Distinct Operator Operations
 

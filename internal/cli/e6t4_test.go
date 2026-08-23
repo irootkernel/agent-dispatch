@@ -119,8 +119,17 @@ func TestG5AC502DoctorStableFindings(t *testing.T) {
 func TestG5AC503PrunePreservesLineageAndAudit(t *testing.T) {
 	configPath, _ := cliStoreFixture(t)
 	store := e6t2Open(t, configPath)
+	// The resolved seed carries a genuinely terminal state; an accepted
+	// dispatch — holding or not holding the active slot — is unresolved
+	// live work whose lineage prune never touches (E8-T4, H-3).
 	e6t2SeedLineage(t, store, "old", "2025-01-01T00:00:00Z")
-	e6t2SetIntentState(t, store, "dispatch-old", "accepted", "2025-01-02T00:00:00Z", "")
+	e6t2SetIntentState(t, store, "dispatch-old", "completed", "2025-01-02T00:00:00Z", "")
+	e6t2SeedLineage(t, store, "acc", "2025-01-01T00:00:00Z")
+	e6t2SetIntentState(t, store, "dispatch-acc", "accepted", "2025-01-02T00:00:00Z", "")
+	if _, err := store.ExecContext(context.Background(),
+		`UPDATE route_runtime_state SET active_dispatch_id = 'dispatch-acc' WHERE route_id = 'wiki' AND active_dispatch_id IS NULL`); err != nil {
+		t.Fatal(err)
+	}
 	e6t2SeedLineage(t, store, "unk", "2025-01-01T00:00:00Z")
 	e6t2SetIntentState(t, store, "dispatch-unk", "unknown", "2025-01-02T00:00:00Z", "")
 	var auditBefore int
@@ -138,6 +147,12 @@ func TestG5AC503PrunePreservesLineageAndAudit(t *testing.T) {
 	var keep int
 	if err := store.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM dispatch_intents WHERE dispatch_id = 'dispatch-unk'`).Scan(&keep); err != nil || keep != 1 {
 		t.Fatalf("AC-503: unresolved lineage not preserved")
+	}
+	// The active accepted dispatch keeps its whole lineage: attempts,
+	// receipts, and the intent itself (H-3).
+	var keepAccepted int
+	if err := store.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM dispatch_intents WHERE dispatch_id = 'dispatch-acc'`).Scan(&keepAccepted); err != nil || keepAccepted != 1 {
+		t.Fatalf("AC-503: an active accepted dispatch must survive prune: %d %v", keepAccepted, err)
 	}
 	var audit int
 	if err := store.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM state_transitions`).Scan(&audit); err != nil || audit == 0 {

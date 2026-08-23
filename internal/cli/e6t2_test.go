@@ -236,9 +236,11 @@ func TestDoctorConfigErrorStillProducesFindings(t *testing.T) {
 func TestMaintenancePruneDryRunThenExecute(t *testing.T) {
 	configPath, _ := cliStoreFixture(t)
 	store := e6t2Open(t, configPath)
-	// One resolved terminal lineage far past every horizon.
+	// One resolved terminal lineage far past every horizon. An accepted
+	// dispatch is unresolved live work since E8-T4/H-3, so the resolved
+	// seed carries a genuinely terminal state.
 	e6t2SeedLineage(t, store, "old", "2025-01-01T00:00:00Z")
-	e6t2SetIntentState(t, store, "dispatch-old", "accepted", "2025-01-02T00:00:00Z", "")
+	e6t2SetIntentState(t, store, "dispatch-old", "completed", "2025-01-02T00:00:00Z", "")
 	// One unresolved lineage past every horizon: it must survive.
 	e6t2SeedLineage(t, store, "unk", "2025-01-01T00:00:00Z")
 	e6t2SetIntentState(t, store, "dispatch-unk", "dead_lettered", "2025-01-02T00:00:00Z", "")

@@ -121,7 +121,7 @@ POL-006), `classification` (`normal|protected|bulk|overflow|malformed|stale|unkn
 batch: a reconciliation generation may span many batches or none.
 
 **Full-reconciliation result** (`reconcile` command): `route_id`,
-`reason` (one of `initial|scheduled|overflow|fresh-instance|lost-cursor|manual|delivery|stale-active`),
+`reason` (one of `initial|scheduled|overflow|fresh-instance|lost-cursor|manual|delivery|stale-active|startup`),
 `enumerated`, `compared`, sorted `added`/`removed`/`changed` path lists,
 `pending_reconcile`, `decision_id`, optional `reconcile_dispatch_id`
 (exactly one latest-state intent when the route was idle with due work,

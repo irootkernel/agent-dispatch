@@ -186,7 +186,7 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 		return usageError(stderr, command, "reconcile requires --route")
 	}
 	if !reconcile.Reasons[reason] {
-		return usageError(stderr, command, "--reason must be one of initial, scheduled, overflow, fresh-instance, lost-cursor, manual, delivery, or stale-active")
+		return usageError(stderr, command, "--reason must be one of initial, scheduled, overflow, fresh-instance, lost-cursor, manual, delivery, stale-active, or startup")
 	}
 	artifacts, exit := planConfigOnly(command, flags.val("--config"), routeID, stderr)
 	if exit != 0 {

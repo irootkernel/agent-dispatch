@@ -434,18 +434,13 @@ func TestDropDispositionPersistsEvidence(t *testing.T) {
 	}
 }
 
-// TestReconcileSubmitSkippedWarning proves --submit on a route that is
-// not enabled reports the skip as a warning instead of silently
-// passing (E5 audit round 5, F008; rewritten by E7-T2: the automatic
-// gate now lives on the --submit path itself, so the disabled route is
-// the skip scenario and the warning names the gate).
-func TestReconcileSubmitSkippedWarning(t *testing.T) {
+// TestReconcileRefusalOnDisabledRoute proves M-12 (E8-T4): a route
+// that is not enabled fails closed with transition_invalid/14
+// unconditionally — in every route state — instead of exiting 0 with a
+// warning only when work happens to be due.
+func TestReconcileRefusalOnDisabledRoute(t *testing.T) {
 	configPath, vault := e4t3Fixture(t)
 	e4t3RegisterRoute(t, configPath)
-	// A first reconciliation stores the snapshot and schedules the
-	// intent; the automatic-write gate then closes: with the route
-	// disabled, --submit must refuse the write path while the audit
-	// result stays visible.
 	var initOut, initErr bytes.Buffer
 	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "initial"}, &initOut, &initErr); code != 0 {
 		t.Fatalf("initial reconcile failed (exit %d): %s", code, initErr.String())
@@ -455,12 +450,8 @@ func TestReconcileSubmitSkippedWarning(t *testing.T) {
 	}
 	var out2, errb2 bytes.Buffer
 	code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "scheduled", "--submit"}, &out2, &errb2)
-	if code != 0 {
-		t.Fatalf("skipped submit must still succeed: %s", errb2.String())
-	}
-	body := out2.String() + errb2.String()
-	if !strings.Contains(body, "--submit skipped") || !strings.Contains(body, "not enabled") {
-		t.Fatalf("the gated skip must be warned with its reason: %s", body)
+	if code != 14 || !strings.Contains(errb2.String(), "transition_invalid") || !strings.Contains(errb2.String(), "not enabled") {
+		t.Fatalf("a disabled route must fail closed at 14 with the activation reason, got %d: %s", code, errb2.String())
 	}
 	store := e5t1Store(t, configPath)
 	defer store.Close()

@@ -30,7 +30,7 @@ func TestExamineCoversEveryFindingCode(t *testing.T) {
 		{"unknown", Input{StoreExamined: true, Store: StoreFact{SchemaVersion: 4, LatestVersion: 4, UnknownCount: 2}}, "unknown_dispatches", nil},
 		{"dead letter", Input{StoreExamined: true, Store: StoreFact{SchemaVersion: 4, LatestVersion: 4, DeadLettered: 1}}, "dead_lettered_dispatches", nil},
 		{"db size", Input{StoreExamined: true, Store: StoreFact{SchemaVersion: 4, LatestVersion: 4, DatabaseBytes: largeDatabaseBytes + 1}}, "database_size_large", nil},
-		{"watchman", Input{StoreExamined: true, Store: StoreFact{SchemaVersion: 4, LatestVersion: 4}, Watchman: WatchmanFact{UnusableBecause: "gone"}}, "watchman_unavailable", nil},
+		{"watchman", Input{StoreExamined: true, Store: StoreFact{SchemaVersion: 4, LatestVersion: 4}, WatchmanExamined: true, Watchman: WatchmanFact{UnusableBecause: "gone"}}, "watchman_unavailable", nil},
 		{"watchman version", Input{StoreExamined: true, Store: StoreFact{SchemaVersion: 4, LatestVersion: 4}, Watchman: WatchmanFact{Available: true, Version: "x", UnusableBecause: "old"}}, "watchman_version_unsupported", nil},
 		{"target gate", Input{StoreExamined: true, Store: StoreFact{SchemaVersion: 4, LatestVersion: 4}, Targets: []TargetFact{{TargetID: "t", GateError: "bad"}}}, "target_gate_failed", nil},
 		{"secret", Input{StoreExamined: true, Store: StoreFact{SchemaVersion: 4, LatestVersion: 4}, Targets: []TargetFact{{TargetID: "t", SecretResolved: &no}}}, "secret_unresolvable", nil},

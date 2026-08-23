@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/domain/state"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
@@ -354,6 +355,28 @@ func (s *Store) ActivateFollowup(ctx context.Context, dispatchID, actor, now str
 		return err
 	}
 	return tx.Commit()
+}
+
+// ActiveDispatchAgeNanos returns how long the route's active dispatch
+// has held the slot in nanoseconds (0 when none holds it); the stored
+// second-precision timestamp truncates downward, so a sub-second bound
+// only applies once the dispatch crosses a full second.
+func (s *Store) ActiveDispatchAgeNanos(ctx context.Context, routeID string) (int64, error) {
+	var createdAt string
+	err := s.QueryRowContext(ctx, `SELECT i.created_at FROM dispatch_intents i
+		JOIN route_runtime_state r ON r.active_dispatch_id = i.dispatch_id
+		WHERE r.route_id = ?`, routeID).Scan(&createdAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	created, perr := time.Parse(time.RFC3339, normalizeTimestamp(createdAt))
+	if perr != nil {
+		return 0, nil
+	}
+	return int64(time.Since(created)), nil
 }
 
 // routeSnapshotInTx reads the route runtime snapshot inside a

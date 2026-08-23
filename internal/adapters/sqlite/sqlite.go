@@ -48,6 +48,15 @@ func Open(path string) (*Store, error) {
 	if err := rejectNetworkPlacement(path); err != nil {
 		return nil, err
 	}
+	// The database file is owner-only from creation (SEC-008, E8-T4/
+	// M-19): a fresh SQLite create honors the process umask otherwise,
+	// which shipped 0644 databases. Best-effort for existing files —
+	// the doctor surfaces a persistent wrong mode.
+	if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
+		if f, ferr := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600); ferr == nil {
+			f.Close()
+		}
+	}
 	db, err := sql.Open("sqlite", path+"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)

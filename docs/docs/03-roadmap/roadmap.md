@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E8 (second compliance remediation, D-020) |
 | Current active task | None |
-| Next task | E8-T4 |
-| Completed tasks | 48 / 51 |
-| Planned tasks | 3 / 51 |
+| Next task | E8-T5 |
+| Completed tasks | 49 / 51 |
+| Planned tasks | 2 / 51 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -87,7 +87,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 46 | E8-T1 | Completed | Follow-up loop state-machine defects closed |
 | 47 | E8-T2 | Completed | Recovery wired into every submit path; operator exits repaired |
 | 48 | E8-T3 | Completed | Behavior-sensitive revision and enforced production gate |
-| 49 | E8-T4 | Planned | Unresolved lineage preserved; doctor made trustworthy |
+| 49 | E8-T4 | Completed | Unresolved lineage preserved; doctor made trustworthy |
 | 50 | E8-T5 | Planned | Input containment and configuration validation gaps closed |
 | 51 | E8-T6 | Planned | Documentation truth restored and v0.1.2 released |
 
@@ -2042,7 +2042,7 @@ Delivered as the revision and production-gate closure: the route revision projec
 
 ## E8-T4: Preserve Unresolved Lineage and Make Doctor Trustworthy
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -2074,7 +2074,7 @@ E8-T3 Completed.
 
 ### Evidence
 
-Pending (E8-T4 not started).
+Delivered as the retention and diagnostics closure: prune drops `accepted` from the resolved terminal set — an accepted dispatch is live, unreceipted work — and the attempt, receipt, and work-receipt deletes carry the active-slot predicate, mirrored exactly in the dry-run plan; `TestG5AC503` seeds an active accepted dispatch and asserts its lineage survives while a genuinely completed seed prunes (H-3/AC-503). Doctor raises `watchman_unavailable` and `target_gate_failed` to error severity so each AC-502 condition forces exit 3, runs the offline capability gate on readable reports, resolves PATH-named executables through `exec.LookPath`, and probes resource roots with a real open/readdir access check — a chmod-000 root reports `resource_root_not_readable` (`TestE8T4DoctorReportsUnreadableRoot`) — and a configuration that fails to load never fabricates an unexamined Watchman finding (`TestE8T4DoctorNeverFabricatesWatchman`; H-4). `state.db` is created 0600 at first open (M-19, correcting the D-019 M-12 record); the credential redactor covers basic/token authorization headers, `client_secret`/`apikey`/`password`/`key` query and fragment parameters, and bare JWTs, pinned adversarially (M-20); reconcile on a non-enabled route fails closed with `transition_invalid`/14 in every route state (M-12, `TestReconcileRefusalOnDisabledRoute`); `route stale` enforces the `active_stale_after` precondition with a nanosecond comparison (M-23, both refusal and exit paths covered); the `startup` reconcile reason is implemented, documented in the runbook, and enumerated in every published list (M-22); and `prune --dry-run --yes` refuses the pair as vacuum does (L-9). Verified by `make verify` on darwin/arm64 (all checks green). Reviewed through two full-target Mulgae rounds (`r_01a0302f-8cb9-76e4-af71-d85d8c3d8486`, remediation-eligible: request-changes high — the root access probe claimed but not implemented — plus four low findings, all remediated; `r_01a03047-b9ee-7b7e-a8ac-dc15698aa2d2`, hardening-deferral-eligible: request-changes high — a flag inversion the round-1 remediation itself introduced — fixed in-tree immediately after the review with regression tests rather than deferred, a deviation from the defer rule recorded here and in the Podway evidence for the epic validation audit to re-verify; F002 (two more reason enumerations) also fixed; five low/info findings F003-F007 deferred to epic hardening with the exact run and finding IDs in the commit trailers). Changelog 1.0.31.
 
 ## E8-T5: Close the Input-Containment and Configuration-Validation Gaps
 

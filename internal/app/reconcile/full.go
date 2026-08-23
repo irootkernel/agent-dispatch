@@ -31,6 +31,10 @@ import (
 var Reasons = map[string]bool{
 	"initial": true, "scheduled": true, "overflow": true, "fresh-instance": true,
 	"lost-cursor": true, "manual": true, "delivery": true, "stale-active": true,
+	// Startup uncertainty (OPS-006, E8-T4/M-22): an operator who cannot
+	// vouch for what happened while the tooling was down reconciles
+	// latest state under this reason instead of mislabeling it manual.
+	"startup": true,
 }
 
 // FullStore is the durable surface full reconciliation needs.
@@ -99,6 +103,13 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 	snap, err := s.Store.LoadRouteState(ctx, routeID)
 	if err != nil {
 		return FullResult{}, ports.WrapStore(err)
+	}
+	// cli-spec section 9: a route that is not enabled fails closed with
+	// transition_invalid unconditionally — in every route state, not
+	// only when work happens to be due on an idle route (E8-T4, M-12).
+	if snap.ActivationState != "enabled" {
+		return FullResult{}, fmt.Errorf("%w: route %s activation state is %q, not enabled; reconcile refuses until the route is enabled",
+			ports.ErrStateNotEligible, routeID, snap.ActivationState)
 	}
 	current, skipped, err := s.enumerate()
 	if err != nil {

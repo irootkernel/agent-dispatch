@@ -74,6 +74,15 @@ func TestRouteStaleOperatorExit(t *testing.T) {
 	withStdin(t, `[{"name":"Inbox/new.md","exists":true,"new":true,"size":5,"type":"f"}]`, func() {
 		Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman"}, &out, &errb)
 	})
+	// The precondition (E8-T4, M-23): with the shipped 2h bound a fresh
+	// dispatch is live work and the stale exit refuses; the operator
+	// narrows the bound before the exit applies.
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"route", "stale", "--route", "wiki", "--config", configPath, "--reason", "fresh dispatch"}, &out, &errb); code != 14 {
+		t.Fatalf("a fresh dispatch inside active_stale_after must refuse at 14, got %d: %s", code, errb.String())
+	}
+	e5t4Rewrite(t, configPath, "active_stale_after: 2h", "active_stale_after: 1ms")
 	out.Reset()
 	errb.Reset()
 	if code := Run([]string{"route", "stale", "--route", "wiki", "--config", configPath, "--reason", "active task never completed"}, &out, &errb); code != 0 {

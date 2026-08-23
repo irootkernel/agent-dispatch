@@ -307,7 +307,16 @@ func stableDigest(s string) string {
 }
 
 // credentialPattern matches credential-shaped values regardless of their
-// key: bearer tokens and query-string tokens are redacted even when the
-// emitter did not label them (SEC-007, E7-T9/M-26). The patterns are
-// anchored to the credential fragment, never the whole containing path.
-var credentialPattern = regexp.MustCompile(`(?i)(bearer\s+)[A-Za-z0-9._~+/-]{8,}|((?:^|[?&])(?:token|access_token|api_key|secret)=)[^&\s]*`)
+// key: bearer/basic/token authorization headers, common credential
+// query parameters (hash and fragment forms included), and bare JWT
+// blobs are redacted even when the emitter did not label them (SEC-007,
+// E7-T9/M-26, widened E8-T4/M-20). The patterns are anchored to the
+// credential fragment, never the whole containing path.
+var credentialPattern = regexp.MustCompile(`(?i)` +
+	// Header forms: Authorization: Bearer x / Basic x / Token x.
+	`((?:bearer|basic|token)\s+)[A-Za-z0-9._~+/-]{8,}` +
+	// Query and fragment parameter forms, including client_secret,
+	// apikey, key, and password.
+	`|((?:^|[?&#])(?:token|access_token|api_key|apikey|client_secret|secret|key|password)=)[^&\s]*` +
+	// Bare JWTs: three dot-separated base64url segments.
+	`|(eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{8,})`)

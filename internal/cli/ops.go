@@ -190,6 +190,9 @@ func runMaintenancePrune(command string, args []string, stdout, stderr io.Writer
 	}
 	log := opsLogger(stderr, cfg)
 	corr := observability.Correlation{TraceID: globalTraceID}
+	if flags.val("--dry-run") == "true" && flags.val("--yes") == "true" {
+		return usageError(stderr, command, "prune cannot combine --dry-run with --yes; choose one (E8-T4, L-9)")
+	}
 	if flags.val("--yes") != "true" {
 		return writeEnvelope(stdout, command, map[string]any{
 			"dry_run": true,

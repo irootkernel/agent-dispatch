@@ -104,7 +104,11 @@ type Input struct {
 	Targets        []TargetFact
 	Resources      []ResourceFact
 	Watchman       WatchmanFact
-	Now            string
+	// WatchmanExamined suppresses every Watchman finding when the probe
+	// never ran (a configuration that failed to load examines nothing —
+	// an unavailable posture must not be invented, E8-T4/H-4).
+	WatchmanExamined bool
+	Now              string
 }
 
 // largeDatabaseBytes is the size above which doctor warns about
@@ -114,6 +118,9 @@ const largeDatabaseBytes = 512 * 1024 * 1024
 // Examine collects the findings for one input. Findings are sorted by
 // severity (error, warning, info) then code for stable output.
 func Examine(in Input) []Finding {
+	// An unexamined Watchman surface never produces findings: the
+	// unavailable posture is a probe result, not a default (E8-T4, H-4).
+
 	var out []Finding
 	for _, err := range in.SemanticErrors {
 		out = append(out, Finding{
@@ -213,9 +220,11 @@ func Examine(in Input) []Finding {
 			Remediation: "review retention policy and run agent-dispatch maintenance prune",
 		})
 	}
-	if !in.Watchman.Available {
+	if in.WatchmanExamined && !in.Watchman.Available {
 		out = append(out, Finding{
-			Code: "watchman_unavailable", Severity: SeverityWarning,
+			// AC-502 names Watchman unavailability as an actionable
+			// error condition: triggers cannot fire at all (E8-T4, H-4).
+			Code: "watchman_unavailable", Severity: SeverityError,
 			Summary:     "Watchman is not reachable",
 			Details:     in.Watchman.UnusableBecause,
 			Remediation: "install or start Watchman; sensing continues but triggers will not fire",
@@ -231,7 +240,10 @@ func Examine(in Input) []Finding {
 	for _, t := range in.Targets {
 		if t.GateError != "" {
 			out = append(out, Finding{
-				Code: "target_gate_failed", Severity: SeverityWarning,
+				// A failing construction gate is an AC-502 error
+				// condition: the route can never submit against this
+				// target (E8-T4, H-4).
+				Code: "target_gate_failed", Severity: SeverityError,
 				Summary:     fmt.Sprintf("target %s fails its construction gate", t.TargetID),
 				Details:     t.GateError,
 				Remediation: "correct the target configuration or its capability requirements (HER-005)",

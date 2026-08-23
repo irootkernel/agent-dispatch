@@ -1,5 +1,14 @@
 # SOT Changelog
 
+## 1.0.31 - 2026-08-23
+
+E8-T4: unresolved lineage is preserved and doctor is trustworthy:
+
+- H-3/AC-503: prune drops accepted from the resolved set and guards every lineage delete with the active-slot predicate (mirrored in the dry-run plan) - an active accepted dispatch keeps its attempts, receipts, and work receipts;
+- H-4/AC-502: watchman_unavailable and target_gate_failed are error severities, the offline capability gate runs on readable reports, PATH-named executables resolve, resource roots get a real open/readdir access probe, and a broken configuration never fabricates an unexamined Watchman finding;
+- M-19: state.db is created 0600; M-20: the credential redactor covers basic/token headers, client_secret/apikey/password/key query and fragment forms, and bare JWTs; M-12: reconcile on a non-enabled route exits 14 in every state; M-23: route stale enforces active_stale_after; M-22: the startup reconcile reason with runbook procedure; L-9: prune refuses --dry-run with --yes;
+- five round-2 low/info findings deferred to epic hardening; the round-2 high (a flag inversion introduced by the round-1 remediation) was fixed in-tree with regression tests - the deviation is recorded for the epic validation audit.
+
 ## 1.0.30 - 2026-08-23
 
 E8-T3: the route revision is behavior-sensitive and the production gate is enforced:

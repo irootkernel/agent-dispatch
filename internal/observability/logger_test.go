@@ -136,3 +136,29 @@ func TestParseLevelAndPolicy(t *testing.T) {
 		t.Fatalf("unknown policy must fail")
 	}
 }
+
+// TestE8T4CredentialRedactionWidened pins M-20: the header, query, and
+// bare-JWT credential forms stay masked even when no emitter labeled
+// them.
+func TestE8T4CredentialRedactionWidened(t *testing.T) {
+	adversarial := []string{
+		"Authorization: Bearer abc123def456ghi789",
+		"Authorization: Basic dXNlcjpwYXNzd29yZA==",
+		"Token abc123def456ghi789",
+		"https://x.test/cb?client_secret=sekritvalue",
+		"https://x.test/cb#token=fragtok",
+		"https://x.test/cb?apikey=keyvalue123",
+		"https://x.test/cb?password=hunter2222",
+		"https://x.test/cb?key=KeyValue999",
+		"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N65IhY0c8f7Sg1c8V6q8xU",
+	}
+	for _, s := range adversarial {
+		got := RenderPath(s, PathsRedacted)
+		if strings.Contains(got, "sekritvalue") || strings.Contains(got, "fragtok") ||
+			strings.Contains(got, "keyvalue123") || strings.Contains(got, "hunter2222") ||
+			strings.Contains(got, "KeyValue999") || strings.Contains(got, "dXNlcjpwYXNzd29yZA") ||
+			strings.Contains(got, "abc123def456ghi789") || strings.Contains(got, "dozjgNryP4J3") {
+			t.Errorf("credential leaked through RenderPath: %q -> %q", s, got)
+		}
+	}
+}

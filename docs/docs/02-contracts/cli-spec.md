@@ -246,7 +246,7 @@ Marks the hold resolved without task creation. Requires `--reason` and `--yes` a
 ```text
 agent-dispatch reconcile \
   --route <id> \
-  --reason initial|scheduled|overflow|fresh-instance|lost-cursor|manual|delivery|stale-active \
+  --reason initial|scheduled|overflow|fresh-instance|lost-cursor|manual|delivery|stale-active|startup \
   [--submit]
 ```
 

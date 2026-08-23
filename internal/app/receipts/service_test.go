@@ -126,6 +126,9 @@ func storeWithAcceptedDispatch(t *testing.T) Store {
 	if err := s.InitializeRouteState(nil, "wiki"); err != nil {
 		t.Fatal(err)
 	}
+	if err := s.SetRouteActivation(ctx, "wiki", "enabled", "route-rev-1", "2026-08-20T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
 	now := "2026-08-20T00:00:00Z"
 	if err := s.CommitLineage(ctx, ports.Lineage{
 		Observation: ports.ObservationInput{

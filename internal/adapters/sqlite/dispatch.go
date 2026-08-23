@@ -186,7 +186,8 @@ func (s *Store) AcquireAttempt(ctx context.Context, req ports.AcquireAttempt) (s
 	// E7-T2/B-2).
 	const slotFree = `AND NOT EXISTS (SELECT 1 FROM route_runtime_state r
 		WHERE r.route_id = dispatch_intents.route_id
-		  AND r.active_dispatch_id IS NOT NULL AND r.active_dispatch_id != ?)`
+		  AND ((r.active_dispatch_id IS NOT NULL AND r.active_dispatch_id != ?)
+		    OR r.activation_state != 'enabled'))`
 	var fromState string
 	err = tx.QueryRow(`SELECT state FROM dispatch_intents
 		WHERE dispatch_id = ?
@@ -250,9 +251,14 @@ func (s *Store) explainAcquireFailure(ctx context.Context, q queryer, dispatchID
 		return fmt.Errorf("%w: dispatch %s leased to another owner until %s", ports.ErrLeaseHeld, dispatchID, leaseExpires.String)
 	}
 	var holder sql.NullString
-	if err := q.QueryRow(`SELECT active_dispatch_id FROM route_runtime_state WHERE route_id = ?`, routeID).Scan(&holder); err == nil &&
-		holder.Valid && holder.String != "" && holder.String != dispatchID {
-		return fmt.Errorf("%w: route %s holds active dispatch %s, not %s", ports.ErrRouteSlotHeld, routeID, holder.String, dispatchID)
+	var activation string
+	if err := q.QueryRow(`SELECT COALESCE(active_dispatch_id, ''), activation_state FROM route_runtime_state WHERE route_id = ?`, routeID).Scan(&holder, &activation); err == nil {
+		if activation != "enabled" {
+			return fmt.Errorf("%w: route %s activation state is %q, not enabled", ports.ErrStateNotEligible, routeID, activation)
+		}
+		if holder.Valid && holder.String != "" && holder.String != dispatchID {
+			return fmt.Errorf("%w: route %s holds active dispatch %s, not %s", ports.ErrRouteSlotHeld, routeID, holder.String, dispatchID)
+		}
 	}
 	return fmt.Errorf("attempt not acquirable for %s in state %s at %s: %w", dispatchID, current, now, ErrOptimisticConcurrency)
 }
@@ -435,8 +441,24 @@ func (s *Store) CloseDeadLetter(ctx context.Context, dispatchID, actor, reason, 
 		fmt.Sprintf(`{"reason":%q,"actor":%q,"operator_reason":%q}`, state.ReasonReprocessOrDiscard, actor, reason)); err != nil {
 		return err
 	}
+	// The slot releases only when this dead letter actually held it
+	// (an already-resolved route keeps its outcome; epic audit round 1).
 	if _, err := tx.Exec(`UPDATE route_runtime_state SET active_dispatch_id = NULL, active_generation = 0 WHERE route_id = ? AND active_dispatch_id = ?`, routeID, dispatchID); err != nil {
 		return err
+	}
+	snap, rsErr := s.routeSnapshotInTx(tx, routeID)
+	if rsErr != nil {
+		return rsErr
+	}
+	if snap.ActiveDispatchID == "" && (snap.State == state.RouteActiveClean || snap.State == state.RouteActiveDirty) {
+		// The closed letter was the route's only active work: the route
+		// moves to IDLE through the documented clean-completion edge
+		// with the discard as its evidence.
+		if err := s.applyRouteTransition(tx, snap, state.RouteIdle, state.ReasonWorkCompletedClean,
+			state.RouteEvidence{Actor: actor, ReceiptRef: "discard:" + dispatchID}, now,
+			fmt.Sprintf(`{"reason":%q,"actor":%q,"dispatch_id":%q,"operator_discard":true}`, state.ReasonWorkCompletedClean, actor, dispatchID)); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

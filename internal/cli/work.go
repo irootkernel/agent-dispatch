@@ -54,7 +54,7 @@ func workReceiptErr(stderr io.Writer, command string, err error) int {
 		writeError(stderr, command, "work_receipt_invalid", "input_rejected", invalid.Error())
 		return 4
 	case errors.Is(err, ports.ErrIntentNotFound):
-		writeError(stderr, command, "dispatch_not_found", "usage", err.Error())
+		writeError(stderr, command, "dispatch_not_found", "input_rejected", err.Error())
 		return 4
 	case errors.Is(err, ports.ErrRunNotBegun), errors.Is(err, ports.ErrRunAlreadyRecorded):
 		writeError(stderr, command, "work_receipt_invalid", "input_rejected", err.Error())
@@ -185,7 +185,7 @@ func loadWorkIntent(command, configPath, dispatchID string, stderr io.Writer) (p
 	if err != nil {
 		closer.Close()
 		if errors.Is(err, ports.ErrIntentNotFound) {
-			writeError(stderr, command, "dispatch_not_found", "usage", err.Error())
+			writeError(stderr, command, "dispatch_not_found", "input_rejected", err.Error())
 			return ports.IntentSnapshot{}, nil, 4
 		}
 		writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())

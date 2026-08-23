@@ -40,6 +40,11 @@ func openTestStore(t *testing.T) *Store {
 	if err := s.InitializeRouteState(nil, "wiki-maintenance"); err != nil {
 		t.Fatal(err)
 	}
+	// The lease transaction requires an enabled route (the epic audit's
+	// transactional activation gate, E7 round 1).
+	if err := s.SetRouteActivation(context.Background(), "wiki-maintenance", "enabled", "route-rev-1", now()); err != nil {
+		t.Fatal(err)
+	}
 	return s
 }
 
@@ -249,7 +254,9 @@ func TestRouteRuntimeStateOptimisticConcurrency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rec.Version != 0 || rec.RouteState != "IDLE" || rec.ActivationState != "disabled" {
+	// The shared fixture enables the route (version 1); the optimistic
+	// check is relative to that baseline.
+	if rec.Version != 1 || rec.RouteState != "IDLE" || rec.ActivationState != "enabled" {
 		t.Fatalf("unexpected initial state: %+v", rec)
 	}
 	stale := rec.Version
@@ -264,7 +271,7 @@ func TestRouteRuntimeStateOptimisticConcurrency(t *testing.T) {
 		t.Fatal("stale version must fail optimistically")
 	}
 	rec, err = s.LoadRouteRuntimeState("wiki-maintenance")
-	if err != nil || rec.Version != 1 || rec.RouteState != "ACTIVE_CLEAN" {
+	if err != nil || rec.Version != 2 || rec.RouteState != "ACTIVE_CLEAN" {
 		t.Fatalf("unexpected updated state: %+v %v", rec, err)
 	}
 }
@@ -864,6 +871,9 @@ func seedRouteForAttempts(t *testing.T, s *Store) {
 		t.Fatal(err)
 	}
 	if err := s.InitializeRouteState(nil, "wiki"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetRouteActivation(context.Background(), "wiki", "enabled", "rev-1", "2026-08-21T00:00:00Z"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.CommitLineage(context.Background(), attemptLineage("dispatch-samesecond", "decision-ss", "obs-ss", "batch-ss", "2026-08-21T00:00:00Z")); err != nil {

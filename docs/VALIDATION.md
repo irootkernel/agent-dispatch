@@ -1,7 +1,7 @@
 # SOT Package Validation
 
 > **Validated:** 2026-08-23 (post E7 registration; the findings of the 2026-08-22 MVP compliance review, `reports/mvp-compliance-review-2026-08-22.md`, are open remediation items under D-017 and epic E7)  
-> **Package target:** Agent Dispatch SOT 1.0.14 / implementation v0.1.0 (compliance remediation in progress)
+> **Package target:** Agent Dispatch SOT 1.0.25 / implementation v0.1.1 (the E7 compliance remediation release)
 
 ## Completed Checks
 

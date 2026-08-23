@@ -229,6 +229,13 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 		warnings := []string{fmt.Sprintf("--submit skipped: route %s activation state is %q, not enabled", routeID, rs.ActivationState)}
 		return writeEnvelopeWithWarnings(stdout, command, result, warnings)
 	}
+	// The YAML-key half of the two-key gate (E7-T6/M-2, epic audit
+	// round 1): the scheduled path refuses automatic submission while
+	// the configuration key is off, exactly like drain and dispatch.
+	if route, ok := artifacts.cfg.Routes[routeID]; ok && !route.Enabled {
+		warnings := []string{fmt.Sprintf("--submit skipped: route %q is disabled in configuration (routes.%s.enabled: false); nothing was submitted", routeID, routeID)}
+		return writeEnvelopeWithWarnings(stdout, command, result, warnings)
+	}
 	envelope := map[string]any{"result": result, "submitted": false}
 	if result.ReconcileDispatch != "" {
 		report, err := rt.SubmitOnce(requestCtx(), result.ReconcileDispatch, "agent-dispatch-reconcile")

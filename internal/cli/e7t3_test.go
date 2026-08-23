@@ -51,14 +51,30 @@ func TestStaleIntentRebuiltUnderActiveRevision(t *testing.T) {
 	// stored plan's revision is revoked while the intent waits.
 	e5t4Rewrite(t, configPath, "automatic_threshold: 25", "automatic_threshold: 40")
 
+	// The behavior-sensitive change pauses the route (E8-T3, H-2): the
+	// drain rebuilds the stale intent under the active revision but
+	// submits nothing until the operator re-acknowledges the new
+	// revision.
 	out.Reset()
 	errb.Reset()
 	if code := Run([]string{"dispatches", "drain", "--route", "wiki", "--config", configPath}, &out, &errb); code != 0 {
 		t.Fatalf("drain: %s", errb.String())
 	}
 	body := out.String()
+	if strings.Contains(body, `"accepted"`) || !strings.Contains(out.String(), "skipped") {
+		t.Fatalf("the rebuilt replacement must pause for re-acknowledgement, not submit: %s", body)
+	}
+	if code := enableRouteAck(t, configPath, "wiki"); code != 0 {
+		t.Fatalf("re-acknowledgement of the new revision: %d", code)
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"dispatches", "drain", "--route", "wiki", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("drain after re-ack: %s", errb.String())
+	}
+	body = out.String()
 	if !strings.Contains(body, `"accepted"`) {
-		t.Fatalf("the rebuilt replacement must be submitted: %s", body)
+		t.Fatalf("the rebuilt replacement must submit after re-acknowledgement: %s", body)
 	}
 	store := e5t1Store(t, configPath)
 	defer store.Close()
@@ -107,8 +123,16 @@ func TestStaleTargetRepointNeverSubmitsFalseLineage(t *testing.T) {
 
 	out.Reset()
 	errb.Reset()
+	// The behavior-sensitive re-point pauses the route (E8-T3): rebuild
+	// happens, submission waits for the re-acknowledgement.
 	if code := Run([]string{"dispatches", "drain", "--route", "wiki", "--config", configPath}, &out, &errb); code != 0 {
 		t.Fatalf("drain: %s", errb.String())
+	}
+	if code := enableRouteAck(t, configPath, "wiki"); code != 0 {
+		t.Fatalf("re-acknowledgement of the re-pointed revision: %d", code)
+	}
+	if code := Run([]string{"dispatches", "drain", "--route", "wiki", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("drain after re-ack: %s", errb.String())
 	}
 	store := e5t1Store(t, configPath)
 	defer store.Close()

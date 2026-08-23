@@ -128,9 +128,9 @@ Examples that become `unknown`:
 
 Reconciliation order:
 
-1. lookup by idempotency key;
+1. lookup by idempotency key — unsupported against the public CLI (the report records the port-level capability false, E8-T3), so this step never runs for hermes-kanban in v0.1;
 2. lookup by known external reference;
-3. inspect a public task listing only if the query is deterministic and bounded;
+3. inspect a public task listing only if the query is deterministic and bounded (not performed by the shipped adapter: unknown intents resolve through the reference lookup and the operator's retry/rerun exits);
 4. if proven absent, schedule retry;
 5. otherwise dead-letter or require operator resolution.
 

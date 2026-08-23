@@ -140,6 +140,14 @@ func (r *Runtime) submitOnce(ctx context.Context, dispatchID, owner string, rebu
 		if !slotAdmissible(rs, dispatchID) {
 			return report, fmt.Errorf("%w: route %s is %s with active dispatch %q, not submittable for %s", ports.ErrStateNotEligible, snap.RouteID, rs.State, rs.ActiveDispatchID, dispatchID)
 		}
+		// The acknowledged-revision gate (E8-T3, H-2): a behavior-sensitive
+		// configuration change since the operator's enable acknowledgement
+		// pauses the route — nothing submits under a revoked plan until
+		// `route enable` re-acknowledges the computed revision.
+		if rs.ActivationState == "enabled" && rs.AcknowledgedRevision != snap.RouteRevision {
+			return report, fmt.Errorf("%w: route %s acknowledged revision %s but dispatch %s was planned under %s; re-acknowledge with route enable",
+				ports.ErrStaleRouteRevision, snap.RouteID, rs.AcknowledgedRevision, dispatchID, snap.RouteRevision)
+		}
 	}
 	now := r.Now()
 	report.DispatchID = dispatchID

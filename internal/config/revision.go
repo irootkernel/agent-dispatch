@@ -24,7 +24,9 @@ func CaseMode() string {
 // covers the source binding, resource ID, normalized patterns, batch
 // limits, policy actions, target ID, profile, skills, mutex, latest-state
 // flag, submission retry, execution hints, failure budget, the
-// active-stale bound, and the referenced target's capability requirements; it excludes comments,
+// active-stale bound, the referenced target's capability requirements,
+// the referenced resource's root/file scope/git mode, the global limits
+// block, and the target's type/board/endpoint (E8-T3); it excludes comments,
 // display order, the state directory, log level, and secret values. Map
 // iteration order is neutralized by sorting, so the same behavior yields
 // the same revision on every run and platform.
@@ -34,6 +36,11 @@ func RouteRevision(cfg *Config, routeID string) (string, bool) {
 		return "", false
 	}
 	target := cfg.Targets[route.Dispatch.Target]
+	resource := cfg.Resources[route.Source.Resource]
+	gitMode := ""
+	if resource.Git != nil {
+		gitMode = resource.Git.Mode
+	}
 	projection := map[string]any{
 		"source": map[string]any{
 			"type":         route.Source.Type,
@@ -69,6 +76,19 @@ func RouteRevision(cfg *Config, routeID string) (string, bool) {
 			"active_stale_after": route.Dispatch.ActiveStaleAfter,
 		},
 		"required_capabilities": sortedCopy(target.RequiredCapabilities),
+		// The referenced resource's shape and the target's binding are
+		// behavior-affecting (E8-T3, H-2/POL-007): repointing the vault
+		// root, switching the file scope or git mode, changing the global
+		// limits, or moving the board/endpoint must change the revision —
+		// and with it the idempotency key — so distinct vaults can never
+		// collide and a behavior change pauses the acknowledged route.
+		"resource": map[string]any{
+			"root":       resource.Root,
+			"file_scope": resource.FileScope,
+			"git_mode":   gitMode,
+		},
+		"limits":       cfg.Limits,
+		"target_shape": map[string]any{"type": target.Type, "board": target.Board, "endpoint": target.Endpoint},
 	}
 	// Batching and the retry structs marshal through fixed field order in
 	// their struct tags, which encoding/json keeps stable.

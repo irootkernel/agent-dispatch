@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"sort"
 	"time"
 
@@ -129,6 +130,18 @@ func runConfigValidate(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
+	// The offline section-12 target checks run in every validation, not
+	// only under --probe-targets (E8-T3): the hermes-kanban report file
+	// (existence, parse, and the required-capability gate) and the static
+	// webhook declaration (transport/durable split, header collision)
+	// need no live target. Only the freshness check against the
+	// installed version stays probe-gated, because it needs the
+	// executable.
+	offlineWarnings, code := validateTargetsOffline(command, cfg, stderr)
+	if code != 0 {
+		return code
+	}
+	warnings = append(warnings, offlineWarnings...)
 	if probeTargets {
 		targets, code := probeHermesTargets(command, cfg, stdout, stderr)
 		if code != 0 {
@@ -147,6 +160,52 @@ func runConfigValidate(args []string, stdout, stderr io.Writer) int {
 		"watchman_version": version,
 		"probe_targets":    probeSummary,
 	}, warnings)
+}
+
+// validateTargetsOffline runs the probe-free section 12 checks for every
+// configured target (E8-T3): the hermes-kanban capability report file and
+// the static webhook declaration. An unreadable report or a required
+// capability the report does not carry is a configuration defect at exit
+// 3 — the old probe-only gating let `config validate` pass
+// configurations the targets could never honor.
+func validateTargetsOffline(command string, cfg *config.Config, stderr io.Writer) ([]string, int) {
+	var warnings []string
+	for _, id := range sortedTargetIDs(cfg) {
+		target := cfg.Targets[id]
+		switch target.Type {
+		case "hermes-kanban":
+			// A not-yet-placed report is a warning (the configuration
+			// document is still valid and the report arrives at
+			// deployment, installation section 3); a present-but-invalid
+			// report, or a required capability it does not carry, fails
+			// the default validation (E8-T3).
+			if _, statErr := os.Stat(target.CapabilityReport); statErr != nil {
+				warnings = append(warnings, fmt.Sprintf("target %s: capability report %s is not placed yet; validation defers the report checks to deployment (installation section 3)", id, target.CapabilityReport))
+				continue
+			}
+			report, err := hermeskanban.LoadReport(target.CapabilityReport)
+			if err != nil {
+				return warnings, planErr(stderr, command, "config_invalid", "configuration", fmt.Sprintf("target %s: %v", id, err), 3)
+			}
+			if err := hermeskanban.ValidateRequired(id, report.PortCapabilities(), target.RequiredCapabilities); err != nil {
+				return warnings, planErr(stderr, command, "config_capability_missing", "configuration", err.Error(), 3)
+			}
+		case "hermes-webhook":
+			opts, err := webhookSinkOptions(id, target)
+			if err != nil {
+				return warnings, planErr(stderr, command, "config_invalid", "configuration", fmt.Sprintf("target %s: %v", id, err), 3)
+			}
+			if _, err := hermeswebhook.NewSink(opts); err != nil {
+				var missing *hermeswebhook.CapabilityError
+				detail := err.Error()
+				if errors.As(err, &missing) {
+					detail = missing.Error() + "; " + missing.Remediation()
+				}
+				return warnings, planErr(stderr, command, "config_capability_missing", "configuration", fmt.Sprintf("target %s: %v", id, detail), 3)
+			}
+		}
+	}
+	return warnings, 0
 }
 
 // probeResult carries the per-target probe outcome of one

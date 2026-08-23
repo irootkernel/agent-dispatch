@@ -1,5 +1,14 @@
 # SOT Changelog
 
+## 1.0.30 - 2026-08-23
+
+E8-T3: the route revision is behavior-sensitive and the production gate is enforced:
+
+- H-2/POL-007: the revision projection covers the resource root, file scope, git mode, the global limits, and the target type/board/endpoint (configuration-spec section 13 amended); the acknowledged revision is re-checked on every submit path, so a behavior-sensitive change pauses the route until re-acknowledged (exit 14);
+- H-7: route enable runs the live version-gated probe — unreadable or stale reports and unsupported versions refuse at exit 3, durable_acceptance and submit_idempotency_key are unconditional, and the capability report records lookup_by_idempotency_key false (the honest read-only semantics; the D-018 record now matches the file);
+- M-6: resource_mutex gates --mutex-key in the renderer; M-18: config validate runs the probe-free section 12 target checks by default (a missing report warns, an invalid one fails);
+- five round-2 documentation findings deferred to the E8-T6 pass via epic hardening.
+
 ## 1.0.29 - 2026-08-23
 
 E8-T2: recovery is wired into every submit path and the operator exits are repaired:

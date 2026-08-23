@@ -445,3 +445,75 @@ func TestWebhookAuthShapeSemanticGates(t *testing.T) {
 		}
 	}
 }
+
+// TestE8T3RevisionCoversResourceAndTargetShape pins H-2: the computed
+// revision changes when the resource root, file scope, git mode, the
+// global limits, or the target's board/endpoint/type changes — so two
+// distinct vaults with identical relative paths can never share an
+// idempotency key, and a behavior-sensitive change pauses the
+// acknowledged route.
+func TestE8T3RevisionCoversResourceAndTargetShape(t *testing.T) {
+	base, err := Load(filepath.Join("..", "..", "docs", "examples", "config.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	revisionOf := func(cfg *Config, route string) string {
+		rev, ok := RouteRevision(cfg, route)
+		if !ok {
+			t.Fatalf("revision of %s could not be computed", route)
+		}
+		return rev
+	}
+	baseRev := revisionOf(base, "wiki-maintenance")
+	mutations := map[string]func(*Config){
+		"resource root": func(c *Config) {
+			r := c.Resources["vault-main"]
+			r.Root = "/srv/other-vault"
+			c.Resources["vault-main"] = r
+		},
+		"file scope": func(c *Config) {
+			r := c.Resources["vault-main"]
+			r.FileScope = "all"
+			c.Resources["vault-main"] = r
+		},
+		"git mode": func(c *Config) {
+			r := c.Resources["vault-main"]
+			r.Git = &Git{Mode: "enabled"}
+			c.Resources["vault-main"] = r
+		},
+		"limits": func(c *Config) {
+			v := int64(999)
+			c.Limits.MaxStdinBytes = &v
+		},
+		"board": func(c *Config) {
+			tg := c.Targets["hermes-kanban-main"]
+			tg.Board = "other-board"
+			c.Targets["hermes-kanban-main"] = tg
+		},
+		"endpoint": func(c *Config) {
+			tg := c.Targets["hermes-webhook-main"]
+			tg.Endpoint = "https://other.example/hook"
+			c.Targets["hermes-webhook-main"] = tg
+			rt := c.Routes["wiki-maintenance"]
+			rt.Dispatch.Target = "hermes-webhook-main"
+			c.Routes["wiki-maintenance"] = rt
+		},
+	}
+	for name, mutate := range mutations {
+		cfg := deepCopyConfig(base)
+		mutate(cfg)
+		if rev := revisionOf(cfg, "wiki-maintenance"); rev == baseRev {
+			t.Errorf("%s change must change the computed revision", name)
+		}
+	}
+}
+
+// deepCopyConfig reloads the example configuration as an independent
+// copy for one mutation.
+func deepCopyConfig(base *Config) *Config {
+	cfg, err := Load(filepath.Join("..", "..", "docs", "examples", "config.yaml"))
+	if err != nil {
+		panic(err)
+	}
+	return cfg
+}

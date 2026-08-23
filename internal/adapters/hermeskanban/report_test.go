@@ -30,7 +30,7 @@ func TestLoadFrozenReport(t *testing.T) {
 	want := ports.Capabilities{
 		DurableAcceptance:      true,
 		SubmitIdempotencyKey:   true,
-		LookupByIdempotencyKey: true,
+		LookupByIdempotencyKey: false,
 		LookupByExternalRef:    true,
 		ResourceMutex:          true,
 		ExecutionStatus:        true,
@@ -95,15 +95,22 @@ func TestValidateRequired(t *testing.T) {
 	all := ports.Capabilities{
 		DurableAcceptance:      true,
 		SubmitIdempotencyKey:   true,
-		LookupByIdempotencyKey: true,
+		LookupByIdempotencyKey: false,
 		LookupByExternalRef:    true,
 		ResourceMutex:          true,
 		ExecutionStatus:        true,
 		Cancellation:           true,
 		ResultReceipt:          true,
 	}
-	if err := ValidateRequired("t", all, ports.CapabilityNames); err != nil {
-		t.Fatalf("all capabilities present must validate: %v", err)
+	// The honest capability set excludes the port-level key lookup (the
+	// public CLI has no read-only query; E8-T3), so requiring every name
+	// is the negative case below and the honest set validates.
+	requireHonest := []string{"durable_acceptance", "submit_idempotency_key", "lookup_by_external_ref", "resource_mutex", "execution_status", "cancellation", "result_receipt"}
+	if err := ValidateRequired("t", all, requireHonest); err != nil {
+		t.Fatalf("all honest capabilities present must validate: %v", err)
+	}
+	if err := ValidateRequired("t", all, ports.CapabilityNames); err == nil {
+		t.Fatal("requiring the unsupported key lookup must fail closed (E8-T3)")
 	}
 	if err := ValidateRequired("t", all, nil); err != nil {
 		t.Fatalf("no requirements must validate: %v", err)

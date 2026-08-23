@@ -644,6 +644,11 @@ func intentErr(stderr io.Writer, command string, err error) int {
 	case errors.Is(err, ports.ErrStateNotEligible):
 		writeError(stderr, command, "transition_invalid", "conflict", err.Error())
 		return 14
+	case errors.Is(err, ports.ErrStaleRouteRevision):
+		// The acknowledged-revision pause is the documented route-paused
+		// conflict, never an internal defect (E8-T3 round-1 F001).
+		writeError(stderr, command, "transition_invalid", "conflict", err.Error())
+		return 14
 	case isStateTransitionError(err):
 		// A route/intent guard rejection is a state conflict, never an
 		// internal defect (E8-T2, H-9 — the work commands share the arm).

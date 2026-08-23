@@ -26,6 +26,9 @@ const CreatedByAttribution = "agent-dispatch"
 // rejects a manifest that exceeds it instead of truncating (SEC-009).
 type RenderOptions struct {
 	MaxManifestBytes int64
+	// ResourceMutexSupported suppresses --mutex-key when the target's
+	// capability report does not honor it (E8-T3, M-6).
+	ResourceMutexSupported bool
 }
 
 // ManifestTooLargeError is the explicit policy rejection for an
@@ -186,7 +189,9 @@ func Render(req ports.TaskRequest, opts RenderOptions) (RenderedTask, error) {
 	if req.Assignment != nil {
 		create.Assignee = req.Assignment.Profile
 		create.Skills = append([]string(nil), req.Assignment.Skills...)
-		create.MutexKey = req.Assignment.MutexKey
+		if req.Assignment.MutexKey != "" && opts.ResourceMutexSupported {
+			create.MutexKey = req.Assignment.MutexKey
+		}
 	}
 	create.Workspace = req.Resource.Workspace
 	if req.ExecutionHints != nil {

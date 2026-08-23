@@ -133,6 +133,11 @@ type RouteSnapshot struct {
 	ActiveDispatchID string
 	DirtyGeneration  int
 	PendingReconcile bool
+	// AcknowledgedRevision is the route revision the operator explicitly
+	// acknowledged at enable; the submit paths compare it against the
+	// intent's planned revision so a behavior-sensitive change pauses the
+	// route until re-acknowledged (E8-T3, H-2).
+	AcknowledgedRevision string
 	// FailureBudget is the route's remaining consecutive-failure budget.
 	FailureBudget int
 }

@@ -45,13 +45,20 @@ func NewSink(targetID, executable, reportPath string, required []string, board s
 	if maxManifestBytes <= 0 {
 		return nil, fmt.Errorf("target %s: the sink requires a positive manifest byte bound", targetID)
 	}
-	if _, err := loadValidatedCaps(targetID, reportPath, required); err != nil {
+	caps, err := loadValidatedCaps(targetID, reportPath, required)
+	if err != nil {
 		return nil, err
 	}
 	return &Sink{
-		adapter:    New(targetID, executable, reportPath, required, limits),
-		board:      board,
-		renderOpts: RenderOptions{MaxManifestBytes: maxManifestBytes},
+		adapter: New(targetID, executable, reportPath, required, limits),
+		board:   board,
+		renderOpts: RenderOptions{
+			MaxManifestBytes: maxManifestBytes,
+			// resource_mutex is consulted before --mutex-key is ever sent
+			// (E8-T3, M-6): a target that does not honor the flag never
+			// receives it.
+			ResourceMutexSupported: caps.ResourceMutex,
+		},
 		reportPath: reportPath,
 		targetID:   targetID,
 		required:   append([]string(nil), required...),

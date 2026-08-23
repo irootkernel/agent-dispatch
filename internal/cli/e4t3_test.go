@@ -51,7 +51,14 @@ func e4t3RegisterRoute(t *testing.T, configPath string) {
 			t.Fatal(err)
 		}
 	}
-	if err := store.SetRouteActivation(context.Background(), "wiki", "enabled", "route-rev-1", "2026-08-20T00:00:00Z"); err != nil {
+	// The fixture acknowledges the computed revision, exactly as the
+	// product enable gate does (E8-T3: the acknowledged-revision submit
+	// gate fires on placeholder acknowledgements).
+	rev, ok := config.RouteRevision(cfg, "wiki")
+	if !ok {
+		t.Fatal("route wiki revision could not be computed")
+	}
+	if err := store.SetRouteActivation(context.Background(), "wiki", "enabled", rev, "2026-08-20T00:00:00Z"); err != nil {
 		t.Fatal(err)
 	}
 }

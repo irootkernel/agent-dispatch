@@ -223,6 +223,17 @@ func TestG5AC504CleanHostInstallDispatchScheduleUninstall(t *testing.T) {
 	// part of the reviewed enable, then acknowledges the computed
 	// revision.
 	e5t4Rewrite(t, cfgPath, "enabled: false", "enabled: true")
+	// The production enable gate probes the live target against its
+	// capability report (E8-T3): the clean-host flow places the report
+	// before enabling — the corrected installation order.
+	if err := os.MkdirAll(filepath.Join(home, ".config", "agent-dispatch"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if reportRaw, rerr := os.ReadFile(filepath.Join("..", "..", "docs", "integrations", "hermes-capability-report.json")); rerr != nil {
+		t.Fatal(rerr)
+	} else if werr := os.WriteFile(filepath.Join(home, ".config", "agent-dispatch", "hermes-capabilities.json"), reportRaw, 0o644); werr != nil {
+		t.Fatal(werr)
+	}
 	if code := Run([]string{"route", "enable", "--route", "wiki-maintenance", "--config", cfgPath, "--acknowledge-production-gate", revision, "--yes"}, &out, &errb); code != 0 {
 		t.Fatalf("AC-504 gate-acknowledged route enable failed: %s", errb.String())
 	}

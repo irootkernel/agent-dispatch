@@ -182,7 +182,17 @@ func e6t1RegisterRoute(t *testing.T, configPath, endpoint string) {
 			t.Fatal(err)
 		}
 	}
-	if err := store.SetRouteActivation(context.Background(), "wiki", "enabled", "route-rev-1", "2026-08-22T00:00:00Z"); err != nil {
+	// Acknowledge the computed revision exactly as the product gate does
+	// (E8-T3: the acknowledged-revision submit gate fires on placeholders).
+	revCfg, err := config.Load(resolveConfigPath(configPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rev, ok := config.RouteRevision(revCfg, "wiki")
+	if !ok {
+		t.Fatal("route wiki revision could not be computed")
+	}
+	if err := store.SetRouteActivation(context.Background(), "wiki", "enabled", rev, "2026-08-22T00:00:00Z"); err != nil {
 		t.Fatal(err)
 	}
 }

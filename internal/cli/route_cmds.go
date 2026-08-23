@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -197,19 +198,8 @@ func runRouteEnable(command string, args []string, stdout, stderr io.Writer) int
 		return exit
 	}
 	defer closer.Close()
-	// HER-005 (E7-T9/M-22): the enablement gate verifies the route's
-	// required capabilities against the configured capability report when
-	// the local report is readable; an unreadable report path (the
-	// shipped example resolves only in deployment context) defers to the
-	// submit path's fail-closed construction gate.
-	if route, ok := cfg.Routes[routeID]; ok {
-		if target, ok := cfg.Targets[route.Dispatch.Target]; ok && target.Type == "hermes-kanban" {
-			if report, rerr := hermeskanban.LoadReport(target.CapabilityReport); rerr == nil {
-				if cerr := hermeskanban.ValidateRequired(route.Dispatch.Target, report.PortCapabilities(), target.RequiredCapabilities); cerr != nil {
-					return planErr(stderr, command, "config_capability_missing", "configuration", cerr.Error(), 3)
-				}
-			}
-		}
+	if code := routeEnableGate(command, cfg, routeID, stderr); code != 0 {
+		return code
 	}
 	if err := store.SetRouteActivation(requestCtx(), routeID, "enabled", revision, dispatch.Timestamp(time.Now())); err != nil {
 		if errors.Is(err, sqlite.ErrOptimisticConcurrency) {
@@ -218,19 +208,8 @@ func runRouteEnable(command string, args []string, stdout, stderr io.Writer) int
 			if regErr := registerRouteState(requestCtx(), closer, cfg, routeID); regErr != nil {
 				return planErr(stderr, command, "route_not_registered", "conflict", regErr.Error(), 14)
 			}
-			// HER-005 (E7-T9/M-22): the enablement gate verifies the route's
-			// required capabilities against the configured capability report when
-			// the local report is readable; an unreadable report path (the
-			// shipped example resolves only in deployment context) defers to the
-			// submit path's fail-closed construction gate.
-			if route, ok := cfg.Routes[routeID]; ok {
-				if target, ok := cfg.Targets[route.Dispatch.Target]; ok && target.Type == "hermes-kanban" {
-					if report, rerr := hermeskanban.LoadReport(target.CapabilityReport); rerr == nil {
-						if cerr := hermeskanban.ValidateRequired(route.Dispatch.Target, report.PortCapabilities(), target.RequiredCapabilities); cerr != nil {
-							return planErr(stderr, command, "config_capability_missing", "configuration", cerr.Error(), 3)
-						}
-					}
-				}
+			if code := routeEnableGate(command, cfg, routeID, stderr); code != 0 {
+				return code
 			}
 			if err := store.SetRouteActivation(requestCtx(), routeID, "enabled", revision, dispatch.Timestamp(time.Now())); err != nil {
 				return planErr(stderr, command, "transition_invalid", "conflict", err.Error(), 14)
@@ -240,6 +219,74 @@ func runRouteEnable(command string, args []string, stdout, stderr io.Writer) int
 		}
 	}
 	return writeEnvelope(stdout, command, map[string]any{"route_id": routeID, "activation_state": "enabled", "acknowledged_revision": revision})
+}
+
+// routeEnableGate is the production enable precondition (E8-T3, H-7): a
+// hermes-kanban production route may only be enabled when the live
+// target probes available through the version-gated report (an
+// unreadable or stale report, an unsupported version, or an unusable
+// target fails closed at exit 3) and the report itself carries
+// durable_acceptance and submit_idempotency_key — the delivery
+// guarantees the durable core depends on, required unconditionally, not
+// at the operator's option.
+func routeEnableGate(command string, cfg *config.Config, routeID string, stderr io.Writer) int {
+	route, ok := cfg.Routes[routeID]
+	if !ok {
+		return 0
+	}
+	target, ok := cfg.Targets[route.Dispatch.Target]
+	if !ok || target.Type != "hermes-kanban" {
+		return 0
+	}
+	limits, err := hermesProcessLimits(cfg, target)
+	if err != nil {
+		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
+	}
+	adapter := hermeskanban.New(route.Dispatch.Target, target.Executable, target.CapabilityReport, target.RequiredCapabilities, limits)
+	summary, caps, perr := adapter.ProbeVerbose(requestCtx())
+	if perr != nil {
+		// A persistent configuration defect (unreadable or stale report,
+		// unknown capability name, missing required capability) fails the
+		// enable: the old deferral to the submit gate let routes enable
+		// against reports the target could never honor (H-7).
+		return planErr(stderr, command, "config_capability_missing", "configuration", perr.Error(), 3)
+	}
+	switch summary.State {
+	case "available":
+		if !caps.DurableAcceptance || !caps.SubmitIdempotencyKey {
+			return planErr(stderr, command, "config_capability_missing", "configuration",
+				fmt.Sprintf("target %s must report durable_acceptance and submit_idempotency_key for a production route (durable=%v, idempotent=%v)",
+					route.Dispatch.Target, caps.DurableAcceptance, caps.SubmitIdempotencyKey), 3)
+		}
+	case "version_unsupported":
+		return planErr(stderr, command, "config_invalid", "configuration",
+			fmt.Sprintf("target %s probes version_unsupported: %s; a production route cannot be enabled against it", route.Dispatch.Target, summary.Detail), 3)
+	default:
+		// Target liveness (an absent or unprobeable executable) is a
+		// warning, not an enable refusal: re-acknowledging a paused
+		// production route must not be hostage to the target being up
+		// (the submit path gates again at run time). A report that IS
+		// present still validates — parse, required capabilities, and the
+		// unconditional guarantees never depend on target liveness
+		// (E8-T3 round-1 F002); only a not-yet-placed report warns.
+		fmt.Fprintf(stderr, "warning: target %s probes %s: %s; the submit path re-gates at run time\n", route.Dispatch.Target, summary.State, summary.Detail)
+		if _, statErr := os.Stat(target.CapabilityReport); statErr == nil {
+			report, lerr := hermeskanban.LoadReport(target.CapabilityReport)
+			if lerr != nil {
+				return planErr(stderr, command, "config_invalid", "configuration", fmt.Sprintf("target %s: %v", route.Dispatch.Target, lerr), 3)
+			}
+			caps := report.PortCapabilities()
+			if verr := hermeskanban.ValidateRequired(route.Dispatch.Target, caps, target.RequiredCapabilities); verr != nil {
+				return planErr(stderr, command, "config_capability_missing", "configuration", verr.Error(), 3)
+			}
+			if !caps.DurableAcceptance || !caps.SubmitIdempotencyKey {
+				return planErr(stderr, command, "config_capability_missing", "configuration",
+					fmt.Sprintf("target %s must report durable_acceptance and submit_idempotency_key for a production route (durable=%v, idempotent=%v)",
+						route.Dispatch.Target, caps.DurableAcceptance, caps.SubmitIdempotencyKey), 3)
+			}
+		}
+	}
+	return 0
 }
 
 func runRouteDisable(command string, args []string, stdout, stderr io.Writer) int {

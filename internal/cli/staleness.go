@@ -30,6 +30,9 @@ func stalenessCheckOf(cfg *config.Config) func(context.Context, ports.IntentSnap
 		if rev != snap.RouteRevision {
 			return true, fmt.Sprintf("route revision %s (planned under %s)", rev, snap.RouteRevision), nil
 		}
+		if _, ok := cfg.Resources[route.Source.Resource]; !ok {
+			return true, fmt.Sprintf("resource %s removed from the configuration", route.Source.Resource), nil
+		}
 		target, ok := cfg.Targets[route.Dispatch.Target]
 		if !ok {
 			return true, fmt.Sprintf("target %s removed from the configuration", route.Dispatch.Target), nil

@@ -86,6 +86,16 @@ routes:
 	if err := os.WriteFile(configPath, []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	// The capability report the fixture's target references: the real
+	// frozen report (E8-T3 — route enable probes the live target against
+	// it; hosts without hermes installed degrade to the unavailable
+	// warning, hosts with it verify freshness).
+	reportSrc := filepath.Join("..", "..", "docs", "integrations", "hermes-capability-report.json")
+	if reportRaw, rerr := os.ReadFile(reportSrc); rerr == nil {
+		if werr := os.WriteFile(filepath.Join(dir, "cap.json"), reportRaw, 0o644); werr != nil {
+			t.Fatal(werr)
+		}
+	}
 	return configPath, vault
 }
 

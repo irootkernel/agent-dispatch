@@ -9,8 +9,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // stubVersionHermes emits the frozen version first line for --version.
@@ -26,14 +24,17 @@ func stubVersionHermes(t *testing.T, versionLine string) string {
 func TestProbeHappyPath(t *testing.T) {
 	bin := stubVersionHermes(t, "Hermes Agent v0.19.1 (2026.7.30)")
 	adapter := New("hermes-kanban-main", bin, machineReport, []string{
-		"durable_acceptance", "submit_idempotency_key", "lookup_by_idempotency_key",
+		"durable_acceptance", "submit_idempotency_key", "lookup_by_external_ref",
 	}, ProcessLimits{})
 	caps, err := adapter.Probe(context.Background())
 	if err != nil {
 		t.Fatalf("probe: %v", err)
 	}
-	if !caps.DurableAcceptance || !caps.SubmitIdempotencyKey || !caps.LookupByIdempotencyKey {
+	if !caps.DurableAcceptance || !caps.SubmitIdempotencyKey || !caps.LookupByExternalRef {
 		t.Fatalf("frozen capabilities must surface: %+v", caps)
+	}
+	if caps.LookupByIdempotencyKey {
+		t.Fatalf("the public CLI has no read-only key lookup; the honest report records false (E8-T3): %+v", caps)
 	}
 	if adapter.Type() != "hermes_kanban" || adapter.ID() != "hermes-kanban-main" {
 		t.Fatalf("adapter identity %q/%q", adapter.ID(), adapter.Type())
@@ -167,7 +168,10 @@ func TestProbeVerboseStates(t *testing.T) {
 	})
 	t.Run("available", func(t *testing.T) {
 		bin := stubVersionHermes(t, "Hermes Agent v0.19.1 (2026.7.30)")
-		adapter := New("t", bin, machineReport, ports.CapabilityNames, ProcessLimits{})
+		// The honest report no longer carries the port-level key lookup
+		// (E8-T3), so requiring every capability name would mismatch.
+		available := []string{"durable_acceptance", "submit_idempotency_key", "lookup_by_external_ref", "resource_mutex", "execution_status", "cancellation", "result_receipt"}
+		adapter := New("t", bin, machineReport, available, ProcessLimits{})
 		summary, caps, err := adapter.ProbeVerbose(context.Background())
 		if err != nil || summary.State != "available" || summary.Version != "0.19.1" {
 			t.Fatalf("state=%q err=%v", summary.State, err)
@@ -187,7 +191,7 @@ func TestRealHermesProbeIfAvailable(t *testing.T) {
 		t.Skip("hermes binary not available")
 	}
 	adapter := New("hermes-local", bin, machineReport, []string{
-		"durable_acceptance", "submit_idempotency_key", "lookup_by_idempotency_key",
+		"durable_acceptance", "submit_idempotency_key", "lookup_by_external_ref",
 	}, ProcessLimits{LookupTimeout: 10 * time.Second, SubmitTimeout: 20 * time.Second})
 	caps, err := adapter.Probe(context.Background())
 	if err != nil {

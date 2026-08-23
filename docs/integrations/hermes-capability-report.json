@@ -6,7 +6,7 @@
   "capabilities": {
     "durable_acceptance": true,
     "submit_idempotency_key": true,
-    "lookup_by_idempotency_key": true,
+    "lookup_by_idempotency_key": false,
     "lookup_by_external_ref": true,
     "resource_mutex": true,
     "execution_status": true,
@@ -40,11 +40,11 @@
       "fixtures": [
         "fixtures/hermes/create-response.json"
       ],
-      "observation": "create accepts --idempotency-key and echoes the persisted task."
+      "observation": "the public CLI dedups creates by idempotency key (recorded as submit_idempotency_key); it has no read-only query by key, so the port-level lookup capability is false (E8-T3)."
     },
     {
       "capability": "lookup_by_idempotency_key",
-      "grade": "runtime-verified",
+      "grade": "unsupported",
       "commands": [
         "hermes kanban --board agent-dispatch-e0t4-probe create <duplicate-title> --idempotency-key <same-key> --json"
       ],

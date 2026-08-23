@@ -26,12 +26,13 @@ func (s *Store) LoadRouteState(ctx context.Context, routeID string) (state.Route
 		return state.RouteSnapshot{}, err
 	}
 	return state.RouteSnapshot{
-		RouteID:          rec.RouteID,
-		ActivationState:  rec.ActivationState,
-		State:            parsed,
-		ActiveDispatchID: rec.ActiveDispatchID,
-		DirtyGeneration:  rec.DirtyGeneration,
-		PendingReconcile: rec.PendingReconcile,
+		RouteID:              rec.RouteID,
+		ActivationState:      rec.ActivationState,
+		State:                parsed,
+		ActiveDispatchID:     rec.ActiveDispatchID,
+		DirtyGeneration:      rec.DirtyGeneration,
+		PendingReconcile:     rec.PendingReconcile,
+		AcknowledgedRevision: rec.AcknowledgedRevision,
 	}, nil
 }
 
@@ -377,6 +378,7 @@ func (s *Store) routeSnapshotInTx(tx *sql.Tx, routeID string) (state.RouteSnapsh
 	return state.RouteSnapshot{
 		RouteID: routeID, ActivationState: activation, State: parsed,
 		ActiveDispatchID: nullText(active), DirtyGeneration: dirtyGen, PendingReconcile: pending,
+		AcknowledgedRevision: nullText(ack),
 	}, nil
 }
 

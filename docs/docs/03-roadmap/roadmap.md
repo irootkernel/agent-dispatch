@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E8 (second compliance remediation, D-020) |
 | Current active task | None |
-| Next task | E8-T3 |
-| Completed tasks | 47 / 51 |
-| Planned tasks | 4 / 51 |
+| Next task | E8-T4 |
+| Completed tasks | 48 / 51 |
+| Planned tasks | 3 / 51 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -86,7 +86,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 45 | E7-T12 | Completed | MUST closure re-verified and v0.1.1 prepared |
 | 46 | E8-T1 | Completed | Follow-up loop state-machine defects closed |
 | 47 | E8-T2 | Completed | Recovery wired into every submit path; operator exits repaired |
-| 48 | E8-T3 | Planned | Behavior-sensitive revision and enforced production gate |
+| 48 | E8-T3 | Completed | Behavior-sensitive revision and enforced production gate |
 | 49 | E8-T4 | Planned | Unresolved lineage preserved; doctor made trustworthy |
 | 50 | E8-T5 | Planned | Input containment and configuration validation gaps closed |
 | 51 | E8-T6 | Planned | Documentation truth restored and v0.1.2 released |
@@ -2005,7 +2005,7 @@ Delivered as the recovery and operator-exit repairs: the trigger path sweeps exp
 
 ## E8-T3: Make the Route Revision and Production Gate Behavior-Sensitive
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -2038,7 +2038,7 @@ E8-T2 Completed.
 
 ### Evidence
 
-Pending (E8-T3 not started).
+Delivered as the revision and production-gate closure: the route revision projection now covers the referenced resource's root, file scope, and git mode, the global limits block, and the target's type, board, and endpoint (configuration-spec section 13 amended) — repointing a vault or moving a board changes the revision and with it the idempotency key, so distinct vaults with identical relative paths can never collide (`TestE8T3RevisionCoversResourceAndTargetShape` pins every mutation; H-2/POL-007). The route snapshot carries the acknowledged revision and every submit path refuses with the typed stale-revision conflict when the intent's planned revision diverges — a behavior-sensitive change now genuinely pauses the route until `route enable` re-acknowledges, failing closed on empty acknowledgements and mapping to exit 14 (`TestE8T3BehaviorChangePausesUntilReacknowledged`; the e7t3 stale-rebuild and target-repoint tests updated to the pause-then-re-acknowledge semantics). `route enable` runs the live version-gated probe: an unreadable or stale report and an unsupported version refuse at exit 3, `durable_acceptance` and `submit_idempotency_key` are unconditional preconditions, target unavailability is a documented warning that still validates a present report (H-7 — `TestE8T3EnableGateRefusesStaleReportAndWeakGuarantees` reproduces both review defects as refusals). The capability report records `lookup_by_idempotency_key` false with the evidence entry re-graded and the adapter, example, configuration-spec, and hermes-integration prose aligned to the honest read-only semantics (H-7/HER-009; the D-018 record already stated the honest false — the file now matches it). `resource_mutex` gates `--mutex-key` in the renderer (M-6, `TestE8T3MutexKeyOnlyWhenSupported`), and `config validate` runs the probe-free section 12 target checks by default — a present-but-invalid report fails, a not-yet-placed report warns (M-18's probe-gated half). Fixtures acknowledge computed revisions and place reports before enabling (the corrected installation order). Verified by `make verify` on darwin/arm64 (all checks green). Reviewed through two full-target Mulgae rounds (`r_01a02fec-90ee-75b3-82bf-06e07c8c8a11`, remediation-eligible: the dispatch-path pause exit, the unavailable-branch report validation, the empty-acknowledgement hardening, and the missing-report warnings remediated in-tree, with the transport-field projection and silent mutex suppression declared for deferral; `r_01a03000-3488-7027-bb98-0f48b23f7807`, hardening-deferral-eligible: ci pass, coverage complete, publication committed, five valid documentation findings — the installation section 3 order, cli-spec section 3 enable wording, configuration-spec section 12 wording, the sink-contract example boolean, and the dispatch-plan example requirement — deferred to the E8-T6 documentation pass with the exact run and finding IDs recorded in the commit trailers). Changelog 1.0.30.
 
 ## E8-T4: Preserve Unresolved Lineage and Make Doctor Trustworthy
 

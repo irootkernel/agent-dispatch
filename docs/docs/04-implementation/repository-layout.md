@@ -111,8 +111,9 @@ Do not overwrite historical reports when rerunning a released gate; create a ver
 
 ## Layout Deviations (E7-T10, M-31)
 
-The v0.1 tree deviates from the layout above in six named places; each
-deviation is intentional and explained here:
+The v0.1 tree deviates from the layout above in the named places below;
+each deviation is intentional and explained here (E8-T6 corrects the
+earlier "six" undercount and adds the undocumented packages):
 
 - `LICENSE` at the repository root was absent through v0.1.0 and added
   2026-08-23 (M-27), together with
@@ -138,3 +139,9 @@ deviation is intentional and explained here:
   `internal/app/reconcile` retain their placeholder `doc.go` files
   alongside real implementations; the placeholders predate the code and
   are retained as package documentation anchors.
+- `internal/app/receipts/` — the acceptance/execution receipt projection service delivered with E4-T4; a real, tested package under the app layer rather than a named deviation.
+- `internal/tools/` — the schemavalid tool (D-015) and the import-direction linter; build-time verification tooling beside the packages they verify.
+- `internal/version/` — the build-metadata package the version command reports; shared by the CLI and the tests.
+- `internal/ports/sink.go` and `internal/ports/workreceipt.go` — the two port files beyond the four the layout lists; the ports layer grew one file per port family as the contract matured.
+- The pictured top-level `testdata/` and `scripts/` never materialized: fixture corpora live beside their packages (`internal/adapters/watchman/testdata/`) and the Python tooling lives under `docs/scripts/` inside the manifest-verified package.
+

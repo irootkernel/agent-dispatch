@@ -1,7 +1,7 @@
 # SOT Package Validation
 
-> **Validated:** 2026-08-23 (post E7 closeout and E8 registration; the 2026-08-23 second compliance review is accepted under D-020 — remediation epic E8 is open, and the E7 closure rows it refuted stand corrected by E8)  
-> **Package target:** Agent Dispatch SOT 1.0.27 / implementation v0.1.1 (v0.1.2 under remediation in epic E8)
+> **Validated:** 2026-08-23 (post E8 remediation; the 2026-08-23 second compliance review is closed under D-020 — every Blocker, High, and mapped Medium finding is fixed, the documentation pass is delivered, and the Linux exception is closed)  
+> **Package target:** Agent Dispatch SOT 1.0.33 / implementation v0.1.2 (the E8 compliance remediation release)
 
 ## Completed Checks
 
@@ -25,7 +25,7 @@
 
 ## Package Statistics at Validation
 
-- Markdown files: 62 on the manifest basis (every file under this package, including this report; the retired review report was removed by D-019)
+- Markdown files: 65 on the manifest basis (every file under this package, including this report and the v0.1.2 release notes)
 - JSON Schemas: 12
 - Example files: 12
 - Integration reports: 2 (Hermes public interface E0-T4, Watchman public interface E0-T5)
@@ -150,33 +150,70 @@ Verified 2026-08-22 by executable acceptance tests in `internal/cli/e6t4_test.go
 | Criterion | Evidence |
 |---|---|
 | AC-501 webhook explicit route: auth resolved without persistence, transport vs durable distinguished, no Kanban fallback | `TestG5AC501WebhookExplicitRoute`: the dispatch through the loopback TLS webhook target is accepted, the state directory contains no resolved secret, the acceptance receipt records `durable=0` for the 2xx, and exactly one endpoint invocation occurred |
-| AC-502 doctor returns actionable structured findings | `TestG5AC502DoctorStableFindings` plus `TestDoctorDetectsFailureClasses` and the `doctor.Examine` unit table covering every finding code with severity and remediation |
-| AC-503 prune removes resolved expired data without breaking unresolved lineage or audit | `TestG5AC503PrunePreservesLineageAndAudit`, `TestMaintenancePruneDryRunThenExecute`, and `TestMaintenancePrunePreservesHeldQuarantineLineage` |
+| AC-502 doctor returns actionable structured findings | `TestG5AC502DoctorStableFindings` plus `TestDoctorDetectsFailureClasses`, the `doctor.Examine` unit table, `TestE8T4DoctorReportsUnreadableRoot` (the real root access probe), and `TestE8T4DoctorNeverFabricatesWatchman` (E8-T4: every AC-502 condition is error-severity and exits 3) |
+| AC-503 prune removes resolved expired data without breaking unresolved lineage or audit | `TestG5AC503PrunePreservesLineageAndAudit` (E8-T4: seeds an active accepted dispatch and asserts its lineage survives), `TestMaintenancePruneDryRunThenExecute`, and `TestMaintenancePrunePreservesHeldQuarantineLineage` |
 | AC-504 clean macOS host install works without manual database edits | `TestG5AC504CleanHostInstallDispatchScheduleUninstall` (init → validate → dry-run dispatch → route registration and gate acknowledgement → scheduled reconciliation → doctor) and `TestCleanHostInstallationScenario` (platform default paths, owner-only state, fail-closed re-init) |
-| AC-505 supported-Linux suite pass | No successful `make verify` run on a supported Linux host is recorded and hosted CI is not used (explicit SCP-008 exception, D-017). The compliance review's diagnostic linux/arm64 container runs failed with exit 2 (two unguarded darwin-only keychain tests; 506 passes as non-root), so this criterion currently has no passing evidence; the platform guards landed in E7-T4 (the darwin-only keychain tests now skip with a recorded reason off-platform). |
-| AC-506 release artifacts present and version-compatible | `TestG5AC506ReleaseArtifactsPresent` (release-way build, version envelope, schema/example/skill/SOT/changelog artifact set), the digest-identical double `make release`, and `make manifest-check`/`schema-validation`/`traceability` inside `make verify` |
+| AC-505 supported-Linux suite pass | Closed under D-020: `make verify` in full (including `test-race`, manifest, schema, traceability) passed on linux/arm64 as a non-root user at `f00ed30` in a `golang:1.26` container, and `make test` passed on linux/amd64; the two permission-expectation tests self-skip under root. The real Hermes and Watchman legs and `systemd-analyze verify` remain macOS-verified only. |
+| AC-506 release artifacts present and version-compatible | `TestG5AC506ReleaseArtifactsPresent` reads the version from the shipped release notes as the one source, asserts the documented artifact set, validates `dist/SHA256SUMS` line-per-artifact with every checksummed file present (E8-T6), and proves the release-way build reports the shipped version; the digest-identical double `make release VERSION=v0.1.2` and the tag close the set |
 
 Upgrade and backup rehearsal (release-checklist durability): `TestG5UpgradeAndBackupRehearsal` drives the documented procedure — built-in backup with verification, doctor, full integrity, one reconciliation — and restores the backup standalone with its lineage intact. The migration interruption and checksum-immutability evidence remains `internal/adapters/sqlite` (`TestBackupBeforeMigration`, `TestMigrationChecksumImmutability`, `TestNewerSchemaRefused`, `TestFreshAndMigratedSchemasIdentical`).
 
-## MUST-Closure Matrix (E7-T12, D-017)
+## MUST-Closure Matrix (E8-T6, D-020) — supersedes the E7-T12 matrix
 
-Every one of the 14 MUST requirements the 2026-08-22 review judged GAP,
-restated with its v0.1.1 disposition. Thirteen PASS through the E7
-remediation; SCP-008 carries the explicit recorded exception.
+Every MUST requirement the 2026-08-23 review judged FAIL or PARTIAL on
+a named clause, restated with its v0.1.2 disposition. The two FAILs
+(CON-003, POL-007) and the review's Blocker and High findings are
+closed by E8-T1..E8-T6; the remaining PARTIAL clauses listed here carry
+their fix or recorded exception. The E7-T12 rows the second
+review refuted are annotated in place with their refutation (decision
+entries are never rewritten; matrix rows are living evidence and carry
+the correction marker) and this matrix is the authoritative disposition.
+
+| Requirement | v0.1.2 disposition |
+|---|---|
+| CON-003 (one follow-up after completion) | PASS - the FOLLOWUP_READY -> ACTIVE_DIRTY edge closes the burst-between-completion-and-submission wedge (B-1, E8-T1); the follow-up chain is bounded by MaxConsecutiveFollowups with UUIDv7 identities and the batch-sequence watermark (H-1) |
+| POL-007 (revision changes with behavior) | PASS - the projection covers the resource root/file scope/git mode, the global limits, and the target type/board/endpoint; the acknowledged revision gates every submit (H-2, E8-T3) |
+| PTH-002 (reject or quarantine escapes) | PASS - every recorded path resolves containment, pure deletes included (H-8, E8-T5) |
+| PTH-008 (protected never dispatched) | PASS - the hold stays visible under overflow precedence and never enters an automatic task (M-14, E8-T5) |
+| SCP-005 (pinned toolchain) | PASS - the go.mod `go 1.26.6` directive names the exact toolchain version (a two- or three-part go directive selects that exact toolchain; the separate `toolchain` line is redundant when identical and is normalized away by `go mod tidy`). Recorded as the honest reading of the pin (E8-T6); a future toolchain bump changes this line |
+| SCP-006 (validation before side effects) | PASS - the probe-free section 12 checks run by default; the version match stays probe-gated by design (E8-T3/E8-T5) |
+| SCP-008 (macOS + one Linux) | CLOSED - make verify passed on linux/arm64 non-root and make test on linux/amd64 (D-020; real Hermes/Watchman legs remain macOS-only) |
+| SRC-005 (recrawl) | EXCEPTED - recorded exception in watchman-integration section 7 (M-8, E8-T5): the trigger path never observes the query-surface warning; aftermath reaches the product through the detected signals |
+| DAT-004/005 (identity derivations) | PASS - follow-up fingerprints recompute over their manifests (M-10) and the reconcile key is mount-point independent (M-11) |
+| DAT-007 (causal columns) | PARTIAL-ACCEPTED - join-reachable lineage stands for v0.1.2; the five-table column gap is recorded for the next cycle |
+| DAT-009 (versioned payloads, fail closed) | PASS on the enforced columns - the impossible legacy-bypass rationale is withdrawn; the unread columns remain a recorded hardening item |
+| HER-004/005/009 (capability truth) | PASS - the report records the honest false with the unconditional enable preconditions and the live version-gated probe (H-7, E8-T3) |
+| DUR-007/009 (retry and closure) | PASS - the explicit retry resets the budget in one audited transaction; a definite rejection dead-letters through the declared edge (M-2/M-3, E8-T2) |
+| DUR-010 (crash never loses work) | PASS - every submit entry point sweeps expired leases at its head (H-6, E8-T2) |
+| OPS-003/004 (retention) | PASS - an accepted dispatch is unresolved live work and its lineage never prunes while it holds the slot (H-3, E8-T4) |
+| OPS-005 (doctor) | PASS - the AC-502 conditions are error-severity with the real root access probe and no fabricated findings (H-4, E8-T4) |
+| OPS-006 (uncertainty reasons) | PASS - startup lands with its runbook procedure (M-22, E8-T4); recrawl is the recorded exception above |
+| CLI-004 (full command tree) | PARTIAL-ACCEPTED - dispatches show lacks route state and config show drops board; both recorded for the next cycle |
+| CLI-008 (exit codes) | PASS - operator refusals and storage failures carry their registered codes; the transition and store arms are pinned (H-9) |
+| SEC-007 (redaction) | PASS - the widened credential pattern covers the header, query/fragment, and bare-JWT forms adversarially (M-20, E8-T4) |
+| SEC-008 (owner-only state) | PASS - state.db is created 0600 (M-19, E8-T4) |
+| SEC-010 (revalidate before side effects) | PASS - same POL-007 enforcement plus the acknowledged-revision gate |
+| TST-008 (production gate) | PASS - the two-key gate stands; the acknowledged revision is now enforced at submit, closing the bypass |
+| TST-009 (evidence traceability) | PASS - the E8 Evidence sections record the runs; the refuted E7 rows are superseded by this matrix |
+
+The G1-G5 gate suites and `make verify` (including the race suite)
+passed on darwin/arm64 on 2026-08-23; the two consecutive
+`make release VERSION=v0.1.2` builds are byte-identical and tagged
+`v0.1.2`.
 
 | Requirement | v0.1.1 disposition |
 |---|---|
-| SCP-008 (macOS + one Linux) | EXCEPTED - no successful Linux `make verify` is recorded; the explicit D-017 exception (darwin/arm64 verified; linux-amd64 artifact reproducible but runtime-unverified; the review's diagnostic arm64 runs failed) |
+| SCP-008 (macOS + one Linux) | CLOSED for v0.1.2 by the E8-T6 matrix above (this E7-T12 row is historical: v0.1.1 shipped under the D-017 exception) |
 | PTH-007 (metadata-only excluded) | PASS - the durable path facts suppress byte-identical modifies with the `unchanged_content` reason in the decision (E7-T3) |
-| DAT-009 (versioned payloads, fail closed) | PASS - receipts carry the submitted contract version (never null) and both store reads refuse any stored version other than this build's exact contract; a legacy empty stored version is tolerated as pre-versioning data (E7-T8) |
+| DAT-009 (versioned payloads, fail closed) | PASS on the enforced columns (the legacy empty-version tolerance was impossible per the schema's NOT NULL; withdrawn, E8-T6); the unread columns are the recorded hardening item in the E8-T6 matrix above |
 | POL-008 (revalidate before dispatch) | PASS - every submit path revalidates the stored plan against the active configuration and supersedes-and-rebuilds stale work (E7-T3) |
 | DUR-010 (crash/restart never lose work) | PASS - the drain recovers expired submitting leases and reconciles unknowns; a real mid-submit process death heals without manual edits (E7-T2 wiring; the process-death evidence itself is E7-T2/E7-T4) |
 | DUR-011 (transactional audited transitions) | PASS - every route transition appends its audit row inside the transaction and intent creation records its arrival row (E7-T6) |
 | CON-001 (one authoritative task) | PASS - the slot predicate is enforced inside the lease transaction and rerun supersedes through the declared edge (E7-T2) |
-| CON-003 (one follow-up after completion) | PASS - acceptance promotes the follow-up and the scheduled path submits it; every gate scenario drives the product path (E7-T2) |
+| CON-003 (one follow-up after completion) | REFUTED for v0.1.1 by the second review (B-1); PASS for v0.1.2 by the E8-T6 matrix above (E8-T1) |
 | HER-006 (complete Hermes task) | PASS - the renderer carries the acceptance criteria and the manifest-existence sentence, pinned by the golden (E7-T8) |
 | FBK-005 (public work-receipt CLI) | PASS - the public `work begin|complete|fail` commands drive the full second generation including the promoted follow-up (E7-T2; the scheduled-path product test pins the lifecycle end to end) |
-| CLI-004 (full command tree) | PASS - every command the contract names is implemented (`config show`, the full lineage, the filters); the registry test pins that no tree entry answers `command_not_implemented` (E7-T5) |
+| CLI-004 (full command tree) | WEAKENED for v0.1.1 by the second review (`dispatches show` lacks route state; `config show` drops board); both recorded for the next cycle in the E8-T6 matrix above |
 | SEC-010 (revalidate before side effects) | PASS - same POL-008 enforcement (E7-T3) |
 | OPS-002 (inspectable state) | PASS - `dispatches show` returns the decision, batch, observations, and work receipts beside the intent (E7-T5) |
 | TST-004 (crash-boundary coverage) | PASS - before-commit, after-commit, during-submit, after-remote-acceptance, and every migration interruption boundary have executing evidence (E7-T2/E7-T4) |

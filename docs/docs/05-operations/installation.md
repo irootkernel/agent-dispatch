@@ -15,9 +15,9 @@ Release artifacts are byte-reproducible binaries plus a portable
 `SHA256SUMS` file, built from the repository root:
 
 ```sh
-make release VERSION=v0.1.0
-# dist/agent-dispatch-v0.1.0-darwin-arm64
-# dist/agent-dispatch-v0.1.0-linux-amd64
+make release VERSION=<the-release-tag>  # e.g. v0.1.2
+# dist/agent-dispatch-<version>-darwin-arm64
+# dist/agent-dispatch-<version>-linux-amd64
 # dist/SHA256SUMS
 cd dist && shasum -a 256 -c SHA256SUMS   # or: sha256sum -c SHA256SUMS
 ```
@@ -49,6 +49,9 @@ it, and `doctor` reports violations).
 ```sh
 agent-dispatch init                              # writes the disabled example config,
                                            # creates the owner-only state directory
+cp <your-hermes-capability-report.json> ~/.config/agent-dispatch/
+                                           # the probed report must exist BEFORE the
+                                           # target gates (E8-T3: enable probes it)
 agent-dispatch config validate --probe-targets   # configuration and target gates
 agent-dispatch watchman install --route wiki-maintenance
 agent-dispatch route enable --route wiki-maintenance \

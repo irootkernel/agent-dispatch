@@ -246,9 +246,11 @@ A `file:` reference must be owner-only (mode 600): a file with group or other pe
 Beyond schema validation, the validator must check:
 
 - all route references exist;
-- roots do not overlap in unsupported ways;
+- resource roots do not overlap (the default validation, E8-T5) and are absolute together with `instance.state_dir`;
+- the map keys for resources, targets, and routes follow the identifier grammar (E8-T5);
+- `limits.max_hash_file_bytes` is positive when set (E8-T5);
 - state directory is local and outside governed roots by default;
-- target capability report matches the installed target version;
+- the target capability report file is readable and carries every required capability (the default validation; a not-yet-placed report warns, E8-T3), while the report's match against the installed target version requires the live probe and stays on `config validate --probe-targets` and `route enable`;
 - route-required capabilities are available;
 - profile, skills, mutex, and target are operator-owned fixed values;
 - all durations and sizes are bounded;

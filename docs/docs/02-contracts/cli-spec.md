@@ -83,7 +83,7 @@ agent-dispatch route enable --route <id> --acknowledge-production-gate <computed
 agent-dispatch route disable --route <id> [--reason <text>]
 ```
 
-The config field `enabled: true` permits activation but does not by itself activate a production route. `route enable` stores an acknowledged route revision in SQLite. A behavior-sensitive revision change pauses the route until explicitly acknowledged again. `route disable` immediately prevents new submissions while preserving observations, active work, and dirty state.
+The config field `enabled: true` permits activation but does not by itself activate a production route. `route enable` stores an acknowledged route revision in SQLite. A behavior-sensitive revision change pauses the route until explicitly acknowledged again. `route disable` immediately prevents new submissions while preserving observations, active work, and dirty state. `route enable` probes the live target first (E8-T3): an unreadable or stale capability report, an unsupported Hermes version, or a missing required capability refuses at exit 3, and the report must itself carry `durable_acceptance` and `submit_idempotency_key`; an unreachable target warns and defers to the submit path's run-time gate.
 
 ### `route plan`
 

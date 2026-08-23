@@ -10,11 +10,11 @@
 
 | Field | Value |
 |---|---|
-| Current epic | E8 (second compliance remediation, D-020) |
+| Current epic | None (E8 complete; see the epic validation audit) |
 | Current active task | None |
-| Next task | E8-T6 |
-| Completed tasks | 50 / 51 |
-| Planned tasks | 1 / 51 |
+| Next task | None (E8 sequence complete) |
+| Completed tasks | 51 / 51 |
+| Planned tasks | 0 / 51 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -33,7 +33,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | E5 | Feedback Loop, Quarantine, and Reconciliation | **Completed** | 5 | G4 |
 | E6 | Hermes Webhook, Operations, Packaging, and v0.1 Release | **Completed** | 4 | G5 |
 | E7 | MVP Compliance Review Remediation | **Completed** | 12 | MUST closure + v0.1.1 |
-| E8 | v0.1.2 Compliance Remediation | Planned | 6 | MUST closure + v0.1.2 |
+| E8 | v0.1.2 Compliance Remediation | **Completed** | 6 | MUST closure + v0.1.2 |
 
 ## 3. Task Status Index
 
@@ -89,7 +89,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 48 | E8-T3 | Completed | Behavior-sensitive revision and enforced production gate |
 | 49 | E8-T4 | Completed | Unresolved lineage preserved; doctor made trustworthy |
 | 50 | E8-T5 | Completed | Input containment and configuration validation gaps closed |
-| 51 | E8-T6 | Planned | Documentation truth restored and v0.1.2 released |
+| 51 | E8-T6 | Completed | Documentation truth restored and v0.1.2 released |
 
 ---
 
@@ -546,13 +546,13 @@ E2-T1 Completed.
 ### Acceptance
 
 - traversal, absolute path, NUL, and symlink escape cases cannot read outside root;
-- pattern behavior matches golden tests on macOS and Linux;
+- pattern behavior matches golden tests on the verified hosts (macOS; the goldens are platform-independent by construction, executed on the Linux verify legs since D-020);
 - event content cannot affect route authority;
 - protected paths are classified but not read unnecessarily or dispatched.
 
 ### Evidence
 
-- `internal/domain/policy`: pure deterministic pattern engine (PTH-003, configuration-spec §7) over normalized slash-separated relative paths with `**` recursive matching, single-segment `*`/`?`, fail-closed pattern validation (relative, no backslash/NUL/`.`/`..`, `**` only whole-segment), exclude precedence over include, protected/immutable evaluated after include/exclude, and built-in default exclusions (PTH-007: `.git/**` at any depth, Watchman cookie/state bookkeeping at any depth, `.DS_Store`). Case mode must be resolved by the caller (`filesystem` → sensitive/insensitive) so behavior is explicit, recorded, and identical on macOS and Linux for the same input; golden classification and segment-matching files under `internal/domain/policy/testdata/` pin the contract.
+- `internal/domain/policy`: pure deterministic pattern engine (PTH-003, configuration-spec §7) over normalized slash-separated relative paths with `**` recursive matching, single-segment `*`/`?`, fail-closed pattern validation (relative, no backslash/NUL/`.`/`..`, `**` only whole-segment), exclude precedence over include, protected/immutable evaluated after include/exclude, and built-in default exclusions (PTH-007: `.git/**` at any depth, Watchman cookie/state bookkeeping at any depth, `.DS_Store`). Case mode must be resolved by the caller (`filesystem` → sensitive/insensitive) so behavior is explicit, recorded, and identical across platforms by construction (executed on macOS; the D-020 Linux verify legs re-run the suites) for the same input; golden classification and segment-matching files under `internal/domain/policy/testdata/` pin the contract.
 - `internal/adapters/localfs`: safe root resolver (PTH-001, PTH-002, SEC-002) that resolves the trusted root's symlinks once, lexically validates untrusted event paths (UTF-8, relative, separators, traversal, NUL, SEC-009 length limit) before any filesystem access, resolves each path with full symlink evaluation under a canonical-prefix containment check, walks shallowest-first over every ancestor of not-currently-existing (deleted) paths, verifying each intermediate component before traversing it, so live or dangling symlinked directories cannot position a future path outside the root, and opens regular files only via `OpenRegular` with final-component `O_NOFOLLOW`, regular-file enforcement, and the configured size limit returning structural errors (`ErrEscape`/`ErrNotRegular`/`ErrTooLarge`) so a digest stays unknown rather than falsely unchanged. Deleted paths are never opened.
 - Security tests: lexical escape (traversal, absolute, NUL, backslash, empty) fails before access; file and directory symlink escapes (live and dangling) are refused while contained symlinks resolve; directories and non-regular files fail the type guard; over-limit files fail the size guard with exact-limit acceptance; hostile path names (`include=`, `profile=admin/**`, embedded traversal) cannot mutate compiled patterns or flip other paths' classification (PTH-004, SEC-003); protected and nonexistent paths classify purely through patterns with no filesystem access (PTH-008 classification-time behavior).
 
@@ -1527,7 +1527,7 @@ D-017 recorded; v0.1.0 sequence complete.
 
 ### Evidence
 
-Delivered as a documentation-only correction set over twelve files: every surviving false verification claim now carries one accurate statement (no successful `make verify` run on a supported Linux host is recorded, hosted CI is not used, and the review's diagnostic linux/arm64 container runs failed with exit 2) at the roadmap's E1-T1/E6-T3/E6-T4 acceptance and evidence wording plus the superseded "all MUST requirements pass" bullet, the AC-505 criterion, the charter's success definition, the record-contract and examples README validation sentences, the implementation-guide CGO policy row, and inline markers on the false CHANGELOG 1.0.10/1.0.11 claims; `docs/VALIDATION.md` is truthful about its evidence (current header and statistics: 63 manifest-basis Markdown files, 12 schemas, 8 epics, 45 tasks; the G2 crash-boundary scope naming the in-process-only boundaries; the AC-203 hollow-assertion and AC-207 always-skip corrections owned by E7-T2/E7-T4; the G4 store-direct follow-up-activation bypass note; the G5 AC-505 status; the removed nonexistent `TestG2MigrationInterruptedUpgrade` citation; the em-dash check scoped to `docs/docs/00-sot/`); `docs/README.md` and VALIDATION align on SOT 1.0.14 with CHANGELOG entry 1.0.14; and the roadmap's status artifacts (task index, current-state counts, epic status) stay mutually consistent. Verified by `make verify` on darwin/arm64 (all checks green including the manifest with the admitted review report). Reviewed through two full-target Mulgae rounds (r_01a02afe-da64: four valid report findings — inconsistent roadmap status artifacts, overbroad no-Linux-run absolutes contradicting the recorded Linux facts (D-017), residual CI wording, and the em-dash check scope with three newly introduced em dashes — all remediated in place; r_01a02b0d-3389: coverage complete, ci pass, zero structured findings, reports_only), with the round-2 residuals recorded as the hardening deferral for the epic validation audit under run r_01a02b0d-3389 (reports_only; no structured finding IDs exist; residuals: the 1.0.14 corrected-locations list naming E6-T2 though no E6-T2-owned roadmap wording changed, the platform-unqualified `make verify` claim in the 1.0.14 entry, and the pre-existing testing-strategy CI-stages section owned by E7-T10). Changelog 1.0.14.
+Delivered as a documentation-only correction set over ten files (the E7-T1 record originally said twelve; corrected by E8-T6): every surviving false verification claim now carries one accurate statement (no successful `make verify` run on a supported Linux host is recorded, hosted CI is not used, and the review's diagnostic linux/arm64 container runs failed with exit 2) at the roadmap's E1-T1/E6-T3/E6-T4 acceptance and evidence wording plus the superseded "all MUST requirements pass" bullet, the AC-505 criterion, the charter's success definition, the record-contract and examples README validation sentences, the implementation-guide CGO policy row, and inline markers on the false CHANGELOG 1.0.10/1.0.11 claims; `docs/VALIDATION.md` is truthful about its evidence (current header and statistics: 63 manifest-basis Markdown files, 12 schemas, 8 epics, 45 tasks; the G2 crash-boundary scope naming the in-process-only boundaries; the AC-203 hollow-assertion and AC-207 always-skip corrections owned by E7-T2/E7-T4; the G4 store-direct follow-up-activation bypass note; the G5 AC-505 status; the removed nonexistent `TestG2MigrationInterruptedUpgrade` citation; the em-dash check scoped to `docs/docs/00-sot/`); `docs/README.md` and VALIDATION align on SOT 1.0.14 with CHANGELOG entry 1.0.14; and the roadmap's status artifacts (task index, current-state counts, epic status) stay mutually consistent. Verified by `make verify` on darwin/arm64 (all checks green including the manifest with the admitted review report). Reviewed through two full-target Mulgae rounds (r_01a02afe-da64: four valid report findings — inconsistent roadmap status artifacts, overbroad no-Linux-run absolutes contradicting the recorded Linux facts (D-017), residual CI wording, and the em-dash check scope with three newly introduced em dashes — all remediated in place; r_01a02b0d-3389: coverage complete, ci pass, zero structured findings, reports_only), with the round-2 residuals recorded as the hardening deferral for the epic validation audit under run r_01a02b0d-3389 (reports_only; no structured finding IDs exist; residuals: the 1.0.14 corrected-locations list naming E6-T2 though no E6-T2-owned roadmap wording changed, the platform-unqualified `make verify` claim in the 1.0.14 entry, and the pre-existing testing-strategy CI-stages section owned by E7-T10). Changelog 1.0.14.
 
 ## E7-T2: Wire Crash Recovery, Rerun Supersession, and Follow-Up Activation
 
@@ -1922,7 +1922,7 @@ Delivered as the closeout verification: `make verify` passed on darwin/arm64 inc
 
 # E8: v0.1.2 Compliance Remediation
 
-**Epic status:** Planned  
+**Epic status:** Completed  
 **Purpose:** Remediate every finding of the 2026-08-23 MVP compliance review of v0.1.1 (D-020): the Blocker in the follow-up product loop, the two FAIL requirements (CON-003, POL-007), the three FAIL acceptance criteria (AC-502, AC-503, AC-506), the ten High findings, the mapped Medium findings, and the documentation-truth cluster; close the SCP-008 Linux-verification exception on the review's evidence; and release v0.1.2.  
 **Gate:** MUST closure — CON-003 and POL-007 PASS, AC-502/AC-503/AC-506 pass with real evidence, and every PARTIAL clause named by the review is met or carries an explicit recorded exception — with gates G1-G5 re-run and v0.1.2 released from the tagged tree.
 
@@ -2117,7 +2117,7 @@ Delivered as the input-containment and configuration-validation closure: every r
 
 ## E8-T6: Restore Documentation Truth and Release v0.1.2
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -2150,7 +2150,10 @@ E8-T5 Completed.
 
 ### Evidence
 
-Pending (E8-T6 not started).
+Delivered as the documentation-truth and release closeout: the five E8-T3 deferred documentation findings are fixed — installation section 3 places the capability report before the target gates, cli-spec section 3 documents the enable probe with its unconditional guarantees, configuration-spec section 12 states the default-versus-probe check split, and the sink-contract and dispatch-plan examples carry the honest capability set. The section-4 items: AC-107's given-clause names the refuted `WATCHMAN_FILES_OVERFLOW` honestly, the E7-T1 record's twelve-file count is corrected in place, the E2-T2 Linux claims are hedged to the verified hosts with the D-020 legs, the E7-T12 matrix rows the review refuted (CON-003, CLI-004, DAT-009, SCP-008) carry in-place refutation markers with the new matrix authoritative, the Markdown count matches the 65-file manifest basis, the docs README narrative runs through E7 and E8 to v0.1.2 at SOT 1.0.33, the repository-layout deviations section documents the real package set, and the domain-model/overview prose matches the code. The SCP-008/AC-505 exception is closed across the charter, acceptance criteria, VALIDATION, README, and release notes on the review's linux/arm64 non-root `make verify` and linux/amd64 `make test` evidence, with the two permission-expectation tests self-skipping under root and the real Hermes/Watchman legs disclosed as macOS-only. The exact toolchain pin is the go.mod `go 1.26.6` directive (the separate `toolchain` line normalizes away as redundant; recorded honestly in the matrix). `make release VERSION=v0.1.2` ran twice at HEAD with byte-identical `dist/SHA256SUMS` (darwin/arm64 `fe88ad735cf9…`, linux/amd64 `d9abfa9420fb…`); the AC-506 test derives the version from the latest release-notes file as the one source, asserts the body names it, validates the documented artifact set, and checks `dist/SHA256SUMS` line-per-artifact with every checksummed file present; `RELEASE-NOTES-v0.1.2.md` discloses the remediation, the Linux closure, and the disabled TST-008 gate. Verified by `make verify` on darwin/arm64 (all checks green). Reviewed through two full-target Mulgae rounds (`r_01a03097-ad9a-78f4-8165-c604738e9b91`, remediation-eligible: the round-1 high (the roadmap status contradicting the release claims — the sanctioned pre-commit lifecycle state) and the mediums/lows — the off-by-one Markdown count (fixed to the 65-file manifest basis), the AC-506 one-source rewrite (the test now derives the version from the latest release-notes file and asserts the body), the in-place-row-edit claim aligned with the annotation practice, and the honest toolchain-pin reading — all remediated in-tree; round 2 recorded below). Changelog 1.0.33.
+
+
+**Epic closeout:** all six E8 tasks are Completed; every Blocker, High, and mapped Medium finding of the 2026-08-23 review is fixed, the documentation-truth cluster is corrected, the SCP-008/AC-505 Linux exception is closed, and v0.1.2 is released from the tagged tree. The deferred hardening findings recorded across the member tasks (commit trailers: T1 six test-coverage, T2 five, T3 five documentation, T4 five plus one recorded deviation, T5 none) are reconciled by the epic validation audit.
 
 ---
 

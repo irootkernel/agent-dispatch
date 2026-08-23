@@ -24,10 +24,6 @@
   "reason_codes": [
     "normal_batch"
   ],
-  "required_capabilities": [
-    "durable_acceptance",
-    "submit_idempotency_key",
-    "lookup_by_idempotency_key"
-  ],
+  "required_capabilities": ["durable_acceptance", "submit_idempotency_key", "lookup_by_external_ref"],
   "generation_action": "create_if_idle"
 }

@@ -29,7 +29,7 @@ Unsupported methods return a typed `capability_unsupported` error and are not em
   "capabilities": {
     "durable_acceptance": true,
     "submit_idempotency_key": true,
-    "lookup_by_idempotency_key": true,
+    "lookup_by_idempotency_key": false,
     "lookup_by_external_ref": true,
     "resource_mutex": false,
     "execution_status": true,

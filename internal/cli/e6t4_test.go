@@ -297,13 +297,83 @@ func TestG5AC506ReleaseArtifactsPresent(t *testing.T) {
 		t.Skipf("go toolchain unavailable: %v", err)
 	}
 	dir := t.TempDir()
-	// One reproducible binary built the release way.
+	// One version source: the shipped release notes name the version and
+	// the test derives everything from it (E8-T6, H-5 - the old test
+	// hard-coded v0.1.0 and never looked at dist/).
+	// The one version source: the shipped release-notes FILENAME carries
+	// the version everything else derives from (the body asserts the same
+	// value so a rename drift fails).
+	matches, merr := filepath.Glob(filepath.Join("..", "..", "docs", "RELEASE-NOTES-*.md"))
+	if merr != nil || len(matches) == 0 {
+		t.Fatalf("AC-506: release-notes files must exist, got %v (%v)", matches, merr)
+	}
+	// The LATEST release notes are the one version source (historical
+	// notes for prior releases remain in the package).
+	latest := matches[0]
+	for _, m := range matches {
+		if m > latest {
+			latest = m
+		}
+	}
+	notesRel := filepath.Join("docs", filepath.Base(latest))
+	version := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(latest), "RELEASE-NOTES-"), ".md")
 	root, err := filepath.Abs("../../")
 	if err != nil {
 		t.Fatal(err)
 	}
+	notesBody, nerr := os.ReadFile(filepath.Join(root, notesRel))
+	if nerr != nil {
+		t.Fatalf("AC-506: release notes missing: %v", nerr)
+	}
+	if !strings.Contains(string(notesBody), "Agent Dispatch "+version) {
+		t.Fatalf("AC-506: release notes body must name the version %s (one version source)", version)
+	}
+	// The documented artifact set exists in the repository (paths
+	// relative to the repository root the release builds from).
+	for _, rel := range []string{
+		"docs/schemas/config.schema.json",
+		"docs/examples/config.yaml",
+		"docs/skills/agent-dispatch-wiki-maintenance/SKILL.md",
+		"docs/README.md",
+		"docs/CHANGELOG.md",
+		notesRel,
+	} {
+		path := filepath.Join(root, rel)
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("AC-506 artifact missing: %s (%v)", path, err)
+		}
+	}
+	// The release artifacts: when dist/ exists it carries exactly the
+	// two shipped binaries and one SHA256SUMS line per artifact.
+	dist := filepath.Join(root, "dist")
+	if _, err := os.Stat(dist); err == nil {
+		sums, rerr := os.ReadFile(filepath.Join(dist, "SHA256SUMS"))
+		if rerr != nil {
+			t.Fatalf("AC-506: dist/SHA256SUMS missing: %v", rerr)
+		}
+		lines := 0
+		for _, l := range strings.Split(strings.TrimSpace(string(sums)), "\n") {
+			if l != "" {
+				lines++
+			}
+		}
+		if lines < 2 {
+			t.Fatalf("AC-506: SHA256SUMS must carry one line per artifact, got %d: %q", lines, string(sums))
+		}
+		for _, l := range strings.Split(strings.TrimSpace(string(sums)), "\n") {
+			fields := strings.Fields(l)
+			if len(fields) != 2 {
+				t.Fatalf("AC-506: malformed SHA256SUMS line %q", l)
+			}
+			if _, serr := os.Stat(filepath.Join(dist, fields[1])); serr != nil {
+				t.Fatalf("AC-506: checksummed artifact missing: %s (%v)", fields[1], serr)
+			}
+		}
+	}
+	// One reproducible binary built the release way reports the shipped
+	// version.
 	cmd := exec.Command("go", "build", "-trimpath",
-		"-ldflags", "-X github.com/irootkernel/agent-dispatch/internal/version.Version=v0.1.0",
+		"-ldflags", "-X github.com/irootkernel/agent-dispatch/internal/version.Version="+version,
 		"-o", filepath.Join(dir, "agent-dispatch"), "./cmd/agent-dispatch")
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
@@ -325,23 +395,8 @@ func TestG5AC506ReleaseArtifactsPresent(t *testing.T) {
 	var versionResult struct {
 		Version string `json:"version"`
 	}
-	if err := json.Unmarshal(rawResult, &versionResult); err != nil || versionResult.Version != "v0.1.0" {
-		t.Fatalf("AC-506: built binary reports version %q, want v0.1.0 (%v)", versionResult.Version, err)
-	}
-	// The documented artifact set exists in the repository (paths
-	// relative to the repository root the release builds from).
-	for _, rel := range []string{
-		"docs/schemas/config.schema.json",
-		"docs/examples/config.yaml",
-		"docs/skills/agent-dispatch-wiki-maintenance/SKILL.md",
-		"docs/README.md",
-		"docs/CHANGELOG.md",
-		"docs/RELEASE-NOTES-v0.1.0.md",
-	} {
-		path := filepath.Join(root, rel)
-		if _, err := os.Stat(path); err != nil {
-			t.Fatalf("AC-506 artifact missing: %s (%v)", path, err)
-		}
+	if err := json.Unmarshal(rawResult, &versionResult); err != nil || versionResult.Version != version {
+		t.Fatalf("AC-506: built binary reports version %q, want %s (%v)", versionResult.Version, version, err)
 	}
 }
 

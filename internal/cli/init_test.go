@@ -192,6 +192,11 @@ func TestInitWarnsWhenStateDirInsideResourceRoot(t *testing.T) {
 }
 
 func TestInitStateDirIOFailureUsesConfigInvalid(t *testing.T) {
+	// Root's CAP_DAC_OVERRIDE defeats chmod-based permission
+	// expectations; the D-020 Linux record names this test (E8-T6).
+	if os.Geteuid() == 0 {
+		t.Skip("permission-expectation test defeats CAP_DAC_OVERRIDE under root (D-020)")
+	}
 	// A file where the state directory belongs is a placement error; a
 	// read-only parent produces an IO failure classified config_invalid.
 	dir := t.TempDir()

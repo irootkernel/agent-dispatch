@@ -44,6 +44,11 @@ func TestCompletionEmitsCommandTree(t *testing.T) {
 // deliverable: an owner-only verified snapshot that refuses to
 // overwrite and whose copy is a valid standalone database.
 func TestMaintenanceBackupWritesVerifiedSnapshot(t *testing.T) {
+	// Root's CAP_DAC_OVERRIDE defeats chmod-based permission
+	// expectations; the D-020 Linux record names this test (E8-T6).
+	if os.Geteuid() == 0 {
+		t.Skip("permission-expectation test defeats CAP_DAC_OVERRIDE under root (D-020)")
+	}
 	configPath, _ := cliStoreFixture(t)
 	dir := t.TempDir()
 	backup := filepath.Join(dir, "state-backup.db")

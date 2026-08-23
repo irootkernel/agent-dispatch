@@ -1,5 +1,14 @@
 # SOT Changelog
 
+## 1.0.33 - 2026-08-23
+
+E8-T6: documentation truth restored and v0.1.2 released:
+
+- the five E8-T3 deferred documentation findings fixed (installation section 3 places the capability report before the gates; cli-spec section 3 documents the enable probe; configuration-spec section 12 states the default/probe split; the sink-contract example and the dispatch-plan example carry the honest capability set);
+- the section-4 truth items: AC-107's refuted given-clause, the E7-T1 file count, the E2-T2 Linux wording, the E7 matrix rows the review refuted (CON-003, CLI-004, DAT-009) superseded rather than rewritten, the Markdown count, the README narrative through v0.1.2, the repository-layout deviations, and the domain-model/overview prose;
+- SCP-008/AC-505 closed across the charter, acceptance criteria, VALIDATION, README, and release notes, with the two permission-expectation tests self-skipping under root;
+- the refreshed MUST-closure matrix records the v0.1.2 disposition of every FAIL/PARTIAL requirement; `make release VERSION=v0.1.2` is byte-reproducible with the tag; the AC-506 test reads one version source and validates the artifacts; RELEASE-NOTES-v0.1.2 ships with the TST-008 disclosure.
+
 ## 1.0.32 - 2026-08-23
 
 E8-T5: input containment and configuration validation are closed:

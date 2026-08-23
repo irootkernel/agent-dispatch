@@ -32,7 +32,7 @@ The release gate is cumulative. A later gate cannot pass while an earlier gate i
 | AC-104 | Given an included Markdown deletion, when planned, then one delete is retained without attempting to read the deleted file. |
 | AC-105 | Given `.git/**`, configured Obsidian UI state, or a non-Markdown attachment, when planned, then it is excluded with a deterministic reason. |
 | AC-106 | Given an absolute path, parent traversal, NUL byte, or symlink escape, when planned, then no file outside the resource root is read and the input is rejected or quarantined. |
-| AC-107 | Given `WATCHMAN_FILES_OVERFLOW=true`, a fresh instance, or unusable source position, when planned, then no partial normal task is produced and one reconciliation decision is persisted or printed. |
+| AC-107 | Given a missing or unusable previous source position (overflow-class; `WATCHMAN_FILES_OVERFLOW` was refuted by E0-T5 and is never read) or fresh-instance semantics, when planned, then no partial normal task is produced and one reconciliation decision is persisted or printed. |
 | AC-108 | Given more than the configured automatic threshold, when planned, then policy yields the configured bulk disposition and never silently truncates the manifest. |
 | AC-109 | Given file names or front matter containing instructions, when planned, then target, profile, skills, workspace, and policy remain unchanged. |
 | AC-110 | Given the same normalized input twice, when planned, then the canonical content fingerprint and plan are byte-for-byte stable apart from unique observation identity and timestamps. |
@@ -82,7 +82,7 @@ The release gate is cumulative. A later gate cannot pass while an earlier gate i
 | AC-502 | Given invalid config, missing root, non-local SQLite placement, unavailable Watchman, or target capability mismatch, when `doctor` runs, then it returns a stable nonzero code and actionable structured findings. |
 | AC-503 | Given retention thresholds, when pruning runs, then resolved expired data is removed without breaking unresolved lineage or audit references. |
 | AC-504 | Given a clean macOS host, when install instructions are followed, then Watchman trigger installation, one dispatch, scheduled reconciliation, and uninstall work without manual database edits. |
-| AC-505 | Given a supported Linux host, when the test suite runs, then all unit, integration, race, migration, crash, and fixture tests pass. (v0.1.1 status: no successful Linux run is recorded; explicit SCP-008 exception under D-017, with the review's diagnostic arm64 runs failed.) |
+| AC-505 | Given a supported Linux host, when the test suite runs, then all unit, integration, race, migration, crash, and fixture tests pass. (Closed for v0.1.2 under D-020: `make verify` in full passed on linux/arm64 as a non-root user — 707 pass, 13 environment skips — and `make test` passed on linux/amd64; the two permission-expectation tests self-skip under root. The real Hermes/Watchman legs and `systemd-analyze` remain macOS-verified only.) |
 | AC-506 | Given a v0.1 release candidate, when release verification runs, then binaries, checksums, schemas, example config, Hermes companion skill, SOT, and changelog are present and version-compatible. |
 
 ## 3. Automatic-Write Gate

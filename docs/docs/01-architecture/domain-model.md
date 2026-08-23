@@ -179,7 +179,6 @@ DispatchAttempt {
   attempt_id
   dispatch_id
   lease_owner
-  lease_expires_at
   started_at
   completed_at
   outcome                accepted | rejected | unknown | transport_failure
@@ -307,7 +306,7 @@ Timestamps, observation IDs, and source delivery attempt fields are excluded.
 ### Idempotency key
 
 ```text
-idempotency_key = "agent-dispatch:v1:" + SHA-256(
+idempotency_key = "agent-dispatch:v1:sha256:" + SHA-256(
   canonical_json({
     route_id,
     route_revision,

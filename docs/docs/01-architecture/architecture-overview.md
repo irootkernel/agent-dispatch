@@ -95,7 +95,7 @@ v0.1 does not support:
 | `source/watchman` | Parse stdin and environment metadata into a source DTO with source binding verified against configuration | Route authority from payload |
 | `sink/hermeskanban` | Map logical task request to verified public Hermes interface | Internal Hermes DB/API access |
 | `sink/hermeswebhook` | Explicit immediate target after Kanban gate | Automatic failover |
-| `fs` | Safe containment, hashing, optional Git evidence | Prompt construction |
+| `fs` | Safe containment, hashing, no Git evidence is collected in v0.1 (the `git.mode` configuration is parsed and echoed but inert) | Prompt construction |
 | `cli` | Stable commands, JSON output, exit codes | Business rules duplicated from application layer |
 
 ## 5. Primary Flow

@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E8 (second compliance remediation, D-020) |
 | Current active task | None |
-| Next task | E8-T2 |
-| Completed tasks | 46 / 51 |
-| Planned tasks | 5 / 51 |
+| Next task | E8-T3 |
+| Completed tasks | 47 / 51 |
+| Planned tasks | 4 / 51 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -85,7 +85,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 44 | E7-T11 | Completed | Low and informational findings dispositioned |
 | 45 | E7-T12 | Completed | MUST closure re-verified and v0.1.1 prepared |
 | 46 | E8-T1 | Completed | Follow-up loop state-machine defects closed |
-| 47 | E8-T2 | Planned | Recovery wired into every submit path; operator exits repaired |
+| 47 | E8-T2 | Completed | Recovery wired into every submit path; operator exits repaired |
 | 48 | E8-T3 | Planned | Behavior-sensitive revision and enforced production gate |
 | 49 | E8-T4 | Planned | Unresolved lineage preserved; doctor made trustworthy |
 | 50 | E8-T5 | Planned | Input containment and configuration validation gaps closed |
@@ -1966,7 +1966,7 @@ Delivered as the follow-up loop state-machine closure: the route table gains the
 
 ## E8-T2: Wire Recovery Into Every Submit Path and Repair the Operator Exit Codes
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -2001,7 +2001,7 @@ E8-T1 Completed.
 
 ### Evidence
 
-Pending (E8-T2 not started).
+Delivered as the recovery and operator-exit repairs: the trigger path sweeps expired submitting leases at the head of the durable arrival (before the coordinator evaluates the burst, so a wedged submitter heals on the next Watchman trigger and the freed route can accept work) with the healed unknowns reconciled behind it and failures surfaced on stderr, the scheduled `reconcile --submit` path runs the same sweep before any submission with its ungated-maintenance posture documented at the site, and the drain keeps its E7 sweep (H-6 — `TestE8T2TriggerRecoversExpiredSubmitting` pins the lease-expired recovery transition, `TestE8T2ScheduledReconcileRecoversExpiredSubmitting` pins the scheduled site; the E7-T2 roadmap claims about recovery at every submit entry point are now true). `leaseTTLFor` derives the attempt lease from the configured `submit_timeout` plus a 30 s margin at the dispatch, drain, and reconcile runtime sites, keeping the shipped one-minute default, documented in configuration-spec section 5 (M-1, superseding the D-018 one-minute record). `MakeRetryDue` makes a retry_wait dispatch due and resets its attempt budget in one audited `explicit_retry_reset` transaction — the operator exit for a budget-exhausted wait that the drain previously skipped forever (M-2/L-1, pinned by `TestDrainStopsAtLimit` and the audit-row assertion). `DeadLetterRejected` applies the declared rejected-to-dead_lettered edge after a definite rejection so a refused dispatch cannot hold the route slot with no exit; the closure is the existing discard/rerun surface (M-3, guard branches pinned by `TestE8T2DeadLetterRejectedGuards`; `TestG2AC206` asserts the dead-letter shape with the record, attempts, and receipts inspectable). The operator refusals wrap `ErrStateNotEligible`/`ErrReasonRequired` and `intentErr` carries the TransitionError-to-14 and StoreError-to-20 arms so documented refusals and storage failures never exit 40 (H-9, pinned by `TestIntentErrClassification`); the migration lock gains a heartbeat that refreshes a live holder's mtime so a migration slower than the staleness bound is never stolen (M-4, `TestE8T2MigrationLockHeartbeatRefreshes`); fork/exec failures classify definite not-submitted, never an unknown dead-letter of provably unsubmitted work (M-5, `TestE8T2ExecStartFailureIsDefiniteNotSubmitted`); the test-only `AcquireLease`/`TransitionIntent` exports are deleted with their tests rewritten over the guarded flows (L-2); the `dispatches` usage string and the cli-spec section 2 tree name `discard` (L-22). Runbook section 11 documents the four delivery-failure operator exits (expired submitting, definite rejection, budget-exhausted retry_wait, over-budget follow-up chains). Verified by `make verify` on darwin/arm64 (all checks green). Reviewed through two full-target Mulgae rounds (`r_01a02f88-973d-75af-9f08-a0ee62d1dd55`, remediation-eligible: ten findings — the heartbeat testability, the intentErr arms, the scheduled-site regression, the lease documentation, the cli-spec tree, the dead-letter guards, the audit-row assertion, the trigger-test precision, the ungated-maintenance documentation, and the trigger-path reconciliation warnings — all remediated in-tree; `r_01a02f9c-4722-714f-9cb6-2976227f5c64`, hardening-deferral-eligible: ci pass, coverage complete, publication committed, five valid low coverage/doc findings deferred to epic hardening with the exact run and finding IDs recorded in the commit trailers). Changelog 1.0.29.
 
 ## E8-T3: Make the Route Revision and Production Gate Behavior-Sensitive
 

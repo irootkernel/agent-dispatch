@@ -1,5 +1,14 @@
 # SOT Changelog
 
+## 1.0.29 - 2026-08-23
+
+E8-T2: recovery is wired into every submit path and the operator exits are repaired:
+
+- H-6: the trigger path and the scheduled `reconcile --submit` sweep expired submitting leases at their head (before the arrival is evaluated and before any submission), so a process that died mid-submit heals on the next trigger without a manual drain;
+- M-1: the attempt lease TTL derives from the configured `submit_timeout` plus a 30 s margin (documented in configuration-spec section 5, superseding the D-018 one-minute record); M-2/L-1: `dispatches retry` resets the attempt budget in one audited transaction — the operator exit for a budget-exhausted wait; M-3: a definite rejection dead-letters through the declared edge so a refused dispatch cannot hold the route slot;
+- H-9: operator refusals map to exit 14 with registered codes and storage failures to 20; M-4: the migration lock refreshes its mtime under long units; M-5: fork/exec failures classify definite not-submitted; L-2: the test-only store exports are deleted; L-22: the usage string and cli-spec tree name `discard`;
+- runbook section 11 documents the four delivery-failure operator exits; five round-2 low findings deferred to epic hardening.
+
 ## 1.0.28 - 2026-08-23
 
 E8-T1: the follow-up loop state machine is closed:

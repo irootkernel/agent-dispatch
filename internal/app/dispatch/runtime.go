@@ -250,6 +250,16 @@ func (r *Runtime) submitOnce(ctx context.Context, dispatchID, owner string, rebu
 	report.To = classified.To
 	report.Reason = classified.Reason
 	r.logSubmitOutcome(dispatchID, acquired, snap.RouteID, snap.TargetID, classified, res)
+	if classified.To == records.IntentRejected {
+		// A definite rejection dead-letters through the declared edge so
+		// the dispatch cannot hold the route slot as a terminal rejected
+		// with no operator exit (E8-T2, M-3). The follow-on closure is
+		// the existing discard/rerun surface.
+		if err := r.Store.DeadLetterRejected(ctx, dispatchID, r.Actor, Timestamp(r.Now())); err != nil {
+			r.logEvent(observability.LevelWarn, observability.EventDispatchRejected, dispatchID, acquired, snap.RouteID, snap.TargetID,
+				"definite rejection did not dead-letter", map[string]any{"error": boundedDiagnostic(err.Error())})
+		}
+	}
 	if classified.To == records.IntentAccepted {
 		// An accepted follow-up becomes the route's active task at
 		// acceptance (FOLLOWUP_READY -> ACTIVE_CLEAN, E7-T2/B-3): the

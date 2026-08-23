@@ -86,6 +86,31 @@ func TestReconcileErrClassification(t *testing.T) {
 // TestWorkReceiptErrClassification pins the receipt boundary's storage
 // and defect arms (the rejection and conflict arms are covered by the
 // e5t1 command suites).
+// TestIntentErrClassification pins the E8-T2 arms: a typed transition
+// error maps to transition_invalid/14 and a store surface to
+// sqlite_query_failed/20 — never exit 40 for documented refusals or
+// storage failures.
+func TestIntentErrClassification(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		code string
+		want int
+	}{
+		{"state conflict", fmt.Errorf("%w: retry requires dead_lettered or retry_wait", ports.ErrStateNotEligible), "transition_invalid", 14},
+		{"route-guard rejection", &state.TransitionError{Entity: "route", From: "FOLLOWUP_READY", To: "ACTIVE_CLEAN", Reason: "followup_accepted", Detail: `route activation state is "paused", not enabled`}, "transition_invalid", 14},
+		{"store failure", ports.WrapStore(errors.New("database is locked")), "sqlite_query_failed", 20},
+		{"defect", errors.New("unexpected defect"), "internal_unclassified", 40},
+	}
+	for _, tc := range cases {
+		var errb bytes.Buffer
+		code := intentErr(&errb, "dispatches retry", tc.err)
+		if code != tc.want || !bytes.Contains(errb.Bytes(), []byte(tc.code)) {
+			t.Fatalf("%s: want exit %d with %s, got %d: %s", tc.name, tc.want, tc.code, code, errb.String())
+		}
+	}
+}
+
 func TestWorkReceiptErrClassification(t *testing.T) {
 	cases := []struct {
 		name string

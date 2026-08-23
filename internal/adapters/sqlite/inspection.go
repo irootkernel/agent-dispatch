@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/irootkernel/agent-dispatch/internal/domain/ids"
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 	"github.com/irootkernel/agent-dispatch/internal/domain/state"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
@@ -306,18 +307,30 @@ func (s *Store) ApplyOperatorRetry(ctx context.Context, dispatchID, actor, reaso
 	return tx.Commit()
 }
 
-// MakeRetryDue makes a retry_wait dispatch eligible immediately, keeping
-// the request, idempotency key, and attempt budget.
-func (s *Store) MakeRetryDue(ctx context.Context, dispatchID, now string) error {
+// MakeRetryDue makes a retry_wait dispatch eligible immediately and
+// resets its attempt budget in one audited transaction: the explicit
+// operator retry is the documented exit for a budget-exhausted wait —
+// without the reset, an exhausted dispatch could never leave retry_wait
+// and the drain would skip it forever (E8-T2, M-2/L-1).
+func (s *Store) MakeRetryDue(ctx context.Context, dispatchID, actor, now string) error {
 	now = normalizeTimestamp(now)
-	res, err := s.ExecContext(ctx, `UPDATE dispatch_intents SET next_attempt_at = NULL, updated_at = ? WHERE dispatch_id = ? AND state = 'retry_wait'`, now, dispatchID)
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.Exec(`UPDATE dispatch_intents SET next_attempt_at = NULL, attempt_count = 0, updated_at = ? WHERE dispatch_id = ? AND state = 'retry_wait'`, now, dispatchID)
 	if err != nil {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return fmt.Errorf("%w: %s is not retry_wait", ports.ErrStateNotEligible, dispatchID)
 	}
-	return nil
+	if err := s.AppendTransition(tx, dispatchID+":retry-reset:"+now+":"+ids.RandomSuffix(), "dispatch_intent", dispatchID, "retry_wait", "retry_wait", now,
+		fmt.Sprintf(`{"reason":"explicit_retry_reset","actor":%q}`, actor)); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // RerunIntent persists the caller-built intentional rerun: a new decision

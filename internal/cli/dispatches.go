@@ -101,7 +101,7 @@ func parseDispatchesFlags(command string, args []string, stderr io.Writer, allow
 // runDispatches implements `dispatches` (E3-T3, CLI-004).
 func runDispatches(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		return usageError(stderr, "dispatches", "dispatches requires a subcommand: list, show, retry, reprocess, rerun, refresh, or drain")
+		return usageError(stderr, "dispatches", "dispatches requires a subcommand: list, show, retry, reprocess, rerun, discard, refresh, or drain")
 	}
 	sub, rest := args[0], args[1:]
 	if !knownDispatchesSubcommands[sub] {
@@ -508,7 +508,7 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 	}
 	rt := &dispatch.Runtime{
 		Store: store, Sink: sink,
-		Now: time.Now, LeaseTTL: time.Minute, Actor: "drain",
+		Now: time.Now, LeaseTTL: leaseTTLFor(target.SubmitTimeout), Actor: "drain",
 		Backoff: backoff, JitterUnit: jitterUnit,
 		Log: opsLogger(stderr, cfg), TraceID: globalTraceID,
 		StalenessCheck: stalenessCheckOf(cfg), StaleRebuilder: staleRebuilderOf(store, cfg),
@@ -644,7 +644,19 @@ func intentErr(stderr io.Writer, command string, err error) int {
 	case errors.Is(err, ports.ErrStateNotEligible):
 		writeError(stderr, command, "transition_invalid", "conflict", err.Error())
 		return 14
+	case isStateTransitionError(err):
+		// A route/intent guard rejection is a state conflict, never an
+		// internal defect (E8-T2, H-9 — the work commands share the arm).
+		writeError(stderr, command, "transition_invalid", "conflict", err.Error())
+		return 14
 	default:
+		// Typed classification: store surfaces are storage, never an
+		// internal relabel (mirrors reconcileErr and quarantineErr).
+		var storeErr *ports.StoreError
+		if errors.As(err, &storeErr) {
+			writeError(stderr, command, "sqlite_query_failed", "storage", storeErr.Err.Error())
+			return 20
+		}
 		writeError(stderr, command, "internal_unclassified", "internal", err.Error())
 		return 40
 	}

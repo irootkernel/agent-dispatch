@@ -135,7 +135,33 @@ Uninstall order:
 5. retain config and SQLite by default;
 6. delete the state directory manually after backup; v0.1 has no purge command, so this discards dedup and reconciliation history.
 
-## 11. Incident Data Collection
+## 11. Delivery-Failure Operator Exits (E8-T2)
+
+- **Expired submitting lease (process died mid-submit).** The next
+  Watchman trigger, the scheduled `reconcile --submit`, and
+  `dispatches drain` all run the recovery sweep at their head: the
+  wedged intent moves to `unknown` and is reconciled automatically. No
+  manual database edit is ever required; run `dispatches drain` only to
+  force the sweep immediately.
+- **Definite target rejection.** A dispatch the target provably refused
+  (rejected receipt) dead-letters through the declared edge at rejection
+  time: the record, attempts, and receipt stay inspectable through
+  `dispatches show`, and the route slot is freed by `dispatches discard`
+  (or the work recreated with `dispatches rerun`). A rejected dispatch no
+  longer holds the slot with no exit.
+- **Budget-exhausted retry_wait.** A dispatch whose submission backoff
+  budget is exhausted stays in `retry_wait` and the drain skips it.
+  `dispatches retry <dispatch-id>` is the documented exit: it makes the
+  dispatch due and resets its attempt budget in one audited transaction
+  (`explicit_retry_reset` in the transition history), so the next drain
+  submits it under a fresh budget.
+- **Over-budget follow-up chain (UNCERTAIN).** A route whose consecutive
+  follow-up chain passed `MaxConsecutiveFollowups` resolves through
+  UNCERTAIN instead of scheduling another generation: run
+  `reconcile --route <id> --reason manual` (or wait for the scheduled
+  reconciliation) to resolve the route from latest state.
+
+## 12. Incident Data Collection
 
 Collect:
 

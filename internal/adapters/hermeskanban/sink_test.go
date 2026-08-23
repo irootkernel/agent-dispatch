@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -348,5 +350,23 @@ func TestSinkReportSwapDetectedAtSubmission(t *testing.T) {
 	}
 	if res.Classification != ports.SubmitDefiniteNotSubmitted {
 		t.Fatalf("durability lost after construction must be definite_not_submitted, got %q", res.Classification)
+	}
+}
+
+// TestE8T2ExecStartFailureIsDefiniteNotSubmitted pins M-5: a fork/exec
+// failure (the argv-length family) proves the child never started, so
+// the create failure is definite not-submitted — never an unknown
+// dead-letter of provably unsubmitted work.
+func TestE8T2ExecStartFailureIsDefiniteNotSubmitted(t *testing.T) {
+	s := &Sink{}
+	res := s.classifyCreateFailure(&fs.PathError{Op: "fork/exec", Path: "hermes", Err: syscall.E2BIG})
+	if res.Classification != ports.SubmitDefiniteNotSubmitted {
+		t.Fatalf("a fork/exec failure must classify definite not-submitted, got %v", res.Classification)
+	}
+	// A post-start file error stays unknown: it cannot prove the child
+	// never ran.
+	res = s.classifyCreateFailure(&fs.PathError{Op: "write", Path: "pipe", Err: syscall.EPIPE})
+	if res.Classification != ports.SubmitUnknown {
+		t.Fatalf("a post-start failure must stay unknown, got %v", res.Classification)
 	}
 }

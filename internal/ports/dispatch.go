@@ -14,6 +14,10 @@ import (
 // (DUR-001, ADR-0005). All timestamp strings are canonical UTC RFC 3339
 // at second precision.
 type DispatchStore interface {
+	// DeadLetterRejected applies the declared rejected -> dead_lettered
+	// edge after a definite target rejection so the dispatch cannot hold
+	// the route slot with no operator exit (E8-T2, M-3).
+	DeadLetterRejected(ctx context.Context, dispatchID, actor, now string) error
 	// CommitLineage persists one observation-to-intent lineage and
 	// reserves the route's active slot in a single transaction: the
 	// committed intent exists before any target invocation (DUR-002) and

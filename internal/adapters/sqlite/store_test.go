@@ -12,6 +12,7 @@ import (
 	"sync"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 	"github.com/irootkernel/agent-dispatch/internal/domain/state"
@@ -167,6 +168,29 @@ func TestUniqueConstraints(t *testing.T) {
 	}
 }
 
+// transitionInTx applies one guarded intent transition inside a test
+// transaction through the same unexported primitive the guarded store
+// flows compose (the raw TransitionIntent export is gone, E8-T2/L-2).
+func transitionInTx(t *testing.T, s *Store, dispatchID string, from, to records.IntentState, reason state.IntentReason) error {
+	t.Helper()
+	tx, err := s.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	evidence := state.IntentEvidence{Actor: "test"}
+	if to == records.IntentSubmitting {
+		// Entering submitting demands lease evidence (the same guard the
+		// guarded AcquireAttempt flow satisfies).
+		evidence.Lease = &state.LeaseEvidence{Owner: "test-owner", ExpiresAt: "2099-01-01T00:00:00Z"}
+	}
+	if err := s.transitionWithin(context.Background(), tx, dispatchID, from, to, reason,
+		evidence, now(), fmt.Sprintf(`{"reason":%q,"actor":"test"}`, reason)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func TestIntentReservationAndLease(t *testing.T) {
 	s := openTestStore(t)
 	seedIntentChain(t, s, "dispatch-1")
@@ -177,12 +201,19 @@ func TestIntentReservationAndLease(t *testing.T) {
 		t.Fatal("route with an active dispatch must refuse a second intent (invariant 5)")
 	}
 
-	// Lease acquisition is a conditional write.
-	if err := s.AcquireLease(nil, "dispatch-1", "owner-a", "2026-08-20T00:01:00Z", "", "2026-08-20T00:00:30Z"); err != nil {
+	// Lease acquisition is a conditional write through the guarded flow
+	// (the raw test-only AcquireLease export is gone, E8-T2/L-2).
+	if _, err := s.AcquireAttempt(context.Background(), ports.AcquireAttempt{
+		DispatchID: "dispatch-1", AttemptID: "attempt-a", Owner: "owner-a",
+		Now: "2026-08-20T00:00:30Z", LeaseExpiresAt: "2026-08-20T00:01:00Z",
+	}); err != nil {
 		t.Fatalf("lease: %v", err)
 	}
 	// Re-acquiring while in submitting state must fail.
-	if err := s.AcquireLease(nil, "dispatch-1", "owner-b", "2026-08-20T00:02:00Z", "", "2026-08-20T00:01:30Z"); err == nil {
+	if _, err := s.AcquireAttempt(context.Background(), ports.AcquireAttempt{
+		DispatchID: "dispatch-1", AttemptID: "attempt-b", Owner: "owner-b",
+		Now: "2026-08-20T00:01:30Z", LeaseExpiresAt: "2026-08-20T00:02:00Z",
+	}); err == nil {
 		t.Fatal("lease re-acquisition must be conditional")
 	}
 }
@@ -190,13 +221,13 @@ func TestIntentReservationAndLease(t *testing.T) {
 func TestStateTransitionsAppendOnlyAndValidated(t *testing.T) {
 	s := openTestStore(t)
 	seedIntentChain(t, s, "dispatch-1")
-	if err := s.TransitionIntent(nil, "tr-1", "dispatch-1", "ready", "submitting", now(), "{}"); err != nil {
+	if err := transitionInTx(t, s, "dispatch-1", records.IntentReady, records.IntentSubmitting, state.ReasonLeaseAcquired); err != nil {
 		t.Fatalf("ready->submitting: %v", err)
 	}
-	if err := s.TransitionIntent(nil, "tr-2", "dispatch-1", "ready", "submitting", now(), "{}"); err == nil {
+	if err := transitionInTx(t, s, "dispatch-1", records.IntentReady, records.IntentSubmitting, state.ReasonLeaseAcquired); err == nil {
 		t.Fatal("stale from-state must fail (invariant 3)")
 	}
-	if err := s.TransitionIntent(nil, "tr-3", "dispatch-1", "submitting", "completed", now(), "{}"); err == nil {
+	if err := transitionInTx(t, s, "dispatch-1", records.IntentSubmitting, records.IntentCompleted, state.ReasonExecutionSucceeded); err == nil {
 		t.Fatal("submitting->completed is not a legal transition")
 	}
 	if _, err := s.Exec(`UPDATE state_transitions SET to_state = 'tampered'`); err == nil {
@@ -232,7 +263,7 @@ func TestDomainStateEnumsMatchSchemaChecks(t *testing.T) {
 func TestInvalidTransitionNoPartialPersistence(t *testing.T) {
 	s := openTestStore(t)
 	seedIntentChain(t, s, "dispatch-1")
-	if err := s.TransitionIntent(nil, "tr-bad", "dispatch-1", "ready", "completed", now(), "{}"); err == nil {
+	if err := transitionInTx(t, s, "dispatch-1", records.IntentReady, records.IntentCompleted, state.ReasonExecutionSucceeded); err == nil {
 		t.Fatal("ready -> completed must be rejected by the domain table")
 	}
 	var current string
@@ -243,7 +274,7 @@ func TestInvalidTransitionNoPartialPersistence(t *testing.T) {
 	if err := s.QueryRow(`SELECT COUNT(*) FROM state_transitions WHERE entity_id = 'dispatch-1'`).Scan(&transitions); err != nil || transitions != 0 {
 		t.Fatalf("rejected transition must not append audit history: %d %v", transitions, err)
 	}
-	if err := s.TransitionIntent(nil, "tr-ok", "dispatch-1", "ready", "submitting", now(), "{}"); err != nil {
+	if err := transitionInTx(t, s, "dispatch-1", records.IntentReady, records.IntentSubmitting, state.ReasonLeaseAcquired); err != nil {
 		t.Fatalf("valid transition after a rejected one: %v", err)
 	}
 }
@@ -489,7 +520,10 @@ func TestSaveIntentWithoutRuntimeRow(t *testing.T) {
 func TestLeasePersistsNextAttemptAt(t *testing.T) {
 	s := openTestStore(t)
 	seedIntentChain(t, s, "dispatch-1")
-	if err := s.AcquireLease(nil, "dispatch-1", "owner-a", "2026-08-20T00:01:00Z", "2026-08-20T00:05:00Z", now()); err != nil {
+	if _, err := s.AcquireAttempt(context.Background(), ports.AcquireAttempt{
+		DispatchID: "dispatch-1", AttemptID: "attempt-next", Owner: "owner-a",
+		Now: now(), LeaseExpiresAt: "2026-08-20T00:01:00Z", NextAttemptAt: "2026-08-20T00:05:00Z",
+	}); err != nil {
 		t.Fatal(err)
 	}
 	var next sql.NullString
@@ -736,7 +770,7 @@ func TestSameSecondRetriesAllowed(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MakeRetryDue(ctx, "dispatch-samesecond", now); err != nil {
+	if err := s.MakeRetryDue(ctx, "dispatch-samesecond", "operator", now); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.AcquireAttempt(ctx, ports.AcquireAttempt{
@@ -1481,5 +1515,77 @@ func seedIntentChainV3Era(t *testing.T, s *Store, dispatchID string) {
 	if _, err := s.Exec(`UPDATE route_runtime_state SET active_dispatch_id = ?, active_generation = ?, version = version + 1 WHERE route_id = ? AND active_dispatch_id IS NULL`,
 		rec.DispatchID, rec.Generation, rec.RouteID); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestE8T2MigrationLockHeartbeatRefreshes proves the M-4 heartbeat: a
+// live holder's lock mtime is refreshed on every tick, so a waiter can
+// never steal a lock from a migration still in progress even when it
+// outlives the staleness bound.
+func TestE8T2MigrationLockHeartbeatRefreshes(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "state.db")
+	lockPath := dbPath + ".migration-lock"
+	origRefresh := migrationLockRefresh
+	migrationLockRefresh = 20 * time.Millisecond
+	defer func() { migrationLockRefresh = origRefresh }()
+	release, err := acquireMigrationFileLock(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	// Age the lock past the staleness bound, then let at least one tick
+	// fire: the heartbeat must refresh the mtime forward.
+	aged := time.Now().Add(-2 * migrationLockStaleness)
+	if err := os.Chtimes(lockPath, aged, aged); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(80 * time.Millisecond)
+	info, err := os.Stat(lockPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if time.Since(info.ModTime()) > migrationLockStaleness {
+		t.Fatalf("the heartbeat must refresh a live holder's lock mtime, last refresh %v ago", time.Since(info.ModTime()))
+	}
+}
+
+// TestE8T2DeadLetterRejectedGuards pins the M-3 store guard branches:
+// only a rejected dispatch dead-letters; the dead-lettered shape is
+// idempotent, and any other state refuses with the typed conflict.
+func TestE8T2DeadLetterRejectedGuards(t *testing.T) {
+	s := openTestStore(t)
+	seedIntentChain(t, s, "dispatch-1")
+	if err := s.DeadLetterRejected(context.Background(), "dispatch-1", "runtime", now()); err == nil || !errors.Is(err, ports.ErrStateNotEligible) {
+		t.Fatalf("a ready dispatch must refuse: %v", err)
+	}
+	// Force the rejected shape through the guarded flow's classification
+	// table (the runtime hook applies the same edge in production).
+	if err := transitionInTx(t, s, "dispatch-1", records.IntentReady, records.IntentSubmitting, state.ReasonLeaseAcquired); err != nil {
+		t.Fatal(err)
+	}
+	// The definite-rejection edge demands its receipt evidence (the same
+	// guard the classified completion flow satisfies).
+	tx, txErr := s.BeginTx(context.Background(), nil)
+	if txErr != nil {
+		t.Fatal(txErr)
+	}
+	if err := s.transitionWithin(context.Background(), tx, "dispatch-1", records.IntentSubmitting, records.IntentRejected, state.ReasonDefiniteRejection,
+		state.IntentEvidence{Actor: "runtime", ReceiptRef: "rcpt-test-rejected"}, now(),
+		`{"reason":"definite_rejection","receipt":"rcpt-test-rejected"}`); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeadLetterRejected(context.Background(), "dispatch-1", "runtime", now()); err != nil {
+		t.Fatalf("a rejected dispatch must dead-letter: %v", err)
+	}
+	// Idempotent for the already-dead-lettered shape.
+	if err := s.DeadLetterRejected(context.Background(), "dispatch-1", "runtime", now()); err != nil {
+		t.Fatalf("the dead-lettered shape must be idempotent: %v", err)
+	}
+	var got string
+	if err := s.QueryRow(`SELECT state FROM dispatch_intents WHERE dispatch_id = 'dispatch-1'`).Scan(&got); err != nil || got != string(records.IntentDeadLettered) {
+		t.Fatalf("the dispatch must be dead-lettered: %q %v", got, err)
 	}
 }

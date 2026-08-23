@@ -331,9 +331,16 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	}
 	rt := &dispatch.Runtime{
 		Store: outcome.store, Sink: sink, Now: time.Now,
-		LeaseTTL: time.Minute, Backoff: backoff, JitterUnit: jitterUnit, Actor: "dispatch",
+		LeaseTTL: leaseTTLFor(artifacts.target.SubmitTimeout), Backoff: backoff, JitterUnit: jitterUnit, Actor: "dispatch",
 		Log: opsLogger(stderr, artifacts.cfg), TraceID: globalTraceID,
 		StalenessCheck: stalenessCheckOf(artifacts.cfg), StaleRebuilder: staleRebuilderOf(outcome.store, artifacts.cfg),
+	}
+	// The head-of-entry sweep already ran before the arrival was
+	// evaluated; this second pass covers only the race where the lease
+	// expired between that sweep and this submit (E8-T2/H-6).
+	if _, err := rt.Recover(requestCtx(), artifacts.opts.routeID); err != nil {
+		outcome.Close()
+		return intentErr(stderr, command, err)
 	}
 	report, err := rt.SubmitOnce(requestCtx(), outcome.dispatchID, "agent-dispatch-dispatch")
 	outcome.Close()
@@ -374,6 +381,33 @@ func persistThroughCoordinator(command string, artifacts *planArtifacts, stderr 
 	store, closer, exit := openOperatorStore(command, artifacts.opts.configPath, stderr)
 	if exit != 0 {
 		return persistOutcome{}, exit
+	}
+	// Head-of-entry recovery (DUR-010, E8-T2/H-6): expired submitting
+	// leases are recovered — and their unknowns reconciled — before this
+	// arrival is evaluated, so a process that died mid-submit heals on
+	// the next trigger and the freed route can accept the arriving work
+	// instead of silently merging into a wedged generation. A failure to
+	// enumerate fails closed exactly like the drain.
+	headRecover := dispatch.Runtime{Store: store, Now: time.Now, Actor: "dispatch-cli"}
+	if recovered, err := headRecover.Recover(requestCtx(), artifacts.opts.routeID); err != nil {
+		closer.Close()
+		writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
+		return persistOutcome{}, 20
+	} else if len(recovered) > 0 {
+		if sink, sinkErr := resolveSink(artifacts.cfg, artifacts.target, artifacts.route); sinkErr == nil {
+			if backoff, bErr := backoffFromConfig(artifacts.route.Dispatch.SubmissionRetry); bErr == nil {
+				// The healed unknowns resolve now; a failure here never
+				// blocks the arrival, but it is never silent either — the
+				// operator sees it on stderr (E8-T2 round-1 review).
+				if _, warnings, rErr := reconcileUnknownDispatches(artifacts.cfg, store, sink, artifacts.opts.routeID, backoff); rErr != nil {
+					fmt.Fprintf(stderr, "%s\n", rErr.Error())
+				} else {
+					for _, w := range warnings {
+						fmt.Fprintf(stderr, "%s\n", w)
+					}
+				}
+			}
+		}
 	}
 	lin, err := buildLineage(artifacts)
 	if err != nil {
@@ -656,6 +690,21 @@ func hintsOf(route config.Route) (*ports.TaskExecutionHints, error) {
 	}
 	hints.MaxAttempts = int64(route.Dispatch.ExecutionHints.MaxAttempts)
 	return hints, nil
+}
+
+// leaseTTLFor derives the attempt lease TTL from the route target's
+// configured submit timeout plus a fixed margin, so a live submitter's
+// lease can never be stolen by a recovery sweep while its invocation is
+// still inside the operator-approved window (E8-T2, M-1). The default
+// matches the shipped submit timeout (30 s + 30 s margin = one minute);
+// an unparsable value falls back to it (configuration validation
+// rejects those earlier).
+func leaseTTLFor(submitTimeout string) time.Duration {
+	const margin = 30 * time.Second
+	if d, err := time.ParseDuration(submitTimeout); err == nil && d > 0 {
+		return d + margin
+	}
+	return 30*time.Second + margin
 }
 
 // newPatternEngine compiles the route's pattern sets with the case mode

@@ -330,6 +330,42 @@ func (s *Store) CompleteAttempt(ctx context.Context, res ports.AttemptResult) er
 	return tx.Commit()
 }
 
+// DeadLetterRejected applies the declared rejected -> dead_lettered edge
+// after a definite target rejection (E8-T2, M-3): a dispatch the target
+// provably refused must not hold the route slot as a terminal `rejected`
+// with no operator exit — the dead letter is the documented closure
+// shape the existing discard/rerun exits own. The record and its audit
+// history remain inspectable.
+func (s *Store) DeadLetterRejected(ctx context.Context, dispatchID, actor, now string) error {
+	now = normalizeTimestamp(now)
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var current string
+	if err := tx.QueryRow(`SELECT state FROM dispatch_intents WHERE dispatch_id = ?`, dispatchID).Scan(&current); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: %s", ports.ErrIntentNotFound, dispatchID)
+		}
+		return err
+	}
+	if current != string(records.IntentRejected) {
+		// Idempotent for the already-dead-lettered shape (a concurrent
+		// completion raced this call); anything else is a conflict.
+		if current == string(records.IntentDeadLettered) {
+			return nil
+		}
+		return fmt.Errorf("%w: %s is %s, not rejected", ports.ErrStateNotEligible, dispatchID, current)
+	}
+	if err := s.transitionWithin(ctx, tx, dispatchID, records.IntentRejected, records.IntentDeadLettered, state.ReasonTerminalPolicy,
+		state.IntentEvidence{Actor: actor}, now,
+		fmt.Sprintf(`{"reason":%q,"actor":%q,"note":"definite rejection dead-letters the dispatch for the operator exits"}`, state.ReasonTerminalPolicy, actor)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // RecoverExpiredSubmitting moves every submitting intent on one route
 // whose lease expired to unknown with audit evidence and closes its open
 // attempt row; an abandoned submitting state defaults to unknown

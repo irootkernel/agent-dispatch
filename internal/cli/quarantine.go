@@ -217,10 +217,24 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 	// other due work so a pending follow-up generation reaches the target
 	// without a manual drain (CON-003, E7-T2/B-3). The automatic-write
 	// gate still applies: a route that is not enabled submits nothing.
-	rt, rtErr := artifacts.submitRuntime(store)
+	rt, sink, backoff, rtErr := artifacts.submitRuntime(store)
 	if rtErr != nil {
 		writeError(stderr, command, "config_invalid", "configuration", rtErr.Error())
 		return 3
+	}
+	// Expired submitting leases are recovered before unknown
+	// reconciliation at the head of every submit entry point (DUR-010,
+	// E8-T2/H-6): the scheduled path heals a process that died mid-submit
+	// without a manual drain, exactly like the trigger and drain paths.
+	// The sweep deliberately runs before the activation and enabled gates:
+	// lease recovery and DUR-006 resolution are ungated maintenance
+	// actions (the drain's disabled branch documents the same posture),
+	// never automatic submission.
+	if _, err := rt.Recover(requestCtx(), routeID); err != nil {
+		return intentErr(stderr, command, err)
+	}
+	if _, _, err := reconcileUnknownDispatches(artifacts.cfg, store, sink, routeID, backoff); err != nil {
+		return intentErr(stderr, command, err)
 	}
 	if rs, rsErr := store.LoadRouteState(requestCtx(), routeID); rsErr != nil {
 		writeError(stderr, command, "sqlite_query_failed", "storage", rsErr.Error())

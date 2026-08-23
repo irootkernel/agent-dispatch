@@ -187,8 +187,10 @@ func TestDrainStopsAtLimit(t *testing.T) {
 	if _, err := rt.SubmitOnce(context.Background(), "dispatch-1", "p1"); err != nil {
 		t.Fatal(err)
 	}
-	// Make it due, then the second (final) attempt.
-	if err := s.MakeRetryDue(context.Background(), "dispatch-1", "2026-08-20T01:00:01Z"); err != nil {
+	// Make it due for the second (final) attempt without an operator
+	// retry: the explicit retry resets the attempt budget (E8-T2, M-2),
+	// so the automatic exhaustion path advances the deadline directly.
+	if _, err := s.Exec(`UPDATE dispatch_intents SET next_attempt_at = NULL WHERE dispatch_id = 'dispatch-1'`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := rt.SubmitOnce(context.Background(), "dispatch-1", "p1"); err != nil {
@@ -198,15 +200,27 @@ func TestDrainStopsAtLimit(t *testing.T) {
 	if snap.AttemptCount != 2 {
 		t.Fatalf("attempt count: %d", snap.AttemptCount)
 	}
-	if err := s.MakeRetryDue(context.Background(), "dispatch-1", "2026-08-20T01:00:02Z"); err != nil {
+	// The explicit operator retry resets the attempt budget (E8-T2, M-2):
+	// the retry is the documented exit for a budget-exhausted wait.
+	if err := s.MakeRetryDue(context.Background(), "dispatch-1", "operator", "2026-08-20T01:00:02Z"); err != nil {
 		t.Fatal(err)
 	}
+	if snap, _ = s.LoadIntent(context.Background(), "dispatch-1"); snap.AttemptCount != 0 {
+		t.Fatalf("explicit retry must reset the attempt budget, got %d", snap.AttemptCount)
+	}
+	var resetAudit int
+	if err := s.QueryRow(`SELECT COUNT(*) FROM state_transitions WHERE entity_id = 'dispatch-1' AND context_json LIKE '%explicit_retry_reset%'`).Scan(&resetAudit); err != nil || resetAudit == 0 {
+		t.Fatalf("the retry reset must append its audit row: %d %v", resetAudit, err)
+	}
+	// The reset budget is the operator exit: the drain that previously
+	// skipped the exhausted dispatch forever now processes it (E8-T2,
+	// M-2 — the skip itself stays pinned by TestG2AC205).
 	report, err := rt.Drain(context.Background(), "wiki-maintenance", 10, s)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.Processed != 0 || report.Skipped != 1 {
-		t.Fatalf("exhausted budget must stop automatic processing: %+v", report)
+	if report.Processed != 1 {
+		t.Fatalf("the explicit retry must free the exhausted dispatch for processing: %+v", report)
 	}
 }
 

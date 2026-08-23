@@ -33,7 +33,7 @@ agent-dispatch config validate|show
 agent-dispatch route list|show|plan|enable|disable
 agent-dispatch watchman install|status|remove|test
 agent-dispatch dispatch
-agent-dispatch dispatches list|show|retry|reprocess|rerun|refresh|drain
+agent-dispatch dispatches list|show|retry|reprocess|rerun|discard|refresh|drain
 agent-dispatch receipts list|show
 agent-dispatch work begin|complete|fail
 agent-dispatch quarantine list|show|release|discard

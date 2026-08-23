@@ -336,6 +336,12 @@ func (s *Store) ApplyMigrationSQLWithoutLedgerForHarness(m Migration) error {
 // atomically steals it from a holder that died without releasing.
 const migrationLockStaleness = 30 * time.Second
 
+// migrationLockRefresh is how often a live holder refreshes its lock's
+// mtime so a migration slower than the staleness bound is never stolen
+// from its owner (E8-T2, M-4); a package variable so tests can shorten
+// the tick.
+var migrationLockRefresh = migrationLockStaleness / 3
+
 // acquireMigrationFileLock serializes concurrent migration passes across
 // processes with an exclusive lock file beside the database. Waiters
 // poll for the holder's completion; a lock older than the staleness
@@ -351,7 +357,27 @@ func acquireMigrationFileLock(dbPath string) (func(), error) {
 		if err == nil {
 			fmt.Fprintf(f, "%d\n", os.Getpid())
 			f.Close()
+			// Heartbeat: a migration slower than the staleness bound
+			// refreshes its lock's mtime so a waiter cannot steal a lock
+			// its holder still owns (E8-T2, M-4 — a VACUUM INTO plus
+			// table rebuilds can outlive the old once-written mtime).
+			stop := make(chan struct{})
+			go func() {
+				ticker := time.NewTicker(migrationLockRefresh)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-stop:
+						return
+					case <-ticker.C:
+						if data, readErr := os.ReadFile(lockPath); readErr == nil && strings.TrimSpace(string(data)) == fmt.Sprint(os.Getpid()) {
+							_ = os.Chtimes(lockPath, time.Now(), time.Now())
+						}
+					}
+				}
+			}()
 			return func() {
+				close(stop)
 				// Owned release: remove the lock only when it is still
 				// ours (a stealer may already have replaced it).
 				if data, readErr := os.ReadFile(lockPath); readErr == nil && strings.TrimSpace(string(data)) == fmt.Sprint(os.Getpid()) {

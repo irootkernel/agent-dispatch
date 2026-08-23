@@ -1,6 +1,8 @@
 package hermeskanban
 
 import (
+	"io/fs"
+
 	"context"
 	"encoding/json"
 	"errors"
@@ -123,8 +125,15 @@ func (s *Sink) classifyCreateFailure(err error) ports.SubmitResult {
 	var missing *ExecutableMissingError
 	var rejected *ArgumentRejectedError
 	var board *UnknownBoardError
+	var pathErr *fs.PathError
 	switch {
 	case errors.As(err, &missing), errors.As(err, &rejected), errors.As(err, &board):
+		return definiteNotSubmitted(err.Error())
+	case errors.As(err, &pathErr) && pathErr.Op == "fork/exec":
+		// The child never started (the argv-length family: macOS ARG_MAX,
+		// Linux MAX_ARG_STRLEN): the failure is provably pre-invocation,
+		// so it is definite not-submitted, never an unknown dead-letter
+		// of provably unsubmitted work (E8-T2, M-5).
 		return definiteNotSubmitted(err.Error())
 	default:
 		return ports.SubmitResult{

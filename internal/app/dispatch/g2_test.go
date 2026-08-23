@@ -285,7 +285,10 @@ func TestG2AC205(t *testing.T) {
 			t.Fatal("retries must retain one idempotency key")
 		}
 		_ = report
-		if err := s.MakeRetryDue(context.Background(), "dispatch-1", "due"); err != nil {
+		// Advance the backoff deadline without an operator retry: the
+		// explicit retry resets the attempt budget (E8-T2, M-2), so the
+		// automatic exhaustion path must not use it.
+		if _, err := s.Exec(`UPDATE dispatch_intents SET next_attempt_at = NULL WHERE dispatch_id = 'dispatch-1'`); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -309,9 +312,12 @@ func TestG2AC206(t *testing.T) {
 	if err != nil || report.To != records.IntentRejected {
 		t.Fatalf("terminal rejection: %+v %v", report, err)
 	}
+	// The definite rejection dead-letters through the declared edge so the
+	// dispatch cannot hold the route slot with no operator exit (E8-T2,
+	// M-3); the record, attempts, and receipts remain inspectable.
 	lin, err := s.LoadIntentLineage(context.Background(), "dispatch-1")
-	if err != nil || lin.Intent.State != records.IntentRejected || len(lin.Attempts) == 0 || len(lin.Receipts) == 0 {
-		t.Fatalf("rejected work must remain inspectable: %+v %v", lin, err)
+	if err != nil || lin.Intent.State != records.IntentDeadLettered || len(lin.Attempts) == 0 || len(lin.Receipts) == 0 {
+		t.Fatalf("rejected work must dead-letter and remain inspectable: %+v %v", lin.Intent, err)
 	}
 	if len(fake.Submissions()) != 1 {
 		t.Fatalf("no automatic retry or fallback after rejection: %d submissions", len(fake.Submissions()))

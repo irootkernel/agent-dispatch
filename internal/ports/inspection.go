@@ -216,9 +216,11 @@ type OperatorStore interface {
 	// reason recorded (DUR-009). The attempt budget resets; the request
 	// and idempotency key are retained.
 	ApplyOperatorRetry(ctx context.Context, dispatchID, actor, reason string, now string) error
-	// MakeRetryDue makes a retry_wait dispatch eligible immediately; the
-	// idempotency key and budget are retained.
-	MakeRetryDue(ctx context.Context, dispatchID string, now string) error
+	// MakeRetryDue makes a retry_wait dispatch eligible immediately and
+	// resets its attempt budget in one audited transaction (E8-T2, M-2:
+	// the explicit retry is the operator exit for a budget-exhausted
+	// wait); the idempotency key is retained.
+	MakeRetryDue(ctx context.Context, dispatchID, actor, now string) error
 	// RerunIntent persists an intentional new work request built by the
 	// caller (new dispatch ID, generation, and idempotency key) under one
 	// new decision superseding the original lineage (CLI-005 posture: no

@@ -171,20 +171,22 @@ func (a *reconcileArtifacts) reconcileIntentBuilder() func(routeID, reason, deci
 	}
 }
 
-// submitRuntime assembles the submission runtime for --submit.
-func (a *reconcileArtifacts) submitRuntime(store storeOp) (*dispatch.Runtime, error) {
+// submitRuntime assembles the submission runtime for --submit; the
+// resolved sink and backoff are returned for the head-of-submit recovery
+// wiring (E8-T2/H-6).
+func (a *reconcileArtifacts) submitRuntime(store storeOp) (*dispatch.Runtime, ports.Sink, dispatch.Backoff, error) {
 	sink, err := resolveSink(a.cfg, a.target, a.route)
 	if err != nil {
-		return nil, err
+		return nil, nil, dispatch.Backoff{}, err
 	}
 	backoff, err := backoffFromConfig(a.route.Dispatch.SubmissionRetry)
 	if err != nil {
-		return nil, err
+		return nil, nil, dispatch.Backoff{}, err
 	}
 	return &dispatch.Runtime{
 		Store: store, Sink: sink, Now: time.Now,
-		LeaseTTL: time.Minute, Backoff: backoff, JitterUnit: jitterUnit, Actor: "reconcile",
+		LeaseTTL: leaseTTLFor(a.target.SubmitTimeout), Backoff: backoff, JitterUnit: jitterUnit, Actor: "reconcile",
 		Log: opsLogger(a.stderr, a.cfg), TraceID: globalTraceID,
 		StalenessCheck: stalenessCheckOf(a.cfg), StaleRebuilder: staleRebuilderOf(store, a.cfg),
-	}, nil
+	}, sink, backoff, nil
 }

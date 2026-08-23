@@ -43,7 +43,9 @@ type OperatorStorePort interface {
 
 // Retry applies the explicit retry: dead-lettered work returns to ready
 // with the recorded actor, reason, and a reset attempt budget (DUR-009);
-// retry_wait work becomes due immediately, retaining its key and budget.
+// retry_wait work becomes due immediately with its attempt budget reset
+// in the same audited transaction (E8-T2, M-2: the retry is the exit for
+// a budget-exhausted wait).
 func (o *OperatorService) Retry(ctx context.Context, dispatchID, actor, reason string) (string, error) {
 	lin, err := o.Store.LoadIntentLineage(ctx, dispatchID)
 	if err != nil {
@@ -52,19 +54,19 @@ func (o *OperatorService) Retry(ctx context.Context, dispatchID, actor, reason s
 	switch lin.Intent.State {
 	case "dead_lettered":
 		if strings.TrimSpace(reason) == "" {
-			return "", fmt.Errorf("retrying dead-lettered dispatch %s requires --reason", dispatchID)
+			return "", fmt.Errorf("%w: retrying dead-lettered dispatch %s requires --reason", ports.ErrReasonRequired, dispatchID)
 		}
 		if err := o.Store.ApplyOperatorRetry(ctx, dispatchID, actor, reason, o.Now()); err != nil {
 			return "", err
 		}
 		return "ready", nil
 	case "retry_wait":
-		if err := o.Store.MakeRetryDue(ctx, dispatchID, o.Now()); err != nil {
+		if err := o.Store.MakeRetryDue(ctx, dispatchID, actor, o.Now()); err != nil {
 			return "", err
 		}
 		return "retry_wait", nil
 	default:
-		return "", fmt.Errorf("dispatch %s is %s; retry requires dead_lettered or retry_wait", dispatchID, lin.Intent.State)
+		return "", fmt.Errorf("%w: dispatch %s is %s; retry requires dead_lettered or retry_wait", ports.ErrStateNotEligible, dispatchID, lin.Intent.State)
 	}
 }
 
@@ -80,7 +82,7 @@ func (o *OperatorService) Retry(ctx context.Context, dispatchID, actor, reason s
 func (o *OperatorService) Rerun(ctx context.Context, dispatchID, actor, reason string) (ports.IntentSummary, error) {
 	var zero ports.IntentSummary
 	if strings.TrimSpace(reason) == "" {
-		return zero, fmt.Errorf("rerun requires --reason")
+		return zero, fmt.Errorf("%w: rerun requires --reason", ports.ErrReasonRequired)
 	}
 	snap, err := o.Store.LoadIntent(ctx, dispatchID)
 	if err != nil {
@@ -92,11 +94,11 @@ func (o *OperatorService) Rerun(ctx context.Context, dispatchID, actor, reason s
 		// original to superseded through its declared edge in the same
 		// transaction that creates the rerun.
 	case records.IntentSubmitting, records.IntentUnknown, records.IntentReconciling:
-		return zero, fmt.Errorf("dispatch %s is %s; recover and reconcile it first (dispatches drain resolves expired leases and unknown work)", dispatchID, snap.State)
+		return zero, fmt.Errorf("%w: dispatch %s is %s; recover and reconcile it first (dispatches drain resolves expired leases and unknown work)", ports.ErrStateNotEligible, dispatchID, snap.State)
 	case records.IntentRetryWait:
-		return zero, fmt.Errorf("dispatch %s is retry_wait; use dispatches retry when it is due instead of rerunning it", dispatchID)
+		return zero, fmt.Errorf("%w: dispatch %s is retry_wait; use dispatches retry when it is due instead of rerunning it", ports.ErrStateNotEligible, dispatchID)
 	default:
-		return zero, fmt.Errorf("dispatch %s is %s; its lineage is authoritative and cannot be superseded by a rerun", dispatchID, snap.State)
+		return zero, fmt.Errorf("%w: dispatch %s is %s; its lineage is authoritative and cannot be superseded by a rerun", ports.ErrStateNotEligible, dispatchID, snap.State)
 	}
 	var req ports.TaskRequest
 	if err := json.Unmarshal([]byte(snap.RequestJSON), &req); err != nil {

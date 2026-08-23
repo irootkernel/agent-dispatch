@@ -17,7 +17,7 @@ under [`docs/`](docs/README.md); start there.
 - `docs/` the SOT package: specification, ADRs, contracts, roadmap,
   schemas, examples, and integration evidence.
 - `Makefile` the single verification entrypoint.
-- GitHub Actions is not used; run `make verify` locally on each target
+- GitHub Actions is not used; run `make verify` (format, vet, staticcheck, import lint, unit and race tests, manifest, schema, traceability, schedule-check) locally on each target
   platform (macOS, and a supported Linux host for Linux releases).
 
 ## Build and verify

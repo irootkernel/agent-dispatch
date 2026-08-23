@@ -11,9 +11,10 @@ make verify
 This runs, in order: build, gofmt check, `go vet`, staticcheck (pinned
 version), the package dependency-direction lint (`internal/importlint`),
 unit tests, race tests, the docs package manifest checksum check, Draft
-2020-12 schema/example validation (`internal/tools/schemavalid`), and
-traceability regeneration with a drift guard. Individual targets can be
-run directly, for example `make schema-validation` or `make test-race`.
+2020-12 schema/example validation (`internal/tools/schemavalid`),
+traceability regeneration with a drift guard, and the scheduling-artifact
+check (`make schedule-check`). Individual targets can be run directly,
+for example `make schema-validation` or `make test-race`.
 
 The docs package is checksummed: after editing anything under `docs/`,
 regenerate `docs/MANIFEST.sha256` (see `docs/VALIDATION.md`) so

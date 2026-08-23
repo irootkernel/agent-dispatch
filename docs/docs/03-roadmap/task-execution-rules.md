@@ -74,6 +74,12 @@ evidence:
 notes: []
 ```
 
+The roadmap records `status` and the evidence trail inline (Objective,
+Deliverables, Requirements, Dependencies, Acceptance, Evidence); the
+owner/timestamp fields above are carried by the execution environment
+(Podway session records and the Git commit metadata) rather than a
+per-task YAML file (recorded deviation, E7-T10/M-31).
+
 The roadmap Markdown table is the human SOT. A machine-readable tracker may be added later, but it must be generated from or reconciled with the roadmap.
 
 ## 6. Definition of Ready

@@ -1,5 +1,14 @@
 # SOT Changelog
 
+## 1.0.23 - 2026-08-23
+
+E7-T10: licensing, layout, and documentation consistency (M-27, M-31):
+
+- the repository carries an MIT LICENSE and a recorded dependency-license review (all 39 modules in the build graph: MIT, BSD, Apache, and MPL-2.0 tool-chain only, all compatible);
+- the release checklist is retitled for v0.1.1 and operated: all 50 items checked with honest narrowing notes;
+- repository-layout documents the six named layout deviations; task-execution-rules §5 records the owner/timestamp deviation; the CHANGELOG 1.0.7 entry carries the pending_reconcile known-deferred note; the six E6-T3 hardening residuals carry individual dispositions; CONTRIBUTING and README state the full make verify composition;
+- the two stale docs-schemas skips became fatal broken-checkout guards, the stale E4-T4 skip was removed, and the duplicate E6-T4 heading was unified.
+
 ## 1.0.22 - 2026-08-23
 
 E7-T9: the operations and security medium batch (SCP-004, FBK-002/003, HER-005, OPS-003, SEC-006, SEC-007):
@@ -220,6 +229,8 @@ Review round 2 remediations (all roles, reports_only):
 - the webhook probe surfaces a Probe failure as config_error instead of reporting empty capabilities.
 
 ## 1.0.7 - 2026-08-21
+
+(Known deferred work from this entry: the `pending_reconcile` ABA window is accepted with one-time self-healing semantics; recorded here per the release notes' known-deferred disclosure, E7-T10.)
 
 E5 post-closeout review remediations (no contract surface changes; behavior corrections under the existing contracts):
 

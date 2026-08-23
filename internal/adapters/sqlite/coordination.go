@@ -69,6 +69,23 @@ func (s *Store) CommitMergePending(ctx context.Context, lin ports.Lineage, actor
 	if !snap.State.IsActive() && snap.State != state.RouteFollowupReady && snap.State != state.RouteUncertain && snap.State != state.RouteIdle {
 		return 0, fmt.Errorf("%w: route %s is %s, arriving work cannot merge", ports.ErrStateNotEligible, lin.Decision.RouteID, snap.State)
 	}
+	// An IDLE merge with an empty slot has no dispatch that could own the
+	// burst's dirty generation (a disabled or paused route, or the slot
+	// winner completing inside the race window): recording dirty here
+	// would wedge the next clean completion against a count no later
+	// receipt can clear — the pre-watermark batches sit below the next
+	// dispatch's generation window. The owed work is recorded as a
+	// pending reconciliation instead; the next arrival or the scheduled
+	// reconcile delivers it as latest-state work (E8-T1 round-1 F001).
+	if snap.State == state.RouteIdle && snap.ActiveDispatchID == "" {
+		if _, err := tx.Exec(`UPDATE route_runtime_state SET pending_reconcile = 1 WHERE route_id = ?`, lin.Decision.RouteID); err != nil {
+			return 0, err
+		}
+		if err := tx.Commit(); err != nil {
+			return 0, err
+		}
+		return snap.DirtyGeneration, nil
+	}
 	// Merging onto IDLE only happens when this arrival lost a slot race:
 	// the winner's completion collapses the recorded generation (the
 	// loser reached here through ErrRouteSlotHeld).
@@ -160,24 +177,31 @@ func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.Acti
 	needsFollowup := (snap.DirtyGeneration > 0 && !req.DirtySuppressed) || snap.PendingReconcile
 	// The caller built the follow-up from an earlier read. If the
 	// transaction now sees work the caller did not (a reconciliation
-	// arrival or release flipped pending_reconcile without moving the
+	// arrival or release flipping pending_reconcile without moving the
 	// fenced dirty generation), refusing beats silently dropping the
-	// signal into a follow-up-less FOLLOWUP_READY.
-	if needsFollowup && req.FollowupRequest == nil {
+	// signal into a follow-up-less FOLLOWUP_READY. A completion over the
+	// follow-up budget is the deliberate exception: it deliberately
+	// schedules no follow-up and resolves through UNCERTAIN instead
+	// (E8-T1, FBK-008).
+	overFollowupBudget := needsFollowup && req.FollowupGeneration > state.MaxConsecutiveFollowups
+	if needsFollowup && !overFollowupBudget && req.FollowupRequest == nil {
 		return out, fmt.Errorf("%w: route %s needs a follow-up (dirty %d, pending reconciliation %v) but none was prepared", ErrOptimisticConcurrency, req.RouteID, snap.DirtyGeneration, snap.PendingReconcile)
 	}
 	var to state.RouteState
 	var reason state.RouteReason
 	if needsFollowup {
-		to = state.RouteFollowupReady
-		if req.Failed {
-			if req.FailureBudgetRemaining <= 0 {
-				to, reason = state.RouteUncertain, state.ReasonRetryBudgetExhausted
-			} else {
-				reason = state.ReasonWorkRetryBudgetRemains
-			}
+		if req.Failed && req.FailureBudgetRemaining <= 0 {
+			to, reason = state.RouteUncertain, state.ReasonRetryBudgetExhausted
+		} else if overFollowupBudget {
+			// The consecutive follow-up chain exceeded its bound: the
+			// route resolves through operator reconciliation instead of
+			// scheduling another generation (E8-T1, H-1.1). The active
+			// slot and dirty generation stay recorded for the resolution.
+			to, reason = state.RouteUncertain, state.ReasonFollowupBudgetExhausted
+		} else if req.Failed {
+			to, reason = state.RouteFollowupReady, state.ReasonWorkRetryBudgetRemains
 		} else {
-			reason = state.ReasonWorkCompletedDirty
+			to, reason = state.RouteFollowupReady, state.ReasonWorkCompletedDirty
 		}
 	} else if req.Failed {
 		if req.FailureBudgetRemaining <= 0 {
@@ -191,7 +215,7 @@ func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.Acti
 			reason = state.ReasonWorkSuppressed
 		}
 	}
-	evidence := state.RouteEvidence{Actor: req.Actor, ReceiptRef: req.ReceiptRef}
+	evidence := state.RouteEvidence{Actor: req.Actor, ReceiptRef: req.ReceiptRef, FollowupGeneration: req.FollowupGeneration}
 	if err := s.applyRouteTransition(tx, snap, to, reason, evidence, now,
 		fmt.Sprintf(`{"reason":%q,"dispatch_id":%q,"dirty_generation":%d,"failed":%v}`, reason, req.DispatchID, snap.DirtyGeneration, req.Failed)); err != nil {
 		return out, err
@@ -288,8 +312,10 @@ func (s *Store) ActivateDispatch(ctx context.Context, dispatchID, actor, now str
 	return tx.Commit()
 }
 
-// ActivateFollowup moves FOLLOWUP_READY to ACTIVE_CLEAN with the
-// follow-up dispatch taking the active slot (E3-T1 activation guard).
+// ActivateFollowup moves FOLLOWUP_READY to ACTIVE_CLEAN (no dirty
+// generation) or ACTIVE_DIRTY (a later burst merged while the follow-up
+// waited, E8-T1/B-1) with the follow-up dispatch taking the active slot
+// (E3-T1 activation guard).
 func (s *Store) ActivateFollowup(ctx context.Context, dispatchID, actor, now string) error {
 	now = normalizeTimestamp(now)
 	tx, err := s.BeginTx(ctx, nil)
@@ -309,9 +335,18 @@ func (s *Store) ActivateFollowup(ctx context.Context, dispatchID, actor, now str
 	if err != nil {
 		return err
 	}
-	if err := s.applyRouteTransition(tx, snap, state.RouteActiveClean, state.ReasonFollowupAccepted,
+	// A burst that arrived between completion and follow-up submission
+	// left a dirty generation behind: activating into ACTIVE_CLEAN would
+	// wedge the follow-up's own completion (no documented clean edge with
+	// a dirty generation), so the dirty generation activates with it.
+	to := state.RouteActiveClean
+	reason := state.ReasonFollowupAccepted
+	if snap.DirtyGeneration > 0 {
+		to, reason = state.RouteActiveDirty, state.ReasonFollowupAcceptedDirty
+	}
+	if err := s.applyRouteTransition(tx, snap, to, reason,
 		state.RouteEvidence{Actor: actor, ActivatingDispatchID: dispatchID}, now,
-		fmt.Sprintf(`{"reason":%q,"dispatch_id":%q}`, state.ReasonFollowupAccepted, dispatchID)); err != nil {
+		fmt.Sprintf(`{"reason":%q,"dispatch_id":%q,"dirty_generation":%d}`, reason, dispatchID, snap.DirtyGeneration)); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`UPDATE route_runtime_state SET active_dispatch_id = ?, active_generation = ? WHERE route_id = ?`, dispatchID, int(generation), routeID); err != nil {

@@ -67,11 +67,11 @@ else:
     retain change as unresolved
 ```
 
-A receipt path with no corresponding observed change is recorded as unresolved `receipt_extra_path`: claimed provenance without a durable observation is not an exact match and blocks full suppression. The remaining unresolved outcomes are `receipt_missing_path` (an observed path the receipt does not cover), `digest_mismatch`, `digest_unverified` (either side lacks a known digest), and `observed_before_run` (a temporal-window demotion: an observation before the run began cannot be the run's output). Multiple observations of one path collapse to the latest before matching.
+A receipt path with no corresponding observed change is recorded as unresolved `receipt_extra_path` — unless it is immaterial to the route: a path outside the effective scope (excluded by the pattern engine or the resource's file scope), or a byte-identical rewrite whose reported after-digest equals the durable path fact, is recorded as `receipt_immaterial_path` and does not block full suppression (E8-T1). Every other claimed-provenance path without a durable observation is not an exact match and blocks full suppression. The remaining unresolved outcomes are `receipt_missing_path` (an observed path the receipt does not cover), `digest_mismatch`, `digest_unverified` (either side lacks a known digest), and `observed_before_run` (a temporal-window demotion: an observation before the run began cannot be the run's output). Multiple observations of one path collapse to the latest before matching.
 
 A batch is fully suppressible only when every meaningful change is verified self-generated and there is no pending reconciliation flag.
 
-If even one path is unresolved, route remains dirty. The follow-up task may include only unresolved evidence or may request a full latest-state check, depending on policy. The default is a full latest-state check with a bounded manifest of unresolved paths.
+If even one path is unresolved, route remains dirty. The follow-up task requests a full latest-state check and carries the bounded manifest of unresolved paths observed for the dirty generation (the delivered E8-T1 behavior; the follow-up content fingerprint is recomputed over that manifest).
 
 ## 6. No Receipt or Invalid Receipt
 
@@ -105,6 +105,7 @@ If active work fails or is canceled (cooperative `work fail`, or a verified term
 
 - failure never erases dirty state; the activating changes remain unprocessed;
 - while the route's consecutive-failure budget remains (the route's configured `failure_budget`): create one bounded follow-up intent for latest state, under the same collapse bound as completion, and make it active after acceptance;
+- the consecutive follow-up chain itself is bounded (`MaxConsecutiveFollowups`, E8-T1): a completion whose follow-up would carry a generation beyond the budget schedules no follow-up and resolves the route through `UNCERTAIN` for operator reconciliation, like failure-budget exhaustion; the chain bound dominates — a failure-path completion over the bound also resolves through `UNCERTAIN` rather than scheduling another generation;
 - when the budget is exhausted: mark the route uncertain and require operator resolution.
 
 Follow-up and reconciliation decisions reference the dirty generation lineage rather than a single batch, because a dirty generation may accumulate changes across many batches and scheduled reconciliation may have no batch at all.

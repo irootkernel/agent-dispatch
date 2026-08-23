@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E8 (second compliance remediation, D-020) |
 | Current active task | None |
-| Next task | E8-T1 |
-| Completed tasks | 45 / 51 |
-| Planned tasks | 6 / 51 |
+| Next task | E8-T2 |
+| Completed tasks | 46 / 51 |
+| Planned tasks | 5 / 51 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -84,7 +84,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 43 | E7-T10 | Completed | Licensing, layout, and documentation consistency |
 | 44 | E7-T11 | Completed | Low and informational findings dispositioned |
 | 45 | E7-T12 | Completed | MUST closure re-verified and v0.1.1 prepared |
-| 46 | E8-T1 | Planned | Follow-up loop state-machine defects closed |
+| 46 | E8-T1 | Completed | Follow-up loop state-machine defects closed |
 | 47 | E8-T2 | Planned | Recovery wired into every submit path; operator exits repaired |
 | 48 | E8-T3 | Planned | Behavior-sensitive revision and enforced production gate |
 | 49 | E8-T4 | Planned | Unresolved lineage preserved; doctor made trustworthy |
@@ -1928,7 +1928,7 @@ Delivered as the closeout verification: `make verify` passed on darwin/arm64 inc
 
 ## E8-T1: Close the Follow-Up Loop State-Machine Defects
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -1943,7 +1943,7 @@ Close the review's Blocker and follow-up-chain High findings (B-1, H-1, M-10) so
 - receipt-manifest matching intersected with the route's effective scope (excluded or immaterial receipt paths no longer count as `receipt_extra_path`) and a per-route consecutive-follow-up budget that moves the route to UNCERTAIN exactly like the failure budget;
 - the follow-up manifest reduced to the unresolved paths with the content fingerprint recomputed (M-10);
 - the `work` command error mapping for `*state.TransitionError` (`transition_invalid`, exit 14) so route-guard rejections stop surfacing as `internal_unclassified`;
-- regression tests: a vault edit between completion and follow-up submission, a chain of at least 25 dirty generations, and a same-second completion with a perfect receipt — replacing the seven `time.Sleep(1100ms)` dodges.
+- regression tests: a vault edit between completion and follow-up submission, a chain of at least 25 dirty generations, and a same-second completion with a perfect receipt — replacing the generation-boundary sleeps among the seven `time.Sleep(1100ms)` dodges (three removed; the four that pin orthogonal second-precision boundaries — attribution begin windows, the failure-budget streak window, the stale-age crossing — are retained with documented reasons).
 
 ### Requirements
 
@@ -1962,7 +1962,7 @@ D-020 recorded; E7 complete.
 
 ### Evidence
 
-Pending (E8-T1 not started).
+Delivered as the follow-up loop state-machine closure: the route table gains the FOLLOWUP_READY -> ACTIVE_DIRTY edge (reason `followup_accepted_dirty`, guarded on a dirty generation) so a vault edit arriving between completion and follow-up submission activates with its retained dirty generation instead of wedging `work complete` (B-1 — pinned end to end by `TestE8T1EditBetweenCompletionAndFollowupSubmission`); follow-up dispatch IDs are fresh UUIDv7 values with the parent recorded in the decision lineage and the creation audit row, so chained generations never grow cumulative `-followup-N` suffixes toward the 256-byte bound (H-1.2); migration v6 adds the `change_batches.batch_seq` watermark (SaveBatch assigns MAX+1 under the insert transaction, unique-indexed) and `dispatch_intents.base_batch_seq`, and `LoadActiveGenerationChanges` keys the generation window on the watermark so a batch merged in the same second as a completion is never re-imported into the next generation (H-1.3 — `TestE8T1SameSecondCompletionDoesNotReimport` without a single sleep, and `TestMigrationV6BackfillsBatchSequence` pins the backfill's deterministic ordering and both base resolutions; one recorded residual: the backfill's fallback arm keys on second-precision created_at for pre-migration decision-less intents, a one-time degraded first follow-up documented in the migration). The receipt matcher intersects the manifest with the route's effective scope (the single ingest encoding `ingest.OutsideScopePredicate`, classify errors staying material) and with the durable path facts, so out-of-scope paths and byte-identical rewrites record `receipt_immaterial_path` and never block exact suppression, while a consecutive-follow-up budget (`state.MaxConsecutiveFollowups` = 50) moves an over-budget completion — including the failure path — to UNCERTAIN exactly like failure-budget exhaustion, with the store as the single decision point (H-1.1 — `TestE8T1ReceiptScopeAndIdenticalRewriteSuppress`, `TestE8T1TwentyFiveGenerationChain` driving 25 generations with bounded IDs and a live route, and `TestCompleteActiveFollowupBudgetExhausted` plus its `OnFailure` variant). Follow-up manifests carry the unresolved paths of the dirty generation with the content fingerprint recomputed over them (M-10, asserted on the created intent in the B-1 test); `work fail` carries the generation fence like `work complete`, the work commands map `*state.TransitionError` to `transition_invalid`/14 (the H-9 leg, pinned in `TestWorkReceiptErrClassification`), and an IDLE empty-slot merge records a pending reconciliation instead of a wedge-prone dirty count (round-1 F001 — `TestCommitMergePendingIdleEmptySlotRecordsPendingReconcile`). The SOT updates: the persistence section 6 diagram carries both new edges, the domain-model dirty-counter invariant is corrected, and feedback-loop sections 5 and 7 carry the immaterial outcome vocabulary and the follow-up budget; the schema range and adapter label advance to 1-6. Three generation-boundary sleeps were removed (g4, e5t3, e5t4; the e5t4 intent selection made deterministic by identity with a rowid tiebreak); the four remaining 1100 ms sleeps pin orthogonal second-precision boundaries with documented reasons. Verified by `make verify` on darwin/arm64 (all checks green). Reviewed through two full-target Mulgae rounds (`r_01a02f4d-adee-73b8-aa11-3219d340ce67`, remediation-eligible: ten findings — the IDLE-merge wedge, the budget dual-encoding, the fail-path fence, the dual scope encoding with fail-open classify errors, the silent path-fact degradation, the documentation contradictions, and five test gaps — all verified valid and remediated in-tree; `r_01a02f5f-1bd6-754c-a1ca-59724e2b8ad2`, hardening-deferral-eligible: ci pass, coverage complete, publication committed, seven findings — six valid test-coverage observations deferred to epic hardening with the exact run and finding IDs recorded in the commit trailers, and one invalid premise: the review file at the repository root is untracked by design under D-019/D-020, never committed). Changelog 1.0.28.
 
 ## E8-T2: Wire Recovery Into Every Submit Path and Repair the Operator Exit Codes
 

@@ -998,6 +998,258 @@ func TestCompleteActiveRefusesUnpreparedFollowup(t *testing.T) {
 	}
 }
 
+// TestCompleteActiveFollowupBudgetExhausted proves the consecutive
+// follow-up bound (E8-T1, H-1.1): a completion whose follow-up would
+// carry a generation beyond state.MaxConsecutiveFollowups schedules no
+// follow-up and resolves the route through UNCERTAIN with the slot and
+// dirty generation retained for operator reconciliation.
+func TestCompleteActiveFollowupBudgetExhausted(t *testing.T) {
+	s := openTestStore(t)
+	seedIntentChain(t, s, "dispatch-1")
+	rec0, err := s.LoadRouteRuntimeState("wiki-maintenance")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpdateRouteRuntimeState(nil, "wiki-maintenance", rec0.Version, func(r *RouteRuntimeStateRecord) {
+		r.ActivationState = "enabled"
+		r.RouteState = "ACTIVE_DIRTY"
+		r.ActiveDispatchID = "dispatch-1"
+		r.DirtyGeneration = 1
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out, err := s.CompleteActive(context.Background(), ports.ActiveCompletion{
+		RouteID: "wiki-maintenance", DispatchID: "dispatch-1",
+		ReceiptRef: "rcpt-work-1", Actor: "hermes-task", Now: now(),
+		FollowupGeneration: state.MaxConsecutiveFollowups + 1,
+	})
+	if err != nil {
+		t.Fatalf("over-budget completion must resolve through UNCERTAIN, got %v", err)
+	}
+	if out.RouteTo != state.RouteUncertain || out.FollowupDispatchID != "" {
+		t.Fatalf("over-budget completion must move the route to UNCERTAIN without a follow-up: %+v", out)
+	}
+	rec, loadErr := s.LoadRouteRuntimeState("wiki-maintenance")
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	if rec.RouteState != "UNCERTAIN" || rec.ActiveDispatchID != "dispatch-1" || rec.DirtyGeneration != 1 {
+		t.Fatalf("the uncertain resolution must retain the slot and dirty generation: %+v", rec)
+	}
+	var intents int
+	if err := s.QueryRow(`SELECT COUNT(*) FROM dispatch_intents`).Scan(&intents); err != nil {
+		t.Fatal(err)
+	}
+	if intents != 1 {
+		t.Fatalf("over-budget completion must schedule no follow-up beyond the seeded intent, got %d intents", intents)
+	}
+}
+
+// TestCompleteActiveFollowupBudgetExhaustedOnFailure pins the store's
+// single decision point for the failed-over-budget intersection
+// (E8-T1 round-1 F002): a failure-path completion with remaining failure
+// budget but a follow-up generation beyond the chain bound also resolves
+// through UNCERTAIN with the followup-budget reason, and the prepared
+// follow-up (if any) is never scheduled.
+func TestCompleteActiveFollowupBudgetExhaustedOnFailure(t *testing.T) {
+	s := openTestStore(t)
+	seedIntentChain(t, s, "dispatch-1")
+	rec0, err := s.LoadRouteRuntimeState("wiki-maintenance")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpdateRouteRuntimeState(nil, "wiki-maintenance", rec0.Version, func(r *RouteRuntimeStateRecord) {
+		r.ActivationState = "enabled"
+		r.RouteState = "ACTIVE_DIRTY"
+		r.ActiveDispatchID = "dispatch-1"
+		r.DirtyGeneration = 1
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out, err := s.CompleteActive(context.Background(), ports.ActiveCompletion{
+		RouteID: "wiki-maintenance", DispatchID: "dispatch-1", Failed: true,
+		FailureBudgetRemaining: 2, ReceiptRef: "rcpt-work-1", Actor: "hermes-task", Now: now(),
+		FollowupGeneration: state.MaxConsecutiveFollowups + 1,
+	})
+	if err != nil {
+		t.Fatalf("failed over-budget completion must resolve through UNCERTAIN, got %v", err)
+	}
+	if out.RouteTo != state.RouteUncertain || out.FollowupDispatchID != "" {
+		t.Fatalf("the chain bound dominates the failure path: %+v", out)
+	}
+	rec, loadErr := s.LoadRouteRuntimeState("wiki-maintenance")
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	if rec.RouteState != "UNCERTAIN" || rec.DirtyGeneration != 1 {
+		t.Fatalf("the uncertain resolution must retain the dirty generation: %+v", rec)
+	}
+}
+
+// TestCommitMergePendingIdleEmptySlotRecordsPendingReconcile proves the
+// IDLE empty-slot merge records owed work as a pending reconciliation
+// instead of a dirty generation nothing can later clear (E8-T1 round-1
+// F001: the pre-watermark batches sit below any later dispatch's
+// generation window, so a dirty count would wedge the next clean
+// completion).
+func TestCommitMergePendingIdleEmptySlotRecordsPendingReconcile(t *testing.T) {
+	// openTestStore seeds the route with an IDLE, empty-slot runtime row.
+	s := openTestStore(t)
+	lin := mergeLineage("batch-idle", "decision-idle", now())
+	dirty, err := s.CommitMergePending(context.Background(), lin, "watchman", now())
+	if err != nil {
+		t.Fatalf("idle empty-slot merge: %v", err)
+	}
+	if dirty != 0 {
+		t.Fatalf("no dispatch owns this burst; the dirty count must stay 0, got %d", dirty)
+	}
+	rec, err := s.LoadRouteRuntimeState("wiki-maintenance")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rec.PendingReconcile || rec.DirtyGeneration != 0 || rec.RouteState != "IDLE" {
+		t.Fatalf("owed work must be recorded as a pending reconciliation on IDLE: %+v", rec)
+	}
+}
+
+// mergeLineage builds one minimal arriving lineage for merge tests.
+func mergeLineage(batchID, decisionID, at string) ports.Lineage {
+	return ports.Lineage{
+		Observation: ports.ObservationInput{
+			ObservationID: "obs-" + batchID, SchemaVersion: "agent-dispatch.source-observation/v1", SourceType: "watchman",
+			SourceID: "watchman-main", TriggerName: "trig", ResourceID: "vault-main",
+			ObservedAt: at, ReceivedAt: at, RawPayloadDigest: "sha256:" + strings.Repeat("e", 64), IngestStatus: "accepted",
+		},
+		Batch: ports.BatchInput{
+			BatchID: batchID, RouteID: "wiki-maintenance", RouteRevision: "route-rev-1",
+			ResourceID: "vault-main", CreatedAt: at, ContentFingerprint: "sha256:" + strings.Repeat("f", 64),
+			ObservationIDs: []string{"obs-" + batchID},
+		},
+		Decision: ports.DecisionInput{
+			DecisionID: decisionID, BatchID: batchID, RouteID: "wiki-maintenance",
+			RouteRevision: "route-rev-1", PolicyRevision: "policy-rev-1", Disposition: "dispatch",
+			Classification: "normal", CreatedAt: at, Actor: "planner",
+		},
+	}
+}
+
+// TestMigrationV6BackfillsBatchSequence proves the v6 backfill derives
+// the deterministic batch ordering and both base_batch_seq resolutions:
+// a normal dispatch anchors on its decision's arrival batch, and a
+// decision-less (follow-up-shaped) intent anchors on the maximum batch
+// at or before its creation second (E8-T1 round-1 testing finding).
+func TestMigrationV6BackfillsBatchSequence(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.db")
+	partial := []Migration{Migrations[0], Migrations[1], Migrations[2]}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.migrations = partial
+	if err := s.Migrate(t.TempDir()); err != nil {
+		t.Fatalf("migrate to v3: %v", err)
+	}
+	if err := s.RegisterResource(nil, "vault-main", "res-rev-1", "/srv/vault", "/srv/vault", "markdown", "disabled"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RegisterRoute(nil, "wiki-maintenance", "route-rev-1", "policy-rev-1", "vault-main", "hermes-main", "{}", now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InitializeRouteState(nil, "wiki-maintenance"); err != nil {
+		t.Fatal(err)
+	}
+	// v3-era rows in the v1 column set: batch-1 precedes the normal
+	// dispatch; batch-2 shares the follow-up intent's creation second.
+	seedV3Batch(t, s, "batch-1", "2026-08-01T00:00:01Z", "obs-a")
+	if err := s.SaveDecision(nil, DecisionRecord{DecisionID: "decision-1", BatchID: "batch-1", RouteID: "wiki-maintenance",
+		RouteRevision: "route-rev-1", PolicyRevision: "policy-rev-1", Disposition: "dispatch", Classification: "normal",
+		CreatedAt: "2026-08-01T00:00:01Z", Actor: "system"}); err != nil {
+		t.Fatal(err)
+	}
+	seedV3Intent(t, s, "dispatch-normal", "decision-1", "2026-08-01T00:00:02Z")
+	seedV3Batch(t, s, "batch-2", "2026-08-01T00:00:03Z", "obs-b")
+	// A decision-less batch relation: the follow-up-shaped decision carries
+	// its generation lineage instead of a batch reference (schema CHECK).
+	if err := s.SaveDecision(nil, DecisionRecord{DecisionID: "decision-fu", RouteID: "wiki-maintenance",
+		RouteRevision: "route-rev-1", PolicyRevision: "policy-rev-1", Disposition: "dispatch", Classification: "normal",
+		GenerationLineageJSON: `{"generations":[]}`, CreatedAt: "2026-08-01T00:00:03Z", Actor: "system"}); err != nil {
+		t.Fatal(err)
+	}
+	seedV3Intent(t, s, "dispatch-followup", "decision-fu", "2026-08-01T00:00:03Z")
+	s.Close()
+
+	upgraded, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer upgraded.Close()
+	if err := upgraded.Migrate(t.TempDir()); err != nil {
+		t.Fatalf("reopen must migrate through v6: %v", err)
+	}
+	var seq1, seq2 int
+	if err := upgraded.QueryRow(`SELECT batch_seq FROM change_batches WHERE batch_id='batch-1'`).Scan(&seq1); err != nil {
+		t.Fatal(err)
+	}
+	if err := upgraded.QueryRow(`SELECT batch_seq FROM change_batches WHERE batch_id='batch-2'`).Scan(&seq2); err != nil {
+		t.Fatal(err)
+	}
+	if seq1 != 1 || seq2 != 2 {
+		t.Fatalf("backfill must derive the deterministic 1..N ordering by (created_at, batch_id), got %d and %d", seq1, seq2)
+	}
+	var baseNormal, baseFollowup int
+	if err := upgraded.QueryRow(`SELECT base_batch_seq FROM dispatch_intents WHERE dispatch_id='dispatch-normal'`).Scan(&baseNormal); err != nil {
+		t.Fatal(err)
+	}
+	if err := upgraded.QueryRow(`SELECT base_batch_seq FROM dispatch_intents WHERE dispatch_id='dispatch-followup'`).Scan(&baseFollowup); err != nil {
+		t.Fatal(err)
+	}
+	if baseNormal != 1 {
+		t.Fatalf("a normal dispatch must anchor on its decision's arrival batch, got %d", baseNormal)
+	}
+	if baseFollowup != 2 {
+		t.Fatalf("a decision-less intent must anchor on the maximum batch at its creation second, got %d", baseFollowup)
+	}
+	window, err := upgraded.LoadActiveGenerationChanges(context.Background(), "wiki-maintenance", "dispatch-followup")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(window) != 0 {
+		t.Fatalf("the migrated follow-up window must start above its watermark, got %d changes", len(window))
+	}
+}
+
+// seedV3Batch inserts one v3-era batch row in the v1 column set.
+func seedV3Batch(t *testing.T, s *Store, batchID, at, obsID string) {
+	t.Helper()
+	if _, err := s.Exec(`INSERT INTO source_observations
+		(observation_id, schema_version, source_type, source_id, trigger_name, resource_id, observed_at, received_at, raw_payload_digest, ingest_status, flags_json)
+		VALUES (?, 'agent-dispatch.source-observation/v1', 'watchman', 'watchman-main', 'trig', 'vault-main', ?, ?, 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 'accepted', '{}')`,
+		obsID, at, at); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Exec(`INSERT INTO change_batches (batch_id, route_id, route_revision, resource_id, created_at, content_fingerprint)
+		VALUES (?, 'wiki-maintenance', 'route-rev-1', 'vault-main', ?, 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')`, batchID, at); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Exec(`INSERT INTO batch_observations (batch_id, observation_id) VALUES (?, ?)`, batchID, obsID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// seedV3Intent inserts one v3-era intent row in the v1 column set
+// without reserving the slot (the fixture routes stay IDLE).
+func seedV3Intent(t *testing.T, s *Store, dispatchID, decisionID, at string) {
+	t.Helper()
+	rec := intentRecord(dispatchID, decisionID)
+	if _, err := s.Exec(`INSERT INTO dispatch_intents
+		(dispatch_id, decision_id, route_id, route_revision, target_id, target_type, target_scope, resource_id, generation, idempotency_key, content_fingerprint, manifest_digest, request_version, request_json, state, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'ready',?,?)`,
+		rec.DispatchID, rec.DecisionID, rec.RouteID, rec.RouteRevision, rec.TargetID, rec.TargetType, rec.TargetScope, rec.ResourceID, rec.Generation,
+		rec.IdempotencyKey+"-"+dispatchID, rec.ContentFingerprint, rec.ManifestDigest, rec.RequestVersion, rec.RequestJSON, at, at); err != nil {
+		t.Fatalf("seed intent %s: %v", dispatchID, err)
+	}
+}
+
 func TestResolveUncertainReconciliation(t *testing.T) {
 	s := openTestStore(t)
 	seedIntentChain(t, s, "dispatch-u")
@@ -1208,14 +1460,26 @@ func seedIntentChainV3Era(t *testing.T, s *Store, dispatchID string) {
 		now(), now()); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SaveBatch(nil, "batch-1", "wiki-maintenance", "route-rev-1", "vault-main", now(), "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", []string{"0192e6c6-4d7f-7abc-8def-012345678901"}); err != nil {
+	// The v6-era store API names the batch_seq/base_batch_seq columns;
+	// seeding a genuine v3 database writes the v1 column set directly.
+	if _, err := s.Exec(`INSERT INTO change_batches (batch_id, route_id, route_revision, resource_id, created_at, content_fingerprint)
+		VALUES ('batch-1', 'wiki-maintenance', 'route-rev-1', 'vault-main', ?, 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')`, now()); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SaveDecision(nil, DecisionRecord{DecisionID: "decision-1", BatchID: "batch-1", RouteID: "wiki-maintenance",
 		RouteRevision: "route-rev-1", PolicyRevision: "policy-rev-1", Disposition: "dispatch", Classification: "normal", CreatedAt: now(), Actor: "system"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SaveIntent(nil, intentRecord(dispatchID, "decision-1")); err != nil {
+	rec := intentRecord(dispatchID, "decision-1")
+	if _, err := s.Exec(`INSERT INTO dispatch_intents
+		(dispatch_id, decision_id, route_id, route_revision, target_id, target_type, target_scope, resource_id, generation, idempotency_key, content_fingerprint, manifest_digest, request_version, request_json, state, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'ready',?,?)`,
+		rec.DispatchID, rec.DecisionID, rec.RouteID, rec.RouteRevision, rec.TargetID, rec.TargetType, rec.TargetScope, rec.ResourceID, rec.Generation,
+		rec.IdempotencyKey, rec.ContentFingerprint, rec.ManifestDigest, rec.RequestVersion, rec.RequestJSON, rec.CreatedAt, rec.CreatedAt); err != nil {
 		t.Fatalf("save intent: %v", err)
+	}
+	if _, err := s.Exec(`UPDATE route_runtime_state SET active_dispatch_id = ?, active_generation = ?, version = version + 1 WHERE route_id = ? AND active_dispatch_id IS NULL`,
+		rec.DispatchID, rec.Generation, rec.RouteID); err != nil {
+		t.Fatal(err)
 	}
 }

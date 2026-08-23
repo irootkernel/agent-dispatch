@@ -91,7 +91,11 @@ type ChangeRecord struct {
 
 // SaveBatch stores the canonical batch and its observation lineage.
 func (s *Store) SaveBatch(tx *sql.Tx, batchID, routeID, routeRevision, resourceID, createdAt, contentFingerprint string, observationIDs []string) error {
-	if _, err := execOn(tx, s.DB, `INSERT INTO change_batches (batch_id, route_id, route_revision, resource_id, created_at, content_fingerprint) VALUES (?,?,?,?,?,?)`,
+	// batch_seq is the monotonic watermark assigned at insert (MAX+1)
+	// inside the insert transaction; the unique index makes a lost
+	// assignment a hard failure instead of a silent tie (E8-T1, H-1.3).
+	if _, err := execOn(tx, s.DB, `INSERT INTO change_batches (batch_id, route_id, route_revision, resource_id, created_at, content_fingerprint, batch_seq)
+		VALUES (?,?,?,?,?,?, (SELECT COALESCE(MAX(batch_seq), 0) + 1 FROM change_batches))`,
 		batchID, routeID, routeRevision, resourceID, createdAt, contentFingerprint); err != nil {
 		return err
 	}
@@ -133,11 +137,18 @@ type DecisionRecord struct {
 // SaveIntent stores the immutable dispatch request and reserves the route
 // slot in the same transaction (intent transaction, ADR-0005).
 func (s *Store) SaveIntent(tx *sql.Tx, i IntentRecord) error {
+	// base_batch_seq is the generation-window watermark: the intent's own
+	// arrival batch when its decision carries one, otherwise the current
+	// maximum (the follow-up shape — its window opens at creation, E8-T1).
 	if _, err := execOn(tx, s.DB, `INSERT INTO dispatch_intents
-		(dispatch_id, decision_id, route_id, route_revision, target_id, target_type, target_scope, resource_id, generation, idempotency_key, content_fingerprint, manifest_digest, request_version, request_json, state, created_at, updated_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'ready',?,?)`,
+		(dispatch_id, decision_id, route_id, route_revision, target_id, target_type, target_scope, resource_id, generation, idempotency_key, content_fingerprint, manifest_digest, request_version, request_json, state, created_at, updated_at, base_batch_seq)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'ready',?,?,
+			COALESCE((SELECT b.batch_seq FROM policy_decisions p
+				JOIN change_batches b ON b.batch_id = p.batch_id
+				WHERE p.decision_id = ?), (SELECT COALESCE(MAX(batch_seq), 0) FROM change_batches)))`,
 		i.DispatchID, i.DecisionID, i.RouteID, i.RouteRevision, i.TargetID, i.TargetType, i.TargetScope, i.ResourceID, i.Generation,
-		i.IdempotencyKey, i.ContentFingerprint, i.ManifestDigest, i.RequestVersion, i.RequestJSON, i.CreatedAt, i.CreatedAt); err != nil {
+		i.IdempotencyKey, i.ContentFingerprint, i.ManifestDigest, i.RequestVersion, i.RequestJSON, i.CreatedAt, i.CreatedAt,
+		nullString(i.DecisionID)); err != nil {
 		return err
 	}
 	// Reserve the route's active slot in the same transaction.

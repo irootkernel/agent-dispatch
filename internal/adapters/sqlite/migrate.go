@@ -37,6 +37,7 @@ var Migrations = []Migration{
 	{Version: 3, Name: "intent-target-scope", SQL: schemaV3IntentTargetScope},
 	{Version: 4, Name: "work-receipts-begun-at", SQL: schemaV4WorkReceiptsBegunAt},
 	{Version: 5, Name: "observation-position", SQL: schemaV5ObservationPosition},
+	{Version: 6, Name: "batch-sequence-watermark", SQL: schemaV6BatchSequenceWatermark},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
@@ -382,4 +383,39 @@ func acquireMigrationFileLock(dbPath string) (func(), error) {
 // source.position, E7-T8/M-11).
 const schemaV5ObservationPosition = `
 ALTER TABLE source_observations ADD COLUMN position_json TEXT;
+`
+
+// schemaV6BatchSequenceWatermark keys the active generation window on a
+// monotonic batch sequence instead of second-truncated timestamps
+// (E8-T1, H-1.3): change_batches.batch_seq is assigned by SaveBatch as
+// MAX+1 inside the insert transaction, dispatch_intents.base_batch_seq
+// records the sequence the intent's generation window starts after (the
+// own arrival batch for normal dispatches, the current maximum at
+// creation for follow-ups), and LoadActiveGenerationChanges compares
+// batch_seq so a batch merged in the same second as a completion is
+// never re-imported into the next generation. The backfill orders
+// existing rows by (created_at, batch_id), which is deterministic. One
+// recorded residual (E8-T1 round-1 F006): the fallback arm keys on
+// second-truncated created_at, so a pre-migration decision-less intent
+// (a follow-up in flight at upgrade time) may exclude a batch that
+// arrived later within its creation second — a one-time degraded first
+// follow-up (the parent-manifest fallback covers it), never a wedge;
+// every intent created after the migration anchors on the exact
+// watermark.
+const schemaV6BatchSequenceWatermark = `
+ALTER TABLE change_batches ADD COLUMN batch_seq INTEGER;
+UPDATE change_batches SET batch_seq = (
+	SELECT COUNT(*) FROM change_batches b2
+	WHERE b2.created_at < change_batches.created_at
+	   OR (b2.created_at = change_batches.created_at AND b2.batch_id <= change_batches.batch_id)
+);
+CREATE UNIQUE INDEX idx_change_batches_batch_seq ON change_batches(batch_seq);
+ALTER TABLE dispatch_intents ADD COLUMN base_batch_seq INTEGER NOT NULL DEFAULT 0;
+UPDATE dispatch_intents SET base_batch_seq = COALESCE(
+	(SELECT b.batch_seq FROM policy_decisions p
+		JOIN change_batches b ON b.batch_id = p.batch_id
+		WHERE p.decision_id = dispatch_intents.decision_id),
+	(SELECT COALESCE(MAX(b2.batch_seq), 0) FROM change_batches b2
+		WHERE b2.created_at <= dispatch_intents.created_at)
+);
 `

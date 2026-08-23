@@ -23,6 +23,12 @@ const (
 	OutcomeMismatch   = "digest_mismatch"
 	OutcomeNoDigest   = "digest_unverified"
 	OutcomeBeforeRun  = "observed_before_run"
+	// OutcomeImmaterial labels a receipt path the route never needs
+	// provenance for: it is outside the route's effective scope, or its
+	// reported after-digest equals the durable path fact (a byte-identical
+	// rewrite the ingestion dropped as unchanged). Such a path is recorded
+	// for audit but never blocks full suppression (E8-T1, H-1.1).
+	OutcomeImmaterial = "receipt_immaterial_path"
 )
 
 // PathDecision is one observed path's attribution outcome.
@@ -48,6 +54,10 @@ type AttributionDecision struct {
 	// FullySuppressed reports every observed change of the generation
 	// was verified self-generated (the batch is clearable).
 	FullySuppressed bool `json:"fully_suppressed"`
+	// FactsUnavailable reports the durable path-fact surface could not be
+	// loaded for this match, so identical-rewrite claims classify
+	// conservatively as extra provenance (E8-T1 round-1 F008).
+	FactsUnavailable bool `json:"facts_unavailable,omitempty"`
 }
 
 // ReceiptEvidence is the validated receipt side of the match.
@@ -59,6 +69,28 @@ type ReceiptEvidence struct {
 	BegunAt     string
 	CompletedAt string
 	Changes     []changeEntry
+	// OutsideScope reports whether a path is outside the route's
+	// effective scope (excluded or not admitted by the include set); nil
+	// means every path is in scope.
+	OutsideScope func(path string) bool
+	// FactDigest returns the durable path fact's current digest and
+	// presence; nil means no fact surface is available.
+	FactDigest func(path string) (digest string, ok bool)
+}
+
+// immaterial reports whether one receipt-only path never needs
+// provenance: outside the route's effective scope, or a byte-identical
+// rewrite (the reported after-digest equals the durable path fact).
+func (r ReceiptEvidence) immaterial(path string, afterDigest string) bool {
+	if r.OutsideScope != nil && r.OutsideScope(path) {
+		return true
+	}
+	if r.FactDigest != nil && afterDigest != "" {
+		if fact, ok := r.FactDigest(path); ok && fact != "" && fact == afterDigest {
+			return true
+		}
+	}
+	return false
 }
 
 // Match applies the exact-suppression algorithm (feedback-loop §5) over
@@ -121,18 +153,27 @@ func Match(receipt ReceiptEvidence, observed []ports.DirtyChange) AttributionDec
 			fully = false
 		}
 	}
-	// Receipt paths the generation never observed stay unresolved: the
-	// receipt claims work with no durable observation behind it, so the
-	// batch is not exactly matched and must not clear the route.
+	// Receipt paths the generation never observed stay unresolved unless
+	// they are immaterial to the route (outside the effective scope, or a
+	// byte-identical rewrite matching the durable path fact): material
+	// claims with no durable observation behind them block the exact
+	// match and must not clear the route (E8-T1, H-1.1).
 	for _, path := range sortedChangePaths(receipt.Changes) {
 		if _, ok := latest[path]; ok {
 			continue
 		}
 		entry := receiptByPath[path]
-		d := PathDecision{Path: path, Outcome: OutcomeExtra}
+		afterDigest := ""
 		if entry.AfterDigest != nil {
-			d.ReceiptDigest = *entry.AfterDigest
+			afterDigest = *entry.AfterDigest
 		}
+		if receipt.immaterial(path, afterDigest) {
+			decision.Suppressed = append(decision.Suppressed, PathDecision{
+				Path: path, Outcome: OutcomeImmaterial, ReceiptDigest: afterDigest,
+			})
+			continue
+		}
+		d := PathDecision{Path: path, Outcome: OutcomeExtra, ReceiptDigest: afterDigest}
 		decision.Unresolved = append(decision.Unresolved, d)
 		fully = false
 	}

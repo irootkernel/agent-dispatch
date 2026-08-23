@@ -12,7 +12,7 @@ var documentRouteTable = map[RouteState][]RouteState{
 	RouteIdle:          {RouteActiveClean},
 	RouteActiveClean:   {RouteActiveDirty, RouteIdle, RouteFollowupReady, RouteUncertain},
 	RouteActiveDirty:   {RouteActiveDirty, RouteFollowupReady, RouteUncertain, RouteIdle},
-	RouteFollowupReady: {RouteActiveClean, RouteIdle},
+	RouteFollowupReady: {RouteActiveClean, RouteActiveDirty, RouteIdle},
 	RouteUncertain:     {RouteActiveClean, RouteFollowupReady, RouteQuarantined},
 	RouteQuarantined:   {RouteIdle},
 }
@@ -144,6 +144,10 @@ func TestRouteReasonsMatchEdges(t *testing.T) {
 			s.ActiveDispatchID = "d-1"
 			s.FailureBudget = 0
 		}), RouteUncertain, RouteEvidence{}},
+		{RouteActiveClean, RouteUncertain, ReasonFollowupBudgetExhausted}: {routeSnap(func(s *RouteSnapshot) {
+			s.State = RouteActiveClean
+			s.ActiveDispatchID = "d-1"
+		}), RouteUncertain, RouteEvidence{FollowupGeneration: MaxConsecutiveFollowups + 1}},
 		{RouteActiveClean, RouteUncertain, ReasonExecutionEvidenceStale}: {routeSnap(func(s *RouteSnapshot) {
 			s.State = RouteActiveClean
 			s.ActiveDispatchID = "d-1"
@@ -159,6 +163,11 @@ func TestRouteReasonsMatchEdges(t *testing.T) {
 			s.DirtyGeneration = 1
 			s.FailureBudget = 0
 		}), RouteUncertain, RouteEvidence{}},
+		{RouteActiveDirty, RouteUncertain, ReasonFollowupBudgetExhausted}: {routeSnap(func(s *RouteSnapshot) {
+			s.State = RouteActiveDirty
+			s.ActiveDispatchID = "d-1"
+			s.DirtyGeneration = 1
+		}), RouteUncertain, RouteEvidence{FollowupGeneration: MaxConsecutiveFollowups + 1}},
 		{RouteActiveDirty, RouteUncertain, ReasonExecutionEvidenceStale}: {routeSnap(func(s *RouteSnapshot) {
 			s.State = RouteActiveDirty
 			s.ActiveDispatchID = "d-1"
@@ -167,6 +176,10 @@ func TestRouteReasonsMatchEdges(t *testing.T) {
 		{RouteFollowupReady, RouteActiveClean, ReasonFollowupAccepted}: {routeSnap(func(s *RouteSnapshot) {
 			s.State = RouteFollowupReady
 		}), RouteActiveClean, RouteEvidence{ActivatingDispatchID: "d-2"}},
+		{RouteFollowupReady, RouteActiveDirty, ReasonFollowupAcceptedDirty}: {routeSnap(func(s *RouteSnapshot) {
+			s.State = RouteFollowupReady
+			s.DirtyGeneration = 1
+		}), RouteActiveDirty, RouteEvidence{ActivatingDispatchID: "d-2"}},
 		{RouteFollowupReady, RouteIdle, ReasonFollowupDropped}: {routeSnap(func(s *RouteSnapshot) {
 			s.State = RouteFollowupReady
 		}), RouteIdle, RouteEvidence{ReconciledNoWork: true}},
@@ -216,6 +229,30 @@ func TestRouteReasonsMatchEdges(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// TestRouteGuardE8T1Edges verifies the two E8-T1 guard negations: the
+// dirty-aware follow-up activation refuses a clean generation, and the
+// followup-budget exhaustion reason refuses a generation inside the
+// budget.
+func TestRouteGuardE8T1Edges(t *testing.T) {
+	cleanFollowup := routeSnap(func(s *RouteSnapshot) {
+		s.State = RouteFollowupReady
+		s.DirtyGeneration = 0
+	})
+	err := ValidateRouteTransition(cleanFollowup, RouteActiveDirty, ReasonFollowupAcceptedDirty, RouteEvidence{ActivatingDispatchID: "d-2"})
+	if err == nil {
+		t.Fatal("dirty-aware follow-up activation must refuse a clean generation")
+	}
+	inBudget := routeSnap(func(s *RouteSnapshot) {
+		s.State = RouteActiveDirty
+		s.ActiveDispatchID = "d-1"
+		s.DirtyGeneration = 1
+	})
+	err = ValidateRouteTransition(inBudget, RouteUncertain, ReasonFollowupBudgetExhausted, RouteEvidence{FollowupGeneration: MaxConsecutiveFollowups})
+	if err == nil {
+		t.Fatal("follow-up budget exhaustion must refuse a generation inside the budget")
 	}
 }
 

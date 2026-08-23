@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
+	"github.com/irootkernel/agent-dispatch/internal/domain/fingerprint"
+	"github.com/irootkernel/agent-dispatch/internal/domain/ids"
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 	"github.com/irootkernel/agent-dispatch/internal/domain/state"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
@@ -94,23 +97,40 @@ func (c *Coordinator) Activate(ctx context.Context, dispatchID string) error {
 }
 
 // BuildFollowupRequest constructs the latest-state follow-up intent
-// input for one completed dispatch: a new dispatch ID, the next
-// generation, and the same immutable request shape with the
+// input for one completed dispatch: a fresh UUIDv7 dispatch ID (the
+// follow-up chain never grows derived-ID suffixes, E8-T1/H-1.2), the
+// next generation, and the same immutable request shape with the
 // latest-state instruction retained (CON-004, CON-005 — evidence, not
-// snapshots).
+// snapshots). The content fingerprint is recomputed over the delivered
+// manifest so the follow-up key reflects the work it covers, not the
+// parent's generation (M-10). Parent lineage stays recorded with the
+// decision (generation_lineage_json) and the creation audit row
+// (supersedes_dispatch).
 func BuildFollowupRequest(original ports.IntentSnapshot, manifest []records.ChangeItem, flags []string) (ports.IntentInput, error) {
 	var req ports.TaskRequest
 	if err := json.Unmarshal([]byte(original.RequestJSON), &req); err != nil {
 		return ports.IntentInput{}, fmt.Errorf("stored request is not the task contract shape: %w", err)
 	}
-	id := fmt.Sprintf("%s-followup-%d", original.DispatchID, original.Generation+1)
+	gen := ids.NewUUIDv7(time.Now)
+	followupID, err := gen.NewID()
+	if err != nil {
+		return ports.IntentInput{}, fmt.Errorf("follow-up identity: %w", err)
+	}
+	id := string(followupID)
+	fp, err := fingerprint.Content(records.ContentFingerprintInput{
+		Changes:    followupFingerprintChanges(manifest),
+		ResourceID: req.Resource.ID,
+	})
+	if err != nil {
+		return ports.IntentInput{}, fmt.Errorf("follow-up fingerprint: %w", err)
+	}
 	next, key, err := BuildRequest(RequestInput{
 		DispatchID:         id,
 		Route:              req.Route,
 		Resource:           req.Resource,
 		TargetID:           original.TargetID,
 		Generation:         original.Generation + 1,
-		Fingerprint:        records.Digest(req.Activation.ContentFingerprint),
+		Fingerprint:        fp,
 		Changes:            manifest,
 		Flags:              flags,
 		AcceptanceCriteria: req.AcceptanceCriteria,
@@ -132,4 +152,19 @@ func BuildFollowupRequest(original ports.IntentSnapshot, manifest []records.Chan
 		ManifestDigest:     ManifestDigest(manifest),
 		RequestVersion:     RequestContractVersion, RequestJSON: requestJSON,
 	}, nil
+}
+
+// followupFingerprintChanges projects the follow-up manifest into the
+// content-fingerprint change projection (the same projection ingest
+// uses, minus the source flags a follow-up never carries).
+func followupFingerprintChanges(manifest []records.ChangeItem) []records.FingerprintChange {
+	out := make([]records.FingerprintChange, 0, len(manifest))
+	for _, m := range manifest {
+		out = append(out, records.FingerprintChange{
+			Path: m.Path, Operation: string(m.Operation),
+			BeforeDigest: string(m.BeforeDigest), AfterDigest: string(m.AfterDigest),
+			ExistsAfter: m.Operation != records.OpDelete,
+		})
+	}
+	return out
 }

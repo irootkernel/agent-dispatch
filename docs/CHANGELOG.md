@@ -1,5 +1,14 @@
 # SOT Changelog
 
+## 1.0.28 - 2026-08-23
+
+E8-T1: the follow-up loop state machine is closed:
+
+- B-1: the FOLLOWUP_READY -> ACTIVE_DIRTY edge (reason `followup_accepted_dirty`) lets a burst arriving between completion and follow-up submission activate with its dirty generation; the review's CLI reproduction now completes through the product path;
+- H-1: follow-up IDs are UUIDv7 (no cumulative suffix growth), migration v6 keys the generation window on a batch-sequence watermark instead of second-truncated timestamps, the receipt matcher intersects the route's effective scope and the durable path facts (immaterial paths never block suppression), and a consecutive-follow-up budget resolves over-budget chains through UNCERTAIN;
+- M-10: follow-up manifests carry the unresolved paths with the fingerprint recomputed; the work commands map route-guard rejections to exit 14;
+- round-1 Mulgae remediations folded in (the IDLE empty-slot merge wedge, the budget single decision point, the fail-path fence, the single scope encoding, the path-fact degradation record); six round-2 test-coverage findings deferred to epic hardening.
+
 ## 1.0.27 - 2026-08-23
 
 D-020: the second MVP compliance review is accepted; remediation epic E8 is registered:

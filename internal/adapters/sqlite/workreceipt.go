@@ -187,15 +187,19 @@ func reasonsOrArray(reasons string) string {
 }
 
 // LoadActiveGenerationChanges returns every observation change of the
-// batches recorded since the active dispatch was created (the dirty
-// generation a completion receipt is matched against), oldest first.
+// batches recorded after the active dispatch's generation-window
+// watermark (the dirty generation a completion receipt is matched
+// against), oldest first. The window is keyed on the monotonic
+// batch_seq watermark rather than second-truncated timestamps, so a
+// batch merged in the same second as a completion is never re-imported
+// into the next generation (E8-T1, H-1.3).
 func (s *Store) LoadActiveGenerationChanges(ctx context.Context, routeID, dispatchID string) ([]ports.DirtyChange, error) {
 	rows, err := s.QueryContext(ctx, `SELECT oc.path, oc.operation, oc.before_digest, oc.after_digest, oc.digest_status, so.observed_at, bo.batch_id
 		FROM observation_changes oc
 		JOIN source_observations so ON so.observation_id = oc.observation_id
 		JOIN batch_observations bo ON bo.observation_id = oc.observation_id
 		JOIN change_batches cb ON cb.batch_id = bo.batch_id
-		WHERE cb.route_id = ? AND cb.created_at >= (SELECT created_at FROM dispatch_intents WHERE dispatch_id = ?)
+		WHERE cb.route_id = ? AND cb.batch_seq > (SELECT COALESCE(base_batch_seq, 0) FROM dispatch_intents WHERE dispatch_id = ?)
 		AND bo.batch_id != (SELECT COALESCE((SELECT batch_id FROM policy_decisions
 			WHERE decision_id = (SELECT decision_id FROM dispatch_intents WHERE dispatch_id = ?)), ''))
 		ORDER BY so.observed_at, bo.batch_id, oc.ordinal`, routeID, dispatchID, dispatchID)

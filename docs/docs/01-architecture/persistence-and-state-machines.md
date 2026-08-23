@@ -110,7 +110,10 @@ stateDiagram-v2
     ACTIVE_DIRTY --> FOLLOWUP_READY: work failed or canceled, retry budget remains
     ACTIVE_CLEAN --> UNCERTAIN: work failed, retry budget exhausted
     ACTIVE_DIRTY --> UNCERTAIN: work failed, retry budget exhausted
+    ACTIVE_CLEAN --> UNCERTAIN: consecutive follow-up budget exhausted (E8-T1)
+    ACTIVE_DIRTY --> UNCERTAIN: consecutive follow-up budget exhausted (E8-T1)
     FOLLOWUP_READY --> ACTIVE_CLEAN: follow-up accepted
+    FOLLOWUP_READY --> ACTIVE_DIRTY: follow-up accepted with a dirty generation (E8-T1)
     FOLLOWUP_READY --> IDLE: follow-up dropped after reconciliation proves no work
     ACTIVE_CLEAN --> UNCERTAIN: stale or missing execution evidence
     ACTIVE_DIRTY --> UNCERTAIN: stale or missing execution evidence

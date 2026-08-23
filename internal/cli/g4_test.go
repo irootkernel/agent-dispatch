@@ -5,13 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/irootkernel/agent-dispatch/internal/config"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/irootkernel/agent-dispatch/internal/config"
 )
 
 // Gate G4 (E5-T5): the production-capable feedback-loop harness. Every
@@ -121,10 +119,6 @@ func TestG4FeedbackLoopGate(t *testing.T) {
 	agentContent := "agent index update"
 	g4Edit(t, configPath, vault, "Indexes/topic-index.md", agentContent)
 	g4Edit(t, configPath, vault, "Notes/second-human.md", "more human words") // AC-405 mix
-
-	// Second-precision timestamps: separate the earlier edit batches
-	// from the follow-up generation's creation window deterministically.
-	time.Sleep(1100 * time.Millisecond)
 
 	// AC-404 first: a mismatched digest never suppresses.
 	out.Reset()

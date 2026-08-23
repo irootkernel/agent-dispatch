@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -79,6 +80,10 @@ type Store interface {
 	ports.DispatchStore
 	ports.RouteCoordinationStore
 	ports.WorkReceiptStore
+	// LoadPathFacts returns the stored full-scope path-fact snapshot
+	// (declared as the single method rather than embedding the whole
+	// quarantine surface; the sqlite store satisfies it structurally).
+	LoadPathFacts(ctx context.Context, resourceID string) (map[string]ports.PathFact, error)
 }
 
 // Service validates and records work receipts.
@@ -91,6 +96,11 @@ type Service struct {
 	Resolver *localfs.Resolver
 	// FailureBudget is the route's configured consecutive-failure budget.
 	FailureBudget int
+	// OutsideScope reports whether a path is outside the route's
+	// effective scope (excluded or not admitted); nil means every path is
+	// in scope. Receipt paths it rejects never count as extra provenance
+	// (E8-T1, H-1.1).
+	OutsideScope func(path string) bool
 }
 
 // InvalidError reports a receipt rejected by validation; Reasons are the
@@ -232,17 +242,32 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 	if err != nil {
 		return Result{}, ports.WrapStore(err)
 	}
-	decision := Match(ReceiptEvidence{
+	evidence := ReceiptEvidence{
 		ReceiptID: w.ReceiptID, DispatchID: in.DispatchID, RunID: in.RunID,
 		ResourceID: intent.ResourceID, BegunAt: begun.BegunAt, CompletedAt: w.SubmittedAt,
-		Changes: changes,
-	}, dirty)
+		Changes: changes, OutsideScope: s.OutsideScope,
+	}
+	factsUnavailable := false
+	if facts, ferr := s.Store.LoadPathFacts(ctx, intent.ResourceID); ferr == nil {
+		evidence.FactDigest = func(path string) (string, bool) {
+			f, ok := facts[path]
+			return f.Digest, ok && f.Exists
+		}
+	} else {
+		// A storage failure degrades attribution conservatively (identical
+		// rewrites classify as extra provenance); the decision document
+		// records the degradation so the audit trail can explain it
+		// (E8-T1 round-1 F008).
+		factsUnavailable = true
+	}
+	decision := Match(evidence, dirty)
+	decision.FactsUnavailable = factsUnavailable
 	var auditErr error
 	out, err := s.applyCompletion(ctx, intent, snap, w, ports.ActiveCompletion{
 		RouteID: intent.RouteID, DispatchID: in.DispatchID, Failed: false,
 		ReceiptRef: w.ReceiptID, Actor: "hermes-task", DirtySuppressed: decision.FullySuppressed,
 		FenceGeneration: true, ExpectedDirtyGeneration: snap.DirtyGeneration,
-	})
+	}, &decision, dirty)
 	if err != nil {
 		return out, err
 	}
@@ -295,27 +320,49 @@ func (s *Service) Fail(ctx context.Context, in FailInput) (Result, error) {
 	if err != nil {
 		return Result{}, ports.WrapStore(err)
 	}
+	dirty, err := s.Store.LoadActiveGenerationChanges(ctx, intent.RouteID, in.DispatchID)
+	if err != nil {
+		return Result{}, ports.WrapStore(err)
+	}
+	// The same generation fence as Complete: a burst merging between this
+	// snapshot and the transaction must not be silently dropped from the
+	// follow-up's coverage (E8-T1 round-1 F003).
 	return s.applyCompletion(ctx, intent, snap, w, ports.ActiveCompletion{
 		RouteID: intent.RouteID, DispatchID: in.DispatchID, Failed: true,
 		FailureBudgetRemaining: budget, ReceiptRef: w.ReceiptID, Actor: "hermes-task",
-	})
+		FenceGeneration: true, ExpectedDirtyGeneration: snap.DirtyGeneration,
+	}, nil, dirty)
 }
 
 // applyCompletion builds the follow-up request when the route needs one
-// and applies the atomic receipt-plus-completion transaction.
-func (s *Service) applyCompletion(ctx context.Context, intent ports.IntentSnapshot, snap state.RouteSnapshot, w ports.WorkReceiptInput, base ports.ActiveCompletion) (Result, error) {
+// and applies the atomic receipt-plus-completion transaction. The
+// follow-up manifest carries the unresolved paths of the dirty
+// generation (latest observation per path) so the chain stays bounded to
+// outstanding work (M-10); a consecutive-follow-up chain past
+// state.MaxConsecutiveFollowups schedules no follow-up and resolves the
+// route through UNCERTAIN instead (E8-T1, H-1.1).
+func (s *Service) applyCompletion(ctx context.Context, intent ports.IntentSnapshot, snap state.RouteSnapshot, w ports.WorkReceiptInput, base ports.ActiveCompletion, decision *AttributionDecision, dirty []ports.DirtyChange) (Result, error) {
 	base.FollowupRequest = nil
-	// A failure with remaining budget always warrants its one
-	// follow-up, even on a clean generation (the route would otherwise
-	// sit in FOLLOWUP_READY with nothing following).
-	if (snap.DirtyGeneration > 0 && !base.DirtySuppressed) || snap.PendingReconcile || base.Failed {
-		followup, err := s.buildFollowup(intent)
+	base.FollowupGeneration = intent.Generation + 1
+	storeNeedsFollowup := (snap.DirtyGeneration > 0 && !base.DirtySuppressed) || snap.PendingReconcile
+	overBudget := storeNeedsFollowup && base.FollowupGeneration > state.MaxConsecutiveFollowups
+	// The store is the single decision point (it re-reads the fenced
+	// snapshot): build the follow-up exactly when the store would take the
+	// FOLLOWUP_READY edge. A failed completion with an exhausted failure
+	// budget and any completion over the consecutive follow-up bound both
+	// resolve through UNCERTAIN and schedule nothing (E8-T1 round-1 F002).
+	failureExhausted := base.Failed && base.FailureBudgetRemaining <= 0
+	if (storeNeedsFollowup || base.Failed) && !failureExhausted && !overBudget {
+		followup, err := s.buildFollowup(intent, decision, dirty)
 		if err != nil {
 			return Result{}, fmt.Errorf("building the follow-up request: %w", err)
 		}
 		base.FollowupRequest = &followup
 	}
-	dirtyLineage, _ := json.Marshal(map[string]any{"route_id": intent.RouteID, "dirty_generation": snap.DirtyGeneration})
+	dirtyLineage, _ := json.Marshal(map[string]any{
+		"route_id": intent.RouteID, "dirty_generation": snap.DirtyGeneration,
+		"parent_dispatch_id": intent.DispatchID, "lineage_kind": "followup",
+	})
 	base.DirtyLineageJSON = string(dirtyLineage)
 	base.Now = s.timestamp()
 	created, err := s.Store.CompleteWork(ctx, w, base)
@@ -330,8 +377,13 @@ func (s *Service) applyCompletion(ctx context.Context, intent ports.IntentSnapsh
 }
 
 // buildFollowup derives the latest-state follow-up intent from the
-// completed dispatch's stored request (CON-004: evidence, not snapshots).
-func (s *Service) buildFollowup(original ports.IntentSnapshot) (ports.IntentInput, error) {
+// completed dispatch's stored request (CON-004: evidence, not
+// snapshots). The manifest is the dirty generation's unresolved paths —
+// a nil decision (failure or no attribution) keeps every observed path —
+// each as its latest observation; with nothing unresolved the parent
+// manifest remains the best available description (a pending
+// reconciliation with no observed changes).
+func (s *Service) buildFollowup(original ports.IntentSnapshot, decision *AttributionDecision, dirty []ports.DirtyChange) (ports.IntentInput, error) {
 	var req ports.TaskRequest
 	if err := json.Unmarshal([]byte(original.RequestJSON), &req); err != nil {
 		return ports.IntentInput{}, fmt.Errorf("stored request is not the task contract shape: %w", err)
@@ -344,7 +396,52 @@ func (s *Service) buildFollowup(original ports.IntentSnapshot) (ports.IntentInpu
 		}
 		items = append(items, records.ChangeItem{Path: m.Path, Operation: op, BeforeDigest: records.Digest(m.BeforeDigest), AfterDigest: records.Digest(m.AfterDigest)})
 	}
+	if unresolved := unresolvedManifest(decision, dirty); len(unresolved) > 0 {
+		items = unresolved
+	}
 	return dispatch.BuildFollowupRequest(original, items, req.Activation.Flags)
+}
+
+// unresolvedManifest projects the dirty generation's unresolved paths
+// into the follow-up manifest (latest observation per path; the same
+// collapse the matcher applies).
+func unresolvedManifest(decision *AttributionDecision, dirty []ports.DirtyChange) []records.ChangeItem {
+	if decision == nil {
+		return dirtyManifest(dirty, nil)
+	}
+	unresolved := make(map[string]bool, len(decision.Unresolved))
+	for _, d := range decision.Unresolved {
+		unresolved[d.Path] = true
+	}
+	return dirtyManifest(dirty, unresolved)
+}
+
+// dirtyManifest collapses the dirty changes to the latest observation
+// per path, keeping only the selected paths (nil keeps every path).
+func dirtyManifest(dirty []ports.DirtyChange, keep map[string]bool) []records.ChangeItem {
+	latest := map[string]ports.DirtyChange{}
+	for _, c := range dirty {
+		if keep != nil && !keep[c.Path] {
+			continue
+		}
+		prev, ok := latest[c.Path]
+		if !ok || c.ObservedAt >= prev.ObservedAt {
+			latest[c.Path] = c
+		}
+	}
+	out := make([]records.ChangeItem, 0, len(latest))
+	for _, c := range latest {
+		op, err := records.ParseOperation(c.Operation)
+		if err != nil {
+			continue
+		}
+		out = append(out, records.ChangeItem{
+			Path: c.Path, Operation: op,
+			BeforeDigest: records.Digest(c.BeforeDigest), AfterDigest: records.Digest(c.AfterDigest),
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	return out
 }
 
 // validateLineage checks the dispatch/resource/task/run lineage rules

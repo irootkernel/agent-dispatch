@@ -56,8 +56,10 @@ const (
 	ReasonWorkSuppressed          RouteReason = "work_completed_exact_suppression"
 	ReasonWorkRetryBudgetRemains  RouteReason = "work_retry_budget_remains"
 	ReasonRetryBudgetExhausted    RouteReason = "retry_budget_exhausted"
+	ReasonFollowupBudgetExhausted RouteReason = "followup_budget_exhausted"
 	ReasonExecutionEvidenceStale  RouteReason = "execution_evidence_stale_or_missing"
 	ReasonFollowupAccepted        RouteReason = "followup_accepted"
+	ReasonFollowupAcceptedDirty   RouteReason = "followup_accepted_dirty"
 	ReasonFollowupDropped         RouteReason = "followup_dropped_after_reconciliation"
 	ReasonTargetLookupFindsActive RouteReason = "target_lookup_finds_active"
 	ReasonReconciliationResolved  RouteReason = "reconciliation_resolved"
@@ -76,8 +78,10 @@ func AllRouteReasons() []RouteReason {
 		ReasonWorkSuppressed,
 		ReasonWorkRetryBudgetRemains,
 		ReasonRetryBudgetExhausted,
+		ReasonFollowupBudgetExhausted,
 		ReasonExecutionEvidenceStale,
 		ReasonFollowupAccepted,
+		ReasonFollowupAcceptedDirty,
 		ReasonFollowupDropped,
 		ReasonTargetLookupFindsActive,
 		ReasonReconciliationResolved,
@@ -101,15 +105,24 @@ var routeTable = map[routeEdge][]RouteReason{
 	{RouteActiveDirty, RouteIdle}:          {ReasonWorkSuppressed},
 	{RouteActiveDirty, RouteFollowupReady}: {ReasonWorkCompletedDirty, ReasonWorkRetryBudgetRemains},
 	{RouteActiveClean, RouteFollowupReady}: {ReasonWorkCompletedDirty, ReasonWorkRetryBudgetRemains},
-	{RouteActiveClean, RouteUncertain}:     {ReasonRetryBudgetExhausted, ReasonExecutionEvidenceStale},
-	{RouteActiveDirty, RouteUncertain}:     {ReasonRetryBudgetExhausted, ReasonExecutionEvidenceStale},
+	{RouteActiveClean, RouteUncertain}:     {ReasonRetryBudgetExhausted, ReasonFollowupBudgetExhausted, ReasonExecutionEvidenceStale},
+	{RouteActiveDirty, RouteUncertain}:     {ReasonRetryBudgetExhausted, ReasonFollowupBudgetExhausted, ReasonExecutionEvidenceStale},
 	{RouteFollowupReady, RouteActiveClean}: {ReasonFollowupAccepted},
+	{RouteFollowupReady, RouteActiveDirty}: {ReasonFollowupAcceptedDirty},
 	{RouteFollowupReady, RouteIdle}:        {ReasonFollowupDropped},
 	{RouteUncertain, RouteActiveClean}:     {ReasonTargetLookupFindsActive},
 	{RouteUncertain, RouteFollowupReady}:   {ReasonReconciliationResolved},
 	{RouteUncertain, RouteQuarantined}:     {ReasonOperatorActionRequired},
 	{RouteQuarantined, RouteIdle}:          {ReasonOperatorResolved},
 }
+
+// MaxConsecutiveFollowups bounds one route's consecutive follow-up chain
+// (FBK-008): a completion whose follow-up would carry a generation beyond
+// this budget moves the route to UNCERTAIN for operator reconciliation
+// instead of scheduling another generation. The bound keeps derived
+// dispatch lineage — and the follow-up chain itself — finite by
+// construction even when every generation completes dirty.
+const MaxConsecutiveFollowups = 50
 
 // RouteSnapshot is the minimal durable route runtime fact set the guards
 // read (the route_runtime_state projection).
@@ -137,6 +150,9 @@ type RouteEvidence struct {
 	DirtyGenerationAfter int
 	// ReceiptRef references the completion or projection evidence.
 	ReceiptRef string
+	// FollowupGeneration is the generation the follow-up prepared by this
+	// completion would carry; the follow-up-budget guard reads it.
+	FollowupGeneration int64
 	// OperatorAction marks an operator-resolved quarantine release.
 	OperatorAction bool
 	// ReconciledNoWork marks reconciliation proving no work remains.
@@ -189,7 +205,8 @@ func ValidateRouteTransition(snap RouteSnapshot, to RouteState, reason RouteReas
 		return routeRejected(from, to, reason, fmt.Sprintf("reason is not documented for this edge (allowed: %v)", reasons))
 	}
 	switch edge := (routeEdge{from, to}); edge {
-	case (routeEdge{RouteIdle, RouteActiveClean}), (routeEdge{RouteFollowupReady, RouteActiveClean}):
+	case (routeEdge{RouteIdle, RouteActiveClean}), (routeEdge{RouteFollowupReady, RouteActiveClean}),
+		(routeEdge{RouteFollowupReady, RouteActiveDirty}):
 		if snap.ActivationState != "enabled" {
 			return routeRejected(from, to, reason, fmt.Sprintf("route activation state is %q, not enabled", snap.ActivationState))
 		}
@@ -200,6 +217,14 @@ func ValidateRouteTransition(snap RouteSnapshot, to RouteState, reason RouteReas
 		// active dispatch: activation may consume exactly that reservation.
 		if snap.ActiveDispatchID != "" && snap.ActiveDispatchID != ev.ActivatingDispatchID {
 			return routeRejected(from, to, reason, fmt.Sprintf("route already holds active dispatch %s (invariant 5)", snap.ActiveDispatchID))
+		}
+		// The dirty-aware follow-up activation exists exactly for the
+		// burst-between-completion-and-submission window (E8-T1, B-1): a
+		// pending follow-up with a dirty generation activates directly
+		// into ACTIVE_DIRTY so its completion can take the documented
+		// ACTIVE_DIRTY -> FOLLOWUP_READY edge.
+		if edge == (routeEdge{RouteFollowupReady, RouteActiveDirty}) && snap.DirtyGeneration <= 0 {
+			return routeRejected(from, to, reason, "dirty-aware follow-up activation requires a dirty generation")
 		}
 	case (routeEdge{RouteActiveClean, RouteActiveDirty}), (routeEdge{RouteActiveDirty, RouteActiveDirty}):
 		if ev.DirtyGenerationAfter <= snap.DirtyGeneration {
@@ -242,6 +267,9 @@ func ValidateRouteTransition(snap RouteSnapshot, to RouteState, reason RouteReas
 	case (routeEdge{RouteActiveClean, RouteUncertain}), (routeEdge{RouteActiveDirty, RouteUncertain}):
 		if reason == ReasonRetryBudgetExhausted && snap.FailureBudget > 0 {
 			return routeRejected(from, to, reason, "budget exhaustion requires an exhausted failure budget")
+		}
+		if reason == ReasonFollowupBudgetExhausted && ev.FollowupGeneration <= MaxConsecutiveFollowups {
+			return routeRejected(from, to, reason, fmt.Sprintf("follow-up budget exhaustion requires a follow-up generation beyond %d", MaxConsecutiveFollowups))
 		}
 	case (routeEdge{RouteFollowupReady, RouteIdle}):
 		if !ev.ReconciledNoWork {

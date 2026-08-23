@@ -7,8 +7,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/irootkernel/agent-dispatch/internal/app/ingest"
 	"github.com/irootkernel/agent-dispatch/internal/app/workreceipt"
 	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/domain/state"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
@@ -64,6 +66,12 @@ func workReceiptErr(stderr io.Writer, command string, err error) int {
 		// matched a different generation than the one completed.
 		writeError(stderr, command, "transition_invalid", "conflict", err.Error())
 		return 14
+	case isStateTransitionError(err):
+		// A route-guard rejection (for example the pre-E8-T1 wedge, or a
+		// completion racing an operator exit) is a state conflict, never
+		// an internal defect (E8-T1, H-9).
+		writeError(stderr, command, "transition_invalid", "conflict", err.Error())
+		return 14
 	default:
 		// Typed classification: store surfaces are storage; anything
 		// else is an internal-class defect, never a storage relabel.
@@ -75,6 +83,13 @@ func workReceiptErr(stderr io.Writer, command string, err error) int {
 		writeError(stderr, command, "internal_unclassified", "internal", err.Error())
 		return 40
 	}
+}
+
+// isStateTransitionError reports whether the failure carries the typed
+// route/intent transition error the state package documents as exit 14.
+func isStateTransitionError(err error) bool {
+	var terr *state.TransitionError
+	return errors.As(err, &terr)
 }
 
 func runWorkBegin(command string, args []string, stdout, stderr io.Writer) int {
@@ -194,6 +209,18 @@ func loadWorkIntent(command, configPath, dispatchID string, stderr io.Writer) (p
 	return intent, store, 0
 }
 
+// routeOutsideScope builds the route's effective-scope predicate from
+// the single ingest encoding (file scope above the pattern engine);
+// receipt paths it rejects are immaterial provenance and never block
+// exact suppression (E8-T1, H-1.1).
+func routeOutsideScope(route config.Route, resource config.Resource) (func(string) bool, error) {
+	engine, err := newPatternEngine(route)
+	if err != nil {
+		return nil, err
+	}
+	return ingest.OutsideScopePredicate(engine, resource.FileScope), nil
+}
+
 // workService assembles the receipt service over the open store: the
 // resource resolver carries the containment defense (SEC-002) and the
 // route contributes its failure budget.
@@ -218,11 +245,21 @@ func workService(command, configPath string, store storeOp, routeID string, stde
 		writeError(stderr, command, "config_invalid", "configuration", err.Error())
 		return nil, 3
 	}
+	// The route's effective scope (include/exclude plus the resource's
+	// file scope) decides which receipt paths are material provenance: a
+	// path the route never admits must not block exact suppression as
+	// extra provenance (E8-T1, H-1.1).
+	outsideScope, err := routeOutsideScope(route, resource)
+	if err != nil {
+		writeError(stderr, command, "config_invalid", "configuration", err.Error())
+		return nil, 3
+	}
 	return &workreceipt.Service{
 		Store:         store,
 		Now:           time.Now,
 		Resolver:      runtime.resolver,
 		FailureBudget: route.Dispatch.FailureBudget,
+		OutsideScope:  outsideScope,
 	}, 0
 }
 

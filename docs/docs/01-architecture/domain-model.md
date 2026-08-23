@@ -238,7 +238,7 @@ active_dispatch_id != null
 
 `active_dispatch_id` is reserved when the dispatch intent is created (intent creation and the reservation commit in one transaction) and cleared when that dispatch resolves. `route_state` is the persisted form of the route runtime state machine (see persistence-and-state-machines §6).
 
-`dirty_generation > active_generation` means at least one later relevant change requires a follow-up after the active task is resolved.
+`dirty_generation > 0` means at least one later relevant change requires a follow-up after the active task is resolved. The counter is cleared exactly when that work is resolved — by the creation of a follow-up intent, or by a verified exact suppression clearing the route to IDLE — and it never compares against `active_generation` (E8-T1 records the invariant in this direction).
 
 ## 12. WorkReceipt
 

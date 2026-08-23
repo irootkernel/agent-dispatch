@@ -293,9 +293,6 @@ func TestTemporalWindowAndLatestObservation(t *testing.T) {
 	e5t3Merge(t, configPath, vault, "Indexes/pre-begin.md", "agent revision")
 	e5t3Merge(t, configPath, vault, "Indexes/pre-begin.md", "agent revision 2")
 	manifest := `[{"path":"Indexes/pre-begin.md","after_digest":"` + e5t3Digest("pre-begin content") + `"}]`
-	// Separate the follow-up generation's creation window from the
-	// pre-begin and mid-run batches (second-precision timestamps).
-	time.Sleep(1100 * time.Millisecond)
 	out.Reset()
 	errb.Reset()
 	withStdin(t, manifest, func() {
@@ -513,6 +510,11 @@ func TestFailureBudgetResetsAfterValidCompletion(t *testing.T) {
 	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", followup, "--run-id", "r2"}, &out, &errb); code != 0 {
 		t.Fatalf("begin 2: %s", errb.String())
 	}
+	// Not a generation-boundary dodge: the failure-budget streak window
+	// compares second-precision submitted_at values, so the earlier failed
+	// receipt must sort strictly before this valid completion or the
+	// streak would swallow it and miscount the budget (E8-T1 keeps this
+	// boundary explicit; the generation window itself is watermark-keyed).
 	time.Sleep(1100 * time.Millisecond)
 	out.Reset()
 	errb.Reset()

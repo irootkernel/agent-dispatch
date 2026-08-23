@@ -29,8 +29,9 @@ type RouteCoordinationStore interface {
 	// reservation.
 	ActivateDispatch(ctx context.Context, dispatchID, actor, now string) error
 	// ActivateFollowup moves a route from FOLLOWUP_READY to ACTIVE_CLEAN
-	// with the follow-up dispatch taking the active slot (E3-T1
-	// activation guard).
+	// (no dirty generation) or ACTIVE_DIRTY (a dirty generation remained
+	// when the follow-up was submitted, E8-T1) with the follow-up dispatch
+	// taking the active slot (E3-T1 activation guard).
 	ActivateFollowup(ctx context.Context, dispatchID, actor, now string) error
 }
 
@@ -52,6 +53,12 @@ type ActiveCompletion struct {
 	// the caller prepared one; the store creates it only when the route
 	// actually needs a follow-up.
 	FollowupRequest *IntentInput
+	// FollowupGeneration is the generation the follow-up prepared by this
+	// completion would carry (the completing dispatch's generation plus
+	// one); a generation beyond state.MaxConsecutiveFollowups moves the
+	// route to UNCERTAIN instead of scheduling another generation
+	// (FBK-008 bound, E8-T1).
+	FollowupGeneration int64
 	// DirtyLineageJSON records the dirty generation lineage reference.
 	DirtyLineageJSON string
 	// DirtySuppressed reports that every change of the dirty generation

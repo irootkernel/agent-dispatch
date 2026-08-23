@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 )
 
 // e5t4Rewrite rewrites one line of the fixture configuration.
@@ -577,7 +576,6 @@ func TestReconcileRemovedDiffAndQuarantineNotFound(t *testing.T) {
 	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", followup, "--run-id", "r2"}, &out, &errb); code != 0 {
 		t.Fatalf("follow-up begin: %s", errb.String())
 	}
-	time.Sleep(1100 * time.Millisecond)
 	out.Reset()
 	errb.Reset()
 	withStdin(t, `[]`, func() {
@@ -598,7 +596,10 @@ func TestReconcileRemovedDiffAndQuarantineNotFound(t *testing.T) {
 	}
 	// The intent's evidence carries the deletion.
 	var requestJSON string
-	if err := store.QueryRow(`SELECT request_json FROM dispatch_intents ORDER BY created_at DESC LIMIT 1`).Scan(&requestJSON); err != nil {
+	// Select the reconcile intent by its derived identity: second-precision
+	// created_at values can tie across the follow-up and reconcile intents
+	// in the same second (E8-T1 removed the timestamp dodge here).
+	if err := store.QueryRow(`SELECT request_json FROM dispatch_intents WHERE dispatch_id LIKE 'disp-reconcile-%' ORDER BY created_at DESC, rowid DESC LIMIT 1`).Scan(&requestJSON); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(requestJSON, `"operation":"delete"`) || !strings.Contains(requestJSON, "Inbox/new.md") {

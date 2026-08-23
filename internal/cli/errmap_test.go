@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/irootkernel/agent-dispatch/internal/app/workreceipt"
+	"github.com/irootkernel/agent-dispatch/internal/domain/state"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
@@ -97,6 +98,8 @@ func TestWorkReceiptErrClassification(t *testing.T) {
 		{"invalid receipt", &workreceipt.InvalidError{Reasons: []string{"note body"}}, "work_receipt_invalid", 4},
 		{"state conflict", fmt.Errorf("%w: route needs a follow-up", ports.ErrStateNotEligible), "transition_invalid", 14},
 		{"generation conflict", fmt.Errorf("%w: generation moved", ports.ErrGenerationConflict), "transition_invalid", 14},
+		// E8-T1: a typed route-guard rejection maps to 14, never 40.
+		{"route-guard rejection", &state.TransitionError{Entity: "route", From: "ACTIVE_CLEAN", To: "FOLLOWUP_READY", Reason: "work_completed_dirty_generation", Detail: "follow-up after completion requires a pending reconciliation"}, "transition_invalid", 14},
 	}
 	for _, tc := range cases {
 		var errb bytes.Buffer

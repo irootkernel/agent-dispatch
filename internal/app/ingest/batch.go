@@ -419,6 +419,36 @@ type NoGit struct{}
 
 func (NoGit) Enrich([]string) (map[string]GitPathFacts, error) { return nil, nil }
 
+// IsMarkdownPath reports whether the path carries a Markdown suffix,
+// case-insensitively (the lexical rule the batch normalizer applies
+// above the pattern engine, E7-T9/M-10; exported for the receipt-scope
+// predicate, E8-T1).
+func IsMarkdownPath(path string) bool {
+	return isMarkdownPath(path)
+}
+
+// OutsideScopePredicate composes the effective-scope rule exactly as the
+// batch normalizer applies it (the file scope above the pattern engine)
+// into one injectable predicate: it reports whether a path can never
+// become observed work for the route. This is the single encoding — the
+// receipt matcher and any future consumer inject it instead of
+// recomposing the rule (E8-T1 round-1 F007). A path the engine cannot
+// classify stays material: the predicate never fails open against
+// provenance (E8-T1 round-1 F009/F010).
+func OutsideScopePredicate(engine *policy.Engine, fileScope string) func(string) bool {
+	markdownOnly := fileScope == "markdown"
+	return func(path string) bool {
+		if markdownOnly && !isMarkdownPath(path) {
+			return true
+		}
+		status, err := engine.Classify(path)
+		if err != nil {
+			return false
+		}
+		return status == policy.StatusExcluded
+	}
+}
+
 // isMarkdownPath reports whether the path carries a Markdown suffix,
 // case-insensitively (E7-T9/M-10).
 func isMarkdownPath(path string) bool {

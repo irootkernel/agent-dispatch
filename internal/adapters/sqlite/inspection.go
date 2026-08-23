@@ -350,8 +350,9 @@ func (s *Store) RerunIntent(ctx context.Context, in ports.RerunInput) (ports.Int
 		reasonCodes = string(encoded)
 	}
 	// SaveIntent persists decision_id from the input; align it with the
-	// superseding decision created above. The superseding decision keeps
-	// the route and policy revisions of the replacement intent (E7-T3).
+	// superseding decision created above. The superseding decision takes
+	// the replacement's route revision and inherits the original's policy
+	// revision (E7-T3; the F001 reconciliation).
 	in.New.DecisionID = newDecision
 	if _, err := tx.Exec(`INSERT INTO policy_decisions
 		(decision_id, batch_id, route_id, route_revision, policy_revision, generation_lineage_json, disposition, classification, reason_codes_json, created_at, actor, supersedes_decision_id)

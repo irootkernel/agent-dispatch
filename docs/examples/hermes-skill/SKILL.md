@@ -1,6 +1,6 @@
 # Agent Dispatch LLM Wiki Maintenance Companion
 
-> Format status: provisional pending E0-T4 verification of the public Hermes skill mechanism.
+> Format status: validated against the real Hermes 0.19.1 skills surface (E5-T2; the E0-T4 verification closed 2026-08-21).
 
 ## Purpose
 

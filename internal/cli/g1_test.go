@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -183,6 +184,26 @@ func TestG1AC106UnsafeInputsRejected(t *testing.T) {
 	})
 	if data, err := os.ReadFile(outside); err != nil || string(data) != "secret" {
 		t.Fatal("AC-106: nothing outside the root may be read or altered")
+	}
+	// The rejected input left no store record: the unsafe name was never
+	// read, so no observation exists for it (E7-T11/D-018). The G1
+	// harness plans without a store, so the observation store is opened
+	// directly from the harness state directory and must be empty.
+	stateDir := os.Getenv("AGENT_DISPATCH_STATE_DIR")
+	dbPath := filepath.Join(stateDir, "state.db")
+	if _, err := os.Stat(dbPath); err == nil {
+		store, err := sqlite.Open(dbPath)
+		if err != nil {
+			t.Fatalf("AC-106: open observation store: %v", err)
+		}
+		defer store.Close()
+		var n int
+		if err := store.QueryRow(`SELECT COUNT(*) FROM source_observations`).Scan(&n); err != nil {
+			t.Fatalf("AC-106: the observation store must be readable: %v", err)
+		}
+		if n != 0 {
+			t.Fatalf("AC-106: the rejected inputs must leave no observation record, found %d", n)
+		}
 	}
 }
 

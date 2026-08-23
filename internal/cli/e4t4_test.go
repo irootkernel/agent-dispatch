@@ -346,9 +346,6 @@ func TestWorkReceiptsListableAndShowable(t *testing.T) {
 	// Record a work receipt through the work CLI.
 	var out, errb bytes.Buffer
 	code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1", "--external-task-id", "t_00000001"}, &out, &errb)
-	if code == 2 && strings.Contains(errb.String(), "not implemented") {
-		t.Skip("work begin arrives with its owning roadmap task; the union coverage is exercised at the store level")
-	}
 	if code != 0 {
 		t.Fatalf("work begin: %s", errb.String())
 	}

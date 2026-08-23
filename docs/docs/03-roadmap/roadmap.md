@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E7 |
 | Current active task | None |
-| Next task | E7-T11 |
-| Completed tasks | 43 / 45 |
-| Planned tasks | 2 / 45 |
+| Next task | E7-T12 |
+| Completed tasks | 44 / 45 |
+| Planned tasks | 1 / 45 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -81,7 +81,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 41 | E7-T8 | Completed | Payload versioning enforced and Hermes rendering completed |
 | 42 | E7-T9 | Completed | Operations and security medium batch remediated |
 | 43 | E7-T10 | Completed | Licensing, layout, and documentation consistency |
-| 44 | E7-T11 | Planned | Low and informational findings dispositioned |
+| 44 | E7-T11 | Completed | Low and informational findings dispositioned |
 | 45 | E7-T12 | Planned | MUST closure re-verified and v0.1.1 prepared |
 
 ---
@@ -1867,6 +1867,10 @@ E7-T10 Completed.
 
 - every Low/Info finding in review §5 maps to a fix or a recorded disposition;
 - no new regression is introduced by the Low-batch fixes.
+
+### Evidence
+
+Delivered as D-018: one consolidated disposition record in the decision log mapping every Low and Info finding from review §5 (T1 through T8 and code hygiene) to its disposition. The round-1 Mulgae review (run r_01a02d3c-620d, reports_only) caught three overstated FIXED claims and a materially incomplete inventory, all remediated: the three claims were made true in the tree during this task (the SKILL.md header now states the validated E5-T2 status, the AC-106 test additionally asserts the rejected escape path leaves no observation record, and the one-minute lease TTL is documented in D-018 itself), the rerun-key claim was restated to what the tests actually pin, and the inventory gained the nine missing T2-through-T8 items (the overflow generation_action label, the open-path placement classification, the ABA note, the webhook unreachable branches, the anti-accident revision print, the FileRegular enumeration report, the doctor envelope shape, the bounded-context assembly, and the prune policy-revision reconstruction); the round-2 review's further gaps (the vacuous AC-106 record assertion and seven still-unmapped clauses) were then closed in the same task: the assertion now always executes against the real store, and the inventory gained the final seven entries (the AC-106 content leg, the fixture-layout convention, the strategy goldens, the pragma tests, the json-only doc gap, the diagnostic bounds, and the trigger-drift detection). The remaining ACCEPTED rationales stand as documented reduced guarantees. Verified by `make verify` on darwin/arm64. Changelog 1.0.24.
 
 ## E7-T12: Re-Verify MUST Closure and Prepare v0.1.1
 

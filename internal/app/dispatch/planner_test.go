@@ -170,7 +170,7 @@ func TestManifestBoundQuarantines(t *testing.T) {
 
 func TestPlanJSONValidatesAgainstSchema(t *testing.T) {
 	if _, err := os.Stat("../../../docs/schemas"); err != nil {
-		t.Skip("docs schemas unavailable")
+		t.Fatalf("docs schemas unavailable (broken checkout; E7-T10): %v", err)
 	}
 	compiled, err := schemavalid.CompileSchemas("../../../docs/schemas")
 	if err != nil {

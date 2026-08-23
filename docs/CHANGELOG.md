@@ -1,5 +1,12 @@
 # SOT Changelog
 
+## 1.0.24 - 2026-08-23
+
+E7-T11: the consolidated low and informational finding dispositions (D-018):
+
+- every Low/Info finding from the compliance review's section 5 maps to a fix (with the owning E7 task named) or a documented reduced guarantee with its rationale, in one decision-log record the epic audit reconciles;
+- round-1 review remediations: the three overstated FIXED claims were made true in the tree (the validated SKILL.md header, the AC-106 record assertion, the documented lease TTL), and the inventory gained the ten missing T2-T8 items.
+
 ## 1.0.23 - 2026-08-23
 
 E7-T10: licensing, layout, and documentation consistency (M-27, M-31):

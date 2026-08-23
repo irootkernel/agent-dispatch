@@ -401,3 +401,35 @@ func (s *Store) appendValidatedTransition(tx *sql.Tx, transitionID, dispatchID s
 	}
 	return s.AppendTransition(tx, transitionID, "dispatch_intent", dispatchID, string(from), string(to), recordedAt, contextJSON)
 }
+
+// CloseDeadLetter closes one dead-lettered intent as superseded through
+// the declared edge (E7-T7/M-7): the record and its audit history stay
+// inspectable, the route slot is released, and the lineage becomes
+// retention-resolvable.
+func (s *Store) CloseDeadLetter(ctx context.Context, dispatchID, actor, reason, now string) error {
+	now = normalizeTimestamp(now)
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var current, routeID string
+	if err := tx.QueryRow(`SELECT state, route_id FROM dispatch_intents WHERE dispatch_id = ?`, dispatchID).Scan(&current, &routeID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: %s", ports.ErrIntentNotFound, dispatchID)
+		}
+		return err
+	}
+	if current != string(records.IntentDeadLettered) {
+		return fmt.Errorf("%w: %s is %s, not dead-lettered", ports.ErrStateNotEligible, dispatchID, current)
+	}
+	if err := s.transitionWithin(ctx, tx, dispatchID, records.IntentDeadLettered, records.IntentSuperseded, state.ReasonReprocessOrDiscard,
+		state.IntentEvidence{Actor: actor}, now,
+		fmt.Sprintf(`{"reason":%q,"actor":%q,"operator_reason":%q}`, state.ReasonReprocessOrDiscard, actor, reason)); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE route_runtime_state SET active_dispatch_id = NULL, active_generation = 0 WHERE route_id = ? AND active_dispatch_id = ?`, routeID, dispatchID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}

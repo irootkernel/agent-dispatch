@@ -68,6 +68,14 @@ Performs schema and semantic validation. `--probe-targets` invokes read-only pub
 
 Prints normalized redacted configuration and computed revisions.
 
+### `route stale`
+
+```text
+agent-dispatch route stale --route <id> --reason <text>
+```
+
+Moves an active route whose dispatch is older than `active_stale_after` to UNCERTAIN through the declared execution-evidence-stale edge, auditing the operator reason. The uncertain route is then resolved through the documented reconciliation or lookup exits (DUR-004, E7-T7/M-6).
+
 ### `route enable|disable`
 
 ```text
@@ -140,6 +148,10 @@ Shows full redacted lineage: observation, batch, decision, attempts, receipts, r
 ### `dispatches retry <dispatch-id>`
 
 Uses the same dispatch request and idempotency key. Allowed only when state and reconciliation evidence permit it. Requires `--reason` for dead-lettered or operator-resolved unknown work.
+
+### `dispatches discard <dispatch-id>`
+
+Closes one dead-lettered dispatch as superseded through the declared edge, releasing the route slot while keeping the record and its audit history inspectable; the closed lineage becomes retention-resolvable. Requires `--reason` (DUR-009, E7-T7/M-7).
 
 ### `dispatches refresh <id>`
 

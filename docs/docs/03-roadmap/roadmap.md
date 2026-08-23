@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E7 |
 | Current active task | None |
-| Next task | E7-T7 |
-| Completed tasks | 39 / 45 |
-| Planned tasks | 6 / 45 |
+| Next task | E7-T8 |
+| Completed tasks | 40 / 45 |
+| Planned tasks | 5 / 45 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -77,7 +77,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 37 | E7-T4 | Completed | Gate-evidence tests repaired and platform guards added |
 | 38 | E7-T5 | Completed | CLI inspection contract completed |
 | 39 | E7-T6 | Completed | Write gates, audit rows, and decision records closed |
-| 40 | E7-T7 | Planned | Migration lock, WAL classification, operator exits |
+| 40 | E7-T7 | Completed | Migration lock, WAL classification, operator exits |
 | 41 | E7-T8 | Planned | Payload versioning enforced and Hermes rendering completed |
 | 42 | E7-T9 | Planned | Operations and security medium batch remediated |
 | 43 | E7-T10 | Planned | Licensing, layout, and documentation consistency |
@@ -1728,6 +1728,10 @@ E7-T6 Completed.
 - six concurrent first invocations all succeed or queue without spurious failures;
 - a stale ACTIVE route has a documented, working operator exit;
 - dead-lettered work can be closed and pruned.
+
+### Evidence
+
+Delivered as the storage durability closures (M-4): the migration pass serializes through an exclusive lock file beside the database with a bounded wait window and stale-holder theft, and the WAL journal switch retries inside a bounded window under concurrent first-open congestion - proven by `TestConcurrentFirstOpensSerialize` (six concurrent first opens all observe the complete ledger, the lock file releases, and ten repeat runs stay green). (M-5): a WAL-switch busy that outlives the retry window surfaces as the retryable `sqlite_busy` (transient_local, exit 10) instead of a fatal `sqlite_open_failed`. (M-6): the declared `execution_evidence_stale` edge gained its production writer - `route stale --reason` moves an ACTIVE route to UNCERTAIN with an audited transition, and the uncertain route then resolves through the documented reconciliation exit (`TestRouteStaleOperatorExit`). (M-7): `dispatches discard --reason` closes a dead-lettered intent as superseded through the declared edge, releases the route slot, and keeps the audit history - the closed (superseded) form is what becomes retention-resolvable, while an open dead letter stays retained (`TestDeadLetterDiscardClosesLineage`, `TestOpenDeadLettersStayRetained`). The round-1 Mulgae remediations are folded in (run r_01a02c51-b6e7, reports_only): the lock steal is an atomic rename with an owned, pid-checked release and a wait window that covers the staleness bound, a lock wait that outlives the window surfaces as the retryable busy classification instead of a fatal open, the route stale operator reason is audited on the transition, the cli-spec documents `route stale` and `dispatches discard`, and the lock wait/steal and retention posture gained tests. Verified by `make verify` on darwin/arm64. Changelog 1.0.20.
 
 ## E7-T8: Enforce Payload Versioning and Complete Hermes Rendering
 

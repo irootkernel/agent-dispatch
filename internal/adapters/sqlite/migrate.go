@@ -8,6 +8,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // ErrSchemaTooNewType is the typed newer-database failure.
@@ -106,6 +110,16 @@ func (s *Store) Migrate(backupDir string) error {
 	}
 	maxVersion := list[len(list)-1].Version
 
+	// Application-level migration lock (E7-T7/M-4, OPS-009): concurrent
+	// first opens serialize through an exclusive lock file; exactly one
+	// process applies the units and the others wait for its completion
+	// and then observe the finished ledger. A crashed holder's lock is
+	// stolen after the bounded staleness window.
+	lockRelease, err := acquireMigrationFileLock(s.Path())
+	if err != nil {
+		return err
+	}
+	defer lockRelease()
 	if err := s.ensureMigrationLedger(); err != nil {
 		return err
 	}
@@ -314,4 +328,50 @@ func (s *Store) ApplyMigrationSQLWithoutLedgerForHarness(m Migration) error {
 		return err
 	}
 	return nil
+}
+
+// migrationLockStaleness is how old a lock file may be before a waiter
+// atomically steals it from a holder that died without releasing.
+const migrationLockStaleness = 30 * time.Second
+
+// acquireMigrationFileLock serializes concurrent migration passes across
+// processes with an exclusive lock file beside the database. Waiters
+// poll for the holder's completion; a lock older than the staleness
+// bound is stolen through an atomic rename (exactly one stealer wins),
+// and the release removes only the file this process owns. A wait that
+// outlives the retryable window surfaces as busy congestion, never a
+// fatal open failure.
+func acquireMigrationFileLock(dbPath string) (func(), error) {
+	lockPath := dbPath + ".migration-lock"
+	deadline := time.Now().Add(2 * time.Minute)
+	for {
+		f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err == nil {
+			fmt.Fprintf(f, "%d\n", os.Getpid())
+			f.Close()
+			return func() {
+				// Owned release: remove the lock only when it is still
+				// ours (a stealer may already have replaced it).
+				if data, readErr := os.ReadFile(lockPath); readErr == nil && strings.TrimSpace(string(data)) == fmt.Sprint(os.Getpid()) {
+					os.Remove(lockPath)
+				}
+			}, nil
+		}
+		if !os.IsExist(err) {
+			return nil, err
+		}
+		if info, statErr := os.Stat(lockPath); statErr == nil && time.Since(info.ModTime()) > migrationLockStaleness {
+			// Atomic steal: rename moves the stale lock aside; exactly
+			// one racing stealer succeeds, the losers see it gone.
+			stolen := fmt.Sprintf("%s.stolen-%d-%d", lockPath, os.Getpid(), time.Now().UnixNano())
+			if renameErr := os.Rename(lockPath, stolen); renameErr == nil {
+				os.Remove(stolen)
+				continue
+			}
+		}
+		if time.Now().After(deadline) {
+			return nil, &ports.StoreError{Err: fmt.Errorf("migration lock held by another process past the wait window: %s", lockPath)}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }

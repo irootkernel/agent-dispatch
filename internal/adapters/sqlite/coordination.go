@@ -378,3 +378,30 @@ func lineageOr(json string) string {
 	}
 	return json
 }
+
+// MarkRouteStale moves an active route to UNCERTAIN through the declared
+// execution-evidence-stale edge (E7-T7/M-6): the operator exit for a
+// route whose active dispatch is older than active_stale_after. The
+// uncertain route is then resolved through the documented reconciliation
+// or lookup exits.
+func (s *Store) MarkRouteStaleWithReason(ctx context.Context, routeID, actor, reason, now string) error {
+	now = normalizeTimestamp(now)
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	snap, err := s.routeSnapshotInTx(tx, routeID)
+	if err != nil {
+		return err
+	}
+	if !snap.State.IsActive() {
+		return fmt.Errorf("%w: route %s is %s, not active", ports.ErrStateNotEligible, routeID, snap.State)
+	}
+	if err := s.applyRouteTransition(tx, snap, state.RouteUncertain, state.ReasonExecutionEvidenceStale,
+		state.RouteEvidence{Actor: actor}, now,
+		fmt.Sprintf(`{"reason":%q,"actor":%q,"active_dispatch_id":%q,"operator_stale":true,"operator_reason":%q}`, state.ReasonExecutionEvidenceStale, actor, snap.ActiveDispatchID, reason)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}

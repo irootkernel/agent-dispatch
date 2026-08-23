@@ -121,6 +121,14 @@ func openOperatorStore(command string, configPath string, stderr io.Writer) (sto
 			writeError(stderr, command, "migration_newer_schema", "migration", err.Error())
 			return nil, nil, 21
 		}
+		// Concurrent first-open congestion (a WAL switch or migration
+		// lock held by a peer) is retryable (E7-T7/M-5), never a fatal
+		// open failure.
+		var busy *ports.StoreError
+		if errors.As(err, &busy) {
+			writeError(stderr, command, "sqlite_busy", "transient_local", err.Error())
+			return nil, nil, 10
+		}
 		writeError(stderr, command, "sqlite_open_failed", "storage", err.Error())
 		return nil, nil, 20
 	}

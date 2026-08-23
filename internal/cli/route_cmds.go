@@ -31,6 +31,8 @@ func runRoute(args []string, stdout, stderr io.Writer) int {
 		return runRouteEnable("route enable", args[1:], stdout, stderr)
 	case "disable":
 		return runRouteDisable("route disable", args[1:], stdout, stderr)
+	case "stale":
+		return runRouteStale("route stale", args[1:], stdout, stderr)
 	default:
 		return usageError(stderr, "route", fmt.Sprintf("unknown route subcommand %q", args[0]))
 	}
@@ -236,4 +238,38 @@ func runRouteDisable(command string, args []string, stdout, stderr io.Writer) in
 		warnings = append(warnings, "reason: "+reason)
 	}
 	return writeEnvelopeWithWarnings(stdout, command, map[string]any{"route_id": routeID, "activation_state": "disabled"}, warnings)
+}
+
+// runRouteStale moves an active route to UNCERTAIN through the declared
+// execution-evidence-stale edge (E7-T7/M-6): the operator exit for a
+// stale active route (older than active_stale_after). The uncertain
+// route is then resolved through the documented reconciliation or
+// lookup exits.
+func runRouteStale(command string, args []string, stdout, stderr io.Writer) int {
+	flags, code := parseDispatchesFlags(command, args, stderr, nil)
+	if code != 0 {
+		return code
+	}
+	routeID := flags.val("--route")
+	if routeID == "" {
+		return usageError(stderr, command, "route stale requires --route")
+	}
+	if strings.TrimSpace(flags.val("--reason")) == "" {
+		return usageError(stderr, command, "route stale requires --reason")
+	}
+	_, closer, exit := openOperatorStore(command, flags.val("--config"), stderr)
+	if exit != 0 {
+		return exit
+	}
+	defer closer.Close()
+	if err := closer.MarkRouteStaleWithReason(requestCtx(), routeID, "operator", flags.val("--reason"), dispatch.Timestamp(time.Now())); err != nil {
+		if errors.Is(err, ports.ErrStateNotEligible) {
+			return planErr(stderr, command, "transition_invalid", "conflict", err.Error(), 14)
+		}
+		return intentErr(stderr, command, err)
+	}
+	return writeEnvelope(stdout, command, map[string]any{
+		"route_id": routeID, "route_state": "UNCERTAIN",
+		"next": "resolve through reconcile --reason manual or the target lookup",
+	})
 }

@@ -8,13 +8,17 @@ package sqlite
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
-
-	_ "modernc.org/sqlite"
 	"path/filepath"
 	"runtime"
 	"syscall"
+	"time"
+
+	"github.com/irootkernel/agent-dispatch/internal/ports"
+
+	"modernc.org/sqlite"
 )
 
 // Open opens (creating if needed) the database at path and applies the
@@ -56,21 +60,33 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("pragma synchronous: %w", err)
 	}
-	for _, pragma := range []struct {
-		stmt string
-		want string
-	}{
-		{"PRAGMA journal_mode = WAL", "wal"},
-	} {
+	// A concurrent first open can hit SQLITE_BUSY switching the journal
+	// mode: that is transient initialization congestion (OPS-008,
+	// E7-T7/M-4/M-5), so the switch retries inside a bounded window
+	// before falling back to the retryable busy classification.
+	var walErr error
+	for attempt := 0; attempt < 20; attempt++ {
 		var got string
-		if err := db.QueryRow(pragma.stmt).Scan(&got); err != nil {
-			db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma.stmt, err)
+		walErr = db.QueryRow("PRAGMA journal_mode = WAL").Scan(&got)
+		if walErr == nil {
+			if got != "wal" {
+				db.Close()
+				return nil, fmt.Errorf("pragma journal_mode yielded %q, want wal (unsupported storage?)", got)
+			}
+			walErr = nil
+			break
 		}
-		if got != pragma.want {
-			db.Close()
-			return nil, fmt.Errorf("pragma %q yielded %q, want %q (unsupported storage?)", pragma.stmt, got, pragma.want)
+		if !isBusy(walErr) {
+			break
 		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if walErr != nil {
+		db.Close()
+		if isBusy(walErr) {
+			return nil, &ports.StoreError{Err: fmt.Errorf("database is initializing concurrently (WAL switch busy): %w", walErr)}
+		}
+		return nil, fmt.Errorf("pragma journal_mode: %w", walErr)
 	}
 	// foreign_keys and busy_timeout return no result rows through this
 	// driver; set them and verify through their read forms.
@@ -152,4 +168,13 @@ func rejectNetworkPlacementStatfs(path string, statfs func(string, *syscall.Stat
 		}
 	}
 	return nil
+}
+
+// isBusy reports whether the driver error is SQLITE_BUSY congestion.
+func isBusy(err error) bool {
+	var derr *sqlite.Error
+	if errors.As(err, &derr) {
+		return derr.Code() == 5 || derr.Code() == 261
+	}
+	return false
 }

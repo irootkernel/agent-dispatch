@@ -26,6 +26,7 @@ import (
 // (cli-spec §6).
 var knownDispatchesSubcommands = map[string]bool{
 	"list": true, "show": true, "retry": true, "reprocess": true, "rerun": true, "refresh": true, "drain": true,
+	"discard": true,
 }
 
 // requestCtx carries the global --timeout bound when one was given
@@ -106,6 +107,7 @@ func runDispatches(args []string, stdout, stderr io.Writer) int {
 	if !knownDispatchesSubcommands[sub] {
 		return usageError(stderr, "dispatches", fmt.Sprintf("unknown dispatches subcommand %q", sub))
 	}
+
 	command := "dispatches " + sub
 	switch sub {
 	case "list":
@@ -118,6 +120,8 @@ func runDispatches(args []string, stdout, stderr io.Writer) int {
 		return runDispatchesReprocess(command, rest, stdout, stderr)
 	case "rerun":
 		return runDispatchesRerun(command, rest, stdout, stderr)
+	case "discard":
+		return runDispatchesDiscard(command, rest, stdout, stderr)
 	case "refresh":
 		return runDispatchesRefresh(command, rest, stdout, stderr)
 	default:
@@ -644,4 +648,35 @@ func intentErr(stderr io.Writer, command string, err error) int {
 		writeError(stderr, command, "internal_unclassified", "internal", err.Error())
 		return 40
 	}
+}
+
+// runDispatchesDiscard closes one dead-lettered dispatch as superseded
+// through the declared edge, releasing the route slot (E7-T7/M-7). The
+// record and its audit history remain inspectable.
+func runDispatchesDiscard(command string, args []string, stdout, stderr io.Writer) int {
+	flags, code := parseDispatchesFlags(command, args, stderr, nil)
+	if code != 0 {
+		return code
+	}
+	if flags.positional == "" {
+		return usageError(stderr, command, "dispatches discard requires a dispatch ID")
+	}
+	if strings.TrimSpace(flags.val("--reason")) == "" {
+		return usageError(stderr, command, "dispatches discard requires --reason")
+	}
+	closerStore, closer, exit := openOperatorStore(command, flags.val("--config"), stderr)
+	if exit != 0 {
+		return exit
+	}
+	defer closer.Close()
+	_ = closerStore
+	if err := closer.CloseDeadLetter(requestCtx(), flags.positional, "operator", flags.val("--reason"), dispatch.Timestamp(time.Now())); err != nil {
+		if errors.Is(err, ports.ErrStateNotEligible) {
+			return planErr(stderr, command, "transition_invalid", "conflict", err.Error(), 14)
+		}
+		return intentErr(stderr, command, err)
+	}
+	return writeEnvelope(stdout, command, map[string]any{
+		"dispatch_id": flags.positional, "state": "superseded", "slot_released": true,
+	})
 }

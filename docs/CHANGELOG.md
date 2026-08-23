@@ -1,5 +1,15 @@
 # SOT Changelog
 
+## 1.0.20 - 2026-08-23
+
+E7-T7: storage durability and operator exits (OPS-008, OPS-009, DUR-004, DUR-009):
+
+- the migration pass serializes through an exclusive lock file (bounded wait, stale-holder theft) and the WAL switch retries under concurrent first-open congestion, so concurrent first invocations no longer fail spuriously;
+- a WAL-switch busy that outlives the retry window surfaces as the retryable `sqlite_busy` (exit 10) instead of a fatal open failure;
+- `route stale --reason` moves a stale ACTIVE route to UNCERTAIN through the declared execution-evidence-stale edge (the audited operator exit; reconciliation then resolves it);
+- `dispatches discard --reason` closes a dead-lettered dispatch as superseded through the declared edge, releasing the route slot; the closed form is retention-resolvable while an open dead letter stays retained;
+- round-1 remediations: the migration-lock steal is an atomic rename with an owned pid-checked release and a wait window covering the staleness bound, a lock wait past the window surfaces as retryable busy, and the route stale operator reason is audited.
+
 ## 1.0.19 - 2026-08-23
 
 E7-T6: write gates, audit rows, and decision records (TST-008, DUR-011, POL-006, OPS-004, PTH-008):

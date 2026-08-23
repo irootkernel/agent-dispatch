@@ -80,6 +80,9 @@ func (s *Store) StaleLeases(ctx context.Context, now string) ([]string, error) {
 // resolved for retention (retention-and-privacy §2: everything else is
 // retained until resolution).
 func resolvedTerminalStates() string {
+	// A closed dead letter is superseded (already in the set); an open
+	// dead letter stays retained until the operator closes it
+	// (retention-and-privacy §2, E7-T7 round-1 remediation).
 	return "('accepted','rejected','superseded','completed','failed','canceled')"
 }
 

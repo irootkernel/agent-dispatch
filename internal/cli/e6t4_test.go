@@ -3,11 +3,15 @@ package cli
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -309,10 +313,13 @@ func TestG5AC506ReleaseArtifactsPresent(t *testing.T) {
 	}
 	// The LATEST release notes are the one version source (historical
 	// notes for prior releases remain in the package).
+	// Semantic selection: compare the numeric version components, never
+	// the raw filename (lexical order picks v0.1.9 over v0.1.10).
 	latest := matches[0]
+	latestKey := versionSortKey(filepath.Base(latest))
 	for _, m := range matches {
-		if m > latest {
-			latest = m
+		if k := versionSortKey(filepath.Base(m)); k > latestKey {
+			latest, latestKey = m, k
 		}
 	}
 	notesRel := filepath.Join("docs", filepath.Base(latest))
@@ -365,8 +372,13 @@ func TestG5AC506ReleaseArtifactsPresent(t *testing.T) {
 			if len(fields) != 2 {
 				t.Fatalf("AC-506: malformed SHA256SUMS line %q", l)
 			}
-			if _, serr := os.Stat(filepath.Join(dist, fields[1])); serr != nil {
+			artifact, serr := os.ReadFile(filepath.Join(dist, fields[1]))
+			if serr != nil {
 				t.Fatalf("AC-506: checksummed artifact missing: %s (%v)", fields[1], serr)
+			}
+			sum := sha256.Sum256(artifact)
+			if hex.EncodeToString(sum[:]) != fields[0] {
+				t.Fatalf("AC-506: digest mismatch for %s: SHA256SUMS says %s, file hashes %s", fields[1], fields[0], hex.EncodeToString(sum[:]))
 			}
 		}
 	}
@@ -509,4 +521,19 @@ func TestVersionReportsDeliveredAdapters(t *testing.T) {
 	if !strings.Contains(res.Adapters["hermeswebhook"], "HTTPS sink") {
 		t.Fatalf("hermeswebhook entry wrong: %s", res.Adapters["hermeswebhook"])
 	}
+}
+
+// versionSortKey renders a RELEASE-NOTES-<version>.md basename into a
+// zero-padded numeric key so semantic order equals string order.
+func versionSortKey(base string) string {
+	v := strings.TrimSuffix(strings.TrimPrefix(base, "RELEASE-NOTES-"), ".md")
+	parts := strings.Split(v, ".")
+	for i, p := range parts {
+		digits := p
+		digits = strings.TrimPrefix(digits, "v")
+		if n, err := strconv.Atoi(digits); err == nil {
+			parts[i] = fmt.Sprintf("%08d", n)
+		}
+	}
+	return strings.Join(parts, ".")
 }

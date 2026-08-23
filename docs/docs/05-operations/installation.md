@@ -49,9 +49,12 @@ it, and `doctor` reports violations).
 ```sh
 agent-dispatch init                              # writes the disabled example config,
                                            # creates the owner-only state directory
-cp <your-hermes-capability-report.json> ~/.config/agent-dispatch/
-                                           # the probed report must exist BEFORE the
-                                           # target gates (E8-T3: enable probes it)
+cp <your-hermes-capability-report.json> \
+    ~/.config/agent-dispatch/hermes-capability-report.json
+                                           # the probed report must exist at the
+                                           # exact filename the generated config
+                                           # references, BEFORE the target gates
+                                           # (E8-T3: enable probes it)
 agent-dispatch config validate --probe-targets   # configuration and target gates
 agent-dispatch watchman install --route wiki-maintenance
 agent-dispatch route enable --route wiki-maintenance \

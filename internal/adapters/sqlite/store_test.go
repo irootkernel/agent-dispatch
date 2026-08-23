@@ -1589,3 +1589,33 @@ func TestE8T2DeadLetterRejectedGuards(t *testing.T) {
 		t.Fatalf("the dispatch must be dead-lettered: %q %v", got, err)
 	}
 }
+
+// TestE8AuditFailPathGenerationFence pins the T1 deferred finding: a
+// racing merge between the Fail snapshot and its transaction refuses as
+// a generation conflict, never silently dropping the merged work.
+func TestE8AuditFailPathGenerationFence(t *testing.T) {
+	s := openTestStore(t)
+	seedIntentChain(t, s, "dispatch-1")
+	rec0, err := s.LoadRouteRuntimeState("wiki-maintenance")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpdateRouteRuntimeState(nil, "wiki-maintenance", rec0.Version, func(r *RouteRuntimeStateRecord) {
+		r.ActivationState = "enabled"
+		r.RouteState = "ACTIVE_CLEAN"
+		r.ActiveDispatchID = "dispatch-1"
+		r.DirtyGeneration = 1
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// The caller fenced generation 0; the route moved to 1 inside the
+	// window — the completion must refuse.
+	_, err = s.CompleteActive(context.Background(), ports.ActiveCompletion{
+		RouteID: "wiki-maintenance", DispatchID: "dispatch-1", Failed: true,
+		FailureBudgetRemaining: 2, ReceiptRef: "rcpt-work-1", Actor: "hermes-task", Now: now(),
+		FenceGeneration: true, ExpectedDirtyGeneration: 0,
+	})
+	if err == nil || !errors.Is(err, ErrOptimisticConcurrency) {
+		t.Fatalf("the fail path must honor the generation fence, got %v", err)
+	}
+}

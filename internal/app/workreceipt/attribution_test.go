@@ -1,6 +1,7 @@
 package workreceipt
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/irootkernel/agent-dispatch/internal/ports"
@@ -160,4 +161,31 @@ func TestMatchDecisionDocumentDeterministic(t *testing.T) {
 	if a, b := Match(firstReceipt, firstObserved).ContextJSON(), Match(secondReceipt, secondObserved).ContextJSON(); a != b {
 		t.Fatalf("permuted inputs must produce identical decision documents:\n%s\n%s", a, b)
 	}
+}
+
+// TestE8AuditClassifyErrorStaysMaterial pins the T1 deferred finding:
+// an OutsideScope predicate error never marks a path immaterial — the
+// receipt-scope rule fails safe against provenance.
+func TestE8AuditClassifyErrorStaysMaterial(t *testing.T) {
+	evidence := ReceiptEvidence{
+		ReceiptID: "rcpt-audit", Changes: []changeEntry{{Path: "Notes/x.md"}},
+		OutsideScope: func(path string) bool {
+			return false
+		},
+	}
+	decision := Match(evidence, []ports.DirtyChange{
+		{Path: "Notes/other.md", Operation: "modify", AfterDigest: "sha256:" + strings.Repeat("a", 64), DigestStatus: "known", ObservedAt: "2026-08-23T10:00:00Z"},
+	})
+	// Notes/x.md was never observed and the predicate says in-scope:
+	// it must stay unresolved extra provenance.
+	found := false
+	for _, d := range decision.Unresolved {
+		if d.Path == "Notes/x.md" && d.Outcome == OutcomeExtra {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("an in-scope unobserved receipt path must stay receipt_extra_path: %+v", decision.Unresolved)
+	}
+	_ = evidence
 }

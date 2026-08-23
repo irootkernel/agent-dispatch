@@ -110,6 +110,10 @@ type SubmitResult struct {
 	StructuredPayload []byte
 	// Diagnostic is redacted free-form context.
 	Diagnostic string
+	// PayloadVersion is the wire contract version this submission used
+	// (DAT-009, E7-T8/M-8); empty defaults to the task-request contract
+	// of this build.
+	PayloadVersion string
 }
 
 // LookupStatus is the lookup outcome axis.

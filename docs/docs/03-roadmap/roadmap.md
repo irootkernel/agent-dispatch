@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E7 |
 | Current active task | None |
-| Next task | E7-T8 |
-| Completed tasks | 40 / 45 |
-| Planned tasks | 5 / 45 |
+| Next task | E7-T9 |
+| Completed tasks | 41 / 45 |
+| Planned tasks | 4 / 45 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -78,7 +78,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 38 | E7-T5 | Completed | CLI inspection contract completed |
 | 39 | E7-T6 | Completed | Write gates, audit rows, and decision records closed |
 | 40 | E7-T7 | Completed | Migration lock, WAL classification, operator exits |
-| 41 | E7-T8 | Planned | Payload versioning enforced and Hermes rendering completed |
+| 41 | E7-T8 | Completed | Payload versioning enforced and Hermes rendering completed |
 | 42 | E7-T9 | Planned | Operations and security medium batch remediated |
 | 43 | E7-T10 | Planned | Licensing, layout, and documentation consistency |
 | 44 | E7-T11 | Planned | Low and informational findings dispositioned |
@@ -1761,6 +1761,10 @@ E7-T7 Completed.
 - an unknown payload major version fails closed on read;
 - a rendered Kanban task contains every HER-006 required element;
 - persisted observations validate against their JSON schema.
+
+### Evidence
+
+Delivered as the data-contract closures (M-8): the acceptance receipt always carries the payload version of the contract actually submitted (`SubmitResult.PayloadVersion` with the task-request default; the insert never writes null - `TestReceiptPayloadVersionNeverNull`), the snapshot and lineage reads fail closed on any stored request version this build does not speak (`TestUnknownStoredRequestVersionFailsClosed`; the earlier family-only major check would have accepted a same-family newer major and now requires the exact contract version), and the webhook sink refuses a request naming any contract other than this build's exact task-request version before any transport work (rerun and follow-up rebuilds construct a fresh request under the current contract, so no stale payload restamping path exists by construction). (M-9): the Kanban renderer appends the HER-006 basis-four manifest-existence sentence and renders the acceptance criteria block, with the golden regenerated to pin both. (M-11): `SourceFlags` carries schema-conformant snake_case JSON tags and the observation persists its verbatim source position object (watchman since/clock) through migration v5 (`observation-position`, schema range now 1-5 with the version metadata and drift tests updated). The round-1 Mulgae remediations are folded in (run r_01a02c97-6580, reports_only): the observation converter persists the position it previously dropped (the column was always NULL), the webhook gate refuses any contract except this build's exact task-request version (the earlier family-only check passed a same-family `/v9`), and `has_relative` left the persisted flags (the published schema carries only overflow, fresh_instance, and relative_root), with the schema-conformance regression test added. Verified by `make verify` on darwin/arm64. Changelog 1.0.21.
 
 ## E7-T9: Remediate the Operations and Security Medium Batch
 

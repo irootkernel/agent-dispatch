@@ -36,6 +36,7 @@ var Migrations = []Migration{
 	{Version: 2, Name: "attempts-unique-by-attempt-id", SQL: schemaV2AttemptsUniqueByAttemptID},
 	{Version: 3, Name: "intent-target-scope", SQL: schemaV3IntentTargetScope},
 	{Version: 4, Name: "work-receipts-begun-at", SQL: schemaV4WorkReceiptsBegunAt},
+	{Version: 5, Name: "observation-position", SQL: schemaV5ObservationPosition},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
@@ -375,3 +376,10 @@ func acquireMigrationFileLock(dbPath string) (func(), error) {
 		time.Sleep(50 * time.Millisecond)
 	}
 }
+
+// schemaV5ObservationPosition persists the verbatim source position
+// object on each observation (the observation contract's
+// source.position, E7-T8/M-11).
+const schemaV5ObservationPosition = `
+ALTER TABLE source_observations ADD COLUMN position_json TEXT;
+`

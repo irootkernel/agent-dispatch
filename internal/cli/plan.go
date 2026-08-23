@@ -511,6 +511,13 @@ func buildHeldLineage(a *planArtifacts) (ports.Lineage, ports.QuarantineInput, e
 	if err != nil {
 		return ports.Lineage{}, ports.QuarantineInput{}, err
 	}
+	// The source position object persists verbatim (watchman since and
+	// clock): the observation contract's source.position (E7-T8/M-11).
+	positionJSON, _ := json.Marshal(map[string]any{
+		"since":         a.env.Since,
+		"clock":         a.env.Clock,
+		"relative_root": a.env.RelativeRoot,
+	})
 	// The record contract sorts decision reason codes.
 	sorted := append([]string(nil), a.plan.ReasonCodes...)
 	sort.Strings(sorted)
@@ -530,7 +537,7 @@ func buildHeldLineage(a *planArtifacts) (ports.Lineage, ports.QuarantineInput, e
 				TriggerName:    a.env.Trigger, ResourceID: a.route.Source.Resource,
 				ObservedAt: now, ReceivedAt: now,
 				RawPayloadDigest: string(a.input.RawDigest), IngestStatus: "accepted",
-				FlagsJSON: string(flagsJSON), Changes: changes,
+				FlagsJSON: string(flagsJSON), PositionJSON: string(positionJSON), Changes: changes,
 			},
 			Batch: ports.BatchInput{
 				BatchID: string(batchID), RouteID: a.opts.routeID, RouteRevision: a.plan.Route.Revision,

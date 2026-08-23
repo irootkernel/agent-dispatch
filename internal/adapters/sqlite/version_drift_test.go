@@ -18,10 +18,10 @@ func TestVersionMetadataMatchesSchema(t *testing.T) {
 	if got[0] != "1" {
 		t.Errorf("oldest supported schema = %q, want 1", got[0])
 	}
-	if got[1] != "4" {
-		t.Errorf("newest supported schema = %q, want 4 (migration v4)", got[1])
+	if got[1] != "5" {
+		t.Errorf("newest supported schema = %q, want 5 (migration v5)", got[1])
 	}
-	if MaxSchemaVersion != 4 {
+	if MaxSchemaVersion != 5 {
 		t.Errorf("migration baseline drifted to %d; update version.SchemaRange with it", MaxSchemaVersion)
 	}
 	if version.AdapterVersions()["sqlite"] == "not-implemented (E1-T4)" {

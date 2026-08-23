@@ -80,12 +80,14 @@ func SortChanges(changes []ChangeItem) {
 // SourceFlags are the observation flags that can affect semantics and
 // therefore enter the content fingerprint.
 type SourceFlags struct {
-	Overflow      bool
-	FreshInstance bool
+	Overflow      bool `json:"overflow"`
+	FreshInstance bool `json:"fresh_instance"`
 	// RelativeRoot is the nullable relative-root flag text; empty encodes
 	// null.
-	RelativeRoot string
-	HasRelative  bool
+	RelativeRoot string `json:"relative_root"`
+	// HasRelative has no published schema key: source.flags carries
+	// only overflow, fresh_instance, and relative_root (E7-T8 round-1).
+	HasRelative bool `json:"-"`
 }
 
 // SourceObservation is the immutable observation record (domain-model;

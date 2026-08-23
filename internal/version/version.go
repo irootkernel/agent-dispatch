@@ -20,7 +20,7 @@ const ConfigVersion = "1"
 // supports, inclusive; schema v1 is the initial durable schema delivered
 // by E1-T4; v2 drops the over-constraining attempts uniqueness (E4-T5
 // gate finding) and v3 records the accepting target scope (E4 audit).
-const SchemaRange = "1-4"
+const SchemaRange = "1-5"
 
 // AdapterVersions returns the pinned adapter implementation versions the
 // build carries. Each entry names the delivered surface and its verified

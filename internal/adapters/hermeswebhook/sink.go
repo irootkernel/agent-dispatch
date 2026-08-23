@@ -206,6 +206,13 @@ func (s *Sink) Probe(ctx context.Context) (ports.Capabilities, error) {
 // definite request-refusal statuses prove rejection; ambiguous statuses
 // and mid-flight transport failures are unknown (DUR-005).
 func (s *Sink) Submit(ctx context.Context, req ports.TaskRequest) (ports.SubmitResult, error) {
+	// DAT-009 (E7-T8 round-1): only this build's exact task-request
+	// contract is submittable; a same-family unknown major is refused
+	// before any transport work, exactly like a foreign family.
+	if req.ContractVersion != ports.TaskRequestContractVersion {
+		return ports.SubmitResult{Classification: ports.SubmitDefiniteNotSubmitted}, fmt.Errorf("unsupported task-request contract %q (this build speaks %q)", req.ContractVersion, ports.TaskRequestContractVersion)
+	}
+
 	body, err := json.Marshal(req)
 	if err != nil {
 		return ports.SubmitResult{}, fmt.Errorf("rendering task request: %w", err)

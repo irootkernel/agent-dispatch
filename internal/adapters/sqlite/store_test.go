@@ -893,7 +893,7 @@ func TestMigrationV4BackfillsBegunAt(t *testing.T) {
 	if err := s.InitializeRouteState(nil, "wiki-maintenance"); err != nil {
 		t.Fatal(err)
 	}
-	seedIntentChain(t, s, "dispatch-v4")
+	seedIntentChainV3Era(t, s, "dispatch-v4")
 	// A v3-era row: the begun_at column does not exist yet.
 	if _, err := s.Exec(`INSERT INTO work_receipts
 		(receipt_id, dispatch_id, run_id, resource_id, status, changes_json, submitted_at, validation_state, validation_reasons_json)
@@ -1184,5 +1184,28 @@ func TestClearPendingReconcileConditional(t *testing.T) {
 	cleared, err = s.ClearPendingReconcile(context.Background(), "wiki-maintenance", true, now())
 	if err != nil || cleared {
 		t.Fatalf("an already-cleared flag is a miss, got cleared=%v err=%v", cleared, err)
+	}
+}
+
+// seedIntentChainV3Era seeds the lineage with the v3-era observation
+// shape: the raw insert omits the v5 position column this era does not
+// have (the store helper writes it since E7-T8).
+func seedIntentChainV3Era(t *testing.T, s *Store, dispatchID string) {
+	t.Helper()
+	if _, err := s.Exec(`INSERT INTO source_observations
+		(observation_id, schema_version, source_type, source_id, trigger_name, resource_id, observed_at, received_at, raw_payload_digest, ingest_status, flags_json)
+		VALUES ('0192e6c6-4d7f-7abc-8def-012345678901', 'agent-dispatch.source-observation/v1', 'watchman', 'watchman-main', 'trig', 'vault-main', ?, ?, 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 'accepted', '{}')`,
+		now(), now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveBatch(nil, "batch-1", "wiki-maintenance", "route-rev-1", "vault-main", now(), "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", []string{"0192e6c6-4d7f-7abc-8def-012345678901"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveDecision(nil, DecisionRecord{DecisionID: "decision-1", BatchID: "batch-1", RouteID: "wiki-maintenance",
+		RouteRevision: "route-rev-1", PolicyRevision: "policy-rev-1", Disposition: "dispatch", Classification: "normal", CreatedAt: now(), Actor: "system"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveIntent(nil, intentRecord(dispatchID, "decision-1")); err != nil {
+		t.Fatalf("save intent: %v", err)
 	}
 }

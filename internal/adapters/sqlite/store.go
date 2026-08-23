@@ -41,10 +41,10 @@ func (s *Store) RegisterRoute(tx *sql.Tx, routeID, revision, policyRevision, res
 // changes (DAT-007: causal and attribution fields are real columns).
 func (s *Store) SaveObservation(tx *sql.Tx, o ObservationRecord) error {
 	if _, err := execOn(tx, s.DB, `INSERT INTO source_observations
-		(observation_id, schema_version, source_type, source_id, source_event_key, trigger_name, resource_id, observed_at, received_at, raw_payload_digest, ingest_status, flags_json)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+		(observation_id, schema_version, source_type, source_id, source_event_key, trigger_name, resource_id, observed_at, received_at, raw_payload_digest, ingest_status, flags_json, position_json)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		o.ObservationID, o.SchemaVersion, o.SourceType, o.SourceID, nullString(o.SourceEventKey), o.TriggerName, o.ResourceID,
-		o.ObservedAt, o.ReceivedAt, o.RawPayloadDigest, o.IngestStatus, o.FlagsJSON); err != nil {
+		o.ObservedAt, o.ReceivedAt, o.RawPayloadDigest, o.IngestStatus, o.FlagsJSON, nullString(o.PositionJSON)); err != nil {
 		return err
 	}
 	for _, c := range o.Changes {
@@ -72,7 +72,9 @@ type ObservationRecord struct {
 	RawPayloadDigest string
 	IngestStatus     string
 	FlagsJSON        string
-	Changes          []ChangeRecord
+	// PositionJSON is the verbatim source position object (E7-T8/M-11).
+	PositionJSON string
+	Changes      []ChangeRecord
 }
 
 // ChangeRecord is the persistence shape of one normalized change.

@@ -431,6 +431,12 @@ func (r *Runtime) Recover(ctx context.Context, routeID string) ([]ports.Recovere
 
 // receipt builds the durable acceptance evidence for one submit result.
 func (r *Runtime) receipt(attemptID string, res ports.SubmitResult, acceptance records.AcceptanceState) *ports.ReceiptInput {
+	// The receipt carries the payload version of the contract that was
+	// actually submitted (DAT-009, E7-T8/M-8): never null.
+	version := res.PayloadVersion
+	if version == "" {
+		version = ports.TaskRequestContractVersion
+	}
 	return &ports.ReceiptInput{
 		ReceiptID:        "rcpt-" + attemptID,
 		Acceptance:       acceptance,
@@ -438,6 +444,7 @@ func (r *Runtime) receipt(attemptID string, res ports.SubmitResult, acceptance r
 		ExternalRef:      res.ExternalRef,
 		TargetObservedAt: res.TargetObservedAt,
 		ReceivedAt:       Timestamp(r.Now()),
+		PayloadVersion:   version,
 		BoundedPayload:   boundedPayload(res.StructuredPayload),
 	}
 }

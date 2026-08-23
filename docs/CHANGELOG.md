@@ -1,5 +1,14 @@
 # SOT Changelog
 
+## 1.0.21 - 2026-08-23
+
+E7-T8: payload versioning enforced and the Hermes rendering completed (DAT-009, HER-006, SRC-002):
+
+- acceptance receipts always carry the submitted contract's payload version (never null), the snapshot and lineage reads fail closed on any stored request version this build does not speak, and the webhook sink refuses a foreign task-request contract before transport;
+- the Kanban renderer carries the acceptance criteria block and the HER-006 manifest-existence sentence, pinned by the regenerated golden;
+- persisted observations use schema-conformant snake_case flags and store their verbatim source position (migration v5, schema range 1-5);
+- round-1 remediations: the observation converter actually persists the position (the column was written NULL), the webhook gate refuses every contract except this build's exact version, and the unpublished has_relative key left the persisted flags (rerun and follow-up rebuilds construct fresh requests under the current contract, so no stale restamping path exists).
+
 ## 1.0.20 - 2026-08-23
 
 E7-T7: storage durability and operator exits (OPS-008, OPS-009, DUR-004, DUR-009):

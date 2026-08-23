@@ -10,6 +10,16 @@ Respect all Hermes runtime permissions and approval gates. Do not modify paths t
 {"mode":"latest_state","generation":1,"content_fingerprint":"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","flags":[],"manifest":[{"path":"Inbox/new-note.md","operation":"create","after_digest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}]}
 -- end untrusted change manifest --
 
+The change manifest records activation evidence observed at dispatch time. Do not assume any manifest path still exists: verify current vault state before acting.
+
+Acceptance criteria:
+- Evaluate the current vault state using the configured LLM Wiki skill.
+- Re-evaluate indexing, referencing, and grouping affected by the latest state.
+- Respect Hermes permissions, approvals, and protected-path policy.
+- Do not assume that a manifest path still exists at execution time.
+- Report a bounded Agent Dispatch work receipt when the companion CLI is available.
+
+
 Work receipt (via the Agent Dispatch companion CLI when available):
 agent-dispatch work begin --dispatch-id 019c2234-5678-7abc-9def-0123456789ab --run-id <generated-run-id>
 ...

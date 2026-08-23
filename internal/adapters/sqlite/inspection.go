@@ -89,10 +89,11 @@ func (s *Store) ListIntents(ctx context.Context, f ports.IntentFilter) ([]ports.
 func (s *Store) LoadIntentLineage(ctx context.Context, dispatchID string) (ports.IntentLineage, error) {
 	var lin ports.IntentLineage
 	var next sql.NullString
-	err := s.QueryRowContext(ctx, `SELECT dispatch_id, route_id, target_id, generation, idempotency_key, state, attempt_count, next_attempt_at, created_at, updated_at
+	var storedVersion string
+	err := s.QueryRowContext(ctx, `SELECT dispatch_id, route_id, target_id, generation, idempotency_key, state, request_version, attempt_count, next_attempt_at, created_at, updated_at
 		FROM dispatch_intents WHERE dispatch_id = ?`, dispatchID).Scan(
 		&lin.Intent.DispatchID, &lin.Intent.RouteID, &lin.Intent.TargetID, &lin.Intent.Generation, &lin.Intent.IdempotencyKey,
-		&lin.Intent.State, &lin.Intent.AttemptCount, &next, &lin.Intent.CreatedAt, &lin.Intent.UpdatedAt)
+		&lin.Intent.State, &storedVersion, &lin.Intent.AttemptCount, &next, &lin.Intent.CreatedAt, &lin.Intent.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return lin, fmt.Errorf("%w: %s", ports.ErrIntentNotFound, dispatchID)
 	}
@@ -100,6 +101,11 @@ func (s *Store) LoadIntentLineage(ctx context.Context, dispatchID string) (ports
 		return lin, err
 	}
 	lin.Intent.NextAttemptAt = nullText(next)
+	// DAT-009 (E7-T8/M-8): the same fail-closed version check the
+	// snapshot read enforces.
+	if storedVersion != "" && storedVersion != ports.TaskRequestContractVersion {
+		return lin, fmt.Errorf("stored request version %q is not a contract this build speaks (%s): fail closed", storedVersion, ports.TaskRequestContractVersion)
+	}
 
 	arows, err := s.QueryContext(ctx, `SELECT attempt_id, dispatch_id, lease_owner, started_at, completed_at, outcome, error_code, response_digest, diagnostic
 		FROM dispatch_attempts WHERE dispatch_id = ? ORDER BY started_at, attempt_id`, dispatchID)

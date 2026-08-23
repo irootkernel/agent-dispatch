@@ -173,6 +173,8 @@ func Render(req ports.TaskRequest, opts RenderOptions) (RenderedTask, error) {
 		manifestBeginText + "\n" +
 		rendered.ManifestJSON + "\n" +
 		manifestEndText + "\n\n" +
+		manifestExistenceText + "\n\n" +
+		acceptanceCriteria(req) + "\n\n" +
 		receiptInstructions(req)
 
 	create := CreateOptions{
@@ -249,4 +251,19 @@ func bodyManifestSection(body string) (string, bool) {
 		return "", false
 	}
 	return rest[:j], true
+}
+
+// manifestExistenceText is the HER-006 basis-four sentence: the manifest
+// records the observed change evidence and does not assert that the
+// files still exist at execution time (E7-T8/M-9).
+const manifestExistenceText = "The change manifest records activation evidence observed at dispatch time. Do not assume any manifest path still exists: verify current vault state before acting."
+
+// acceptanceCriteria renders the HER-006 acceptance criteria block.
+func acceptanceCriteria(req ports.TaskRequest) string {
+	var b strings.Builder
+	b.WriteString("Acceptance criteria:\n")
+	for _, c := range req.AcceptanceCriteria {
+		b.WriteString("- " + c + "\n")
+	}
+	return b.String()
 }

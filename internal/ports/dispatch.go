@@ -70,7 +70,11 @@ type ObservationInput struct {
 	RawPayloadDigest string
 	IngestStatus     string
 	FlagsJSON        string
-	Changes          []ObservationChange
+	// PositionJSON is the source position object (watchman since/clock)
+	// persisted verbatim for the observation contract's source.position
+	// (E7-T8/M-11).
+	PositionJSON string
+	Changes      []ObservationChange
 }
 
 // ObservationChange is one normalized path evidence row.
@@ -144,6 +148,7 @@ type IntentSnapshot struct {
 	DispatchID     string
 	RouteID        string
 	RouteRevision  string
+	RequestVersion string
 	TargetID       string
 	TargetScope    string
 	TargetType     string

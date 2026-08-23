@@ -109,6 +109,7 @@ func portsObservation(o ports.ObservationInput) ObservationRecord {
 		RawPayloadDigest: o.RawPayloadDigest,
 		IngestStatus:     o.IngestStatus,
 		FlagsJSON:        o.FlagsJSON,
+		PositionJSON:     o.PositionJSON,
 	}
 	for _, c := range o.Changes {
 		rec.Changes = append(rec.Changes, ChangeRecord{
@@ -141,10 +142,10 @@ func portsIntent(i ports.IntentInput) IntentRecord {
 func (s *Store) LoadIntent(ctx context.Context, dispatchID string) (ports.IntentSnapshot, error) {
 	var snap ports.IntentSnapshot
 	var leaseOwner, leaseExpires, nextAttempt, externalRef sql.NullString
-	err := s.QueryRowContext(ctx, `SELECT dispatch_id, route_id, route_revision, target_id, target_type, target_scope, resource_id, generation, idempotency_key, state, request_json, manifest_digest, external_ref, lease_owner, lease_expires_at, attempt_count, next_attempt_at
+	err := s.QueryRowContext(ctx, `SELECT dispatch_id, route_id, route_revision, target_id, target_type, target_scope, resource_id, generation, idempotency_key, state, request_version, request_json, manifest_digest, external_ref, lease_owner, lease_expires_at, attempt_count, next_attempt_at
 		FROM dispatch_intents WHERE dispatch_id = ?`, dispatchID).Scan(
 		&snap.DispatchID, &snap.RouteID, &snap.RouteRevision, &snap.TargetID, &snap.TargetType, &snap.TargetScope, &snap.ResourceID, &snap.Generation, &snap.IdempotencyKey,
-		&snap.State, &snap.RequestJSON, &snap.ManifestDigest, &externalRef,
+		&snap.State, &snap.RequestVersion, &snap.RequestJSON, &snap.ManifestDigest, &externalRef,
 		&leaseOwner, &leaseExpires, &snap.AttemptCount, &nextAttempt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return snap, fmt.Errorf("%w: %s", ports.ErrIntentNotFound, dispatchID)
@@ -154,6 +155,12 @@ func (s *Store) LoadIntent(ctx context.Context, dispatchID string) (ports.Intent
 	}
 	if _, perr := records.ParseIntentState(string(snap.State)); perr != nil {
 		return snap, fmt.Errorf("stored intent state %q is not a contract state: %v", snap.State, perr)
+	}
+	// DAT-009 (E7-T8/M-8): the stored request's contract version is
+	// load-bearing. A stored major this build does not speak fails
+	// closed on read instead of being mis-rendered at submit time.
+	if snap.RequestVersion != "" && snap.RequestVersion != ports.TaskRequestContractVersion {
+		return snap, fmt.Errorf("stored request version %q is not a contract this build speaks (%s): fail closed", snap.RequestVersion, ports.TaskRequestContractVersion)
 	}
 	snap.ExternalRef, snap.LeaseOwner, snap.LeaseExpiresAt, snap.NextAttemptAt =
 		nullText(externalRef), nullText(leaseOwner), nullText(leaseExpires), nullText(nextAttempt)

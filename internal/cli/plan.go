@@ -233,7 +233,13 @@ func runPlan(command string, args []string, stdout, stderr io.Writer) int {
 		return code
 	}
 	_ = artifacts.opts.jsonOutput // machine output only (CLI-001)
-	return writeEnvelope(stdout, command, artifacts.plan)
+	// The plan and dry-run surfaces open no database, so their batch is
+	// built without the durable path-facts snapshot: unchanged-content
+	// suppression is unreachable here and every modify is reported as
+	// changed. The gap is stated instead of overstated (E8-T5, M-7).
+	return writeEnvelopeWithWarnings(stdout, command, artifacts.plan, []string{
+		"planned without the durable path-facts snapshot: unchanged-content suppression and merge_pending detection are unavailable on this surface; the durable dispatch path reports them",
+	})
 }
 
 // runDispatch implements `dispatch` (cli-spec §5). `--dry-run` stays

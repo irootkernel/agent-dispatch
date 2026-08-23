@@ -1,5 +1,14 @@
 # SOT Changelog
 
+## 1.0.32 - 2026-08-23
+
+E8-T5: input containment and configuration validation are closed:
+
+- H-8: every recorded path resolves containment - pure deletes included - and escaping anomalies wrap as source_unsafe_path/30, so a crafted escaping delete is never recorded as dispatchable;
+- M-7: the plan/dry-run envelope states its no-database fact gap; M-8: recrawl detection resolved as a recorded exception with the product-path reasoning; M-9: the managed trigger pins --config and --output json;
+- M-18 (semantic half): SemanticValidate covers resource-root overlap, absolute state_dir and roots, map-key grammar, and the max_hash_file_bytes floor; M-13: quarantine release recomputes the current revision; M-14: the protected hold stays visible under overflow precedence; M-11: the reconcile fingerprint is mount-point independent;
+- one Mulgae round converged clean (ci pass, zero findings).
+
 ## 1.0.31 - 2026-08-23
 
 E8-T4: unresolved lineage is preserved and doctor is trustworthy:

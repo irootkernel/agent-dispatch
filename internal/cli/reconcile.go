@@ -135,7 +135,11 @@ func (a *reconcileArtifacts) reconcileIntentBuilder() func(routeID, reason, deci
 			})
 		}
 		contentDigest, err := fingerprint.Content(records.ContentFingerprintInput{
-			Changes: fpChanges, ResourceID: a.resourceID, RelativeRoot: a.resource.Root,
+			// No relative-root flag: the reconciliation enumerated the
+			// vault root itself, and hashing the absolute root would make
+			// the idempotency key depend on where the vault is mounted
+			// (E8-T5, M-11 - same content, same key, any mount point).
+			Changes: fpChanges, ResourceID: a.resourceID,
 		})
 		if err != nil {
 			return ports.IntentInput{}, err

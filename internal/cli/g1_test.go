@@ -510,7 +510,7 @@ func TestWatchmanAbsenceActionable(t *testing.T) {
 // executable; it must classify as a known executable command, never a
 // usage or not-implemented error).
 func TestManagedTriggerCommandShapeLockstep(t *testing.T) {
-	argv, err := managedCommand("some-route")
+	argv, err := managedCommand("some-route", "/tmp/agent-dispatch.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

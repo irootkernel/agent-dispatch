@@ -140,12 +140,18 @@ func lifecycleErr(stderr io.Writer, command string, err error) int {
 // one-shot dispatch path for the route. The durable dispatch
 // implementation arrives with E3; the definition this task installs is
 // the final managed form.
-func managedCommand(routeID string) ([]string, error) {
+func managedCommand(routeID, configPath string) ([]string, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return nil, err
 	}
-	return []string{exe, "dispatch", "--route", routeID, "--input", "watchman"}, nil
+	// The trigger pins --config (and the documented output form) so a
+	// configuration installed outside the default location survives fire
+	// time: the un-pinned form loaded the default config whenever the
+	// service environment differed from the installing shell's (E8-T5,
+	// M-9; watchman-integration section 2).
+	argv := []string{exe, "dispatch", "--route", routeID, "--config", configPath, "--input", "watchman", "--output", "json"}
+	return argv, nil
 }
 
 func runWatchmanInstall(args []string, stdout, stderr io.Writer) int {
@@ -166,7 +172,7 @@ func runWatchmanInstall(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return lifecycleErr(stderr, command, err)
 	}
-	cmdArgv, err := managedCommand(opts.routeID)
+	cmdArgv, err := managedCommand(opts.routeID, resolveConfigPath(opts.configPath))
 	if err != nil {
 		return planErr(stderr, command, "internal_unclassified", "internal", err.Error(), 40)
 	}
@@ -290,7 +296,7 @@ func runWatchmanStatus(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return lifecycleErr(stderr, command, err)
 	}
-	cmdArgv, err := managedCommand(opts.routeID)
+	cmdArgv, err := managedCommand(opts.routeID, resolveConfigPath(opts.configPath))
 	if err != nil {
 		return planErr(stderr, command, "internal_unclassified", "internal", err.Error(), 40)
 	}

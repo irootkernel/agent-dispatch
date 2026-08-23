@@ -158,6 +158,15 @@ func Evaluate(policy RoutePolicy, in Input) (*Plan, error) {
 			classification[records.ClassOverflow] = true
 			plan.ReasonCodes = append(plan.ReasonCodes, ReasonFreshInstance)
 		}
+		// The overflow class outranks the protected hold, but the hold
+		// stays visible: the reconciliation generation carries the
+		// protected reason so the operator sees why the next pass
+		// quarantines (the protected path itself never enters an
+		// automatic task — PTH-008 clause 2 holds, E8-T5/M-14).
+		if len(in.Batch.Protected) > 0 {
+			classification[records.ClassProtected] = true
+			plan.ReasonCodes = append(plan.ReasonCodes, ReasonProtectedPath)
+		}
 		plan.Classification = classifyList(classification)
 		return finish(actionOr(action, records.DispositionReconcile), records.GenMergeReconcile), nil
 	}

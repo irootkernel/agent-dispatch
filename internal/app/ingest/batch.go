@@ -227,12 +227,27 @@ func BuildBatch(entries []watchman.Entry, engine *policy.Engine, resolver *local
 				case err == nil:
 					// The file survives: keep the uncertain delete.
 				default:
+					// The check here IS the containment guard for the
+					// create,delete shape: an escaping anomaly is an
+					// unsafe path, never an unclassified failure (E8-T5,
+					// H-8).
+					if errors.Is(err, localfs.ErrEscape) {
+						return nil, fmt.Errorf("%w: checking final state of %q: %v", ErrUnsafePath, path, err)
+					}
 					return nil, fmt.Errorf("checking final state of %q: %w", path, err)
 				}
 			}
 			// modify,delete — and create,delete over a persisted prior
 			// path or a surviving file — end deleted; the uncertainty is
 			// planning-stage evidence, not a different operation.
+			// A pure delete carries no later branch that resolves
+			// containment: resolve it here so a symlink-escaping path is
+			// rejected before it can be recorded as dispatchable
+			// (E8-T5, H-8 - the plain delete previously bypassed every
+			// containment check).
+			if _, rerr := resolver.Resolve(path); rerr != nil {
+				return nil, fmt.Errorf("%w: resolving deleted path %q: %v", ErrUnsafePath, path, rerr)
+			}
 			finalOp = records.OpDelete
 		case sawLifeAfterDelete:
 			// delete,...,create/modify: a replacement only when the file

@@ -80,7 +80,7 @@ The adapter must conservatively identify incomplete incremental evidence.
 | Overflow-class signal | Persist source observation; do not dispatch partial manifest; merge one reconciliation generation. The verified signal is the missing or unusable previous position itself (no `WATCHMAN_SINCE`) plus fresh-instance semantics — `WATCHMAN_FILES_OVERFLOW` was refuted by E0-T5 (0/23 invocations) and is never read. |
 | Fresh instance semantics | Same as overflow-class signal. |
 | Missing or unusable previous position | Same as overflow unless first-install baseline policy explicitly says otherwise. |
-| Recrawl warning or evidence | Mark source uncertainty and reconcile. |
+| Recrawl warning or evidence | Recorded exception (E8-T5, M-8): the production trigger path receives only the subscription payload and the trusted environment — the recrawl `warning` member lives on the query surface (`watchman status`/`query-recrawl-warning.json`) which no production flow runs, so a live recrawl warning is never observed. Recrawl aftermath reaches the product exactly through the detected signals: a recrawl resets the clock and the resulting missing/unusable position is overflow-class (marked source uncertainty and one reconciliation generation), and the spurious re-delivery of an unchanged path is suppressed by the durable path facts. The E0-T5 fixture remains the frozen evidence of both behaviors. |
 | First installation | Default to one explicit initial full reconciliation, not thousands of ordinary tasks. |
 
 ## 8. Source Event Key

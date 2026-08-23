@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E8 (second compliance remediation, D-020) |
 | Current active task | None |
-| Next task | E8-T5 |
-| Completed tasks | 49 / 51 |
-| Planned tasks | 2 / 51 |
+| Next task | E8-T6 |
+| Completed tasks | 50 / 51 |
+| Planned tasks | 1 / 51 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -88,7 +88,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 47 | E8-T2 | Completed | Recovery wired into every submit path; operator exits repaired |
 | 48 | E8-T3 | Completed | Behavior-sensitive revision and enforced production gate |
 | 49 | E8-T4 | Completed | Unresolved lineage preserved; doctor made trustworthy |
-| 50 | E8-T5 | Planned | Input containment and configuration validation gaps closed |
+| 50 | E8-T5 | Completed | Input containment and configuration validation gaps closed |
 | 51 | E8-T6 | Planned | Documentation truth restored and v0.1.2 released |
 
 ---
@@ -2078,7 +2078,7 @@ Delivered as the retention and diagnostics closure: prune drops `accepted` from 
 
 ## E8-T5: Close the Input-Containment and Configuration-Validation Gaps
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -2113,7 +2113,7 @@ E8-T4 Completed.
 
 ### Evidence
 
-Pending (E8-T5 not started).
+Delivered as the input-containment and configuration-validation closure: every recorded path now resolves containment — a pure delete resolves before it is recorded (the plain delete previously bypassed every containment check), and the create,delete branch's checking error wraps as `ErrUnsafePath` — so a crafted stdin delete for a symlink-escaping path rejects with `source_unsafe_path`/30 and no intent exists (`TestE8T5SymlinkEscapeDeleteRejected`; H-8/PTH-002). The plan and dry-run envelope states its no-database fact gap instead of overstating unchanged-content suppression (M-7); recrawl detection is resolved as a recorded exception in watchman-integration section 7 — the production trigger path never observes the query-surface warning, and recrawl aftermath reaches the product through the detected overflow/fresh-instance signals plus durable path-fact suppression (M-8); the managed trigger command pins `--config` and the documented `--output json` so a custom configuration survives fire time (M-9). SemanticValidate gains resource-root overlap (with a form-consistent clean/resolved comparison — the naive mixed-form comparison silently missed nesting on macOS `/var` symlinks, caught by the new test), absolute `state_dir` and resource roots, the map-key identifier grammar, and the `max_hash_file_bytes` floor (`TestE8T5SemanticValidationWidened`; M-18's semantic half). Quarantine release recomputes the route's current revision into the replacement decision instead of copying the quarantined decision's stale one (M-13); the overflow/fresh-instance precedence records the protected reason so the hold stays visible while the protected path never enters an automatic task (M-14); and the reconcile fingerprint drops the absolute vault root so the idempotency key is mount-point independent (M-11). Verified by `make verify` on darwin/arm64 (all checks green). Reviewed through one full-target Mulgae round (`r_01a03074-a3ee-7104-892c-5653915257d8`: ci pass, coverage complete, publication committed, zero findings — the stop-immediately clean condition). Changelog 1.0.32.
 
 ## E8-T6: Restore Documentation Truth and Release v0.1.2
 

@@ -167,17 +167,27 @@ func scanQuarantine(row interface{ Scan(...any) error }) (ports.QuarantineRecord
 }
 
 // ReleaseQuarantine resolves one held item by creating the replacement
-// reconciliation decision with full operator lineage (CLI-006).
+// reconciliation decision with full operator lineage (CLI-006). The
+// replacement records the route's CURRENT revision, not the quarantined
+// decision's stale one (E8-T5, M-13).
 func (s *Store) ReleaseQuarantine(ctx context.Context, quarantineID, actor, reason, now string) (ports.QuarantineRecord, error) {
-	return s.resolveQuarantine(ctx, quarantineID, "released", actor, reason, now, true)
+	var routeID string
+	if err := s.QueryRowContext(ctx, `SELECT route_id FROM policy_decisions WHERE decision_id = (SELECT decision_id FROM quarantine_items WHERE quarantine_id = ?)`, quarantineID).Scan(&routeID); err != nil {
+		return ports.QuarantineRecord{}, err
+	}
+	var routeRevision string
+	if err := s.QueryRowContext(ctx, `SELECT COALESCE(MAX(route_revision), '') FROM dispatch_intents WHERE route_id = ?`, routeID).Scan(&routeRevision); err != nil {
+		return ports.QuarantineRecord{}, err
+	}
+	return s.resolveQuarantine(ctx, quarantineID, "released", actor, reason, now, true, routeRevision)
 }
 
 // DiscardQuarantine resolves one held item without task creation.
 func (s *Store) DiscardQuarantine(ctx context.Context, quarantineID, actor, reason, now string) (ports.QuarantineRecord, error) {
-	return s.resolveQuarantine(ctx, quarantineID, "discarded", actor, reason, now, false)
+	return s.resolveQuarantine(ctx, quarantineID, "discarded", actor, reason, now, false, "")
 }
 
-func (s *Store) resolveQuarantine(ctx context.Context, quarantineID, action, actor, reason, now string, createReplacement bool) (ports.QuarantineRecord, error) {
+func (s *Store) resolveQuarantine(ctx context.Context, quarantineID, action, actor, reason, now string, createReplacement bool, routeRevision string) (ports.QuarantineRecord, error) {
 	tx, err := s.BeginTx(ctx, nil)
 	if err != nil {
 		return ports.QuarantineRecord{}, err
@@ -213,10 +223,15 @@ func (s *Store) resolveQuarantine(ctx context.Context, quarantineID, action, act
 	replacementID := ""
 	if createReplacement {
 		replacementID = "dec-release-" + quarantineID
+		// The replacement decision carries the CURRENT route revision
+		// (E8-T5, M-13): copying the quarantined decision's stale
+		// revision recorded work planned under a configuration the
+		// operator already changed — the released work re-evaluates
+		// under what is configured now, exactly like reprocess does.
 		if _, err := tx.Exec(`INSERT INTO policy_decisions (decision_id, route_id, route_revision, policy_revision, generation_lineage_json, disposition, classification, reason_codes_json, created_at, actor, supersedes_decision_id)
-			SELECT ?, route_id, route_revision, policy_revision, ?, ?, ?, ?, ?, ?, decision_id
+			SELECT ?, route_id, ?, ?, ?, ?, ?, ?, ?, ?, decision_id
 			FROM policy_decisions WHERE decision_id = ?`,
-			replacementID,
+			replacementID, routeRevision, routeRevision,
 			auditJSON("route_id", routeID, "origin", "quarantine_release", "quarantine_id", quarantineID),
 			ports.DispositionReconcile, ports.ClassificationNormal,
 			releaseReasonCodes(quarantineID),

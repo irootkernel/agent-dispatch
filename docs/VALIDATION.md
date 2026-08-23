@@ -157,3 +157,31 @@ Verified 2026-08-22 by executable acceptance tests in `internal/cli/e6t4_test.go
 | AC-506 release artifacts present and version-compatible | `TestG5AC506ReleaseArtifactsPresent` (release-way build, version envelope, schema/example/skill/SOT/changelog artifact set), the digest-identical double `make release`, and `make manifest-check`/`schema-validation`/`traceability` inside `make verify` |
 
 Upgrade and backup rehearsal (release-checklist durability): `TestG5UpgradeAndBackupRehearsal` drives the documented procedure — built-in backup with verification, doctor, full integrity, one reconciliation — and restores the backup standalone with its lineage intact. The migration interruption and checksum-immutability evidence remains `internal/adapters/sqlite` (`TestBackupBeforeMigration`, `TestMigrationChecksumImmutability`, `TestNewerSchemaRefused`, `TestFreshAndMigratedSchemasIdentical`).
+
+## MUST-Closure Matrix (E7-T12, D-017)
+
+Every one of the 14 MUST requirements the 2026-08-22 review judged GAP,
+restated with its v0.1.1 disposition. Thirteen PASS through the E7
+remediation; SCP-008 carries the explicit recorded exception.
+
+| Requirement | v0.1.1 disposition |
+|---|---|
+| SCP-008 (macOS + one Linux) | EXCEPTED - no successful Linux `make verify` is recorded; the explicit D-017 exception (darwin/arm64 verified; linux-amd64 artifact reproducible but runtime-unverified; the review's diagnostic arm64 runs failed) |
+| PTH-007 (metadata-only excluded) | PASS - the durable path facts suppress byte-identical modifies with the `unchanged_content` reason in the decision (E7-T3) |
+| DAT-009 (versioned payloads, fail closed) | PASS - receipts carry the submitted contract version (never null) and both store reads refuse any stored version other than this build's exact contract; a legacy empty stored version is tolerated as pre-versioning data (E7-T8) |
+| POL-008 (revalidate before dispatch) | PASS - every submit path revalidates the stored plan against the active configuration and supersedes-and-rebuilds stale work (E7-T3) |
+| DUR-010 (crash/restart never lose work) | PASS - the drain recovers expired submitting leases and reconciles unknowns; a real mid-submit process death heals without manual edits (E7-T2 wiring; the process-death evidence itself is E7-T2/E7-T4) |
+| DUR-011 (transactional audited transitions) | PASS - every route transition appends its audit row inside the transaction and intent creation records its arrival row (E7-T6) |
+| CON-001 (one authoritative task) | PASS - the slot predicate is enforced inside the lease transaction and rerun supersedes through the declared edge (E7-T2) |
+| CON-003 (one follow-up after completion) | PASS - acceptance promotes the follow-up and the scheduled path submits it; every gate scenario drives the product path (E7-T2) |
+| HER-006 (complete Hermes task) | PASS - the renderer carries the acceptance criteria and the manifest-existence sentence, pinned by the golden (E7-T8) |
+| FBK-005 (public work-receipt CLI) | PASS - the public `work begin|complete|fail` commands drive the full second generation including the promoted follow-up (E7-T2; the scheduled-path product test pins the lifecycle end to end) |
+| CLI-004 (full command tree) | PASS - every command the contract names is implemented (`config show`, the full lineage, the filters); the registry test pins that no tree entry answers `command_not_implemented` (E7-T5) |
+| SEC-010 (revalidate before side effects) | PASS - same POL-008 enforcement (E7-T3) |
+| OPS-002 (inspectable state) | PASS - `dispatches show` returns the decision, batch, observations, and work receipts beside the intent (E7-T5) |
+| TST-004 (crash-boundary coverage) | PASS - before-commit, after-commit, during-submit, after-remote-acceptance, and every migration interruption boundary have executing evidence (E7-T2/E7-T4) |
+
+The G1-G5 gate suites re-ran green on this machine (real Hermes 0.19.1
+and Watchman 2026.07.27.00) on 2026-08-23; `make verify` including the
+race suite passed on darwin/arm64; the two consecutive
+`make release VERSION=v0.1.1` builds are byte-identical.

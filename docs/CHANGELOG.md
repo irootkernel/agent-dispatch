@@ -1,5 +1,14 @@
 # SOT Changelog
 
+## 1.0.25 - 2026-08-23
+
+E7-T12: the MUST-closure re-verification and the v0.1.1 release:
+
+- `make verify` including the race suite passes on darwin/arm64 and the G1-G5 gate suites re-ran green on the real Hermes and Watchman;
+- the MUST-closure matrix is recorded in VALIDATION (13 of the 14 GAP requirements PASS; SCP-008 carries the explicit D-017 exception);
+- `make release VERSION=v0.1.1` is byte-reproducible across two consecutive builds (darwin/arm64 and linux-amd64 artifacts with SHA256SUMS);
+- the release notes disclose the Linux verification exception; E7 is complete (12/12 tasks).
+
 ## 1.0.24 - 2026-08-23
 
 E7-T11: the consolidated low and informational finding dispositions (D-018):

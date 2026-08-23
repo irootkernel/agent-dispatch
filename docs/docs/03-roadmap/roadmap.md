@@ -10,11 +10,11 @@
 
 | Field | Value |
 |---|---|
-| Current epic | E7 |
+| Current epic | None (E7 complete) |
 | Current active task | None |
-| Next task | E7-T12 |
-| Completed tasks | 44 / 45 |
-| Planned tasks | 1 / 45 |
+| Next task | None (E7 sequence complete) |
+| Completed tasks | 45 / 45 |
+| Planned tasks | 0 / 45 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -32,7 +32,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | E4 | Hermes Kanban Durable Integration | **Completed** | 5 | G3 |
 | E5 | Feedback Loop, Quarantine, and Reconciliation | **Completed** | 5 | G4 |
 | E6 | Hermes Webhook, Operations, Packaging, and v0.1 Release | **Completed** | 4 | G5 |
-| E7 | MVP Compliance Review Remediation | In Progress | 12 | MUST closure + v0.1.1 |
+| E7 | MVP Compliance Review Remediation | **Completed** | 12 | MUST closure + v0.1.1 |
 
 ## 3. Task Status Index
 
@@ -82,7 +82,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 42 | E7-T9 | Completed | Operations and security medium batch remediated |
 | 43 | E7-T10 | Completed | Licensing, layout, and documentation consistency |
 | 44 | E7-T11 | Completed | Low and informational findings dispositioned |
-| 45 | E7-T12 | Planned | MUST closure re-verified and v0.1.1 prepared |
+| 45 | E7-T12 | Completed | MUST closure re-verified and v0.1.1 prepared |
 
 ---
 
@@ -1904,6 +1904,12 @@ E7-T11 Completed.
 - AC-102, AC-203, AC-207, and AC-505 evidence is real and reproducible;
 - v0.1.1 artifacts are byte-reproducible and the release notes state the unverified Linux platform;
 - roadmap tasks E7-T1 through E7-T12 are Completed.
+
+### Evidence
+
+Delivered as the closeout verification: `make verify` passed on darwin/arm64 including the race suite (2026-08-23); the G1-G5 gate suites re-ran green on the real Hermes 0.19.1 and Watchman 2026.07.27.00; the MUST-closure matrix is recorded in `docs/VALIDATION.md` (thirteen of the fourteen GAP requirements PASS through the E7 remediation; SCP-008 carries the explicit D-017 exception); `make release VERSION=v0.1.1` ran twice with byte-identical `dist/SHA256SUMS` (darwin/arm64 `170b8984...`, linux-amd64 `c21ce0b5...`); and `docs/RELEASE-NOTES-v0.1.1.md` discloses the Linux verification exception beside the delivered remediation. Changelog 1.0.25.
+
+**Epic closeout:** all twelve E7 tasks are Completed; every Blocker, High, Medium, and Low/Info finding of the 2026-08-22 review is fixed or dispositioned (D-018); the v0.1 sequence stands superseded by v0.1.1. The deferred hardening residuals recorded across the member tasks are reconciled by the epic validation audit.
 
 ---
 

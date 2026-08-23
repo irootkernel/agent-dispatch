@@ -168,8 +168,10 @@ func scanQuarantine(row interface{ Scan(...any) error }) (ports.QuarantineRecord
 
 // ReleaseQuarantine resolves one held item by creating the replacement
 // reconciliation decision with full operator lineage (CLI-006). The
-// replacement records the route's CURRENT revision, not the quarantined
-// decision's stale one (E8-T5, M-13).
+// replacement keeps the quarantined decision's own revision; callers
+// holding the live configuration use ReleaseQuarantineWithRevision to
+// record the computed current one (E8-T5, M-13, epic audit round-1
+// F001).
 func (s *Store) ReleaseQuarantine(ctx context.Context, quarantineID, actor, reason, now string) (ports.QuarantineRecord, error) {
 	// The replacement decision records the quarantined decision's own
 	// revision by default — never a derivation over historical intents,

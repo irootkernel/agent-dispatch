@@ -147,11 +147,15 @@ Uninstall order:
   (rejected receipt) dead-letters through the declared edge at rejection
   time: the record, attempts, and receipt stay inspectable through
   `dispatches show`, and the route slot is freed by `dispatches discard`
-  (or the work recreated with `dispatches rerun`). If the dead-letter
-  transition itself fails (a logged warning on the submit outcome), the
-  dispatch stays in `rejected` — `dispatches rerun` still supersedes it
-  once it reaches `dead_lettered`, and the doctor's rejected-work
-  finding names it; run `dispatches drain` to retry the edge.
+  (or the work recreated with `dispatches rerun`). In the rare case the
+  dead-letter transition itself fails (a logged warning on the submit
+  outcome), the dispatch stays in `rejected` holding the slot — there is
+  no automatic retry of the edge, and the drain does not pick up
+  rejected work; the operator resolves it by forcing the route to
+  UNCERTAIN with `route stale --reason <why>` (valid once the dispatch
+  passes `active_stale_after`) and then reconciling, or by inspecting
+  `dispatches show` and correcting the underlying target condition
+  before rerunning.
 - **Budget-exhausted retry_wait.** A dispatch whose submission backoff
   budget is exhausted stays in `retry_wait` and the drain skips it.
   `dispatches retry <dispatch-id>` is the documented exit: it makes the

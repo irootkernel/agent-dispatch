@@ -1561,7 +1561,7 @@ Delivered as the three Blocker fixes in the product path (B-1): `dispatches drai
 
 ## E7-T3: Enforce Submit-Path Revalidation and Durable Path Facts
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -1596,7 +1596,7 @@ Delivered as the H-1/H-2 fixes (H-1): `ports.IntentSnapshot` carries the stored 
 
 ## E7-T4: Repair Gate-Evidence Tests and Platform Guards
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -1631,7 +1631,7 @@ Delivered as the evidence-integrity repairs (H-4): `TestG2AC207` was rewritten t
 
 ## E7-T5: Complete the CLI Inspection Contract
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -1701,7 +1701,7 @@ Delivered as the write-gate and audit closures (M-1, M-2): the shared `slotAdmis
 
 ## E7-T7: Migration Lock, WAL Classification, and Operator Exits
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -1735,7 +1735,7 @@ Delivered as the storage durability closures (M-4): the migration pass serialize
 
 ## E7-T8: Enforce Payload Versioning and Complete Hermes Rendering
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -1768,7 +1768,7 @@ Delivered as the data-contract closures (M-8): the acceptance receipt always car
 
 ## E7-T9: Remediate the Operations and Security Medium Batch
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -1809,7 +1809,7 @@ Delivered as the operations and security batch (M-10): `BuildBatch` enforces the
 
 ## E7-T10: Licensing, Layout, and Documentation Consistency
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -1843,7 +1843,7 @@ Delivered as the documentation-consistency restoration (M-27): the repository ro
 
 ## E7-T11: Disposition the Low and Informational Findings
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -1874,7 +1874,7 @@ Delivered as D-018: one consolidated disposition record in the decision log mapp
 
 ## E7-T12: Re-Verify MUST Closure and Prepare v0.1.1
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective

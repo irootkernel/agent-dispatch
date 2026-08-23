@@ -679,7 +679,7 @@ func runDispatchesDiscard(command string, args []string, stdout, stderr io.Write
 	}
 	return writeEnvelope(stdout, command, map[string]any{
 		"dispatch_id": flags.positional, "state": "superseded",
-		"slot_released": true, "route_to_idle": outcome.RouteToIDLE,
+		"slot_released": outcome.SlotReleased, "route_to_idle": outcome.RouteToIDLE,
 		"dirty_generation_retained": outcome.DirtyRetained,
 	})
 }

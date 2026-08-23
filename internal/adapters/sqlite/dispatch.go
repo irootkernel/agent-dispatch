@@ -444,8 +444,12 @@ func (s *Store) CloseDeadLetter(ctx context.Context, dispatchID, actor, reason, 
 	}
 	// The slot releases only when this dead letter actually held it
 	// (an already-resolved route keeps its outcome; epic audit round 1).
-	if _, err := tx.Exec(`UPDATE route_runtime_state SET active_dispatch_id = NULL, active_generation = 0 WHERE route_id = ? AND active_dispatch_id = ?`, routeID, dispatchID); err != nil {
+	res, err := tx.Exec(`UPDATE route_runtime_state SET active_dispatch_id = NULL, active_generation = 0 WHERE route_id = ? AND active_dispatch_id = ?`, routeID, dispatchID)
+	if err != nil {
 		return outcome, err
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		outcome.SlotReleased = true
 	}
 	snap, rsErr := s.routeSnapshotInTx(tx, routeID)
 	if rsErr != nil {
@@ -471,6 +475,9 @@ func (s *Store) CloseDeadLetter(ctx context.Context, dispatchID, actor, reason, 
 
 // DeadLetterOutcome reports what one discard closed.
 type DeadLetterOutcome struct {
+	// SlotReleased reports whether this letter actually held and released
+	// the route slot.
+	SlotReleased bool
 	// RouteToIDLE reports whether the route moved to IDLE (a clean
 	// active route whose only work was the closed letter).
 	RouteToIDLE bool

@@ -1,7 +1,7 @@
 # Agent Dispatch Source of Truth
 
-> **SOT version:** 1.0.25  
-> **Implementation target:** Agent Dispatch v0.1.1 (the E7 compliance remediation release)  
+> **SOT version:** 1.0.27  
+> **Implementation target:** Agent Dispatch v0.1.2 (the E8 compliance remediation release; v0.1.1 is the shipped release)  
 > **Document status:** Approved baseline  
 > **Tagline:** **Sense. Catch. Route.**
 

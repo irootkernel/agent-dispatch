@@ -1,5 +1,14 @@
 # SOT Changelog
 
+## 1.0.27 - 2026-08-23
+
+D-020: the second MVP compliance review is accepted; remediation epic E8 is registered:
+
+- the 2026-08-23 review of v0.1.1 (commit `f00ed30`) found one Blocker in the follow-up product loop, two FAIL MUST requirements (CON-003, POL-007), three FAIL acceptance criteria (AC-502, AC-503, AC-506), and 22 PARTIAL clauses; it is accepted in full and stays outside the package per the D-019 precedent;
+- the roadmap gains six E8 remediation tasks (9 epics, 51 tasks) covering the Blocker, the ten High findings, the mapped Medium findings, and the documentation-truth cluster, with every remaining finding dispositioned Deferred/Accepted in the D-020 index;
+- the SCP-008/AC-505 Linux-verification exception is closable on the review's linux/arm64 non-root `make verify` evidence; the closure executes with E8-T6 and the v0.1.2 release;
+- the TST-008 automatic-write gate stays disabled until E8-T1 through E8-T3 are Completed.
+
 ## 1.0.26 - 2026-08-23
 
 D-019: the compliance review report is retired from the SOT package:

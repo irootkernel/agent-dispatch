@@ -259,3 +259,80 @@ Post-baseline decisions and documented errata. Entries amend completed E0 output
 | M-30 | Crash-boundary coverage gaps | Fixed: E7-T4 |
 | M-31 | Documentation consistency bundle | Fixed: E7-T10 |
 | M-32 | Unusable-position handling conservative; signal unemitted | Position fixed: E7-T8; the conservative posture is accepted |
+
+
+## D-020 - 2026-08-23 - Second compliance review accepted; remediation epic E8 and the closable Linux exception
+
+**Decision.** The 2026-08-23 MVP compliance review of v0.1.1 (commit `f00ed30`) is accepted in full. The review itself stays outside the manifest-verified package (the D-019 precedent); its substance is recorded here and lands in the E8 task Evidence sections as remediation completes. The roadmap gains remediation epic E8 with six tasks (the roadmap now has 9 epics and 51 tasks) covering the review's Blocker, all ten High findings, the mapped Medium findings, and the documentation-truth cluster; every remaining finding carries an explicit Deferred or Accepted disposition in the index below. The TST-008 automatic-production-write gate stays disabled until E8-T1 through E8-T3 are Completed. The SCP-008/AC-505 Linux-verification exception is closable on the review's evidence (`make verify` passing in full on linux/arm64 as a non-root user at `f00ed30`, and `make test` passing on linux/amd64 as non-root); the closure executes with the E8-T6 documentation pass and the v0.1.2 release, hardening the two root-sensitive permission tests (defeated by `CAP_DAC_OVERRIDE` under root) with root self-skips and noting the still-unexercised Linux legs (the real Hermes and Watchman tests, `systemd-analyze verify`, and a full `make verify` on amd64).
+
+**Context.** The review re-verified the shipped v0.1.1 claim that every MUST requirement is PASS or explicitly excepted, with eleven independent reviewer agents plus orchestrator re-verification of every Blocker and High finding, and found the claim does not hold: CON-003 and POL-007 FAIL, AC-502/AC-503/AC-506 FAIL, 22 MUST requirements PARTIAL on a named clause, and one Blocker (B-1: a vault edit arriving between completion and follow-up submission wedges `work complete` at exit 40 with no product exit) reproduced end to end through the CLI. The durable core, the crash and concurrency proofs, the subprocess/containment/secrets posture, the Hermes adapter, and the documentation traceability were verified solid, and E7's "always-skipping/hollow gate tests" defect is confirmed fixed (38 of 40 acceptance scenarios backed by executing tests with zero skips on the review host).
+
+**Consequences.** The roadmap summary, task index, and traceability matrix regenerate for 51 tasks. The E7 closure claims the review refuted (the VALIDATION MUST-closure rows CON-003 and CLI-004, the AC-402/406/409/502/503/506 gate rows, the DAT-009 rationale, and the D-018 items marked "corrected" below) stand corrected by their owning E8 tasks or by E8-T6; until then this record is the authoritative statement that they are unsupportable for v0.1.1. The severity-classified finding index (owner mapping; the review's numbering is preserved for citation):
+
+| ID | One-line substance | Disposition |
+|---|---|---|
+| B-1 | A change arriving while FOLLOWUP_READY wedges `work complete` (exit 40, no product exit) | Fixed: E8-T1 |
+| H-1 | Follow-up chains unbounded; IDs grow per generation and wedge at ~21; same-second boundary defeats exact suppression | Fixed: E8-T1 |
+| H-2 | Route revision ignores vault root and target board; acknowledged revision never re-checked at submit | Fixed: E8-T3 |
+| H-3 | Prune deletes the attempts and receipts of an active, unresolved accepted dispatch | Fixed: E8-T4 |
+| H-4 | Doctor exits 0 for two of AC-502's five conditions; an unreadable resource root passes | Fixed: E8-T4 |
+| H-5 | Shipped v0.1.1 binaries not built from the released tree; no tag; the AC-506 test pins v0.1.0 | Fixed: E8-T6 |
+| H-6 | Expired-lease recovery runs only in `dispatches drain`, which nothing schedules | Fixed: E8-T2 |
+| H-7 | Capability report declares `lookup_by_idempotency_key: true`; enable gate opt-in, report freshness ignored | Fixed: E8-T3 |
+| H-8 | A symlink-escaping delete dispatched without a containment check; one branch exits 40 | Fixed: E8-T5 |
+| H-9 | Expected operator refusals and storage failures reported as exit 40 `internal_unclassified` | Fixed: E8-T1 (work commands), E8-T2 (operator/store arms) |
+| H-10 | Documentation-truth cluster that survived E7 (VALIDATION rows, D-018 records, roadmap claims, README, contracts) | Fixed: E8-T6 |
+| M-1 | LeaseTTL hardcoded one minute against an unbounded operator-configured `submit_timeout` | Fixed: E8-T2 |
+| M-2 | Budget-exhausted retry_wait has no operator exit; drain skips it forever | Fixed: E8-T2 |
+| M-3 | A rejected dispatch holds the route slot forever; the declared edge is dead code | Fixed: E8-T2 |
+| M-4 | Migration lock staleness 30 s with a once-written mtime | Fixed: E8-T2 |
+| M-5 | `exec.Start` failures classified unknown (argv-length dead-letters provably unsubmitted work) | Fixed: E8-T2 |
+| M-6 | `resource_mutex` never consulted; the report `evidence` array unenforced | Fixed: E8-T3 |
+| M-7 | Dry-run runs with NoFacts; `unchanged_content` unreachable on the dry-run surface | Fixed: E8-T5 |
+| M-8 | Recrawl uncertainty never detected despite the documented promise | Fixed: E8-T5 (detection or recorded exception) |
+| M-9 | Managed trigger omits `--config`; a custom config unloads at fire time | Fixed: E8-T5 |
+| M-10 | Follow-ups carry the parent manifest and content fingerprint forever | Fixed: E8-T1 |
+| M-11 | Reconcile passes the absolute vault root into the content fingerprint | Fixed: E8-T5 |
+| M-12 | Reconcile on a non-enabled route exits 0 against cli-spec §9 | Fixed: E8-T4 |
+| M-13 | Quarantine release copies stale route/policy revisions into the replacement decision | Fixed: E8-T5 |
+| M-14 | Overflow precedence beats the protected check without a documented override | Fixed: E8-T5 |
+| M-15 | DAT-009 enforced on one column with an impossible legacy-bypass rationale | Fixed: E8-T5 |
+| M-16 | Published record schemas require members the CLI never emits | Fixed: E8-T5 |
+| M-17 | Revision columns missing on five of nine record tables against the schema claim | Fixed: E8-T5 |
+| M-18 | `config validate` checks gated on `--probe-targets` or unimplemented | Fixed: E8-T3 (probe-gated checks by default), E8-T5 (semantic checks) |
+| M-19 | `state.db` created 0644; no doctor permission checks | Fixed: E8-T4 |
+| M-20 | Redaction patterns miss common credential forms; the message path unsanitized | Fixed: E8-T4 |
+| M-21 | CLI-007 Watchman-context refusal not implemented (structural defense only) | Deferred - post-v0.1.2 hardening; the managed trigger argv is fixed and maintenance has no `--input` |
+| M-22 | OPS-006 "startup uncertainty" has no implementation, reason, or procedure | Fixed: E8-T4 (mapped or excepted) |
+| M-23 | `route stale` ignores `active_stale_after` | Fixed: E8-T4 |
+| M-24 | Reconciliation enumerates escaping symlinks as existing regular files | Deferred - enumeration hardening recorded for the next cycle |
+| M-25 | Two probe tests remain load-sensitive under full coverage parallelism | Deferred - E7-T9 raised the fixtures; the residual timing is recorded |
+| L-1 | `MakeRetryDue` mutates outside a transaction and writes no audit row | Fixed: E8-T2 (folded into the retry-path rewrite) |
+| L-2 | Test-only `AcquireLease`/`TransitionIntent` exports bypass the guards | Fixed: E8-T2 (deleted) |
+| L-3 | Inert config keys (`unsafe_path_action`, `git.mode`; discarded `work fail --detail`) | Deferred - touched again by E8-T3's projection change |
+| L-4 | The NUL-path fixture contains the six characters `\u0000`, not a real NUL | Fixed: E8-T5 |
+| L-5 | AC-106 test loop narrower than claimed; the AC-103 digest test overstated | Fixed: E8-T6 (tests widened with the evidence correction) |
+| L-6 | Three golden tests silently self-heal when the golden is missing | Deferred |
+| L-7 | Work commands on an unknown dispatch write no invalid-receipt audit row | Deferred |
+| L-8 | A WalkDir file error records the wrong skip prefix, mislabeling siblings | Deferred |
+| L-9 | `prune --dry-run --yes` executes (the flag is parsed, never read) | Fixed: E8-T4 |
+| L-10 | Envelope shape divergences (PascalCase plan fields, no `dispatch_id`, global-option placement, `has_more`) | Deferred - wire-shape changes stay out of v0.1.2 |
+| L-11 | `config show` rejects `--output json`; `watchman *` reject `--output` | Deferred |
+| L-12 | No `toolchain` directive (floor, not pin) | Fixed: E8-T6 |
+| L-13 | EvalSymlinks/OpenFile TOCTOU window; no Unicode normalization | Accepted - unchanged from the D-018 residual |
+| L-14 | The Watchman lifecycle subprocess is weaker than the Hermes runner | Accepted - unchanged from the D-018 residual |
+| L-15 | Secret file references: no ownership check; permissive-file rejection untested | Deferred |
+| L-16 | `synchronous=FULL` applied once via Exec, not in the DSN | Deferred |
+| L-17 | Declared-but-unemitted observability events; doctor findings carry no `trace_id` | Deferred |
+| L-18 | No distinct policy revision (always the route revision) | Deferred |
+| L-19 | The route enters ACTIVE_CLEAN with reason `dispatch_accepted` at arrival | Deferred |
+| L-20 | One `VACUUM INTO` backup per pending migration unit | Deferred |
+| L-21 | Thirteen registered error codes never emitted | Deferred |
+| L-22 | `dispatches` usage string omits `discard`; cli-spec §2 tree omissions | Fixed: E8-T2 (usage string), E8-T6 (contract tree) |
+| L-23 | Companion-skill labelled variables not emitted; no cross-check test | Deferred |
+| L-24 | No "follow-up" terminology entry; state-machine diagram case divergence | Fixed: E8-T6 |
+| L-25 | SCP-001 single-route certification is not a cardinality limit | Deferred (Info) |
+| L-26 | `.markdown` accepted as Markdown, undocumented | Deferred |
+| L-27 | GO-2026-5970 unreachable transitive advisory in `golang.org/x/text` | Deferred - bumps with the next dependency update |
+
+Corrected D-018 records: the T4/Low `lookup_by_idempotency_key` entry ("the report records the honest false") and the T5/Low symlink entry ("rejected by the containment resolver before fact creation") state the opposite of the code and are corrected by E8-T3 and E8-T5 respectively; the T3/Info `state_directory_not_local` entry and the T8/Low toolchain entry are corrected by E8-T6 alongside the Linux record. SOT 1.0.27.

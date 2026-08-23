@@ -418,10 +418,11 @@ func TestConfigValidateWatchmanReporting(t *testing.T) {
 	if code := Run([]string{"config", "validate", "--config", bad}, &out2, &errb2); code != 3 {
 		t.Fatalf("invalid config must exit 3, got %d", code)
 	}
-	// config show is not implemented.
+	// config show without a resolvable config reports the configuration
+	// defect (E7-T5: the command is implemented now).
 	var out3, errb3 bytes.Buffer
-	if code := Run([]string{"config", "show"}, &out3, &errb3); code != 2 {
-		t.Fatalf("config show must exit 2, got %d", code)
+	if code := Run([]string{"config", "show"}, &out3, &errb3); code != 3 {
+		t.Fatalf("config show must surface the configuration defect, got %d", code)
 	}
 }
 

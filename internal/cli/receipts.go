@@ -79,7 +79,7 @@ func runReceiptsShow(command string, args []string, stdout, stderr io.Writer) in
 	detail, err := store.LoadReceipt(requestCtx(), flags.positional)
 	if err != nil {
 		if errors.Is(err, ports.ErrReceiptNotFound) {
-			writeError(stderr, command, "receipt_not_found", "usage", fmt.Sprintf("receipt %q not found", flags.positional))
+			writeError(stderr, command, "receipt_not_found", "input_rejected", fmt.Sprintf("receipt %q not found", flags.positional))
 			return 4
 		}
 		writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())

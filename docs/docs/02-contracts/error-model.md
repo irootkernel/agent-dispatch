@@ -107,10 +107,10 @@ The v0.1 registry is closed: implementations emit only the codes below. Adding o
 | `dispatch_duplicate` | `conflict` | 14 |
 | `route_slot_held` | `conflict` | 14 |
 | `route_not_registered` | `conflict` | 14 |
-| `dispatch_not_found` | `usage` | 4 |
-| `batch_not_found` | `usage` | 4 |
-| `receipt_not_found` | `usage` | 4 |
-| `quarantine_not_found` | `usage` | 4 |
+| `dispatch_not_found` |input_rejected| 4 |
+| `batch_not_found` | `input_rejected` | 4 |
+| `receipt_not_found` |input_rejected| 4 |
+| `quarantine_not_found` | `input_rejected` | 4 |
 | `transition_invalid` | `conflict` | 14 |
 | `attempt_lease_conflict` | `conflict` | 14 |
 | `dispatch_dead_lettered` | `conflict` | 14 |

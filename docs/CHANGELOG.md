@@ -1,5 +1,15 @@
 # SOT Changelog
 
+## 1.0.18 - 2026-08-23
+
+E7-T5: the CLI inspection contract completed (CLI-004, CLI-008, OPS-002):
+
+- `config show` prints the normalized, redacted configuration; no command in the tree answers `command_not_implemented`;
+- `dispatches show` returns the complete causal lineage: decision with reason codes, retained batch, source observations, and work receipts beside the intent, attempts, receipts, and transitions;
+- `dispatches list` gains the age, external-reference, and causal-ID filters with offset pagination;
+- the parsed `--trace-id` reaches every success envelope; a dead-lettered retry without `--reason` is a usage defect; the exit-4 `*_not_found` codes on the dispatches, receipts, and quarantine surfaces emit `input_rejected` in the implementation and the table (`config_route_not_found` stays `configuration`/exit 3), restoring the category-to-exit 1:1 rule (the work-command `dispatch_not_found` sites are deferred with the round-2 residuals);
+- round-1 remediations: the lineage join surfaces errors instead of truncating, the causal-prefix LIKE wildcards are escaped, and `config show` prints the computed route revisions the CLI contract promises.
+
 ## 1.0.17 - 2026-08-23
 
 E7-T4: gate-evidence integrity and platform honesty (TST-004, TST-009, AC-207, AC-203):

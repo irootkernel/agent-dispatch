@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E7 |
 | Current active task | None |
-| Next task | E7-T5 |
-| Completed tasks | 37 / 45 |
-| Planned tasks | 8 / 45 |
+| Next task | E7-T6 |
+| Completed tasks | 38 / 45 |
+| Planned tasks | 7 / 45 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -75,7 +75,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 35 | E7-T2 | Completed | Crash recovery, rerun supersession, follow-up activation |
 | 36 | E7-T3 | Completed | Submit-path revalidation and durable path facts |
 | 37 | E7-T4 | Completed | Gate-evidence tests repaired and platform guards added |
-| 38 | E7-T5 | Planned | CLI inspection contract completed |
+| 38 | E7-T5 | Completed | CLI inspection contract completed |
 | 39 | E7-T6 | Planned | Write gates, audit rows, and decision records closed |
 | 40 | E7-T7 | Planned | Migration lock, WAL classification, operator exits |
 | 41 | E7-T8 | Planned | Payload versioning enforced and Hermes rendering completed |
@@ -1659,6 +1659,10 @@ E7-T3 Completed.
 - every command named by CLI-004 exits without `command_not_implemented`;
 - a dispatch's complete causal lineage is inspectable from the CLI alone;
 - list filters and pagination behave as the CLI contract specifies.
+
+### Evidence
+
+Delivered as the CLI inspection completion (H-5, M-13 through M-16): `config show` prints the normalized, redacted configuration through the envelope (no `command_not_implemented` remains in the tree); `dispatches show` returns the complete causal chain - the intent, attempts, receipts, and transitions it always carried plus the creating decision with its reason codes, the retained batch, that batch's source observations, and the cooperative work receipts (`ports.IntentLineage` extended with tagged JSON fields, `LoadIntentLineage` joining decision to batch to observations and work receipts); `dispatches list` gains the `--age` (positive Go duration), `--external-ref`, and `--causal` (dispatch or decision prefix) filters with `--offset` pagination echoed in the envelope; the parsed `--trace-id` reaches every success envelope (M-14); a dead-lettered `dispatches retry` without `--reason` is classified as a usage defect instead of an internal one (M-15); and the error-model category table corrects the exit-4 `*_not_found` codes to `input_rejected` (M-16; the dispatches, receipts, and quarantine sites emit the corrected category, while the work-command `dispatch_not_found` sites are deferred with the round-2 review residuals). Proven by `internal/cli/e7t5_test.go` (`TestConfigShowNormalized`, `TestDispatchesShowFullLineage`, `TestDispatchesListFiltersAndPagination`, `TestTraceIDReachesEnvelope`) plus the updated G1 not-implemented pin. The round-1 Mulgae remediations are folded in (run r_01a02bd2-6a77, reports_only): the four exit-4 `*_not_found` codes now emit `input_rejected` in the implementation as well as the table (with `config_route_not_found` kept at `configuration`/exit 3, restoring the category-to-exit 1:1 invariant), the causal-chain join surfaces every error instead of silently truncating, the retry pre-check reads the snapshot and surfaces load errors, the causal-prefix LIKE wildcards are escaped, and `config show` prints the computed route revisions the CLI contract promises, with the retry-classification and redaction/revisions tests added. Verified by `make verify` on darwin/arm64. Changelog 1.0.18.
 
 ## E7-T6: Close Write Gates, Audit Rows, and Decision Records
 

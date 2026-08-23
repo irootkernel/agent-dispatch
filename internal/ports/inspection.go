@@ -17,6 +17,18 @@ type IntentFilter struct {
 	TargetID   string
 	DispatchID string
 	Limit      int
+	// OlderThan restricts the listing to intents created strictly before
+	// this canonical timestamp (the age filter, E7-T5).
+	OlderThan string
+	// ExternalRef restricts the listing to intents carrying this stored
+	// external task reference (E7-T5).
+	ExternalRef string
+	// CausalPrefix restricts the listing to intents whose dispatch or
+	// decision ID starts with this prefix (the causal-ID filter, E7-T5).
+	CausalPrefix string
+	// Offset skips the first Offset rows of the ordered listing
+	// (pagination, E7-T5).
+	Offset int
 }
 
 // IntentSummary is one listed dispatch intent row.
@@ -70,12 +82,56 @@ type TransitionRecord struct {
 	ContextJSON  string `json:"context_json"`
 }
 
-// IntentLineage is the full inspectable lineage of one dispatch.
+// IntentLineage is the full inspectable lineage of one dispatch,
+// including the causal decision, its retained batch, the batch's source
+// observations, and the cooperative work receipts (OPS-002, E7-T5).
 type IntentLineage struct {
-	Intent      IntentSummary
-	Attempts    []AttemptRecord
-	Receipts    []ReceiptRecord
-	Transitions []TransitionRecord
+	Intent      IntentSummary        `json:"intent"`
+	Attempts    []AttemptRecord      `json:"attempts"`
+	Receipts    []ReceiptRecord      `json:"receipts"`
+	Transitions []TransitionRecord   `json:"transitions"`
+	Decision    *DecisionLineage     `json:"decision,omitempty"`
+	WorkReceipt []WorkReceiptLineage `json:"work_receipt,omitempty"`
+}
+
+// DecisionLineage is the decision that created the dispatch with its
+// retained batch and that batch's source observations.
+type DecisionLineage struct {
+	DecisionID  string        `json:"decision_id"`
+	RouteID     string        `json:"route_id"`
+	Revision    string        `json:"route_revision"`
+	Disposition string        `json:"disposition"`
+	Class       string        `json:"classification"`
+	ReasonCodes string        `json:"reason_codes"`
+	Actor       string        `json:"actor"`
+	CreatedAt   string        `json:"created_at"`
+	Batch       *BatchLineage `json:"batch,omitempty"`
+}
+
+// BatchLineage is the retained batch behind one decision.
+type BatchLineage struct {
+	BatchID      string               `json:"batch_id"`
+	CreatedAt    string               `json:"created_at"`
+	Fingerprint  string               `json:"content_fingerprint"`
+	Observations []ObservationLineage `json:"observations"`
+}
+
+// ObservationLineage is one source observation row in the causal chain.
+type ObservationLineage struct {
+	ObservationID string `json:"observation_id"`
+	SourceID      string `json:"source_id"`
+	ObservedAt    string `json:"observed_at"`
+	Status        string `json:"ingest_status"`
+}
+
+// WorkReceiptLineage is one cooperative work receipt over the dispatch.
+type WorkReceiptLineage struct {
+	ReceiptID   string `json:"receipt_id"`
+	RunID       string `json:"run_id"`
+	Status      string `json:"status"`
+	FailureCode string `json:"failure_code,omitempty"`
+	SubmittedAt string `json:"submitted_at"`
+	BegunAt     string `json:"begun_at"`
 }
 
 // BatchEvidence is a retained batch with its normalized changes, for

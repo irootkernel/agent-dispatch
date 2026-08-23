@@ -36,13 +36,36 @@ func (s *Store) ListIntents(ctx context.Context, f ports.IntentFilter) ([]ports.
 		where = append(where, "dispatch_id = ?")
 		args = append(args, f.DispatchID)
 	}
+	if f.OlderThan != "" {
+		where = append(where, "created_at < ?")
+		args = append(args, f.OlderThan)
+	}
+	if f.ExternalRef != "" {
+		where = append(where, "external_ref = ?")
+		args = append(args, f.ExternalRef)
+	}
+	if f.CausalPrefix != "" {
+		where = append(where, "(dispatch_id LIKE ? ESCAPE '\\' OR decision_id LIKE ? ESCAPE '\\')")
+		// The caller's prefix is matched literally: LIKE wildcards in it
+		// are escaped so % and _ cannot widen the filter.
+		escaped := strings.ReplaceAll(f.CausalPrefix, "\\", "\\\\")
+		escaped = strings.ReplaceAll(escaped, "%", "\\%")
+		escaped = strings.ReplaceAll(escaped, "_", "\\_")
+		prefix := escaped + "%"
+		args = append(args, prefix, prefix)
+	}
 	limit := f.Limit
 	if limit <= 0 {
 		limit = 100
 	}
+	query := `SELECT dispatch_id, route_id, target_id, generation, idempotency_key, state, attempt_count, next_attempt_at, created_at, updated_at
+		FROM dispatch_intents WHERE ` + strings.Join(where, " AND ") + ` ORDER BY created_at DESC, dispatch_id DESC LIMIT ?`
 	args = append(args, limit)
-	rows, err := s.QueryContext(ctx, `SELECT dispatch_id, route_id, target_id, generation, idempotency_key, state, attempt_count, next_attempt_at, created_at, updated_at
-		FROM dispatch_intents WHERE `+strings.Join(where, " AND ")+` ORDER BY created_at DESC, dispatch_id DESC LIMIT ?`, args...)
+	if f.Offset > 0 {
+		query += ` OFFSET ?`
+		args = append(args, f.Offset)
+	}
+	rows, err := s.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -140,6 +163,67 @@ func (s *Store) LoadIntentLineage(ctx context.Context, dispatchID string) (ports
 	}
 	trows.Close()
 	if err := trows.Err(); err != nil {
+		return lin, err
+	}
+
+	// The causal chain (E7-T5): the decision that created the dispatch,
+	// its retained batch, that batch's source observations, and the
+	// cooperative work receipts over the dispatch. Every step's failure
+	// surfaces: a truncated lineage is never reported as complete.
+	var decisionID sql.NullString
+	if err := s.QueryRowContext(ctx, `SELECT decision_id FROM dispatch_intents WHERE dispatch_id = ?`, dispatchID).Scan(&decisionID); err != nil {
+		return lin, err
+	}
+	if decisionID.Valid && decisionID.String != "" {
+		d := &ports.DecisionLineage{}
+		var batchID sql.NullString
+		if err := s.QueryRowContext(ctx, `SELECT decision_id, route_id, route_revision, disposition, classification, reason_codes_json, COALESCE(actor, ''), created_at, batch_id
+			FROM policy_decisions WHERE decision_id = ?`, decisionID.String).Scan(
+			&d.DecisionID, &d.RouteID, &d.Revision, &d.Disposition, &d.Class, &d.ReasonCodes, &d.Actor, &d.CreatedAt, &batchID); err != nil {
+			return lin, err
+		}
+		if batchID.Valid && batchID.String != "" {
+			b := &ports.BatchLineage{BatchID: batchID.String}
+			if err := s.QueryRowContext(ctx, `SELECT batch_id, created_at, content_fingerprint FROM change_batches WHERE batch_id = ?`, batchID.String).Scan(&b.BatchID, &b.CreatedAt, &b.Fingerprint); err != nil {
+				return lin, err
+			}
+			orows, oerr := s.QueryContext(ctx, `SELECT o.observation_id, o.source_id, o.observed_at, o.ingest_status
+				FROM source_observations o JOIN batch_observations bo ON bo.observation_id = o.observation_id
+				WHERE bo.batch_id = ? ORDER BY o.observed_at, o.observation_id`, batchID.String)
+			if oerr != nil {
+				return lin, oerr
+			}
+			for orows.Next() {
+				var o ports.ObservationLineage
+				if err := orows.Scan(&o.ObservationID, &o.SourceID, &o.ObservedAt, &o.Status); err != nil {
+					orows.Close()
+					return lin, err
+				}
+				b.Observations = append(b.Observations, o)
+			}
+			orows.Close()
+			if err := orows.Err(); err != nil {
+				return lin, err
+			}
+			d.Batch = b
+		}
+		lin.Decision = d
+	}
+	wrows, werr := s.QueryContext(ctx, `SELECT receipt_id, run_id, status, COALESCE(failure_code, ''), submitted_at, COALESCE(begun_at, submitted_at)
+		FROM work_receipts WHERE dispatch_id = ? ORDER BY COALESCE(begun_at, submitted_at), receipt_id`, dispatchID)
+	if werr != nil {
+		return lin, werr
+	}
+	for wrows.Next() {
+		var w ports.WorkReceiptLineage
+		if err := wrows.Scan(&w.ReceiptID, &w.RunID, &w.Status, &w.FailureCode, &w.SubmittedAt, &w.BegunAt); err != nil {
+			wrows.Close()
+			return lin, err
+		}
+		lin.WorkReceipt = append(lin.WorkReceipt, w)
+	}
+	wrows.Close()
+	if err := wrows.Err(); err != nil {
 		return lin, err
 	}
 	return lin, nil

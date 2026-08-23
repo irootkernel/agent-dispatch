@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,18 +15,63 @@ import (
 	"github.com/irootkernel/agent-dispatch/internal/config"
 )
 
-// runConfig implements the config command tree (cli-spec §3); this build
-// implements `config validate`. `config show` arrives with the E6-T2
-// operational observability surface.
+// runConfig implements the config command tree (cli-spec §3): config
+// validate and config show (the normalized, redacted configuration
+// view, E7-T5).
 func runConfig(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 || args[0] != "validate" {
-		if len(args) > 0 && args[0] == "show" {
-			writeError(stderr, "config show", "command_not_implemented", "usage", "config show is not implemented in this build")
-			return 2
-		}
-		return usageError(stderr, "config", "config requires a subcommand; this build implements 'config validate'")
+	if len(args) == 0 {
+		return usageError(stderr, "config", "config requires a subcommand; this build implements 'config validate' and 'config show'")
 	}
-	return runConfigValidate(args[1:], stdout, stderr)
+	switch args[0] {
+	case "validate":
+		return runConfigValidate(args[1:], stdout, stderr)
+	case "show":
+		return runConfigShow(args[1:], stdout, stderr)
+	default:
+		return usageError(stderr, "config", fmt.Sprintf("unknown config subcommand %q; this build implements 'config validate' and 'config show'", args[0]))
+	}
+}
+
+// runConfigShow prints the normalized configuration with every secret
+// reference redacted (SEC-006/SEC-007: values never leave the store or
+// the output).
+func runConfigShow(args []string, stdout, stderr io.Writer) int {
+	command := "config show"
+	configPath := ""
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--config":
+			if i+1 >= len(args) {
+				return usageError(stderr, command, "--config requires a value")
+			}
+			configPath = args[i+1]
+			i++
+		default:
+			return usageError(stderr, command, fmt.Sprintf("unknown flag %q", args[i]))
+		}
+	}
+	cfg, err := config.Load(resolveConfigPath(configPath))
+	if err != nil {
+		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
+	}
+	normalized, err := cfg.Normalized()
+	if err != nil {
+		return planErr(stderr, command, "internal_unclassified", "internal", err.Error(), 40)
+	}
+	var view map[string]any
+	if err := json.Unmarshal(normalized, &view); err != nil {
+		return planErr(stderr, command, "internal_unclassified", "internal", err.Error(), 40)
+	}
+	// The computed route revisions (cli-spec §3): the same digest the
+	// production gate acknowledges, visible without touching the store.
+	revisions := map[string]string{}
+	for routeID := range cfg.Routes {
+		if rev, ok := config.RouteRevision(cfg, routeID); ok {
+			revisions[routeID] = rev
+		}
+	}
+	view["computed_route_revisions"] = revisions
+	return writeEnvelope(stdout, command, view)
 }
 
 func runConfigValidate(args []string, stdout, stderr io.Writer) int {

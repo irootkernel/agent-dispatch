@@ -54,7 +54,7 @@ func (f dispatchesFlags) val(name string) string { return f.values[name] }
 // bare positional operand.
 func parseDispatchesFlags(command string, args []string, stderr io.Writer, allowed map[string]bool) (dispatchesFlags, int) {
 	out := dispatchesFlags{values: map[string]string{}}
-	valueFlags := map[string]bool{"--config": true, "--route": true, "--state": true, "--target": true, "--reason": true, "--max": true, "--limit": true, "--dispatch": true, "--kind": true, "--acknowledge-production-gate": true, "--output": true}
+	valueFlags := map[string]bool{"--config": true, "--route": true, "--state": true, "--target": true, "--reason": true, "--max": true, "--limit": true, "--offset": true, "--age": true, "--external-ref": true, "--causal": true, "--dispatch": true, "--kind": true, "--acknowledge-production-gate": true, "--output": true}
 	for name := range allowed {
 		valueFlags[name] = true
 	}
@@ -140,21 +140,44 @@ func runDispatchesList(command string, args []string, stdout, stderr io.Writer) 
 		}
 		limit = n
 	}
+	offset := 0
+	if raw := flags.val("--offset"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 0 {
+			return usageError(stderr, command, "--offset must be >= 0")
+		}
+		offset = n
+	}
+	// The age filter takes a Go duration (for example 24h): the listing
+	// then carries only intents created strictly before now minus the
+	// age (cli-spec §6, E7-T5).
+	olderThan := ""
+	if raw := flags.val("--age"); raw != "" {
+		d, err := time.ParseDuration(raw)
+		if err != nil || d <= 0 {
+			return usageError(stderr, command, "--age must be a positive duration like 24h")
+		}
+		olderThan = time.Now().UTC().Add(-d).Truncate(time.Second).Format(time.RFC3339)
+	}
 	store, closer, exit := openOperatorStore(command, flags.val("--config"), stderr)
 	if exit != 0 {
 		return exit
 	}
 	defer closer.Close()
 	intents, err := store.ListIntents(requestCtx(), ports.IntentFilter{
-		RouteID:  flags.val("--route"),
-		State:    stateFilter,
-		TargetID: flags.val("--target"),
-		Limit:    limit,
+		RouteID:      flags.val("--route"),
+		State:        stateFilter,
+		TargetID:     flags.val("--target"),
+		OlderThan:    olderThan,
+		ExternalRef:  flags.val("--external-ref"),
+		CausalPrefix: flags.val("--causal"),
+		Limit:        limit,
+		Offset:       offset,
 	})
 	if err != nil {
 		return planErr(stderr, command, "sqlite_query_failed", "storage", err.Error(), 20)
 	}
-	return writeEnvelope(stdout, command, map[string]any{"dispatches": intents, "count": len(intents)})
+	return writeEnvelope(stdout, command, map[string]any{"dispatches": intents, "count": len(intents), "offset": offset})
 }
 
 // runDispatchesShow prints the full redacted lineage of one dispatch.
@@ -231,6 +254,17 @@ func runDispatchesRetry(command string, args []string, stdout, stderr io.Writer)
 		Store: store, Now: func() string { return dispatch.Timestamp(time.Now()) },
 		TargetScopeResolver: scopeResolver, RevisionResolver: revisionResolver, TargetResolver: targetResolver,
 	}
+	// CLI-008 (E7-T5/M-15): a dead-lettered retry without --reason is a
+	// usage defect, not an internal one.
+	if strings.TrimSpace(flags.val("--reason")) == "" {
+		snap, serr := store.LoadIntent(requestCtx(), flags.positional)
+		switch {
+		case serr != nil:
+			return intentErr(stderr, command, serr)
+		case snap.State == records.IntentDeadLettered:
+			return usageError(stderr, command, "retrying dead-lettered dispatch "+flags.positional+" requires --reason")
+		}
+	}
 	to, err := op.Retry(requestCtx(), flags.positional, "operator", flags.val("--reason"))
 	if err != nil {
 		if errors.Is(err, ports.ErrStateNotEligible) {
@@ -259,7 +293,7 @@ func runDispatchesReprocess(command string, args []string, stdout, stderr io.Wri
 	defer closer.Close()
 	batch, err := store.LoadBatchEvidence(requestCtx(), flags.positional)
 	if err != nil {
-		return planErr(stderr, command, "batch_not_found", "usage", err.Error(), 4)
+		return planErr(stderr, command, "batch_not_found", "input_rejected", err.Error(), 4)
 	}
 	cfg, err := config.Load(resolveConfigPath(flags.val("--config")))
 	if err != nil {
@@ -519,7 +553,7 @@ func reconcileUnknownDispatches(cfg *config.Config, store storeOp, sink ports.Si
 func intentErr(stderr io.Writer, command string, err error) int {
 	switch {
 	case errors.Is(err, ports.ErrIntentNotFound):
-		writeError(stderr, command, "dispatch_not_found", "usage", err.Error())
+		writeError(stderr, command, "dispatch_not_found", "input_rejected", err.Error())
 		return 4
 	case errors.Is(err, ports.ErrLeaseHeld):
 		writeError(stderr, command, "attempt_lease_conflict", "conflict", err.Error())

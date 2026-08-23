@@ -130,7 +130,7 @@ func runQuarantineResolve(command, sub string, args []string, stdout, stderr io.
 func quarantineErr(stderr io.Writer, command, sub string, err error) int {
 	switch {
 	case errors.Is(err, ports.ErrQuarantineNotFound):
-		writeError(stderr, command, "quarantine_not_found", "usage", err.Error())
+		writeError(stderr, command, "quarantine_not_found", "input_rejected", err.Error())
 		return 4
 	case errors.Is(err, ports.ErrQuarantineNotHeld):
 		if sub == "release" {

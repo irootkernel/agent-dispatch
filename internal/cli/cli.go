@@ -276,7 +276,7 @@ func writeEnvelope(w io.Writer, command string, result interface{}) int {
 		OK:         true,
 		Result:     result,
 		Warnings:   []string{},
-		TraceID:    "",
+		TraceID:    globalTraceID,
 	}); err != nil {
 		// Exit 1 is intentionally unassigned and must never be emitted
 		// (error-model §2); an envelope write failure is internal.
@@ -306,7 +306,7 @@ func writeEnvelopeWithWarnings(w io.Writer, command string, result interface{}, 
 		OK:         true,
 		Result:     result,
 		Warnings:   warnings,
-		TraceID:    "",
+		TraceID:    globalTraceID,
 	}); err != nil {
 		return 40
 	}
@@ -326,7 +326,7 @@ func writeError(w io.Writer, command, code, category, message string) {
 			Message:   message,
 			Retryable: false,
 		},
-		TraceID: "",
+		TraceID: globalTraceID,
 	})
 }
 

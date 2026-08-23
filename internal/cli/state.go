@@ -79,6 +79,9 @@ type storeOp interface {
 	ports.ReceiptStore
 	ports.WorkReceiptStore
 	ports.QuarantineStore
+	// ReleaseQuarantineWithRevision records the caller-computed current
+	// revision into the replacement decision (epic audit round-1 F001).
+	ReleaseQuarantineWithRevision(ctx context.Context, quarantineID, actor, reason, routeRevision, now string) (ports.QuarantineRecord, error)
 	io.Closer
 	ListRoutes(ctx context.Context) ([]sqlite.RouteRow, error)
 	CountIntentsByState(ctx context.Context) (map[string]int64, error)

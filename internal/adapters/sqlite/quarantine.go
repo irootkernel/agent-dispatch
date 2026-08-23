@@ -171,14 +171,21 @@ func scanQuarantine(row interface{ Scan(...any) error }) (ports.QuarantineRecord
 // replacement records the route's CURRENT revision, not the quarantined
 // decision's stale one (E8-T5, M-13).
 func (s *Store) ReleaseQuarantine(ctx context.Context, quarantineID, actor, reason, now string) (ports.QuarantineRecord, error) {
-	var routeID string
-	if err := s.QueryRowContext(ctx, `SELECT route_id FROM policy_decisions WHERE decision_id = (SELECT decision_id FROM quarantine_items WHERE quarantine_id = ?)`, quarantineID).Scan(&routeID); err != nil {
-		return ports.QuarantineRecord{}, err
-	}
+	// The replacement decision records the quarantined decision's own
+	// revision by default — never a derivation over historical intents,
+	// which lags the configuration after any acknowledged change (epic
+	// audit round-1 F001). Callers that hold the live configuration use
+	// ReleaseQuarantineWithRevision with the computed current revision.
 	var routeRevision string
-	if err := s.QueryRowContext(ctx, `SELECT COALESCE(MAX(route_revision), '') FROM dispatch_intents WHERE route_id = ?`, routeID).Scan(&routeRevision); err != nil {
-		return ports.QuarantineRecord{}, err
-	}
+	_ = s.QueryRowContext(ctx, `SELECT route_revision FROM policy_decisions WHERE decision_id = (SELECT decision_id FROM quarantine_items WHERE quarantine_id = ?)`, quarantineID).Scan(&routeRevision)
+	return s.resolveQuarantine(ctx, quarantineID, "released", actor, reason, now, true, routeRevision)
+}
+
+// ReleaseQuarantineWithRevision resolves one held item with the
+// caller-computed current route revision recorded into the replacement
+// decision (the CLI loads the configuration and computes the revision;
+// the store cannot).
+func (s *Store) ReleaseQuarantineWithRevision(ctx context.Context, quarantineID, actor, reason, routeRevision, now string) (ports.QuarantineRecord, error) {
 	return s.resolveQuarantine(ctx, quarantineID, "released", actor, reason, now, true, routeRevision)
 }
 

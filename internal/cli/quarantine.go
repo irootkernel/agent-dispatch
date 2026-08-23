@@ -10,6 +10,7 @@ import (
 	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
 	"github.com/irootkernel/agent-dispatch/internal/app/quarantine"
 	"github.com/irootkernel/agent-dispatch/internal/app/reconcile"
+	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
@@ -111,7 +112,21 @@ func runQuarantineResolve(command, sub string, args []string, stdout, stderr io.
 		return exit
 	}
 	defer closer.Close()
-	service := &quarantine.Service{Store: store, Now: func() string { return dispatch.Timestamp(time.Now()) }}
+	// The replacement decision carries the CURRENT computed revision
+	// (epic audit round-1 F001): load the configuration and compute it;
+	// a route not found in the configuration keeps the quarantined
+	// decision's own revision.
+	routeRevision := ""
+	if cfg, cerr := config.Load(resolveConfigPath(flags.val("--config"))); cerr == nil {
+		var routeID string
+		if qerr := closer.QueryRowContext(requestCtx(), `SELECT p.route_id FROM policy_decisions p
+			JOIN quarantine_items q ON q.decision_id = p.decision_id WHERE q.quarantine_id = ?`, flags.positional).Scan(&routeID); qerr == nil {
+			if rev, ok := config.RouteRevision(cfg, routeID); ok {
+				routeRevision = rev
+			}
+		}
+	}
+	service := &quarantine.Service{Store: store, Now: func() string { return dispatch.Timestamp(time.Now()) }, RouteRevision: routeRevision}
 	var (
 		rec ports.QuarantineRecord
 		err error

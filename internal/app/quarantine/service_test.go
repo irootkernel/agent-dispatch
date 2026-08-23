@@ -73,3 +73,7 @@ func TestResolutionErrorClassification(t *testing.T) {
 		t.Fatalf("a missing reason is its own usage outcome, got %v", err)
 	}
 }
+
+func (s *stubStore) ReleaseQuarantineWithRevision(ctx context.Context, quarantineID, actor, reason, routeRevision, now string) (ports.QuarantineRecord, error) {
+	return s.ReleaseQuarantine(ctx, quarantineID, actor, reason, now)
+}

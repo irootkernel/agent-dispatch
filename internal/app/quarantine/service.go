@@ -16,6 +16,9 @@ import (
 // Store is the durable surface the hold service needs.
 type Store interface {
 	ports.QuarantineStore
+	// ReleaseQuarantineWithRevision records the caller-computed current
+	// revision into the replacement decision (epic audit round-1 F001).
+	ReleaseQuarantineWithRevision(ctx context.Context, quarantineID, actor, reason, routeRevision, now string) (ports.QuarantineRecord, error)
 }
 
 // Service applies the operator resolution semantics.
@@ -23,6 +26,11 @@ type Service struct {
 	Store Store
 	// Now renders the canonical resolution timestamp.
 	Now func() string
+	// RouteRevision is the caller-computed CURRENT route revision
+	// recorded into the replacement decision (E8-T5, M-13, epic audit
+	// round-1 F001: never a derivation over historical intents). Empty
+	// keeps the quarantined decision's own revision.
+	RouteRevision string
 }
 
 // Release resolves one held item into a replacement reconciliation
@@ -33,7 +41,13 @@ func (s *Service) Release(ctx context.Context, quarantineID, actor, reason strin
 	if strings.TrimSpace(reason) == "" {
 		return ports.QuarantineRecord{}, ports.ErrReasonRequired
 	}
-	rec, err := s.Store.ReleaseQuarantine(ctx, quarantineID, actor, reason, s.Now())
+	var rec ports.QuarantineRecord
+	var err error
+	if s.RouteRevision != "" {
+		rec, err = s.Store.ReleaseQuarantineWithRevision(ctx, quarantineID, actor, reason, s.RouteRevision, s.Now())
+	} else {
+		rec, err = s.Store.ReleaseQuarantine(ctx, quarantineID, actor, reason, s.Now())
+	}
 	if ports.IsQuarantineDomainOutcome(err) {
 		return rec, err
 	}

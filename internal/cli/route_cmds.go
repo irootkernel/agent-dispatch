@@ -342,16 +342,22 @@ func runRouteStale(command string, args []string, stdout, stderr io.Writer) int 
 	// must be older than the route's active_stale_after before an
 	// operator may stale it (E8-T4, M-23 — a minutes-old dispatch with a
 	// 2h bound is live work, not stale evidence).
+	// The precondition fails closed (epic audit round-1 F003): a
+	// configuration that cannot load leaves the bound unknown, and
+	// stale-ing live work on an unknown bound is exactly the failure the
+	// precondition exists to prevent.
 	cfg, cfgErr := config.Load(resolveConfigPath(flags.val("--config")))
-	if cfgErr == nil {
-		if route, ok := cfg.Routes[routeID]; ok && route.Dispatch.ActiveStaleAfter != "" {
-			if d, derr := config.ParseDuration(route.Dispatch.ActiveStaleAfter); derr == nil {
-				if snap, serr := closer.LoadRouteState(requestCtx(), routeID); serr == nil && snap.ActiveDispatchID != "" {
-					if age, aerr := closer.ActiveDispatchAgeNanos(requestCtx(), routeID); aerr == nil && age < d.Nanos {
-						return planErr(stderr, command, "transition_invalid", "conflict",
-							fmt.Sprintf("active dispatch %s is inside the route's active_stale_after bound (%s); live work is not stale",
-								snap.ActiveDispatchID, route.Dispatch.ActiveStaleAfter), 14)
-					}
+	if cfgErr != nil {
+		return planErr(stderr, command, "config_invalid", "configuration",
+			fmt.Sprintf("route stale requires the active_stale_after bound, and the configuration failed to load: %v", cfgErr), 3)
+	}
+	if route, ok := cfg.Routes[routeID]; ok && route.Dispatch.ActiveStaleAfter != "" {
+		if d, derr := config.ParseDuration(route.Dispatch.ActiveStaleAfter); derr == nil {
+			if snap, serr := closer.LoadRouteState(requestCtx(), routeID); serr == nil && snap.ActiveDispatchID != "" {
+				if age, aerr := closer.ActiveDispatchAgeNanos(requestCtx(), routeID); aerr == nil && age < d.Nanos {
+					return planErr(stderr, command, "transition_invalid", "conflict",
+						fmt.Sprintf("active dispatch %s is inside the route's active_stale_after bound (%s); live work is not stale",
+							snap.ActiveDispatchID, route.Dispatch.ActiveStaleAfter), 14)
 				}
 			}
 		}

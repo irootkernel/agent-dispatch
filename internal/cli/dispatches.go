@@ -670,13 +670,16 @@ func runDispatchesDiscard(command string, args []string, stdout, stderr io.Write
 	}
 	defer closer.Close()
 	_ = closerStore
-	if err := closer.CloseDeadLetter(requestCtx(), flags.positional, "operator", flags.val("--reason"), dispatch.Timestamp(time.Now())); err != nil {
+	outcome, err := closer.CloseDeadLetter(requestCtx(), flags.positional, "operator", flags.val("--reason"), dispatch.Timestamp(time.Now()))
+	if err != nil {
 		if errors.Is(err, ports.ErrStateNotEligible) {
 			return planErr(stderr, command, "transition_invalid", "conflict", err.Error(), 14)
 		}
 		return intentErr(stderr, command, err)
 	}
 	return writeEnvelope(stdout, command, map[string]any{
-		"dispatch_id": flags.positional, "state": "superseded", "slot_released": true,
+		"dispatch_id": flags.positional, "state": "superseded",
+		"slot_released": true, "route_to_idle": outcome.RouteToIDLE,
+		"dirty_generation_retained": outcome.DirtyRetained,
 	})
 }

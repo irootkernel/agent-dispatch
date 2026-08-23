@@ -419,46 +419,61 @@ func (s *Store) appendValidatedTransition(tx *sql.Tx, transitionID, dispatchID s
 // the declared edge (E7-T7/M-7): the record and its audit history stay
 // inspectable, the route slot is released, and the lineage becomes
 // retention-resolvable.
-func (s *Store) CloseDeadLetter(ctx context.Context, dispatchID, actor, reason, now string) error {
+func (s *Store) CloseDeadLetter(ctx context.Context, dispatchID, actor, reason, now string) (DeadLetterOutcome, error) {
+	var outcome DeadLetterOutcome
 	now = normalizeTimestamp(now)
 	tx, err := s.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return outcome, err
 	}
 	defer tx.Rollback()
 	var current, routeID string
 	if err := tx.QueryRow(`SELECT state, route_id FROM dispatch_intents WHERE dispatch_id = ?`, dispatchID).Scan(&current, &routeID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("%w: %s", ports.ErrIntentNotFound, dispatchID)
+			return outcome, fmt.Errorf("%w: %s", ports.ErrIntentNotFound, dispatchID)
 		}
-		return err
+		return outcome, err
 	}
 	if current != string(records.IntentDeadLettered) {
-		return fmt.Errorf("%w: %s is %s, not dead-lettered", ports.ErrStateNotEligible, dispatchID, current)
+		return outcome, fmt.Errorf("%w: %s is %s, not dead-lettered", ports.ErrStateNotEligible, dispatchID, current)
 	}
 	if err := s.transitionWithin(ctx, tx, dispatchID, records.IntentDeadLettered, records.IntentSuperseded, state.ReasonReprocessOrDiscard,
 		state.IntentEvidence{Actor: actor}, now,
 		fmt.Sprintf(`{"reason":%q,"actor":%q,"operator_reason":%q}`, state.ReasonReprocessOrDiscard, actor, reason)); err != nil {
-		return err
+		return outcome, err
 	}
 	// The slot releases only when this dead letter actually held it
 	// (an already-resolved route keeps its outcome; epic audit round 1).
 	if _, err := tx.Exec(`UPDATE route_runtime_state SET active_dispatch_id = NULL, active_generation = 0 WHERE route_id = ? AND active_dispatch_id = ?`, routeID, dispatchID); err != nil {
-		return err
+		return outcome, err
 	}
 	snap, rsErr := s.routeSnapshotInTx(tx, routeID)
 	if rsErr != nil {
-		return rsErr
+		return outcome, rsErr
 	}
-	if snap.ActiveDispatchID == "" && (snap.State == state.RouteActiveClean || snap.State == state.RouteActiveDirty) {
-		// The closed letter was the route's only active work: the route
-		// moves to IDLE through the documented clean-completion edge
-		// with the discard as its evidence.
+	outcome.DirtyRetained = snap.ActiveDispatchID == "" && snap.State == state.RouteActiveDirty
+	if snap.ActiveDispatchID == "" && snap.State == state.RouteActiveClean {
+		// The closed letter was a clean route's only active work: the
+		// route moves to IDLE through the documented clean-completion
+		// edge with the discard as its evidence. A dirty route keeps
+		// its dirty generation (the documented edge to IDLE demands
+		// exact-suppression evidence a discard cannot supply), so the
+		// pending generation stays resolvable through reconciliation.
 		if err := s.applyRouteTransition(tx, snap, state.RouteIdle, state.ReasonWorkCompletedClean,
 			state.RouteEvidence{Actor: actor, ReceiptRef: "discard:" + dispatchID}, now,
 			fmt.Sprintf(`{"reason":%q,"actor":%q,"dispatch_id":%q,"operator_discard":true}`, state.ReasonWorkCompletedClean, actor, dispatchID)); err != nil {
-			return err
+			return outcome, err
 		}
+		outcome.RouteToIDLE = true
 	}
-	return tx.Commit()
+	return outcome, tx.Commit()
+}
+
+// DeadLetterOutcome reports what one discard closed.
+type DeadLetterOutcome struct {
+	// RouteToIDLE reports whether the route moved to IDLE (a clean
+	// active route whose only work was the closed letter).
+	RouteToIDLE bool
+	// DirtyRetained reports whether a dirty generation remained.
+	DirtyRetained bool
 }

@@ -212,3 +212,34 @@ func TestOpenDeadLettersStayRetained(t *testing.T) {
 		t.Fatalf("discard: %s", errb.String())
 	}
 }
+
+// TestLeaseTransactionRefusesDisabledRoute proves the epic audit's
+// transactional gate: AcquireAttempt fails on a route whose activation
+// state is not enabled, even without any runtime pre-check.
+func TestLeaseTransactionRefusesDisabledRoute(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	setPlanEnv(t, vault, false)
+	e4t3RegisterRoute(t, configPath)
+	var out, errb bytes.Buffer
+	withStdin(t, `[{"name":"Inbox/new.md","exists":true,"new":true,"size":5,"type":"f"}]`, func() {
+		Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman", "--no-submit"}, &out, &errb)
+	})
+	if code := Run([]string{"route", "disable", "--config", configPath, "--route", "wiki"}, &bytes.Buffer{}, &bytes.Buffer{}); code != 0 {
+		t.Fatal("route disable failed")
+	}
+	out.Reset()
+	errb.Reset()
+	code := Run([]string{"dispatches", "drain", "--route", "wiki", "--config", configPath}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("drain: %s", errb.String())
+	}
+	if res := decodeEnvelope(t, &out); res["processed"] != float64(0) {
+		t.Fatalf("the disabled route must not submit: %v", res["processed"])
+	}
+	store := e5t1Store(t, configPath)
+	defer store.Close()
+	var state string
+	if err := store.QueryRow(`SELECT state FROM dispatch_intents WHERE state = 'ready'`).Scan(&state); err != nil || state != "ready" {
+		t.Fatalf("the refused intent must stay ready: %q %v", state, err)
+	}
+}

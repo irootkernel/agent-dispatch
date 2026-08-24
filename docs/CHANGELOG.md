@@ -5,7 +5,8 @@
 E8 correction pass (operator audit of the D-020 finding index against the tree):
 
 - six rows recorded as Fixed but descoped or omitted are now true: M-15 (empty stored request versions fail closed; receipt payload_version is checked on read), M-17 (the schema DAT-007 claim corrected in place to the join-reachable design), L-4 (the real-NUL malformed fixture), L-5 (the AC-106 loop widened with a NUL name; the AC-103 repeated-save test pins the same final digest), L-24 (the follow-up terminology entry), M-18's pattern half (route pattern sets compile at validate), and M-20's remaining halves (log messages are sanitized; config show masks endpoint query strings);
-- M-16 (record schemas vs CLI emissions) is corrected to Deferred — a wire-shape change out of the v0.1.2 scope, recorded in the epic closeout.
+- M-16 (record schemas vs CLI emissions) is corrected to Deferred — a wire-shape change out of the v0.1.2 scope, recorded in the epic closeout;
+- v0.1.2 is re-tagged at the corrected tree and rebuilt twice byte-identically: the correction pass changed source after the first tag, which would have repeated the review's H-5 defect (binaries not built from the released tree).
 
 ## 1.0.34 - 2026-08-23
 

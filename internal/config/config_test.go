@@ -310,19 +310,12 @@ func TestNormalizedGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The golden never self-heals (E9-T4, L-6): a missing file is a
+	// failure, never a regeneration.
 	golden := filepath.Join("testdata", "normalized.golden.json")
-	if _, err := os.Stat(golden); os.IsNotExist(err) {
-		if err := os.MkdirAll("testdata", 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(golden, got, 0o644); err != nil {
-			t.Fatal(err)
-		}
-		return
-	}
 	want, err := os.ReadFile(golden)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("the normalized golden must exist and never regenerate: %v", err)
 	}
 	if !bytes.Equal(got, want) {
 		t.Fatalf("normalized output drifted from golden file:\ngot:  %s\nwant: %s", got, want)

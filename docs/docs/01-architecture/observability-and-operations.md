@@ -139,7 +139,7 @@ Daily full reconciliation uses an external scheduler invoking:
 agent-dispatch reconcile --route wiki-maintenance --reason scheduled --output json
 ```
 
-Before the production gate, scheduled invocations omit `--submit` and persist reconciliation decisions for audit only. After the production gate, installed scheduled recipes add `--submit` (see the CLI contract) so that due reconciliation intents are actually submitted; without it, reconcile output alone never reaches Hermes when no new source events arrive.
+Scheduled invocations carry `--submit` (E9-T4/T2-F001); the two-key gate is the safety boundary. Before the production acknowledgement the reconciliation fails closed at exit 14 (`transition_invalid`, nothing persisted) until `route enable --acknowledge-production-gate` records the route; after it, a route disabled in configuration (the YAML key) persists its reconciliation decisions and recovers without submitting anything, and the same scheduled leg actually delivers the due reconciliation intents — without the submit leg, reconcile output alone never reaches Hermes when no new source events arrive.
 
 Recommended schedules and installation examples are included for `launchd` and `systemd --user`. A scheduler failure is visible through `last_reconciled_at` and `doctor`.
 

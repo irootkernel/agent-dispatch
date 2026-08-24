@@ -84,9 +84,14 @@ Agent Dispatch daemon. Verified examples live in
   `systemctl --user enable --now agent-dispatch-reconcile.timer` (`daily`,
   persistent).
 
-Before the production gate the recipes omit `--submit` (reconciliation
-persists its decisions for audit without submitting work); after the
-gate, add `--submit` to the installed invocation. The schedule is
+The shipped recipes carry `--submit` (E9-T4/T2-F001): the two-key gate
+is the safety boundary. Before the production acknowledgement the
+reconciliation fails closed at exit 14 (`transition_invalid`, nothing
+persisted) until `route enable --acknowledge-production-gate` records
+the route; after it, a route disabled in configuration (the YAML key)
+persists its reconciliation decisions and recovers without submitting,
+and the same scheduled leg delivers the due work once re-enabled. The
+schedule is
 idempotently inspectable: `agent-dispatch status` reports
 `last_reconciled_at`, and `agent-dispatch doctor` flags
 `reconciliation_never_run` and `reconciliation_overdue` (over 25

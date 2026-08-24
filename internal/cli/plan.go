@@ -335,12 +335,7 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
 	}
-	rt := &dispatch.Runtime{
-		Store: outcome.store, Sink: sink, Now: time.Now,
-		LeaseTTL: leaseTTLFor(artifacts.target.SubmitTimeout), Backoff: backoff, JitterUnit: jitterUnit, Actor: "dispatch",
-		Log: opsLogger(stderr, artifacts.cfg), TraceID: globalTraceID,
-		StalenessCheck: stalenessCheckOf(artifacts.cfg), StaleRebuilder: staleRebuilderOf(outcome.store, artifacts.cfg),
-	}
+	rt := newSubmitRuntime(outcome.store, sink, artifacts.cfg, artifacts.target, backoff, "dispatch", stderr)
 	// The head-of-entry sweep already ran before the arrival was
 	// evaluated; this second pass covers only the race where the lease
 	// expired between that sweep and this submit (E8-T2/H-6).

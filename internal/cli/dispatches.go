@@ -506,13 +506,7 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 	if err != nil {
 		return writeSinkError(stderr, command, err)
 	}
-	rt := &dispatch.Runtime{
-		Store: store, Sink: sink,
-		Now: time.Now, LeaseTTL: leaseTTLFor(target.SubmitTimeout), Actor: "drain",
-		Backoff: backoff, JitterUnit: jitterUnit,
-		Log: opsLogger(stderr, cfg), TraceID: globalTraceID,
-		StalenessCheck: stalenessCheckOf(cfg), StaleRebuilder: staleRebuilderOf(store, cfg),
-	}
+	rt := newSubmitRuntime(store, sink, cfg, target, backoff, "drain", stderr)
 	// Expired submitting leases are recovered before unknown
 	// reconciliation so the DUR-006 lookup ordering covers them (DUR-010,
 	// E7-T2/B-1): a process that died mid-submit leaves submitting work

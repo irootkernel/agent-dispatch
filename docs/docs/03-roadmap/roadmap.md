@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E9 (hardening, D-021) |
 | Current active task | None |
-| Next task | E9-T4 |
-| Completed tasks | 54 / 56 |
-| Planned tasks | 2 / 56 |
+| Next task | E9-T5 |
+| Completed tasks | 55 / 56 |
+| Planned tasks | 1 / 56 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -94,7 +94,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 52 | E9-T1 | Completed | Record schema truth and storage hardening |
 | 53 | E9-T2 | Completed | Reconciliation and operator-surface hardening |
 | 54 | E9-T3 | Completed | Security, observability, and revision hygiene |
-| 55 | E9-T4 | Planned | Test-coverage hardening |
+| 55 | E9-T4 | Completed | Test-coverage hardening |
 | 56 | E9-T5 | Planned | Documentation truth, dependency, and the v0.1.3 release |
 
 ---
@@ -2279,7 +2279,7 @@ Delivered as the security, observability, and revision hygiene: observability `s
 
 ## E9-T4: Test-Coverage Hardening
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -2309,7 +2309,7 @@ E9-T3 Completed.
 
 ### Evidence
 
-Pending (E9-T4 not started).
+Delivered as the coverage hardening: the E8 member-task deferrals each carry an executing named test — a dropped path-facts surface still completes with the attribution decision recording `facts_unavailable` (T1-F002; `TestE9T4PathFactLoadFailureDegradesConservative`), a pending reconciliation recorded on an IDLE route is delivered as exactly one latest-state follow-up by the next — even clean — completion with the flag consumed (T1-F005; `TestE9T4PendingReconcileDeliveredThroughFollowup`), the service-level failure-budget mirror and the store guard agree end to end with an exhausted one-shot budget resolving through UNCERTAIN and no follow-up beyond the single retry (T1-F006; `TestE9T4FailureBudgetMirrorDrivesUncertain`), and the over-budget UNCERTAIN route resolves through operator reconciliation to IDLE with no second dispatch (T1-F007; `TestE9T4OverBudgetUncertainResolvesThroughReconciliation`). The shipped scheduling recipes carry `--submit` with the two-key-gate posture stated in place of the stale omit guidance — in the launchd plist, the systemd unit, and every live spec passage that repeated the old posture (cli-spec §9, the installation and operations passages, and the VALIDATION production-enable checklist): before the production acknowledgement the route fails closed at exit 14, and after it a configuration-disabled route persists decisions and recovers without submitting, with that YAML-key leg pinned (T2-F001; `TestE9T4ScheduledRecipesCarrySubmit` with the E6-T3 verifier updated to the new contract, and `TestE9T4ReconcileSubmitSkipsDisabledYAMLKey` from the round-1 security observation); the migration-lock test now pins steal prevention itself — a live holder survives a concurrent waiter, the lock hands over on release, and a dead holder's stale lock is stolen (T2-F002; `TestE9T4MigrationLockStealPrevention`); the three submit surfaces (dispatch, drain, reconcile --submit) share one `newSubmitRuntime` constructor whose lease-TTL derivation is asserted for every actor with a `leaseTTLFor` table (T2-F003/F004; `TestE9T4LeaseTTLWiredAtEverySubmitSite` — a site cannot drift without leaving the constructor); and ungated recovery on a configuration-disabled route heals the wedged intent while submitting nothing, with the operator warning (T2-F005; `TestE9T4UngatedRecoveryOnDisabledRoute`). The confirmation observations landed: the misnamed `TestE8AuditClassifyErrorStaysMaterial` is renamed to the in-scope-unobserved contract it actually pins, and the predicate's real error arm — an uncompilable scope pattern — fails the work commands closed at exit 3 (`TestE9T4ScopePredicateErrorFailsClosed`), while the unreadable-root doctor test self-skips under root. The three self-healing goldens (normalized config, content fingerprint, idempotency key) now fail on a missing golden instead of regenerating (L-6), and the skill↔renderer cross-check pins the rendered instruction against every assigned skill id and the exact work-command flag surface (L-23; `TestE9T4SkillRendererCrossCheck`). The remaining 1s stub deadlines in the hermeskanban suite are raised to 10s, and the full suite passed twice consecutively under `-count=1` with coverage instrumentation with zero timing failures (M-25 residual). `T4-F004`'s tri-state was already delivered inside E9-T2's store-level rule and is cited there. Verified by `make verify` on darwin/arm64 (all checks green). Reviewed through two full-target Mulgae rounds (`r_01a033d9-df52-765d-82aa-36c0dd79d7ac`, remediation-eligible shape: zero committed findings, with the round-1 reports' material observations remediated in-tree — the three stale doc passages and the overstated pre-gate prose corrected everywhere they appeared with the passage counts fixed, the YAML-key leg of `reconcile --submit` pinned by test from the security observation, and the ungated-recovery and cross-check assertions tightened to their exact claims; `r_01a033ec-5073-7f95-a6b1-7187bbcb1a55`, hardening-deferral-eligible: ci pass, coverage complete, publication committed, zero findings, every role confirming the nine areas and the remediations). Changelog 1.0.40.
 
 ## E9-T5: Documentation Truth, Dependency, and the v0.1.3 Release
 

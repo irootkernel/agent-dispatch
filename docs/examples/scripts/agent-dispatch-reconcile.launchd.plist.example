@@ -5,9 +5,12 @@
        cp agent-dispatch-reconcile.launchd.plist ~/Library/LaunchAgents/xyz.rootkernel.agent-dispatch.reconcile.plist
        launchctl load ~/Library/LaunchAgents/xyz.rootkernel.agent-dispatch.reconcile.plist
      Replace /usr/local/bin/agent-dispatch and wiki-maintenance with the
-     installed binary path and route id. Before the production gate the
-     recipe omits --submit (persisted decisions only); after the gate
-     add --submit to the ProgramArguments. -->
+     installed binary path and route id. The recipe carries --submit:
+     the two-key gate is the safety boundary (E9-T4/T2-F001) — before
+     the production acknowledgement the route fails closed at exit 14
+     until `route enable --acknowledge-production-gate` records it, and
+     after it a route disabled in configuration (the YAML key) persists
+     its decisions and recovers without submitting. -->
 <plist version="1.0">
 <dict>
     <key>Label</key>
@@ -20,6 +23,7 @@
         <string>wiki-maintenance</string>
         <string>--reason</string>
         <string>scheduled</string>
+        <string>--submit</string>
         <string>--output</string>
         <string>json</string>
     </array>

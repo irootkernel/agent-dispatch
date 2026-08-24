@@ -35,7 +35,7 @@ func TestRunnerEnvironmentAllowlisted(t *testing.T) {
 		SubmitTimeout: 5 * time.Second, LookupTimeout: 5 * time.Second,
 		MaxOutputBytes: 4096,
 	}.withDefaults()}
-	res, err := r.run(context.Background(), time.Second, []string{"kanban", "list", "--json"})
+	res, err := r.run(context.Background(), 10*time.Second, []string{"kanban", "list", "--json"})
 	if err != nil {
 		t.Fatalf("stub run: %v", err)
 	}
@@ -61,9 +61,11 @@ func TestRunnerControlledWorkingDirectory(t *testing.T) {
 	controlled := t.TempDir()
 	r := &runner{executable: bin, limits: ProcessLimits{
 		WorkingDirectory: controlled,
-		SubmitTimeout:    time.Second, LookupTimeout: time.Second, MaxOutputBytes: 4096,
+		// The 10s bounds replace 1s ones that flaked under full-parallel
+		// coverage load (E9-T4, M-25).
+		SubmitTimeout: 10 * time.Second, LookupTimeout: 10 * time.Second, MaxOutputBytes: 4096,
 	}.withDefaults()}
-	res, err := r.run(context.Background(), time.Second, []string{"kanban"})
+	res, err := r.run(context.Background(), 10*time.Second, []string{"kanban"})
 	if err != nil {
 		t.Fatalf("stub run: %v", err)
 	}
@@ -163,9 +165,11 @@ func TestRunnerTimeoutKillsProcessGroup(t *testing.T) {
 func TestRunnerStdinClosed(t *testing.T) {
 	bin := newStubHermes(t, `head -c 16 /dev/stdin | wc -c | tr -d ' '`)
 	r := &runner{executable: bin, limits: ProcessLimits{
-		SubmitTimeout: time.Second, LookupTimeout: time.Second, MaxOutputBytes: 1024,
+		// The 10s bound replaces a 1s one that flaked under full-parallel
+		// coverage load (E9-T4, M-25): the stub reads EOF immediately.
+		SubmitTimeout: 10 * time.Second, LookupTimeout: 10 * time.Second, MaxOutputBytes: 1024,
 	}.withDefaults()}
-	res, err := r.run(context.Background(), time.Second, []string{"kanban"})
+	res, err := r.run(context.Background(), 10*time.Second, []string{"kanban"})
 	if err != nil {
 		t.Fatalf("stub run: %v", err)
 	}

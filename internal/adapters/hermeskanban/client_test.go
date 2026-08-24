@@ -346,7 +346,9 @@ func TestSecretValuesRedactedFromDiagnostics(t *testing.T) {
 	t.Setenv("HERMES_API_TOKEN", token)
 	bin := newStubHermes(t, `echo "auth failed for $HERMES_API_TOKEN" >&2; exit 3`)
 	client := NewClient(bin, ProcessLimits{
-		SubmitTimeout: time.Second, LookupTimeout: time.Second, MaxOutputBytes: 4096,
+		// The 10s bound replaces a 1s one that flaked under full-parallel
+		// coverage load (E9-T4, M-25): the stub fails fast on its own.
+		SubmitTimeout: 10 * time.Second, LookupTimeout: 10 * time.Second, MaxOutputBytes: 4096,
 		EnvironmentAllowlist: []string{"HERMES_API_TOKEN"},
 	})
 	_, err := client.Show(context.Background(), "b", "t_6253023d")
@@ -411,7 +413,9 @@ func TestVersionParseDiagnosticRedacted(t *testing.T) {
 	t.Setenv("HERMES_API_TOKEN", token)
 	bin := newStubHermes(t, `printf 'Hermes Agent %s\n' "$HERMES_API_TOKEN"`)
 	client := NewClient(bin, ProcessLimits{
-		SubmitTimeout: time.Second, LookupTimeout: time.Second, MaxOutputBytes: 4096,
+		// The 10s bound replaces a 1s one that flaked under full-parallel
+		// coverage load (E9-T4, M-25): the stub prints immediately.
+		SubmitTimeout: 10 * time.Second, LookupTimeout: 10 * time.Second, MaxOutputBytes: 4096,
 		EnvironmentAllowlist: []string{"HERMES_API_TOKEN"},
 	})
 	_, err := client.DiscoverVersion(context.Background())

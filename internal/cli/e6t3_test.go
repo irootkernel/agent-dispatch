@@ -185,7 +185,11 @@ func TestUninstallExampleRetainsStateAndConfig(t *testing.T) {
 
 // TestScheduleExamplesInvokeVerifiedCommands proves the schedule
 // examples drive the verified reconcile command shape (OPS-006/007)
-// and introduce no daemon.
+// and introduce no daemon. The invocations carry --submit (T2-F001,
+// E9-T4): the runbook's automatic-recovery claim relies on the
+// scheduled submit leg, and the two-key gate makes it safe before the
+// production acknowledgement — a route that is not enabled in
+// configuration persists decisions and recovers but submits nothing.
 func TestScheduleExamplesInvokeVerifiedCommands(t *testing.T) {
 	plist, err := os.ReadFile("../../docs/examples/scripts/agent-dispatch-reconcile.launchd.plist.example")
 	if err != nil {
@@ -195,15 +199,17 @@ func TestScheduleExamplesInvokeVerifiedCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The installed invocations omit --submit (the pre-gate posture);
-	// only the prose comments explain the post-gate addition.
-	if strings.Contains(string(plist), "<string>--submit</string>") {
-		t.Fatalf("pre-gate launchd invocation must omit --submit")
+	if !strings.Contains(string(plist), "<string>--submit</string>") {
+		t.Fatalf("the launchd invocation must carry --submit")
 	}
+	var execSubmit bool
 	for _, line := range strings.Split(string(service), "\n") {
 		if strings.HasPrefix(line, "ExecStart=") && strings.Contains(line, "--submit") {
-			t.Fatalf("pre-gate systemd invocation must omit --submit: %s", line)
+			execSubmit = true
 		}
+	}
+	if !execSubmit {
+		t.Fatalf("the systemd ExecStart must carry --submit")
 	}
 	for _, artifact := range []string{string(plist), string(service)} {
 		if !strings.Contains(artifact, "reconcile") || !strings.Contains(artifact, "scheduled") {

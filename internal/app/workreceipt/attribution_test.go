@@ -163,10 +163,14 @@ func TestMatchDecisionDocumentDeterministic(t *testing.T) {
 	}
 }
 
-// TestE8AuditClassifyErrorStaysMaterial pins the T1 deferred finding:
-// an OutsideScope predicate error never marks a path immaterial — the
-// receipt-scope rule fails safe against provenance.
-func TestE8AuditClassifyErrorStaysMaterial(t *testing.T) {
+// TestInScopeUnobservedReceiptPathStaysExtra pins the receipt-scope
+// rule's conservative half: an unobserved receipt path the predicate
+// calls in-scope stays unresolved extra provenance. (Honest rename of
+// the former TestE8AuditClassifyErrorStaysMaterial — the bool
+// predicate carries no error channel to exercise here; the
+// error-capable arm of the scope predicate is its construction, pinned
+// at the CLI boundary by TestE9T4ScopePredicateErrorFailsClosed.)
+func TestInScopeUnobservedReceiptPathStaysExtra(t *testing.T) {
 	evidence := ReceiptEvidence{
 		ReceiptID: "rcpt-audit", Changes: []changeEntry{{Path: "Notes/x.md"}},
 		OutsideScope: func(path string) bool {

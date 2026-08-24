@@ -9,8 +9,13 @@ import (
 
 // TestE8T4DoctorReportsUnreadableRoot proves H-4's access probe: a
 // chmod-000 resource root produces the error-severity finding and a
-// nonzero doctor exit — the stat-only probe passed it silently.
+// nonzero doctor exit — the stat-only probe passed it silently. Root
+// bypasses directory permissions, so the probe cannot be exercised
+// under it (E9-T4 confirmation observation).
 func TestE8T4DoctorReportsUnreadableRoot(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root reads through chmod-000 directories; the unreadable-root probe needs an unprivileged run")
+	}
 	configPath, vault := e4t3Fixture(t)
 	if err := os.Chmod(vault, 0o000); err != nil {
 		t.Fatal(err)

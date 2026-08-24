@@ -70,19 +70,12 @@ func TestContentFingerprintGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The golden never self-heals (E9-T4, L-6): a missing file is a
+	// failure, never a regeneration.
 	golden := filepath.Join("testdata", "content-fingerprint.golden")
-	if _, err := os.Stat(golden); os.IsNotExist(err) {
-		if err := os.MkdirAll("testdata", 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(golden, []byte(got.String()+"\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		return
-	}
 	want, err := os.ReadFile(golden)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("the fingerprint golden must exist and never regenerate: %v", err)
 	}
 	if !bytes.Equal([]byte(got.String()+"\n"), want) {
 		t.Fatalf("fingerprint drifted cross-platform or across runs: got %s want %s", got, want)
@@ -121,17 +114,13 @@ func TestIdempotencyKeyGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The golden never self-heals (E9-T4, L-6): a missing file is a
+	// failure, never a regeneration.
 	golden := filepath.Join("testdata", "idempotency-key.golden")
-	if _, err := os.Stat(golden); os.IsNotExist(err) {
-		if err := os.MkdirAll("testdata", 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(golden, []byte(key+"\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		return
+	want, err := os.ReadFile(golden)
+	if err != nil {
+		t.Fatalf("the idempotency-key golden must exist and never regenerate: %v", err)
 	}
-	want, _ := os.ReadFile(golden)
 	if !bytes.Equal([]byte(key+"\n"), want) {
 		t.Fatalf("key drifted: got %s want %s", key, want)
 	}

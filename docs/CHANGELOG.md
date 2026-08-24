@@ -1,5 +1,16 @@
 # SOT Changelog
 
+## 1.0.40 - 2026-08-24
+
+E9-T4: test-coverage hardening:
+
+- the member-task coverage deferrals land as executing tests: path-fact load failure degrades the attribution conservatively with the degradation recorded (T1-F002), a pending reconciliation on an IDLE route is delivered as one follow-up through the next completion (T1-F005), the service-level failure-budget mirror resolves an exhausted budget through UNCERTAIN end to end (T1-F006), and the over-budget UNCERTAIN route resolves through operator reconciliation to IDLE (T1-F007);
+- the scheduled recipes carry --submit (T2-F001: the runbook's automatic-recovery leg); the two-key gate is the safety boundary — before the production acknowledgement the route fails closed at exit 14, and after it a configuration-disabled route persists decisions and recovers without submitting (cli-spec §9, the installation and observability passages, and the VALIDATION checklist all state the posture; the YAML-key leg is pinned by test);
+- the migration-lock test pins steal prevention rather than the mtime proxy (T2-F002), the three submit surfaces share one runtime constructor whose lease-TTL derivation is asserted (T2-F003/F004), and ungated recovery on a disabled route is pinned (T2-F005);
+- the confirmation observations land (the misnamed classify-error test renamed to what it pins, the real error arm — uncompilable scope patterns — fails the work commands closed; doctor's unreadable-root test self-skips under root);
+- the three self-healing goldens now fail on absence (L-6) and the skill-renderer cross-check pins the rendered instruction against the assigned skills and the work-command flag surface (L-23);
+- the load-sensitive 1s stub deadlines are raised to 10s and the suite passes twice consecutively under -count=1 with coverage (M-25 residual).
+
 ## 1.0.39 - 2026-08-24
 
 E9-T3: security, observability, and revision hygiene:

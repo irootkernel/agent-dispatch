@@ -189,6 +189,21 @@ var webhookClientFactory = func(timeout time.Duration) hermeswebhook.HTTPClient 
 	return hermeswebhook.NewStrictClient(timeout)
 }
 
+// newSubmitRuntime assembles the one submission-runtime shape shared by
+// the three submit surfaces (dispatch, drain, reconcile --submit): the
+// attempt lease TTL derives from the target's submit timeout at every
+// site (E8-T2/M-1; the shared constructor is the E9-T4 pin for the
+// T2-F003/F004 wiring — a site cannot drift from the derivation
+// without leaving it).
+func newSubmitRuntime(store storeOp, sink ports.Sink, cfg *config.Config, target config.Target, backoff dispatch.Backoff, actor string, stderr io.Writer) *dispatch.Runtime {
+	return &dispatch.Runtime{
+		Store: store, Sink: sink, Now: time.Now,
+		LeaseTTL: leaseTTLFor(target.SubmitTimeout), Backoff: backoff, JitterUnit: jitterUnit, Actor: actor,
+		Log: opsLogger(stderr, cfg), TraceID: globalTraceID,
+		StalenessCheck: stalenessCheckOf(cfg), StaleRebuilder: staleRebuilderOf(store, cfg),
+	}
+}
+
 // resolveSink looks up and gates the sink adapter for one route target
 // (E4-T3, E6-T1). The hermes-kanban sink is constructed from the operator
 // configuration, its frozen capability report is validated against the

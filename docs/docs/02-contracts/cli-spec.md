@@ -250,7 +250,7 @@ agent-dispatch reconcile \
   [--submit]
 ```
 
-Default behavior persists the current-state reconciliation decision. `--submit` attempts an eligible intent and then drains the route's other due work (bounded), so a pending follow-up generation reaches the target on the scheduled path without a manual drain (E7-T2); an accepted follow-up is promoted to the route's active task at acceptance. A route whose activation state is not `enabled` fails closed with the state-conflict classification (`transition_invalid`, exit 14), never a storage failure. Installed scheduled recipes may include `--submit` only after the production gate.
+Default behavior persists the current-state reconciliation decision. `--submit` attempts an eligible intent and then drains the route's other due work (bounded), so a pending follow-up generation reaches the target on the scheduled path without a manual drain (E7-T2); an accepted follow-up is promoted to the route's active task at acceptance. A route whose activation state is not `enabled` fails closed with the state-conflict classification (`transition_invalid`, exit 14), never a storage failure. The installed scheduled recipes carry `--submit` unconditionally (E9-T4/T2-F001): the two-key gate is the safety boundary — before the production acknowledgement the route fails closed at exit 14 as above, and after it a route disabled in configuration (the YAML key) persists its reconciliation decisions and recovers without submitting.
 
 ## 10. Status and Doctor
 

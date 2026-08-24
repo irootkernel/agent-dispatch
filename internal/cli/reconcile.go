@@ -187,10 +187,5 @@ func (a *reconcileArtifacts) submitRuntime(store storeOp) (*dispatch.Runtime, po
 	if err != nil {
 		return nil, nil, dispatch.Backoff{}, err
 	}
-	return &dispatch.Runtime{
-		Store: store, Sink: sink, Now: time.Now,
-		LeaseTTL: leaseTTLFor(a.target.SubmitTimeout), Backoff: backoff, JitterUnit: jitterUnit, Actor: "reconcile",
-		Log: opsLogger(a.stderr, a.cfg), TraceID: globalTraceID,
-		StalenessCheck: stalenessCheckOf(a.cfg), StaleRebuilder: staleRebuilderOf(store, a.cfg),
-	}, sink, backoff, nil
+	return newSubmitRuntime(store, sink, a.cfg, a.target, backoff, "reconcile", a.stderr), sink, backoff, nil
 }

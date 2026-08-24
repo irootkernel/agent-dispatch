@@ -63,7 +63,7 @@
 ## Operations
 
 - [x] `doctor`, `status`, inspection, retry, reprocess, rerun, discard, reconcile, quarantine, and maintenance commands work (E7-T5/E7-T7 completed the surface).
-- [x] Retention dry-run and prune preserve unresolved lineage (and begun receipts, E7-T9).
+- [x] Retention dry-run and prune preserve unresolved lineage (and begun receipts while their dispatch is unresolved or holds the active slot; begun receipts prune with a terminal lineage past retention, E9 epic validation round-1 F001).
 - [x] Watchman install/status/remove is idempotent.
 - [x] `launchd` and `systemd --user` scheduled reconciliation examples are tested (make schedule-check on each platform; systemd verified where the tool exists).
 - [x] Upgrade and uninstall procedures are documented.

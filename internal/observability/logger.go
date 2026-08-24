@@ -169,6 +169,11 @@ func New(w io.Writer, level Level, paths PathPolicy) *Logger {
 }
 
 // Enabled reports whether the level passes the filter.
+// denylisted reports whether a data key is redacted regardless of case
+// (SEC-007); the one check both map arms share so they cannot drift
+// (epic round-3 F002).
+func denylisted(key string) bool { return redactedKeys[strings.ToLower(key)] }
+
 func (l *Logger) Enabled(level Level) bool { return level >= l.level }
 
 // Log emits one event if the level passes. message is human context;
@@ -252,7 +257,7 @@ func sanitize(c Correlation, policy PathPolicy) map[string]any {
 func sanitizeMap(data map[string]any, policy PathPolicy) map[string]any {
 	out := make(map[string]any, len(data))
 	for k, v := range data {
-		if redactedKeys[strings.ToLower(k)] {
+		if denylisted(k) {
 			out[k] = "[redacted]"
 			continue
 		}
@@ -280,7 +285,7 @@ func sanitizeValue(v any, policy PathPolicy) any {
 		// key check is the round-1 security remediation).
 		out := make(map[string]string, len(t))
 		for k, v := range t {
-			if redactedKeys[k] {
+			if denylisted(k) {
 				out[k] = "[redacted]"
 				continue
 			}

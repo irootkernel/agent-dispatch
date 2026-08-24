@@ -145,7 +145,8 @@ func (s *Store) PlanPrune(ctx context.Context, cutoffs PruneCutoffs) (PrunePlan,
 	}
 	var err error
 	// The plan mirrors the execution guards exactly (the active slot and
-	// begun receipts never count; E8-T4, H-3).
+	// unresolved dispatches never count; E8-T4, H-3, with begun receipts
+	// prunable on terminal dispatches — E9 epic validation round-1 F001).
 	// The JOIN'd plan queries alias the guard's dispatch_id to the
 	// joined table (the shared constant's bare name is ambiguous here).
 	attemptSlot := ` AND a.dispatch_id NOT IN (SELECT active_dispatch_id FROM route_runtime_state WHERE active_dispatch_id IS NOT NULL)`
@@ -159,7 +160,7 @@ func (s *Store) PlanPrune(ctx context.Context, cutoffs PruneCutoffs) (PrunePlan,
 		return plan, err
 	}
 	if plan.Counts.WorkReceipts, err = count("work receipt",
-		`SELECT COUNT(*) FROM work_receipts WHERE submitted_at < ? AND status != 'begun'`+notActiveSlotSQL, c.CompletedReceipts); err != nil {
+		`SELECT COUNT(*) FROM work_receipts WHERE submitted_at < ? AND dispatch_id IN (SELECT dispatch_id FROM dispatch_intents WHERE state IN `+terminal+`)`+notActiveSlotSQL, c.CompletedReceipts); err != nil {
 		return plan, err
 	}
 	if plan.Counts.Intents, err = count("intent",
@@ -255,22 +256,31 @@ func (s *Store) ExecutePrune(ctx context.Context, cutoffs PruneCutoffs, actor, r
 		n, err := res.RowsAffected()
 		return n, err
 	}
+	// The terminal-lineage guard every record delete shares (the E9-T2
+	// convention of one shared predicate; the epic round-3 F001 remediation
+	// removed the last inline duplication).
+	terminalLineage := `dispatch_id IN (SELECT dispatch_id FROM dispatch_intents WHERE state IN ` + terminal + `)`
 	// The active-slot guard applies to every lineage delete via the
 	// shared predicate (E8-T4, H-3/AC-503; E9-T2/T4-F005 shares it
 	// between plan and execution).
 	if counts.Attempts, err = exec("attempts",
-		`DELETE FROM dispatch_attempts WHERE completed_at IS NOT NULL AND completed_at < ? AND dispatch_id IN (SELECT dispatch_id FROM dispatch_intents WHERE state IN `+terminal+`)`+notActiveSlotSQL, c.Attempts); err != nil {
+		`DELETE FROM dispatch_attempts WHERE completed_at IS NOT NULL AND completed_at < ? AND `+terminalLineage+notActiveSlotSQL, c.Attempts); err != nil {
 		return counts, err
 	}
 	if counts.Receipts, err = exec("receipts",
-		`DELETE FROM dispatch_receipts WHERE received_at < ? AND dispatch_id IN (SELECT dispatch_id FROM dispatch_intents WHERE state IN `+terminal+`)`+notActiveSlotSQL, c.CompletedReceipts); err != nil {
+		`DELETE FROM dispatch_receipts WHERE received_at < ? AND `+terminalLineage+notActiveSlotSQL, c.CompletedReceipts); err != nil {
 		return counts, err
 	}
-	// A begun receipt is the attribution anchor of an in-flight run:
-	// it is never pruned, whatever its age (FBK-002/FBK-003,
-	// E7-T9/M-20), and an active slot's receipts never prune either.
+	// A begun receipt is the attribution anchor of an in-flight run and
+	// never prunes while its dispatch is unresolved or holds the active
+	// slot (FBK-002/FBK-003, E7-T9/M-20): a running dispatch is never in
+	// the terminal set, and the active-slot guard covers the rest. On a
+	// TERMINAL dispatch past retention the begun receipt prunes with
+	// everything else — otherwise its un-cascaded foreign key blocks the
+	// intent delete and wedges the whole prune (E9 epic validation
+	// round-1 F001).
 	if counts.WorkReceipts, err = exec("work receipts",
-		`DELETE FROM work_receipts WHERE submitted_at < ? AND status != 'begun'`+notActiveSlotSQL, c.CompletedReceipts); err != nil {
+		`DELETE FROM work_receipts WHERE submitted_at < ? AND `+terminalLineage+notActiveSlotSQL, c.CompletedReceipts); err != nil {
 		return counts, err
 	}
 	// Intents only when nothing remains to orphan: no surviving

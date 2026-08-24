@@ -60,3 +60,17 @@ func TestE9T3MapValuePathSanitization(t *testing.T) {
 		t.Fatalf("ordinary keys keep their values, got %v", auth)
 	}
 }
+
+// TestE9ValidationTypedMapDenylistCaseFolds pins the epic round-1 F002
+// fix: the typed-map denylist matches case-insensitively like the
+// untyped map — Token denies exactly like token.
+func TestE9ValidationTypedMapDenylistCaseFolds(t *testing.T) {
+	var buf bytes.Buffer
+	log := New(&buf, LevelInfo, PathsFull)
+	log.Info("test.case_fold", Correlation{}, "mixed-case keys deny", map[string]any{
+		"auth": map[string]string{"Token": "hunter2"},
+	})
+	if strings.Contains(buf.String(), "hunter2") {
+		t.Fatalf("a mixed-case denylisted key must still deny: %s", buf.String())
+	}
+}

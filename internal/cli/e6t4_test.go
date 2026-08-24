@@ -362,7 +362,8 @@ func TestG5AC506ReleaseArtifactsPresent(t *testing.T) {
 		}
 	}
 	// The release artifacts: when dist/ exists it carries exactly the
-	// two shipped binaries and one SHA256SUMS line per artifact.
+	// one shipped darwin/arm64 binary (the only supported platform,
+	// D-023) and one SHA256SUMS line per artifact.
 	dist := filepath.Join(root, "dist")
 	if _, err := os.Stat(dist); err == nil {
 		sums, rerr := os.ReadFile(filepath.Join(dist, "SHA256SUMS"))
@@ -375,8 +376,8 @@ func TestG5AC506ReleaseArtifactsPresent(t *testing.T) {
 				lines++
 			}
 		}
-		if lines < 2 {
-			t.Fatalf("AC-506: SHA256SUMS must carry one line per artifact, got %d: %q", lines, string(sums))
+		if lines != 1 {
+			t.Fatalf("AC-506: SHA256SUMS must carry exactly the one darwin/arm64 artifact under the D-023 policy, got %d: %q", lines, string(sums))
 		}
 		for _, l := range strings.Split(strings.TrimSpace(string(sums)), "\n") {
 			fields := strings.Fields(l)

@@ -7,19 +7,19 @@
 | Requirement group | Citing tasks | Final verification |
 |---|---|---|
 | `BND-*` | E0-T1, E0-T4, E5-T2 | E6-T4 |
-| `CLI-*` | E1-T1, E2-T4, E3-T3, E5-T1, E5-T4, E6-T2, E7-T5, E7-T6, E7-T11, E8-T1, E8-T2, E8-T4 | E6-T4 |
+| `CLI-*` | E1-T1, E2-T4, E3-T3, E5-T1, E5-T4, E6-T2, E7-T5, E7-T6, E7-T11, E8-T1, E8-T2, E8-T4, E9-T2 | E6-T4 |
 | `CON-*` | E3-T1, E3-T4, E5-T3, E5-T5, E7-T2, E8-T1, E8-T3 | E5-T5 |
-| `DAT-*` | E0-T2, E1-T3, E1-T4, E2-T3, E7-T8, E7-T11, E8-T1, E8-T5 | E3-T5 |
+| `DAT-*` | E0-T2, E1-T3, E1-T4, E2-T3, E7-T8, E7-T11, E8-T1, E8-T5, E9-T1 | E3-T5 |
 | `DUR-*` | E0-T2, E1-T4, E3-T1, E3-T2, E3-T3, E3-T5, E4-T3, E4-T5, E7-T2, E7-T6, E7-T7, E8-T2 | E3-T5, E4-T5 |
 | `FBK-*` | E0-T2, E3-T4, E5-T1, E5-T2, E5-T3, E5-T5, E7-T2, E7-T9, E8-T1 | E5-T5 |
 | `HER-*` | E0-T2, E0-T4, E4-T1, E4-T2, E4-T3, E4-T4, E4-T5, E7-T8, E7-T9, E8-T3 | E4-T5, E6-T4 |
-| `OPS-*` | E1-T2, E1-T4, E2-T5, E3-T5, E4-T4, E5-T4, E6-T2, E6-T3, E7-T2, E7-T5, E7-T6, E7-T7, E7-T9, E7-T11, E8-T2, E8-T4 | E6-T4 |
-| `POL-*` | E1-T2, E2-T4, E5-T4, E7-T3, E7-T6, E8-T3 | E5-T5 |
-| `PTH-*` | E1-T2, E2-T2, E2-T3, E5-T4, E7-T3, E7-T6, E7-T9, E8-T5 | E2-T5, E5-T5 |
+| `OPS-*` | E1-T2, E1-T4, E2-T5, E3-T5, E4-T4, E5-T4, E6-T2, E6-T3, E7-T2, E7-T5, E7-T6, E7-T7, E7-T9, E7-T11, E8-T2, E8-T4, E9-T1, E9-T2, E9-T3 | E6-T4 |
+| `POL-*` | E1-T2, E2-T4, E5-T4, E7-T3, E7-T6, E8-T3, E9-T3 | E5-T5 |
+| `PTH-*` | E1-T2, E2-T2, E2-T3, E5-T4, E7-T3, E7-T6, E7-T9, E8-T5, E9-T2 | E2-T5, E5-T5 |
 | `SCP-*` | E0-T1, E1-T1, E1-T2, E1-T4, E2-T3, E6-T3, E7-T1, E7-T4, E7-T9, E7-T10, E8-T5 | E6-T3, E6-T4 |
-| `SEC-*` | E0-T2, E1-T2, E2-T1, E2-T2, E2-T4, E4-T1, E4-T2, E5-T1, E6-T1, E6-T2, E7-T3, E7-T9, E7-T11, E8-T3, E8-T4, E8-T5 | E5-T5, E6-T4 |
-| `SRC-*` | E0-T5, E2-T1, E2-T3, E2-T5, E5-T4, E7-T8, E7-T9, E8-T5 | E2-T5, E6-T3 |
-| `TST-*` | E0-T3, E0-T4, E0-T5, E1-T1, E1-T3, E1-T4, E2-T1, E2-T3, E2-T4, E2-T5, E3-T1, E3-T2, E3-T3, E3-T5, E4-T3, E4-T5, E5-T5, E7-T1, E7-T4, E7-T10, E8-T3 | E6-T4 |
+| `SEC-*` | E0-T2, E1-T2, E2-T1, E2-T2, E2-T4, E4-T1, E4-T2, E5-T1, E6-T1, E6-T2, E7-T3, E7-T9, E7-T11, E8-T3, E8-T4, E8-T5, E9-T3 | E5-T5, E6-T4 |
+| `SRC-*` | E0-T5, E2-T1, E2-T3, E2-T5, E5-T4, E7-T8, E7-T9, E8-T5, E9-T2 | E2-T5, E6-T3 |
+| `TST-*` | E0-T3, E0-T4, E0-T5, E1-T1, E1-T3, E1-T4, E2-T1, E2-T3, E2-T4, E2-T5, E3-T1, E3-T2, E3-T3, E3-T5, E4-T3, E4-T5, E5-T5, E7-T1, E7-T4, E7-T10, E8-T3, E9-T4 | E6-T4 |
 | `WHK-*` | E6-T1, E7-T11 | E6-T4 |
 
 E6-T4 additionally cites every requirement group as the release gate

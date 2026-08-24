@@ -3,18 +3,18 @@
 > **Roadmap version:** 1.0  
 > **Release target:** v0.1.0  
 > **Execution model:** Strictly linear, one active task globally  
-> **Epics:** 9  
-> **Tasks:** 51
+> **Epics:** 10  
+> **Tasks:** 56
 
 ## 1. Current State
 
 | Field | Value |
 |---|---|
-| Current epic | None (E8 complete; see the epic validation audit) |
+| Current epic | E9 (hardening, D-021) |
 | Current active task | None |
-| Next task | None (E8 sequence complete) |
-| Completed tasks | 51 / 51 |
-| Planned tasks | 0 / 51 |
+| Next task | E9-T1 |
+| Completed tasks | 51 / 56 |
+| Planned tasks | 5 / 56 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -34,6 +34,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | E6 | Hermes Webhook, Operations, Packaging, and v0.1 Release | **Completed** | 4 | G5 |
 | E7 | MVP Compliance Review Remediation | **Completed** | 12 | MUST closure + v0.1.1 |
 | E8 | v0.1.2 Compliance Remediation | **Completed** | 6 | MUST closure + v0.1.2 |
+| E9 | Deferred-Inventory Hardening | Planned | 5 | Deferred closure + v0.1.3 |
 
 ## 3. Task Status Index
 
@@ -90,6 +91,11 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 49 | E8-T4 | Completed | Unresolved lineage preserved; doctor made trustworthy |
 | 50 | E8-T5 | Completed | Input containment and configuration validation gaps closed |
 | 51 | E8-T6 | Completed | Documentation truth restored and v0.1.2 released |
+| 52 | E9-T1 | Planned | Record schema truth and storage hardening |
+| 53 | E9-T2 | Planned | Reconciliation and operator-surface hardening |
+| 54 | E9-T3 | Planned | Security, observability, and revision hygiene |
+| 55 | E9-T4 | Planned | Test-coverage hardening |
+| 56 | E9-T5 | Planned | Documentation truth, dependency, and the v0.1.3 release |
 
 ---
 
@@ -2159,9 +2165,191 @@ The validation audit reconciled the deferred findings (32 recorded in the commit
 
 ---
 
+# E9: Deferred-Inventory Hardening
+
+**Epic status:** Planned  
+**Purpose:** Close the hardening inventory E8 recorded for the next cycle (D-021): the four Deferred mediums, the resolution remainders, the seventeen Deferred lows, the member-task test-coverage deferrals, and the documentation sub-wording items — every remaining D-020 disposition that is not a maintained exception or a D-018 acceptance.  
+**Gate:** every D-020 row reads Fixed, maintained exception, or explicit D-018 acceptance — with the whole-epic review (diff from 148bf57, covering the E8 correction delta) converged and v0.1.3 released from the tagged tree.
+
+## E9-T1: Record Schema Truth and Storage Hardening
+
+**Status:** Planned  
+**Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
+
+### Objective
+
+Make the CLI's record emissions match the published record schemas, land the revision columns the schema claim once promised, and harden the storage pragmas and migration backup behavior.
+
+### Deliverables
+
+- `dispatches show` emits schema-conformant records: `schema_version` on attempt and receipt records, the six missing required members on the intent summary (`schema_version`, `decision_id`, `route{id,revision}`, `resource_id`, `content_fingerprint`, `request`), and a derived dead-letter-record view when the dispatch is dead-lettered (M-16); a schema↔emission lockstep test pins the alignment;
+- migration v7 adds `route_revision` to `dispatch_attempts`, `dispatch_receipts`, `work_receipts`, and `quarantine_items` (written from the intent's revision at insert, backfilled by join), and the schema comment's "recorded design choice" wording yields to the delivered columns (M-17);
+- the `foreign_keys`, `busy_timeout`, and `synchronous=FULL` pragmas move into the DSN so every pooled connection re-applies them (L-16);
+- one verified backup per migration run instead of one per pending unit (L-20);
+- `PruneCutoffs` and the watchman test envelope's `changes[]` carry snake_case json tags (L-10), with goldens updated.
+
+### Requirements
+
+`DAT-004`, `DAT-007`, `DAT-009`, `OPS-008`
+
+### Dependencies
+
+D-021 recorded; E8 complete.
+
+### Acceptance
+
+- every required member of the four published record schemas is emitted by the owning CLI view, pinned by the lockstep test;
+- a fresh open at v0 migrates to v7 with the backfill verified and the backup taken once;
+- `make verify` green including the updated goldens.
+
+### Evidence
+
+Pending (E9-T1 not started).
+
+## E9-T2: Reconciliation and Operator-Surface Hardening
+
+**Status:** Planned  
+**Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
+
+### Objective
+
+Close the reconciliation enumeration symlink defect, the Watchman-context refusal, and the operator-surface gaps the review recorded as deferred.
+
+### Deliverables
+
+- the reconciliation walk resolves symlinks: an escaping symlink lands in the skipped list with a warning and never projects as an exists-fact or `FileRegular` in an automatic task manifest (M-24);
+- the WalkDir file-error prefix records the file, not `rel+"/"`, so siblings are not mislabeled Removed (L-8);
+- `maintenance prune/vacuum --yes` refuses to run with `WATCHMAN_TRIGGER` or `WATCHMAN_ROOT` in the environment (CLI-007, M-21; exit 2 usage refusal, no registry change);
+- `config show` accepts `--output json` (L-11) and the work commands on an unknown dispatch write their invalid-receipt audit row (L-7);
+- the prune plan/execute guards share one predicate (T4-F005), the route-stale precondition becomes a store-level eligibility rule (T4-F006), and the dead self-assignment at the doctor boundary is removed (T4-F007).
+
+### Requirements
+
+`PTH-002`, `SRC-005`, `OPS-006`, `CLI-007`, `CLI-008`
+
+### Dependencies
+
+E9-T1 Completed.
+
+### Acceptance
+
+- an escaping symlink in the vault produces a reconciliation warning and no `FileRegular` diff entry;
+- `maintenance prune --yes` under a Watchman environment exits 2 without touching the store;
+- `make verify` green including the reconciliation symlink regression test.
+
+### Evidence
+
+Pending (E9-T2 not started).
+
+## E9-T3: Security, Observability, and Revision Hygiene
+
+**Status:** Planned  
+**Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
+
+### Objective
+
+Close the sanitization, secret-ownership, and observability remainders, and complete the revision projection's transport fields.
+
+### Deliverables
+
+- `sanitizeValue` covers `map[string]string` values (M-20's remainder);
+- secret file references check ownership alongside the mode bits (L-15);
+- `work.begun`, `work.completed`, and `work.receipt_invalid` events are emitted at the work command sites and doctor findings carry `trace_id` (L-17);
+- the revision projection gains the transport fields (`executable`, `submit_timeout`, `environment_allowlist`, and the manifest byte bound), so replacing the target binary or its bounds pauses the acknowledged route like any behavior change (T3-F006; configuration-spec §13 amended);
+- a suppressed `--mutex-key` logs a warning at submission (T3-F007);
+- a distinct policy-revision digest is computed in the config package and recorded on decisions from plan, quarantine-release, and reconcile (L-18).
+
+### Requirements
+
+`SEC-006`, `SEC-007`, `OPS-001`, `POL-007`
+
+### Dependencies
+
+E9-T2 Completed.
+
+### Acceptance
+
+- map values and unsanitized message fields cannot leak credential shapes (adversarial test extended);
+- changing only the executable or submit timeout changes the computed route revision;
+- decisions carry a policy revision distinct from the route revision where the subsets differ.
+
+### Evidence
+
+Pending (E9-T3 not started).
+
+## E9-T4: Test-Coverage Hardening
+
+**Status:** Planned  
+**Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
+
+### Objective
+
+Pin the test-coverage deferrals the E8 member tasks recorded, harden the load-sensitive tests, and correct the two confirmation-review observations.
+
+### Deliverables
+
+- the deferred coverage proofs land: path-fact load failure (T1-F002), pending-reconcile delivery after an IDLE-slot merge (T1-F005), the service-level budget mirror (T1-F006), over-budget resolution end to end (T1-F007), the scheduled recipes carrying `--submit` (T2-F001), heartbeat steal-prevention end to end (T2-F002), leaseTTL wiring assertions at the three runtime sites (T2-F003/F004), and the ungated-recovery posture pin (T2-F005);
+- `ActiveDispatchAgeNanos` distinguishes no-active-dispatch, unreadable, and measured states (T4-F004) and the two load-sensitive tests stop flaking under full-parallel coverage (M-25);
+- `TestE8AuditClassifyErrorStaysMaterial` matches the real predicate contract (an error-capable scope predicate or an honest rename; the confirmation-review observation) and `TestE8T4DoctorReportsUnreadableRoot` self-skips under root;
+- the three self-healing goldens fail when the golden is missing (L-6) and a skill↔renderer task-variable cross-check test lands (L-23).
+
+### Requirements
+
+`TST-001`, `TST-002`, `TST-009`
+
+### Dependencies
+
+E9-T3 Completed.
+
+### Acceptance
+
+- every listed deferral carries an executing, named test;
+- the full suite passes twice consecutively under `-count=1` with coverage instrumentation without timing failures;
+- the goldens fail on absence instead of regenerating.
+
+### Evidence
+
+Pending (E9-T4 not started).
+
+## E9-T5: Documentation Truth, Dependency, and the v0.1.3 Release
+
+**Status:** Planned  
+**Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
+
+### Objective
+
+Close the documentation sub-wording items, the dependency advisory, and release v0.1.3 from the validated tree.
+
+### Deliverables
+
+- the documentation items: observability §3 lists the events actually emitted, §5 documents `--output json` with the real status payload, §7 names the offline construction gate (not a capability match); the roadmap E4-T5 gains its Evidence section and E5-T4 lists all nine reason values; configuration-spec §9 states the multiplier maximum 10.0 and §7/§8 note the inert `unsafe_path_action` and `git.mode` keys (L-3); the error-model §2 exit-13 wording matches the code; the reserved error codes are tabulated as reserved (L-21); SCP-001's certification posture is noted (L-25) and `.markdown` is documented (L-26);
+- the `golang.org/x/text` indirect dependency is bumped (GO-2026-5970) or the offline constraint is recorded (L-27);
+- the whole-epic validation review runs over the diff from 148bf57 — covering the E8 correction delta and all of E9 — through the 3+1 round budget;
+- `make release VERSION=v0.1.3` twice byte-identical, the `v0.1.3` tag at the final tree, RELEASE-NOTES-v0.1.3 disclosing the hardening and the TST-008 gate remaining disabled; the epic closeout reconciles every D-021 inventory item to its final disposition.
+
+### Requirements
+
+All `BND-*` through `WHK-*` requirements.
+
+### Dependencies
+
+E9-T4 Completed.
+
+### Acceptance
+
+- every D-020/D-021 dispositioned item reads Fixed, maintained exception, or explicit acceptance in the final record;
+- v0.1.3 artifacts are byte-reproducible and tagged;
+- roadmap tasks E9-T1 through E9-T5 are Completed.
+
+### Evidence
+
+Pending (E9-T5 not started).
+
+---
+
 # 4. Deferred Future Work
 
-The following do not count toward the 51 tracked roadmap tasks (33 v0.1 feature tasks, 12 E7 remediation tasks, and 6 E8 remediation tasks) and remain Deferred until a new roadmap is approved:
+The following do not count toward the 56 tracked roadmap tasks (33 v0.1 feature tasks, 12 E7, 6 E8, and 5 E9 remediation tasks) and remain Deferred until a new roadmap is approved:
 
 - Agent Dispatch managed daemon;
 - multi-vault production certification and global budgets;

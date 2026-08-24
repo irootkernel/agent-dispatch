@@ -1,5 +1,13 @@
 # SOT Changelog
 
+## 1.0.36 - 2026-08-24
+
+D-021: the hardening inventory is accepted and epic E9 is registered:
+
+- the four Deferred mediums, the resolution remainders, the seventeen Deferred lows, the member-task test-coverage deferrals, and the documentation sub-wording items become E9's five tasks (10 epics, 56 tasks) closing with the v0.1.3 patch release;
+- the M-8 recrawl exception stands, the D-018 Accepted dispositions (L-13, L-14) are not reopened, and the E8 round-2 T6-F003 premise is dispositioned as invalid (the root-level review file is untracked by design);
+- E9's validation review covers the diff from 148bf57, so the E8 correction delta rides into reviewed evidence with it.
+
 ## 1.0.35 - 2026-08-24
 
 E8 correction pass (operator audit of the D-020 finding index against the tree):

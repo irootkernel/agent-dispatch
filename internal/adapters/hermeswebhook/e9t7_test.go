@@ -33,7 +33,7 @@ func TestE9T7HeaderNameGrammar(t *testing.T) {
 			t.Fatalf("idempotency_header %q must be rejected as a ConfigError, got %v", name, err)
 		}
 	}
-	for _, name := range []string{"X-Request-Id", "a#!$%&b", "X_Own~Path", "A+B.C^D", "t`t", "0123456789ABCDEF"} {
+	for _, name := range []string{"X-Request-Id", "a#!$%&b", `a'b`, "x*y", "p|q", "X_Own~Path", "A+B.C^D", "t`t", "0123456789ABCDEF"} {
 		opts := Options{TargetID: "hook", AuthType: "header", AuthHeaderName: name, SecretRef: "env:X", Endpoint: "https://example.invalid/hook"}
 		if _, err := NewSink(opts); err != nil {
 			t.Fatalf("a valid tchar auth.header_name %q must construct: %v", name, err)

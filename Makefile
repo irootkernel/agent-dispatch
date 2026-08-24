@@ -12,7 +12,8 @@ LDFLAGS := -X $(PKG)/internal/version.Version=$(VERSION) \
            -X $(PKG)/internal/version.BuildTime=$(BUILDTIME)
 
 .PHONY: all build test test-race vet fmt-check staticcheck check-imports \
-        go-version-check manifest-check schema-validation traceability verify clean
+        go-version-check manifest-check schema-validation traceability \
+        schedule-check verify release clean
 
 all: build
 

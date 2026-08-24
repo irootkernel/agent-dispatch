@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/irootkernel/agent-dispatch/internal/testsupport/hermesenv"
 )
 
 // stubVersionHermes emits the frozen version first line for --version.
@@ -190,16 +192,14 @@ func TestRealHermesProbeIfAvailable(t *testing.T) {
 	if err != nil {
 		t.Skip("hermes binary not available")
 	}
-	// An installed Hermes outside the verified support set is the same
-	// environment-dependent evidence gap as an absent binary (TST-007):
-	// the probe's guarantees are recorded only for the verified set, and
-	// widening it is a fresh E0-T4 probe, not a test assertion.
-	if verOut, verr := exec.Command(bin, "--version").Output(); verr == nil {
-		firstLine := strings.SplitN(strings.TrimSpace(string(verOut)), "\n", 2)[0]
-		if ver, perr := ParseVersionOutput(firstLine); perr == nil && !ver.Supported() {
-			t.Skipf("installed hermes %s is outside the verified support set %s (environment-dependent evidence gap, TST-007)", ver.String(), SupportedRangeText())
-		}
-	}
+	// An installed Hermes outside the verified support set skips as the
+	// same environment-dependent evidence gap as an absent binary
+	// (TST-007); the environment probe is shared through
+	// testsupport/hermesenv and the version judgment stays here.
+	hermesenv.SkipUnlessSupportedHermes(t, func(firstLine string) bool {
+		ver, perr := ParseVersionOutput(firstLine)
+		return perr == nil && ver.Supported()
+	})
 	adapter := New("hermes-local", bin, machineReport, []string{
 		"durable_acceptance", "submit_idempotency_key", "lookup_by_external_ref",
 	}, ProcessLimits{LookupTimeout: 10 * time.Second, SubmitTimeout: 20 * time.Second})

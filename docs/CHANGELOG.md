@@ -1,5 +1,12 @@
 # SOT Changelog
 
+## 1.0.43 - 2026-08-25
+
+D-023 registration (E9 reopened for the external compliance review):
+
+- the 2026-08-25 external MVP compliance review of the shipped v0.1.3 tree (one High, five Medium) is accepted in full and epic E9 reopens under the formal-audit rule with four remediation tasks: the route revision's webhook-transport blind spot and the `route enable` capability-report gap (E9-T6), the RFC 9110 header grammar and the unenforced Go 1.26.6 toolchain pin (E9-T7), the Linux surface under the new darwin/arm64-only support policy (E9-T8), and the status-surface contradictions with the v0.1.4 release (E9-T9);
+- D-023 records the macOS-only support policy that supersedes SCP-008's and AC-505's Linux verification clauses; historical release notes keep their records unchanged with the decision as the supersession authority;
+- the roadmap re-counts to 10 epics and 60 tasks; E9-T1 through E9-T5 keep their Completed status and D-022 evidence; the epic summary's stale Planned row is corrected to In Progress; v0.1.4 supersedes v0.1.3 at the re-closure.
 ## 1.0.42 - 2026-08-24
 
 E9 closeout and v0.1.3:

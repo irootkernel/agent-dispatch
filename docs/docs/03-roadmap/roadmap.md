@@ -4,22 +4,22 @@
 > **Release target:** v0.1.0  
 > **Execution model:** Strictly linear, one active task globally  
 > **Epics:** 10  
-> **Tasks:** 56
+> **Tasks:** 60
 
 ## 1. Current State
 
 | Field | Value |
 |---|---|
-| Current epic | None (E9 closed by D-022) |
+| Current epic | E9 (reopened by D-023) |
 | Current active task | None |
-| Next task | None (56/56 complete) |
-| Completed tasks | 56 / 56 |
-| Planned tasks | 0 / 56 |
+| Next task | E9-T6 |
+| Completed tasks | 56 / 60 |
+| Planned tasks | 4 / 60 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
-The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). E2-T1 delivered the bounded Watchman input parser against the frozen E0-T5 fixture corpus. E2-T2 delivered the safe path containment resolver and the deterministic pattern policy engine. E2-T3 delivered meaningful-change confirmation and batch normalization. E2-T4 delivered the structural policy planner and the side-effect-free `route plan` / `dispatch --dry-run` CLI. E2-T5 delivered the managed Watchman trigger lifecycle and closed gate G1. Epic E2 is complete: the bounded parser, safe path containment, pattern engine, batch normalization, structural policy planner, dry-run CLI, and the real Watchman trigger lifecycle were delivered, audited (one cross-task remediation commit), and validated. E3-T1 delivered the validated dispatch and route state transition services as the authoritative domain table with typed reasons, guards, and the acceptance/execution projection separation. E3-T2 delivered the durable intent commit, the attempt lease, and the fake sink port: the ingestion transaction, conditional leasing, submitting recovery, and the submit flow that proves the committed intent exists before any target invocation. E3-T3 delivered the bounded retry core, unknown reconciliation, dead-letter handling with operator actions, the dispatches and route command groups with stable exit codes, the result classifier, and the dispatch-attempt and dead-letter record contracts. E3-T4 delivered the route coordination core: one active dispatch per route under concurrency, durable dirty generations for later bursts, the merge-pending transaction, and the single latest-state follow-up collapse. E3-T5 delivered the crash-injection framework, the multi-process harness, and gate G2: AC-201 through AC-207 verified with executable evidence in docs/VALIDATION.md section Gate G2. Epic E3 is complete: the validated state machines, the durable intent commit with attempt leasing, the bounded retry and reconciliation core with operator commands, the one-active-task route coordination, and the proven crash and concurrency guarantees were delivered, audited (16 verified findings remediated in one cross-task commit), and validated with a clean re-audit. E4-T1 delivered the public Hermes Kanban CLI process adapter strictly from the E0-T4 frozen evidence: the exact-version gate (0.19.1), the read-only capability probe over the frozen report with required-capability validation, the controlled process execution (allowlisted environment, controlled working directory, closed stdin, bounded output, deadline with process-group cleanup), the typed structured response parsing for create/show/list/assignees, the frozen error-behavior classification, and the `config validate --probe-targets` surface. E4-T2 delivered the safe Hermes task request renderer: the deterministic contract title and trusted instruction template, the strictly delimited untrusted manifest JSON section, assignment/hints/workspace/mutex mapping validated from trusted route-derived request members only, the verbatim idempotency key transmission, latest-state semantics and work-receipt instructions in every rendered task, and manifest byte-bound enforcement that rejects rather than truncates, with golden tests against the frozen example request. E4-T3 connected the durable core to the target: the gated hermes sink (render, dedup-safe submission, reference lookup, honest capability boundaries), the board-binding configuration, the submit-phase CLI wiring with stable error codes, drain-time reconciliation of unknown dispatches, and both stub-based and real disposable-board integration evidence. E4-T4 delivered the acceptance-receipt and execution-projection surface: the documented version-tested Hermes status mapping with malformed statuses becoming the unknown projection, the execution-projection receipt repository and refresh service, the receipts list|show commands, the route execution projection with stale-active warnings, and the redaction-bounded inspectable payloads. E4-T5 closed gate G3: the real-trigger end-to-end harness (real binary as separate processes, real Watchman trigger, disposable Hermes board) verified AC-301 through AC-306 with executable evidence in docs/VALIDATION.md, remediated the same-second attempts-uniqueness schema defect through migration v2, and recorded the operator demo procedure. The E4 validation audit remediated its confirmed findings under their owning tasks (E3-T3 day-unit durations, E3-T2 malformed-request attempt completion) and cross-task (production route registration through the operator entry points, reconciliation identity and board scope through migration v3, receipt uniqueness, typed error classes, adapter labels, runbook) across seven epic commits, closing with five full-epic review rounds converged to zero unresolved findings and a clean from-scratch matrix. Epic E4 is complete: the version-gated adapter and capability probe, the safe request renderer with strict trusted/untrusted separation, the dedup-safe durable sink with lookup and reconciliation, the acceptance-receipt and execution-projection surfaces, and the real end-to-end gate G3 were delivered, audited, and validated with a clean re-audit. E5-T1 delivered the cooperative work-receipt surface: the `work begin|complete|fail` commands with schema-equivalent receipt validation (identity fields, closed failure-code set, digest shapes, bounded change counts), the active dispatch/resource/task lineage checks, containment-validated relative change paths through the resource resolver, durable receipt persistence with the execution projection updated in one row per run, the atomic completion transaction that collapses a dirty generation into exactly one latest-state follow-up, the failure-budget decision between a bounded follow-up and operator-required UNCERTAIN resolution, and the append-only invalid-receipt audit that never deletes evidence. E5-T2 delivered the production Hermes companion skill: the packaged agent-dispatch-wiki-maintenance skill (frontmatter, task-variable mapping, explicit latest-state and untrusted-data rules, no-receipt fallback), public-mechanism installation instructions, and disposable-profile validation through the real Hermes 0.19.1 skills and kanban surfaces — optional for core correctness, permission-free, and leaving Hermes core unchanged (BND-003, BND-004, FBK-006). E5-T3 delivered exact self-change attribution: the receipt/observation matcher with temporal-window and lineage checks, audited suppression decisions, mixed-change retention, the exact-suppression route clearing (ACTIVE_DIRTY to IDLE under receipt evidence, added to the route state machine and its SOT), and the bounded follow-up collapse proven under ten bursts and no-receipt conditions (FBK-001 through FBK-004, FBK-008, CON-002, CON-003). E5-T4 delivered the conservative structural handling: the dispatch path now persists its true disposition (quarantine holds with operator release/discard lineage, reconcile generations that never dispatch partial ordinary work, drops), the quarantine list|show|release|discard commands with JSON record contracts, and full-scope reconciliation (containment-defended enumeration, path-fact comparison, one latest-state intent on an idle route, repeated reconciliation collapsing into the single pending generation cleared by completion) — with the partial-list prohibition and collapse proven by tests and the fresh-instance gate flow updated (PTH-008, POL-005, POL-006, SRC-005, CLI-006, OPS-006, OPS-007). E5-T5 closed gate G4: the executable feedback harness verified AC-401 through AC-409 on a disposable vault (concurrent human edits, exact suppression with audit, mixed retention, the no-receipt bounded fallback, protected and fresh-instance handling, and the distinct operator semantics), the loop bounds were proven under ten-burst stress, and the production gate was explicitly reviewed — route enable now demands the acknowledgement of the exact computed route revision (the previous boolean-parsed acknowledgement value was never checked and was remediated in this gate) with the production-enable checklist recorded in docs/VALIDATION.md. The E5 validation audit re-verified the requirement-to-owner matrix and integration seams and ran the full-epic review to convergence: its confirmed findings (three real defects: a budgeted clean failure creating no follow-up intent, the reconcile intent constant content fingerprint duplicating the target idempotency key, and unreadable subtrees reported as removals; plus registry, contract, error-boundary, and coverage gaps) were remediated under their owning tasks and the epic ID across the audit commits, closing with a final complete review round at zero critical/blocker/high/medium and two low findings that were initially accepted by explicit operator decision and subsequently resolved in the post-closeout correction commit (the sorted reconciliation reason codes with a regression test, and the error-model class-5 wording), and the production gate remediated to demand the computed route revision. A post-closeout maximum-effort review round then remediated its confirmed findings under the epic ID: the UNCERTAIN operator exit through full reconciliation (the declared resolution edges were unreachable, leaving budget-exhausted routes permanently wedged), the completion-transaction refusal for an unprepared follow-up (a reconciliation arrival racing a clean completion could drop the pending signal), the AC-404 extra-receipt-path suppression block with the `receipt_extra_path` outcome, the schema-required document-form fields, storage-classified lineage failures instead of false invalid-receipt audits, the unreadable-subtree snapshot retention completing the round-20 fix, and the follow-up decision's placeholder policy revision — each with regression tests, and recorded in the SOT changelog 1.0.7. The v0.1 sequence is complete: E6 delivered the explicit webhook adapter, the operations surface, the packaging and scheduling, and the v0.1.0 release verification; all 33 tasks are Completed and gates G0-G5 are closed. The 2026-08-22 MVP compliance review (D-017) then verified the shipped package against the SOT and found 14 MUST requirement gaps — concentrated in expired-submitting recovery wiring, rerun supersession, follow-up activation, submit-path revalidation, durable path facts, the unperformed Linux verification, gate-evidence integrity, and the CLI inspection contract — so remediation epic E7 is registered with twelve tasks to correct every Blocker, High, Medium, and Low/Info finding and release v0.1.1. The 2026-08-23 second MVP compliance review (D-020) then re-verified the shipped v0.1.1 claim that every MUST requirement is PASS or explicitly excepted and found it does not hold — one Blocker in the follow-up product loop (B-1), two FAIL requirements (CON-003, POL-007), three FAIL acceptance criteria (AC-502, AC-503, AC-506), and 22 PARTIAL clauses — so remediation epic E8 is registered with six tasks to close the Blocker, the ten High findings, the mapped Medium findings, and the documentation-truth cluster, to close the now-evidenced SCP-008 Linux exception, and to release v0.1.2; the TST-008 automatic-write gate stays disabled until E8-T1 through E8-T3 are Completed.
+The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 completed against the real installed Hermes 0.19.1 (see `docs/integrations/hermes-public-interface-report.md` and `docs/integrations/hermes-capability-report.json`). E0-T5 completed against the real installed Watchman 2026.07.27.00 (see `docs/integrations/watchman-public-interface-report.md` and the frozen corpus under `docs/integrations/fixtures/watchman/`), closing epic E0 and gate G0. E1-T1 bootstrapped the Go repository, toolchain, and verification pipeline. Epic E1 is complete: the Go foundation, configuration, domain primitives, and durable schema were delivered, audited, and validated (four task commits plus audit remediations). E2-T1 delivered the bounded Watchman input parser against the frozen E0-T5 fixture corpus. E2-T2 delivered the safe path containment resolver and the deterministic pattern policy engine. E2-T3 delivered meaningful-change confirmation and batch normalization. E2-T4 delivered the structural policy planner and the side-effect-free `route plan` / `dispatch --dry-run` CLI. E2-T5 delivered the managed Watchman trigger lifecycle and closed gate G1. Epic E2 is complete: the bounded parser, safe path containment, pattern engine, batch normalization, structural policy planner, dry-run CLI, and the real Watchman trigger lifecycle were delivered, audited (one cross-task remediation commit), and validated. E3-T1 delivered the validated dispatch and route state transition services as the authoritative domain table with typed reasons, guards, and the acceptance/execution projection separation. E3-T2 delivered the durable intent commit, the attempt lease, and the fake sink port: the ingestion transaction, conditional leasing, submitting recovery, and the submit flow that proves the committed intent exists before any target invocation. E3-T3 delivered the bounded retry core, unknown reconciliation, dead-letter handling with operator actions, the dispatches and route command groups with stable exit codes, the result classifier, and the dispatch-attempt and dead-letter record contracts. E3-T4 delivered the route coordination core: one active dispatch per route under concurrency, durable dirty generations for later bursts, the merge-pending transaction, and the single latest-state follow-up collapse. E3-T5 delivered the crash-injection framework, the multi-process harness, and gate G2: AC-201 through AC-207 verified with executable evidence in docs/VALIDATION.md section Gate G2. Epic E3 is complete: the validated state machines, the durable intent commit with attempt leasing, the bounded retry and reconciliation core with operator commands, the one-active-task route coordination, and the proven crash and concurrency guarantees were delivered, audited (16 verified findings remediated in one cross-task commit), and validated with a clean re-audit. E4-T1 delivered the public Hermes Kanban CLI process adapter strictly from the E0-T4 frozen evidence: the exact-version gate (0.19.1), the read-only capability probe over the frozen report with required-capability validation, the controlled process execution (allowlisted environment, controlled working directory, closed stdin, bounded output, deadline with process-group cleanup), the typed structured response parsing for create/show/list/assignees, the frozen error-behavior classification, and the `config validate --probe-targets` surface. E4-T2 delivered the safe Hermes task request renderer: the deterministic contract title and trusted instruction template, the strictly delimited untrusted manifest JSON section, assignment/hints/workspace/mutex mapping validated from trusted route-derived request members only, the verbatim idempotency key transmission, latest-state semantics and work-receipt instructions in every rendered task, and manifest byte-bound enforcement that rejects rather than truncates, with golden tests against the frozen example request. E4-T3 connected the durable core to the target: the gated hermes sink (render, dedup-safe submission, reference lookup, honest capability boundaries), the board-binding configuration, the submit-phase CLI wiring with stable error codes, drain-time reconciliation of unknown dispatches, and both stub-based and real disposable-board integration evidence. E4-T4 delivered the acceptance-receipt and execution-projection surface: the documented version-tested Hermes status mapping with malformed statuses becoming the unknown projection, the execution-projection receipt repository and refresh service, the receipts list|show commands, the route execution projection with stale-active warnings, and the redaction-bounded inspectable payloads. E4-T5 closed gate G3: the real-trigger end-to-end harness (real binary as separate processes, real Watchman trigger, disposable Hermes board) verified AC-301 through AC-306 with executable evidence in docs/VALIDATION.md, remediated the same-second attempts-uniqueness schema defect through migration v2, and recorded the operator demo procedure. The E4 validation audit remediated its confirmed findings under their owning tasks (E3-T3 day-unit durations, E3-T2 malformed-request attempt completion) and cross-task (production route registration through the operator entry points, reconciliation identity and board scope through migration v3, receipt uniqueness, typed error classes, adapter labels, runbook) across seven epic commits, closing with five full-epic review rounds converged to zero unresolved findings and a clean from-scratch matrix. Epic E4 is complete: the version-gated adapter and capability probe, the safe request renderer with strict trusted/untrusted separation, the dedup-safe durable sink with lookup and reconciliation, the acceptance-receipt and execution-projection surfaces, and the real end-to-end gate G3 were delivered, audited, and validated with a clean re-audit. E5-T1 delivered the cooperative work-receipt surface: the `work begin|complete|fail` commands with schema-equivalent receipt validation (identity fields, closed failure-code set, digest shapes, bounded change counts), the active dispatch/resource/task lineage checks, containment-validated relative change paths through the resource resolver, durable receipt persistence with the execution projection updated in one row per run, the atomic completion transaction that collapses a dirty generation into exactly one latest-state follow-up, the failure-budget decision between a bounded follow-up and operator-required UNCERTAIN resolution, and the append-only invalid-receipt audit that never deletes evidence. E5-T2 delivered the production Hermes companion skill: the packaged agent-dispatch-wiki-maintenance skill (frontmatter, task-variable mapping, explicit latest-state and untrusted-data rules, no-receipt fallback), public-mechanism installation instructions, and disposable-profile validation through the real Hermes 0.19.1 skills and kanban surfaces — optional for core correctness, permission-free, and leaving Hermes core unchanged (BND-003, BND-004, FBK-006). E5-T3 delivered exact self-change attribution: the receipt/observation matcher with temporal-window and lineage checks, audited suppression decisions, mixed-change retention, the exact-suppression route clearing (ACTIVE_DIRTY to IDLE under receipt evidence, added to the route state machine and its SOT), and the bounded follow-up collapse proven under ten bursts and no-receipt conditions (FBK-001 through FBK-004, FBK-008, CON-002, CON-003). E5-T4 delivered the conservative structural handling: the dispatch path now persists its true disposition (quarantine holds with operator release/discard lineage, reconcile generations that never dispatch partial ordinary work, drops), the quarantine list|show|release|discard commands with JSON record contracts, and full-scope reconciliation (containment-defended enumeration, path-fact comparison, one latest-state intent on an idle route, repeated reconciliation collapsing into the single pending generation cleared by completion) — with the partial-list prohibition and collapse proven by tests and the fresh-instance gate flow updated (PTH-008, POL-005, POL-006, SRC-005, CLI-006, OPS-006, OPS-007). E5-T5 closed gate G4: the executable feedback harness verified AC-401 through AC-409 on a disposable vault (concurrent human edits, exact suppression with audit, mixed retention, the no-receipt bounded fallback, protected and fresh-instance handling, and the distinct operator semantics), the loop bounds were proven under ten-burst stress, and the production gate was explicitly reviewed — route enable now demands the acknowledgement of the exact computed route revision (the previous boolean-parsed acknowledgement value was never checked and was remediated in this gate) with the production-enable checklist recorded in docs/VALIDATION.md. The E5 validation audit re-verified the requirement-to-owner matrix and integration seams and ran the full-epic review to convergence: its confirmed findings (three real defects: a budgeted clean failure creating no follow-up intent, the reconcile intent constant content fingerprint duplicating the target idempotency key, and unreadable subtrees reported as removals; plus registry, contract, error-boundary, and coverage gaps) were remediated under their owning tasks and the epic ID across the audit commits, closing with a final complete review round at zero critical/blocker/high/medium and two low findings that were initially accepted by explicit operator decision and subsequently resolved in the post-closeout correction commit (the sorted reconciliation reason codes with a regression test, and the error-model class-5 wording), and the production gate remediated to demand the computed route revision. A post-closeout maximum-effort review round then remediated its confirmed findings under the epic ID: the UNCERTAIN operator exit through full reconciliation (the declared resolution edges were unreachable, leaving budget-exhausted routes permanently wedged), the completion-transaction refusal for an unprepared follow-up (a reconciliation arrival racing a clean completion could drop the pending signal), the AC-404 extra-receipt-path suppression block with the `receipt_extra_path` outcome, the schema-required document-form fields, storage-classified lineage failures instead of false invalid-receipt audits, the unreadable-subtree snapshot retention completing the round-20 fix, and the follow-up decision's placeholder policy revision — each with regression tests, and recorded in the SOT changelog 1.0.7. The v0.1 sequence is complete: E6 delivered the explicit webhook adapter, the operations surface, the packaging and scheduling, and the v0.1.0 release verification; all 33 tasks are Completed and gates G0-G5 are closed. The 2026-08-22 MVP compliance review (D-017) then verified the shipped package against the SOT and found 14 MUST requirement gaps — concentrated in expired-submitting recovery wiring, rerun supersession, follow-up activation, submit-path revalidation, durable path facts, the unperformed Linux verification, gate-evidence integrity, and the CLI inspection contract — so remediation epic E7 is registered with twelve tasks to correct every Blocker, High, Medium, and Low/Info finding and release v0.1.1. The 2026-08-23 second MVP compliance review (D-020) then re-verified the shipped v0.1.1 claim that every MUST requirement is PASS or explicitly excepted and found it does not hold — one Blocker in the follow-up product loop (B-1), two FAIL requirements (CON-003, POL-007), three FAIL acceptance criteria (AC-502, AC-503, AC-506), and 22 PARTIAL clauses — so remediation epic E8 is registered with six tasks to close the Blocker, the ten High findings, the mapped Medium findings, and the documentation-truth cluster, to close the now-evidenced SCP-008 Linux exception, and to release v0.1.2; the TST-008 automatic-write gate stays disabled until E8-T1 through E8-T3 are Completed. The 2026-08-24 deferred-inventory hardening (D-021, E9) then closed every remaining D-020 disposition across five tasks and released v0.1.3 from the validated tree (D-022). The 2026-08-25 external MVP compliance review (D-023) re-audited the shipped v0.1.3 tree and recorded one High and five Medium findings — the route revision's webhook-transport blind spot, the capability-report gap in `route enable`, the incomplete header-name grammar, the unenforced toolchain pin, the package's self-contradictory status surfaces, and the macOS-only product still carrying Linux packaging — so E9 is reopened under the formal-audit rule with four remediation tasks (E9-T6 through E9-T9) to disposition every finding under the darwin/arm64-only support policy D-023 records and to release v0.1.4.
 
 ## 2. Epic Summary
 
@@ -34,7 +34,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | E6 | Hermes Webhook, Operations, Packaging, and v0.1 Release | **Completed** | 4 | G5 |
 | E7 | MVP Compliance Review Remediation | **Completed** | 12 | MUST closure + v0.1.1 |
 | E8 | v0.1.2 Compliance Remediation | **Completed** | 6 | MUST closure + v0.1.2 |
-| E9 | Deferred-Inventory Hardening | Planned | 5 | Deferred closure + v0.1.3 |
+| E9 | Deferred-Inventory Hardening | **In Progress** | 9 | Deferred closure + review remediation + v0.1.4 |
 
 ## 3. Task Status Index
 
@@ -96,6 +96,10 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 54 | E9-T3 | Completed | Security, observability, and revision hygiene |
 | 55 | E9-T4 | Completed | Test-coverage hardening |
 | 56 | E9-T5 | Completed | Documentation truth, dependency, and the v0.1.3 release |
+| 57 | E9-T6 | Planned | Submission-gate revision and capability-report integrity |
+| 58 | E9-T7 | Planned | RFC 9110 header grammar and pinned-toolchain enforcement |
+| 59 | E9-T8 | Planned | macOS-only support policy and Linux-surface removal |
+| 60 | E9-T9 | Planned | Documentation truth resynchronized and v0.1.4 released |
 
 ---
 
@@ -2177,9 +2181,9 @@ The validation audit reconciled the deferred findings (32 recorded in the commit
 
 # E9: Deferred-Inventory Hardening
 
-**Epic status:** Completed  
-**Purpose:** Close the hardening inventory E8 recorded for the next cycle (D-021): the four Deferred mediums, the resolution remainders, the seventeen Deferred lows, the member-task test-coverage deferrals, and the documentation sub-wording items — every remaining D-020 disposition that is not a maintained exception or a D-018 acceptance.  
-**Gate:** every D-020 row reads Fixed, maintained exception, or explicit D-018 acceptance — with the whole-epic review (diff from 148bf57, covering the E8 correction delta) converged and v0.1.3 released from the tagged tree.
+**Epic status:** In Progress (reopened 2026-08-25 by the D-023 formal audit; E9-T1 through E9-T5 remain Completed with their D-022 evidence)  
+**Purpose:** Close the hardening inventory E8 recorded for the next cycle (D-021): the four Deferred mediums, the resolution remainders, the seventeen Deferred lows, the member-task test-coverage deferrals, and the documentation sub-wording items — every remaining D-020 disposition that is not a maintained exception or a D-018 acceptance. Reopened by D-023 for the 2026-08-25 external MVP compliance review: its six findings (F1 through F6) remediate through E9-T6 through E9-T9 under the darwin/arm64-only support policy D-023 records, and the epic re-closes with the v0.1.4 patch release.  
+**Gate:** every D-020 row reads Fixed, maintained exception, or explicit D-018 acceptance — with the whole-epic review (diff from 148bf57, covering the E8 correction delta) converged and v0.1.3 released from the tagged tree. Reopened gate (D-023): every review finding dispositioned in-tree or by recorded supersession, the whole-epic review converged over the reopened delta, and v0.1.4 released from the re-closed tree.
 
 ## E9-T1: Record Schema Truth and Storage Hardening
 
@@ -2355,11 +2359,151 @@ E9-T4 Completed.
 
 Documentation truth delivered: observability §3 now separates the thirteen events the v0.1 CLI actually emits (including the E9-T3 `dispatch.mutex_suppressed` and the work lifecycle trio) from the reserved vocabulary no command emits yet; §5 documents the real surfaces — `status --output json` with its actual payload (`routes`, `queues`, `quarantine`, `oldest_unresolved`, `database_bytes`, `targets`) and `doctor`'s always-JSON findings envelope with `trace_id` — in place of the `--json` flag and the latency/retry counters that do not exist; §7 names the target check as the offline construction gate (report validation, no process execution) with the installed-version probe credited to dispatch time. The roadmap's E4-T5 gained its Evidence section (the five-test G3 harness covering the six acceptance scenarios over real components, the VALIDATION G3 table, and the E9-T3 transport-coverage semantics the downtime gate now asserts), and E5-T4's reason vocabulary is corrected to the delivered nine values (`initial, scheduled, overflow, fresh-instance, lost-cursor, manual, delivery, stale-active, startup`) in both the deliverable and the evidence. configuration-spec §9 states the multiplier range 1.0–10.0 the schema already enforces; §4 and §8 note the two inert keys (`git.mode`, `unsafe_path_action`) with their revision-recorded-but-unconsumed semantics and their exclusion from the policy digest; the `file_scope` row documents the `.md`/`.markdown` scope (SCP-003's delivered scope, L-26) and SCP-001 carries the certification-posture note (L-25: no formal certification process exists; the claim means the verified `make verify`-gated shape). The error-model's exit-13 row states the code truth (the Watchman protocol surface exits 13 on `target_response_invalid`; the plain dispatch command records `unknown` in its exit-0 envelope), and the reserved code names (`batch_hard_limit`, `protected_path_quarantined`, `unsafe_path_quarantined`) moved out of the emitted registry into an explicit reserved table with their activation conditions (L-21). L-27 resolved by a real bump: `golang.org/x/text` v0.14.0 → v0.41.0 (GO-2026-5970) with the aligned `x/mod`, `x/sync`, and `x/tools` indirects, `go mod tidy` clean, full suite green — no offline constraint needed. The epic validation, the v0.1.3 release, and the closeout decision record: the whole-epic review over 148bf57..HEAD (covering the E8 correction delta, closing its confirmation-evidence gap explicitly) converged through three remediation rounds plus a clean confirmation — round 1 (`r_01a0344b-e13f`) surfaced one medium (the retention prune wedging on a terminal dispatch's old begun receipt — its un-cascaded foreign key blocked the intent delete) and the typed-map denylist case-folding gap, both fixed with regression tests; round 2 (`r_01a03463-de2c`) carried the by-design untracked review-file disposition and the test-comment gap; round 3 (`r_01a0346e-656e`) carried four lows (the release-checklist retention wording, the slot-guard pin, the shared terminal predicate, the shared denylist helper), all fixed; the confirmation round (`r_01a03482-6db2`) committed clean with zero findings. The E9-T1 audit's eleven deferred findings are reconciled in-tree (the request object on show and list, the schema-excluded members off the wire, the open outcome, the null shapes, the enum-clamped dead-letter reason with the degraded-context test, the v7 backfill pin over a rewound v6 shape, and the wire pins — full-schema validation from real runs replaces the presence checks), and the E9-T2 F003 provenance correction is recorded in D-022. v0.1.3 is released from this tree: `make release VERSION=v0.1.3` twice byte-identically, the tag at the final commit, RELEASE-NOTES-v0.1.3 disclosing the hardening and the TST-008 gate remaining disabled. D-022 closes the epic: every D-021 inventory item reads Fixed, maintained exception (M-8), or D-018 acceptance (L-13, L-14), with the D-011 scheduled-submit supersession recorded. Changelog 1.0.42. Reviewed through two full-target Mulgae rounds (`r_01a03414-3a5e-7f15-b90e-330916d4b6be`, remediation-eligible: one low finding — configuration-spec §4 understated git.mode's recording sites — plus three wording residuals, all remediated in-tree: both recording sites stated, the five-test G3 count, doctor's accepted-and-ignored `--output json`, and the §3 log-level hedge; `r_01a03423-f206-7108-be8c-782a975ff2e0`, hardening-deferral-eligible: ci pass, coverage complete, publication committed, zero findings, every role confirming the documentation truth and the dependency bump).
 
+## E9-T6: Submission-Gate Revision and Capability-Report Integrity
+
+**Status:** Planned  
+**Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
+
+### Objective
+
+Close review findings F1 (High) and F2: the computed route revision must cover every behavior-affecting webhook transport field, and `route enable` must refuse without capability evidence regardless of target liveness.
+
+### Deliverables
+
+- the revision projection gains the webhook transport fields: `auth.type`, `auth.secret_ref` (the reference name only; secret values stay excluded), `auth.header_name`, `idempotency_header`, `lookup_timeout`, and the `capability_report` path, so changing authentication or deduplication headers makes existing intents stale and requires route re-acknowledgement (F1);
+- the route's `reconciliation` and `retention` blocks receive explicit recorded dispositions in the revision contract (included or excluded with the reason), and the RouteRevision doc comment states the complete inclusion rule;
+- `route enable` always loads and validates the capability report for hermes-kanban targets — a missing, unreadable, or stale report refuses at exit 3 whether or not the executable is present, while an unreachable target stays a warning deferred to the submit path's run-time gate (F2);
+- the CLI contract's `route enable` wording loses the missing/unreadable ambiguity;
+- regression tests: each newly covered field moves the computed revision (unit level), an acknowledged route whose auth or idempotency fields change goes stale end to end (enable, mutate, submit → stale-revision refusal), and `route enable` with the executable absent and the report missing or unreadable exits 3.
+
+### Requirements
+
+`POL-007`, `SEC-010`, `HER-005`, `CLI-008`
+
+### Dependencies
+
+D-023 recorded; E9-T5 Completed.
+
+### Acceptance
+
+- changing only `auth.type`, `auth.header_name`, `auth.secret_ref`, `idempotency_header`, or `lookup_timeout` changes the computed route revision and pauses the acknowledged route;
+- `route enable` without a valid capability report exits 3 in every executable-availability combination;
+- `make verify` green including the new regression tests.
+
+### Evidence
+
+Pending (E9-T6 not started).
+
+## E9-T7: Header Grammar and Pinned-Toolchain Enforcement
+
+**Status:** Planned  
+**Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
+
+### Objective
+
+Close review findings F3 and F4: webhook header names must validate against the complete RFC 9110 token grammar before side effects, and the pinned Go toolchain must be enforced by the build entrypoints themselves.
+
+### Deliverables
+
+- `validHeaderName` accepts exactly the RFC 9110 `tchar` set (`!#$%&'*+-.^_`|~`, ALPHA, DIGIT), rejecting separators, quotes, backslashes, and non-ASCII characters the previous scan let through (F3);
+- the configuration schema constrains `header_name` and `idempotency_header` with the equivalent pattern, both schema copies kept byte-identical;
+- regression tests cover the previously accepted invalid names (`Bad(Name`, `Bad,Name`, `Bad/Name`), quotes, backslashes, and Unicode, plus valid tchar names;
+- `make verify` and `make release` both require the exact `go1.26.6` toolchain before building, through a version check that fails fast with a clear message (F4), with the comparison logic unit-tested so an unsupported version is proven rejected before any build step;
+- VALIDATION.md's SCP-005 wording and the release checklist's toolchain line state the enforced mechanism in place of the go.mod-only claim.
+
+### Requirements
+
+`SCP-005`, `SCP-006`, `TST-001`
+
+### Dependencies
+
+E9-T6 Completed.
+
+### Acceptance
+
+- a header name outside the tchar grammar fails configuration validation before any submission attempt;
+- `make verify` and `make release` reject an ambient Go toolchain other than 1.26.6 before building;
+- `make verify` green including the grammar and toolchain tests.
+
+### Evidence
+
+Pending (E9-T7 not started).
+
+## E9-T8: macOS-Only Support Policy and Linux-Surface Removal
+
+**Status:** Planned  
+**Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
+
+### Objective
+
+Close review finding F6 under the D-023 support-policy decision: darwin/arm64 is the only supported platform, and the Linux packaging and documentation surface is removed or explicitly superseded.
+
+### Deliverables
+
+- the release output restricts to `darwin/arm64`; the `linux/amd64` build leg, the systemd example assets, and the systemd leg of `schedule-check` leave the repository;
+- SCP-008's and AC-505's Linux clauses carry supersession annotations pointing at the D-023 policy; the charter's success definition, the testing strategy, the implementation guide, the configuration-spec platform wording, the observability and Watchman scheduling guidance, and the installation guide state the macOS-only policy;
+- the packaged maintenance skill declares `platforms: [macos]`; the root README drops the Linux-host clause;
+- historical release notes keep their Linux-artifact records unchanged, with the supersession authority recorded in D-023;
+- traceability and manifest outputs regenerate; the macOS verification entrypoint passes.
+
+### Requirements
+
+`SCP-008`, `TST-009`
+
+### Dependencies
+
+E9-T7 Completed.
+
+### Acceptance
+
+- `make release` produces exactly one darwin/arm64 artifact set;
+- no active specification, contract, or operational document presents Linux as supported; the supersession trail is explicit;
+- `make verify` green.
+
+### Evidence
+
+Pending (E9-T8 not started).
+
+## E9-T9: Documentation Truth Resynchronization and the v0.1.4 Release
+
+**Status:** Planned  
+**Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
+
+### Objective
+
+Close review finding F5 and re-close the epic: every status surface agrees with the authoritative decision record, and v0.1.4 ships the remediation from the validated tree.
+
+### Deliverables
+
+- `docs/README.md` (SOT version, implementation target, Roadmap State narrative), `docs/VALIDATION.md` (validation record, versions, counts), the roadmap's summary and current-state block, and the release checklist are synchronized to the post-remediation truth — one SOT version, one shipped release, one E9 lifecycle state, one task count;
+- the release checklist is rewritten from its v0.1.1-era basis to the current 60-task, macOS-only posture;
+- the whole-epic validation review runs over the reopened delta through the 3+1 round budget;
+- `make release VERSION=v0.1.4` twice byte-identical, the `v0.1.4` tag at the final tree, and RELEASE-NOTES-v0.1.4 disclosing the submission-gate hardening (acknowledged routes re-acknowledge once under the widened revision), the toolchain enforcement, and the macOS-only policy;
+- the closeout decision dispositions every D-023 finding to its final state.
+
+### Requirements
+
+All `BND-*` through `WHK-*` requirements.
+
+### Dependencies
+
+E9-T8 Completed.
+
+### Acceptance
+
+- every status surface reads the same SOT version, shipped release, E9 state, and task count;
+- v0.1.4 artifacts are byte-reproducible and tagged;
+- roadmap tasks E9-T6 through E9-T9 are Completed and the epic re-closes.
+
+### Evidence
+
+Pending (E9-T9 not started).
+
 ---
 
 # 4. Deferred Future Work
 
-The following do not count toward the 56 tracked roadmap tasks (33 v0.1 feature tasks, 12 E7, 6 E8, and 5 E9 remediation tasks) and remain Deferred until a new roadmap is approved:
+The following do not count toward the 60 tracked roadmap tasks (33 v0.1 feature tasks, 12 E7, 6 E8, and 9 E9 remediation tasks) and remain Deferred until a new roadmap is approved:
 
 - Agent Dispatch managed daemon;
 - multi-vault production certification and global budgets;

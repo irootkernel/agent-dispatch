@@ -76,6 +76,11 @@ func (s *Store) StaleLeases(ctx context.Context, now string) ([]string, error) {
 	return ids, rows.Err()
 }
 
+// notActiveSlotSQL is the shared active-slot guard for every prune
+// lineage delete (plan and execution, E9-T2/T4-F005): the route's live
+// dispatch keeps its lineage whatever its age.
+const notActiveSlotSQL = ` AND dispatch_id NOT IN (SELECT active_dispatch_id FROM route_runtime_state WHERE active_dispatch_id IS NOT NULL)`
+
 // resolvedTerminalStates are the intent states whose lineage is fully
 // resolved for retention (retention-and-privacy §2: everything else is
 // retained until resolution).
@@ -141,18 +146,20 @@ func (s *Store) PlanPrune(ctx context.Context, cutoffs PruneCutoffs) (PrunePlan,
 	var err error
 	// The plan mirrors the execution guards exactly (the active slot and
 	// begun receipts never count; E8-T4, H-3).
+	// The JOIN'd plan queries alias the guard's dispatch_id to the
+	// joined table (the shared constant's bare name is ambiguous here).
+	attemptSlot := ` AND a.dispatch_id NOT IN (SELECT active_dispatch_id FROM route_runtime_state WHERE active_dispatch_id IS NOT NULL)`
+	receiptSlot := ` AND r.dispatch_id NOT IN (SELECT active_dispatch_id FROM route_runtime_state WHERE active_dispatch_id IS NOT NULL)`
 	if plan.Counts.Attempts, err = count("attempt",
-		`SELECT COUNT(*) FROM dispatch_attempts a JOIN dispatch_intents i ON i.dispatch_id = a.dispatch_id WHERE a.completed_at IS NOT NULL AND a.completed_at < ? AND i.state IN `+terminal+
-			` AND a.dispatch_id NOT IN (SELECT active_dispatch_id FROM route_runtime_state WHERE active_dispatch_id IS NOT NULL)`, c.Attempts); err != nil {
+		`SELECT COUNT(*) FROM dispatch_attempts a JOIN dispatch_intents i ON i.dispatch_id = a.dispatch_id WHERE a.completed_at IS NOT NULL AND a.completed_at < ? AND i.state IN `+terminal+attemptSlot, c.Attempts); err != nil {
 		return plan, err
 	}
 	if plan.Counts.Receipts, err = count("receipt",
-		`SELECT COUNT(*) FROM dispatch_receipts r JOIN dispatch_intents i ON i.dispatch_id = r.dispatch_id WHERE r.received_at < ? AND i.state IN `+terminal+
-			` AND r.dispatch_id NOT IN (SELECT active_dispatch_id FROM route_runtime_state WHERE active_dispatch_id IS NOT NULL)`, c.CompletedReceipts); err != nil {
+		`SELECT COUNT(*) FROM dispatch_receipts r JOIN dispatch_intents i ON i.dispatch_id = r.dispatch_id WHERE r.received_at < ? AND i.state IN `+terminal+receiptSlot, c.CompletedReceipts); err != nil {
 		return plan, err
 	}
 	if plan.Counts.WorkReceipts, err = count("work receipt",
-		`SELECT COUNT(*) FROM work_receipts WHERE submitted_at < ? AND status != 'begun' AND dispatch_id NOT IN (SELECT active_dispatch_id FROM route_runtime_state WHERE active_dispatch_id IS NOT NULL)`, c.CompletedReceipts); err != nil {
+		`SELECT COUNT(*) FROM work_receipts WHERE submitted_at < ? AND status != 'begun'`+notActiveSlotSQL, c.CompletedReceipts); err != nil {
 		return plan, err
 	}
 	if plan.Counts.Intents, err = count("intent",
@@ -248,23 +255,22 @@ func (s *Store) ExecutePrune(ctx context.Context, cutoffs PruneCutoffs, actor, r
 		n, err := res.RowsAffected()
 		return n, err
 	}
-	// The active-slot guard applies to every lineage delete: the route's
-	// live dispatch keeps its attempts, receipts, and work receipts
-	// whatever their age (E8-T4, H-3/AC-503).
-	activeSlot := ` AND dispatch_id NOT IN (SELECT active_dispatch_id FROM route_runtime_state WHERE active_dispatch_id IS NOT NULL)`
+	// The active-slot guard applies to every lineage delete via the
+	// shared predicate (E8-T4, H-3/AC-503; E9-T2/T4-F005 shares it
+	// between plan and execution).
 	if counts.Attempts, err = exec("attempts",
-		`DELETE FROM dispatch_attempts WHERE completed_at IS NOT NULL AND completed_at < ? AND dispatch_id IN (SELECT dispatch_id FROM dispatch_intents WHERE state IN `+terminal+`)`+activeSlot, c.Attempts); err != nil {
+		`DELETE FROM dispatch_attempts WHERE completed_at IS NOT NULL AND completed_at < ? AND dispatch_id IN (SELECT dispatch_id FROM dispatch_intents WHERE state IN `+terminal+`)`+notActiveSlotSQL, c.Attempts); err != nil {
 		return counts, err
 	}
 	if counts.Receipts, err = exec("receipts",
-		`DELETE FROM dispatch_receipts WHERE received_at < ? AND dispatch_id IN (SELECT dispatch_id FROM dispatch_intents WHERE state IN `+terminal+`)`+activeSlot, c.CompletedReceipts); err != nil {
+		`DELETE FROM dispatch_receipts WHERE received_at < ? AND dispatch_id IN (SELECT dispatch_id FROM dispatch_intents WHERE state IN `+terminal+`)`+notActiveSlotSQL, c.CompletedReceipts); err != nil {
 		return counts, err
 	}
 	// A begun receipt is the attribution anchor of an in-flight run:
 	// it is never pruned, whatever its age (FBK-002/FBK-003,
 	// E7-T9/M-20), and an active slot's receipts never prune either.
 	if counts.WorkReceipts, err = exec("work receipts",
-		`DELETE FROM work_receipts WHERE submitted_at < ? AND status != 'begun'`+activeSlot, c.CompletedReceipts); err != nil {
+		`DELETE FROM work_receipts WHERE submitted_at < ? AND status != 'begun'`+notActiveSlotSQL, c.CompletedReceipts); err != nil {
 		return counts, err
 	}
 	// Intents only when nothing remains to orphan: no surviving

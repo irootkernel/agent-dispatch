@@ -198,11 +198,17 @@ func loadWorkIntent(command, configPath, dispatchID string, stderr io.Writer) (p
 	}
 	intent, err := store.LoadIntent(requestCtx(), dispatchID)
 	if err != nil {
-		closer.Close()
 		if errors.Is(err, ports.ErrIntentNotFound) {
+			// The unknown-dispatch rejection is audited like every other
+			// invalid receipt through the service's shared shape
+			// (E9-T2/L-7, round-1 F002): the service takes the store
+			// directly so the unknown dispatch needs no route lookup.
+			(&workreceipt.Service{Store: store, Now: time.Now}).AuditUnknownDispatch(requestCtx(), dispatchID)
+			closer.Close()
 			writeError(stderr, command, "dispatch_not_found", "input_rejected", err.Error())
 			return ports.IntentSnapshot{}, nil, 4
 		}
+		closer.Close()
 		writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
 		return ports.IntentSnapshot{}, nil, 20
 	}

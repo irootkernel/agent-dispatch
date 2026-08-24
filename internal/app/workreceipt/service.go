@@ -648,6 +648,13 @@ func (s *Service) validateManifest(raw, dispatchID, runID, resourceID, externalR
 	return entries, resultRevision, nil
 }
 
+// AuditUnknownDispatch records the work-command rejection of an unknown
+// dispatch in the same append-only audit history (E9-T2/L-7; round-1
+// F002: one shape, owned here rather than the CLI layer).
+func (s *Service) AuditUnknownDispatch(ctx context.Context, dispatchID string) {
+	s.auditInvalid(ctx, dispatchID, "", &InvalidError{Reasons: []string{fmt.Sprintf("dispatch %s does not exist", dispatchID)}})
+}
+
 // auditInvalid records one rejected submission in the append-only audit
 // history (FBK-003: invalid provenance is retained evidence, never a
 // deletion). An audit failure never masks the validation error.

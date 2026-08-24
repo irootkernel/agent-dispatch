@@ -52,6 +52,11 @@ func TestPrunePreservesBegunReceipts(t *testing.T) {
 	withStdin(t, `[{"name":"Inbox/new.md","exists":true,"new":true,"size":5,"type":"f"}]`, func() {
 		Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman"}, &out, &errb)
 	})
+	// The operator shell does not carry the trigger environment into
+	// maintenance (CLI-007, E9-T2/M-21): clear it after the dispatch
+	// step so the prune below runs in an operator context.
+	os.Unsetenv("WATCHMAN_TRIGGER")
+	os.Unsetenv("WATCHMAN_ROOT")
 	id, _ := decodeEnvelope(t, &out)["dispatch_id"].(string)
 	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", id, "--run-id", "r1", "--external-task-id", "t_00000001"}, &bytes.Buffer{}, &bytes.Buffer{}); code != 0 {
 		t.Fatal("work begin failed")

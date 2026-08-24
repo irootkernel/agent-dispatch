@@ -1,5 +1,14 @@
 # SOT Changelog
 
+## 1.0.38 - 2026-08-24
+
+E9-T2: reconciliation and operator-surface hardening:
+
+- every symlink - escaping or in-vault - is skipped from the reconciliation fact set with the skipped list surfaced as envelope warnings, never projected into task manifests as regular files (M-24); file-level walk errors skip exactly the file (L-8);
+- maintenance prune/vacuum refuse under the Watchman trigger environment at exit 2 (M-21/CLI-007); config show accepts --output json (L-11); unknown-dispatch work commands audit (L-7);
+- the prune guards share one predicate across plan and execution, route stale consults a store-level eligibility rule over a tri-state age, and the flaky stub deadline (M-25 residual) is raised;
+- one decision-log provenance note defers to the E9-T5 documentation pass.
+
 ## 1.0.37 - 2026-08-24
 
 E9-T1: record schema truth and storage hardening:

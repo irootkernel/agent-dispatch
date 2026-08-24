@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -279,14 +280,27 @@ func TestFullReconcileEnumeratesAndCompares(t *testing.T) {
 		t.Fatalf("reconcile: %s", errb.String())
 	}
 	first := decodeEnvelope(t, &out)
-	// Scope: Inbox/new.md, Inbox/second.md (markdown, in scope) plus the
-	// reported symlink; the PNG stays out of the markdown scope.
-	if first["enumerated"].(float64) != 3 {
-		t.Fatalf("enumeration must cover the markdown scope plus the reported symlink: %v", first)
+	// Scope: Inbox/new.md, Inbox/second.md (markdown, in scope). The
+	// escaping symlink is skipped with a warning, never enumerated as a
+	// fact (E9-T2/M-24 corrects the old reported-fact posture: a
+	// symlink to outside never projects as an existing regular file);
+	// the PNG stays out of the markdown scope.
+	if first["enumerated"].(float64) != 2 {
+		t.Fatalf("enumeration must cover exactly the markdown scope: %v", first)
 	}
 	added, _ := first["added"].([]any)
-	if len(added) != 3 {
+	if len(added) != 2 {
 		t.Fatalf("first reconciliation reports every in-scope path as added: %v", first)
+	}
+	skipped, _ := first["skipped"].([]any)
+	foundSkippedLink := false
+	for _, s := range skipped {
+		if strings.Contains(fmt.Sprint(s), "link.md") {
+			foundSkippedLink = true
+		}
+	}
+	if !foundSkippedLink {
+		t.Fatalf("the escaping symlink must be reported in the skipped list: %v", first)
 	}
 	if first["reconcile_dispatch_id"] == "" {
 		t.Fatalf("an idle route with due work must schedule one intent: %v", first)

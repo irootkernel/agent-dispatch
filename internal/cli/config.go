@@ -40,6 +40,7 @@ func runConfig(args []string, stdout, stderr io.Writer) int {
 func runConfigShow(args []string, stdout, stderr io.Writer) int {
 	command := "config show"
 	configPath := ""
+	output := ""
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--config":
@@ -48,10 +49,17 @@ func runConfigShow(args []string, stdout, stderr io.Writer) int {
 			}
 			configPath = args[i+1]
 			i++
+		case "--output":
+			if i+1 >= len(args) || args[i+1] != "json" {
+				return usageError(stderr, command, "--output requires 'json'")
+			}
+			output = args[i+1]
+			i++
 		default:
 			return usageError(stderr, command, fmt.Sprintf("unknown flag %q", args[i]))
 		}
 	}
+	_ = output // the command emits JSON only; the flag exists for shell uniformity (E9-T2/L-11)
 	cfg, err := config.Load(resolveConfigPath(configPath))
 	if err != nil {
 		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)

@@ -148,6 +148,19 @@ func runMaintenanceBackup(command string, args []string, stdout, stderr io.Write
 	return writeEnvelope(stdout, command, map[string]any{"backup_path": output})
 }
 
+// watchmanContextRefusal enforces CLI-007 (E9-T2/M-21): destructive
+// maintenance must never run from Watchman input. The managed trigger
+// argv is fixed to the dispatch path, so the env vars appearing means
+// an operator pasted a maintenance command into a trigger definition —
+// refuse at exit 2 before any store is opened.
+func watchmanContextRefusal(stderr io.Writer, command string) int {
+	if os.Getenv("WATCHMAN_TRIGGER") != "" || os.Getenv("WATCHMAN_ROOT") != "" {
+		return usageError(stderr, command,
+			"maintenance commands must not run from a Watchman trigger context (WATCHMAN_TRIGGER/WATCHMAN_ROOT are set); run maintenance from an operator shell")
+	}
+	return 0
+}
+
 // runMaintenancePrune plans or executes the retention prune
 // (OPS-003/004, retention-and-privacy §3): dry-run by default, --yes
 // executes, --before <duration> only narrows the horizons.
@@ -155,6 +168,9 @@ func runMaintenancePrune(command string, args []string, stdout, stderr io.Writer
 	flags := parseOpsFlags(command, args, stderr, map[string]bool{"--config": true, "--before": true, "--reason": true})
 	if flags == nil {
 		return 2
+	}
+	if code := watchmanContextRefusal(stderr, command); code != 0 {
+		return code
 	}
 	cfg, err := config.Load(resolveConfigPath(flags.val("--config")))
 	if err != nil {
@@ -220,6 +236,9 @@ func runMaintenanceVacuum(command string, args []string, stdout, stderr io.Write
 	flags := parseOpsFlags(command, args, stderr, map[string]bool{"--config": true})
 	if flags == nil {
 		return 2
+	}
+	if code := watchmanContextRefusal(stderr, command); code != 0 {
+		return code
 	}
 	if flags.val("--dry-run") == "true" {
 		return usageError(stderr, command, "vacuum has no dry-run mode; it requires --yes (CLI-007)")

@@ -119,8 +119,8 @@ const largeDatabaseBytes = 512 * 1024 * 1024
 // severity (error, warning, info) then code for stable output.
 func Examine(in Input) []Finding {
 	// An unexamined Watchman surface never produces findings: the
-	// unavailable posture is a probe result, not a default (E8-T4, H-4).
-
+	// unavailable posture is a probe result, not a default (E8-T4, H-4);
+	// the WatchmanExamined gate at the finding site enforces it.
 	var out []Finding
 	for _, err := range in.SemanticErrors {
 		out = append(out, Finding{

@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E9 (hardening, D-021) |
 | Current active task | None |
-| Next task | E9-T2 |
-| Completed tasks | 52 / 56 |
-| Planned tasks | 4 / 56 |
+| Next task | E9-T3 |
+| Completed tasks | 53 / 56 |
+| Planned tasks | 3 / 56 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -92,7 +92,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 50 | E8-T5 | Completed | Input containment and configuration validation gaps closed |
 | 51 | E8-T6 | Completed | Documentation truth restored and v0.1.2 released |
 | 52 | E9-T1 | Completed | Record schema truth and storage hardening |
-| 53 | E9-T2 | Planned | Reconciliation and operator-surface hardening |
+| 53 | E9-T2 | Completed | Reconciliation and operator-surface hardening |
 | 54 | E9-T3 | Planned | Security, observability, and revision hygiene |
 | 55 | E9-T4 | Planned | Test-coverage hardening |
 | 56 | E9-T5 | Planned | Documentation truth, dependency, and the v0.1.3 release |
@@ -2208,7 +2208,7 @@ Delivered as the record-schema truth and storage hardening: `dispatches show` em
 
 ## E9-T2: Reconciliation and Operator-Surface Hardening
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -2217,7 +2217,7 @@ Close the reconciliation enumeration symlink defect, the Watchman-context refusa
 
 ### Deliverables
 
-- the reconciliation walk resolves symlinks: an escaping symlink lands in the skipped list with a warning and never projects as an exists-fact or `FileRegular` in an automatic task manifest (M-24);
+- the reconciliation walk skips every symlink — escaping or in-vault — into the skipped list (surfaced in the envelope as warnings); a symlink never projects as an exists-fact or `FileRegular` in an automatic task manifest, because the fact set describes regular files only (M-24);
 - the WalkDir file-error prefix records the file, not `rel+"/"`, so siblings are not mislabeled Removed (L-8);
 - `maintenance prune/vacuum --yes` refuses to run with `WATCHMAN_TRIGGER` or `WATCHMAN_ROOT` in the environment (CLI-007, M-21; exit 2 usage refusal, no registry change);
 - `config show` accepts `--output json` (L-11) and the work commands on an unknown dispatch write their invalid-receipt audit row (L-7);
@@ -2239,7 +2239,7 @@ E9-T1 Completed.
 
 ### Evidence
 
-Pending (E9-T2 not started).
+Delivered as the reconciliation and operator-surface hardening: the reconciliation walk skips every symlink — escaping or in-vault — into the skipped list, now surfaced in the envelope as warnings (`Skipped` on the full-reconcile result), and never projects a symlink as an exists-fact or `FileRegular` in an automatic task manifest; the fact set describes regular files only, closing the D-018-recorded posture gap for real (M-24; `TestE9T2EscapingSymlinkNeverRegular` covers both symlink kinds against the skipped list, the added facts, and the stored manifests). File-level `WalkDir` errors record the file itself with exact-match semantics in `underSkippedPrefix` (directory entries keep their subtree prefix), so a blocked file no longer mislabels its siblings as Removed (L-8). `maintenance prune/vacuum --yes` refuse under `WATCHMAN_TRIGGER` or `WATCHMAN_ROOT` at exit 2 before any store opens (M-21/CLI-007; `TestE9T2MaintenanceRefusesWatchmanContext` covers both guard conditions); `config show` accepts `--output json` only (L-11); and the work commands' unknown-dispatch rejection writes its invalid-receipt audit row through the service's shared shape, `Service.AuditUnknownDispatch` (L-7; `TestE9T2UnknownDispatchAudits`). The prune plan and execution share one `notActiveSlotSQL` predicate with aliased JOIN forms (T4-F005); `route stale` consults the store-level `EligibleForStale` rule over a tri-state `ActiveDispatchAge` (none/unreadable/measured) so the CLI composes no guard chain (T4-F006, and T4-F004's tri-state delivered with it); and the dead self-assignment at the doctor boundary is gone (T4-F007). The known hermeskanban 1s stub-deadline flake (M-25) is raised to 10s. Verified by `make verify` on darwin/arm64 (all checks green). Reviewed through two full-target Mulgae rounds (`r_01a032aa-8a73-75e0-b4bb-9826da78d2bb`, remediation-eligible: the dead Resolve branch and the CLI-layer audit duplication — both remediated; `r_01a032be-ba3b-738d-a4bf-274cf98b08b7`, hardening-deferral-eligible: ci pass, coverage complete, publication committed, six findings — the tri-state and both-symlink-kind coverage landed in-tree with the round-2 remediation alongside the both-conditions guard test and the deliverable wording, with F003's decision-log provenance note deferred to the E9-T5 documentation pass in the commit trailers). Changelog 1.0.38.
 
 ## E9-T3: Security, Observability, and Revision Hygiene
 

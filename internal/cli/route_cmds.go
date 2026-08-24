@@ -351,15 +351,22 @@ func runRouteStale(command string, args []string, stdout, stderr io.Writer) int 
 		return planErr(stderr, command, "config_invalid", "configuration",
 			fmt.Sprintf("route stale requires the active_stale_after bound, and the configuration failed to load: %v", cfgErr), 3)
 	}
-	if route, ok := cfg.Routes[routeID]; ok && route.Dispatch.ActiveStaleAfter != "" {
-		if d, derr := config.ParseDuration(route.Dispatch.ActiveStaleAfter); derr == nil {
-			if snap, serr := closer.LoadRouteState(requestCtx(), routeID); serr == nil && snap.ActiveDispatchID != "" {
-				if age, aerr := closer.ActiveDispatchAgeNanos(requestCtx(), routeID); aerr == nil && age < d.Nanos {
-					return planErr(stderr, command, "transition_invalid", "conflict",
-						fmt.Sprintf("active dispatch %s is inside the route's active_stale_after bound (%s); live work is not stale",
-							snap.ActiveDispatchID, route.Dispatch.ActiveStaleAfter), 14)
-				}
+	// The eligibility rule is store-level (E9-T2/T4-F006): the CLI
+	// reads the bound and asks the store, instead of composing the guard
+	// chain here.
+	if route, ok := cfg.Routes[routeID]; ok {
+		bound := time.Duration(0)
+		if route.Dispatch.ActiveStaleAfter != "" {
+			if d, derr := config.ParseDuration(route.Dispatch.ActiveStaleAfter); derr == nil {
+				bound = time.Duration(d.Nanos)
 			}
+		}
+		eligible, why, gerr := closer.EligibleForStale(requestCtx(), routeID, bound)
+		if gerr != nil {
+			return intentErr(stderr, command, gerr)
+		}
+		if !eligible {
+			return planErr(stderr, command, "transition_invalid", "conflict", why, 14)
 		}
 	}
 	if err := closer.MarkRouteStaleWithReason(requestCtx(), routeID, "operator", flags.val("--reason"), dispatch.Timestamp(time.Now())); err != nil {

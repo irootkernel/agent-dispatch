@@ -51,13 +51,17 @@ type FullStore interface {
 
 // FullResult reports one reconciliation outcome.
 type FullResult struct {
-	RouteID           string   `json:"route_id"`
-	Reason            string   `json:"reason"`
-	Enumerated        int      `json:"enumerated"`
-	Compared          int      `json:"compared"`
-	Added             []string `json:"added"`
-	Removed           []string `json:"removed"`
-	Changed           []string `json:"changed"`
+	RouteID    string   `json:"route_id"`
+	Reason     string   `json:"reason"`
+	Enumerated int      `json:"enumerated"`
+	Compared   int      `json:"compared"`
+	Added      []string `json:"added"`
+	Removed    []string `json:"removed"`
+	Changed    []string `json:"changed"`
+	// Skipped lists the entries the enumeration could not verify —
+	// unreadable subtrees and (E9-T2/M-24) escaping symlinks — so the
+	// operator sees exactly what the snapshot retained instead.
+	Skipped           []string `json:"skipped,omitempty"`
 	PendingReconcile  bool     `json:"pending_reconcile"`
 	DecisionID        string   `json:"decision_id"`
 	ReconcileDispatch string   `json:"reconcile_dispatch_id,omitempty"`
@@ -115,11 +119,12 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 	if err != nil {
 		return FullResult{}, err
 	}
+	sort.Strings(skipped)
 	stored, err := s.Store.LoadPathFacts(ctx, s.ResourceID)
 	if err != nil {
 		return FullResult{}, ports.WrapStore(err)
 	}
-	out := FullResult{RouteID: routeID, Reason: reason, Enumerated: len(current), Compared: len(stored)}
+	out := FullResult{RouteID: routeID, Reason: reason, Enumerated: len(current), Compared: len(stored), Skipped: skipped}
 	currentMap := map[string]ports.PathFact{}
 	for _, f := range current {
 		currentMap[f.Path] = f
@@ -269,10 +274,19 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 }
 
 // underSkippedPrefix reports whether path falls inside one of the
-// enumeration's unreadable subtrees.
+// enumeration's skipped entries: a directory entry carries its trailing
+// slash and prefix-matches its subtree; a file entry (no trailing
+// slash) matches exactly that path and nothing else (E9-T2/L-8 - a
+// bare prefix match would also swallow sibling names sharing the stem).
 func underSkippedPrefix(skipped []string, path string) bool {
-	for _, prefix := range skipped {
-		if strings.HasPrefix(path, prefix) {
+	for _, entry := range skipped {
+		if strings.HasSuffix(entry, "/") {
+			if strings.HasPrefix(path, entry) {
+				return true
+			}
+			continue
+		}
+		if path == entry {
 			return true
 		}
 	}
@@ -376,14 +390,22 @@ func (s *FullService) enumerate() ([]ports.PathFact, []string, error) {
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			// An unreadable subtree is reported by absence, never a
-			// whole-command abort: one blocked directory must not stop
-			// the scope's reconciliation (the pending generation still
+			// whole-command abort: one blocked entry must not stop the
+			// scope's reconciliation (the pending generation still
 			// collapses conservatively).
 			if path == root {
 				return err
 			}
 			if rel, relErr := filepath.Rel(root, path); relErr == nil {
-				skippedPrefixes = append(skippedPrefixes, filepath.ToSlash(rel)+"/")
+				relPath := filepath.ToSlash(rel)
+				if d != nil && !d.IsDir() {
+					// A file-level error skips exactly that file (E9-T2/
+					// L-8): the old parent-prefix form mislabeled the
+					// file's siblings as Removed.
+					skippedPrefixes = append(skippedPrefixes, relPath)
+					return nil
+				}
+				skippedPrefixes = append(skippedPrefixes, relPath+"/")
 			}
 			return fs.SkipDir
 		}
@@ -396,6 +418,15 @@ func (s *FullService) enumerate() ([]ports.PathFact, []string, error) {
 		}
 		relPath := filepath.ToSlash(rel)
 		if d.IsDir() {
+			return nil
+		}
+		// A symlink never projects as a regular-file fact (E9-T2/M-24):
+		// the fact set describes regular files, and WalkDir never follows
+		// the link to its target — so every symlink, in-vault or
+		// escaping, lands in the skipped list with a warning (round-1 F001
+		// collapsed the dead Resolve branch: no symlink is ever hashed).
+		if d.Type()&fs.ModeSymlink != 0 {
+			skippedPrefixes = append(skippedPrefixes, relPath)
 			return nil
 		}
 		status, clsErr := s.Engine.Classify(relPath)

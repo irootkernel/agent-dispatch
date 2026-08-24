@@ -357,26 +357,63 @@ func (s *Store) ActivateFollowup(ctx context.Context, dispatchID, actor, now str
 	return tx.Commit()
 }
 
-// ActiveDispatchAgeNanos returns how long the route's active dispatch
-// has held the slot in nanoseconds (0 when none holds it); the stored
-// second-precision timestamp truncates downward, so a sub-second bound
-// only applies once the dispatch crosses a full second.
-func (s *Store) ActiveDispatchAgeNanos(ctx context.Context, routeID string) (int64, error) {
+// AgeState distinguishes the three active-dispatch age outcomes
+// (E9-T2/T4-F006, T4-F004): no active dispatch, an unreadable
+// timestamp, or a measured age.
+type AgeState int
+
+const (
+	AgeNone AgeState = iota
+	AgeUnreadable
+	AgeMeasured
+)
+
+// ActiveDispatchAge reports the route's active-dispatch age with its
+// tri-state: AgeNone (nothing holds the slot), AgeUnreadable (the row
+// exists but the timestamp does not parse), or AgeMeasured with the
+// nanoseconds since creation. The stored second-precision timestamp
+// truncates downward, so a sub-second bound only applies once the
+// dispatch crosses a full second.
+func (s *Store) ActiveDispatchAge(ctx context.Context, routeID string) (AgeState, int64, error) {
 	var createdAt string
 	err := s.QueryRowContext(ctx, `SELECT i.created_at FROM dispatch_intents i
 		JOIN route_runtime_state r ON r.active_dispatch_id = i.dispatch_id
 		WHERE r.route_id = ?`, routeID).Scan(&createdAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, nil
+		return AgeNone, 0, nil
 	}
 	if err != nil {
-		return 0, err
+		return AgeNone, 0, err
 	}
 	created, perr := time.Parse(time.RFC3339, normalizeTimestamp(createdAt))
 	if perr != nil {
-		return 0, nil
+		return AgeUnreadable, 0, nil
 	}
-	return int64(time.Since(created)), nil
+	return AgeMeasured, int64(time.Since(created)), nil
+}
+
+// EligibleForStale is the store-level route-stale eligibility rule
+// (E9-T2/T4-F006): staling live work requires the active dispatch to
+// have held the slot at least as long as the configured bound. An
+// unreadable age refuses (fail closed).
+func (s *Store) EligibleForStale(ctx context.Context, routeID string, bound time.Duration) (bool, string, error) {
+	state, age, err := s.ActiveDispatchAge(ctx, routeID)
+	if err != nil {
+		return false, "", err
+	}
+	switch state {
+	case AgeNone:
+		return false, "no active dispatch holds the route slot", nil
+	case AgeUnreadable:
+		return false, "the active dispatch's creation timestamp is unreadable", nil
+	default:
+		if age < int64(bound) {
+			var id string
+			_ = s.QueryRowContext(ctx, `SELECT active_dispatch_id FROM route_runtime_state WHERE route_id = ?`, routeID).Scan(&id)
+			return false, fmt.Sprintf("active dispatch %s is inside the active_stale_after bound; live work is not stale", id), nil
+		}
+		return true, "", nil
+	}
 }
 
 // routeSnapshotInTx reads the route runtime snapshot inside a

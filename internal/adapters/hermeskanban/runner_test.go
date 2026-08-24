@@ -122,11 +122,15 @@ func TestRunnerOutputWithinBound(t *testing.T) {
 func TestRunnerAllowlistPassThrough(t *testing.T) {
 	t.Setenv("HERMES_TEST_MARKER", "reaches-child")
 	bin := newStubHermes(t, `env | grep -c '^HERMES_TEST_MARKER=' || true`)
+	// The 1s deadline flaked under full-parallel coverage load (M-25):
+	// a stub that spawns a shell must tolerate scheduler contention —
+	// the deadline-honoring behavior is proven by the deadline tests,
+	// not this allowlist probe.
 	r := &runner{executable: bin, limits: ProcessLimits{
-		SubmitTimeout: time.Second, LookupTimeout: time.Second, MaxOutputBytes: 4096,
+		SubmitTimeout: 10 * time.Second, LookupTimeout: 10 * time.Second, MaxOutputBytes: 4096,
 		EnvironmentAllowlist: []string{"HERMES_TEST_MARKER"},
 	}.withDefaults()}
-	res, err := r.run(context.Background(), time.Second, []string{"kanban"})
+	res, err := r.run(context.Background(), 10*time.Second, []string{"kanban"})
 	if err != nil {
 		t.Fatalf("stub run: %v", err)
 	}

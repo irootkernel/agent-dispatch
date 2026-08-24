@@ -228,6 +228,7 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 // own classes are storage or migration carry that detail in their codes
 // and remediation.
 func writeDoctorResult(stdout, stderr io.Writer, command string, findings []doctor.Finding) int {
+	findings = doctor.StampTrace(findings, globalTraceID)
 	errors := 0
 	for _, f := range findings {
 		if f.Severity == doctor.SeverityError {

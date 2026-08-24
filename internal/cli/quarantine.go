@@ -113,10 +113,11 @@ func runQuarantineResolve(command, sub string, args []string, stdout, stderr io.
 	}
 	defer closer.Close()
 	// The replacement decision carries the CURRENT computed revision
-	// (epic audit round-1 F001): load the configuration and compute it;
-	// a route not found in the configuration keeps the quarantined
-	// decision's own revision.
-	routeRevision := ""
+	// (epic audit round-1 F001) and the independent policy digest
+	// (E9-T3, L-18): load the configuration and compute both; a route
+	// not found in the configuration keeps the quarantined decision's
+	// own revisions.
+	routeRevision, policyRevision := "", ""
 	if cfg, cerr := config.Load(resolveConfigPath(flags.val("--config"))); cerr == nil {
 		var routeID string
 		if qerr := closer.QueryRowContext(requestCtx(), `SELECT p.route_id FROM policy_decisions p
@@ -124,9 +125,12 @@ func runQuarantineResolve(command, sub string, args []string, stdout, stderr io.
 			if rev, ok := config.RouteRevision(cfg, routeID); ok {
 				routeRevision = rev
 			}
+			if route, ok := cfg.Routes[routeID]; ok {
+				policyRevision = config.PolicyRevision(route)
+			}
 		}
 	}
-	service := &quarantine.Service{Store: store, Now: func() string { return dispatch.Timestamp(time.Now()) }, RouteRevision: routeRevision}
+	service := &quarantine.Service{Store: store, Now: func() string { return dispatch.Timestamp(time.Now()) }, RouteRevision: routeRevision, PolicyRevision: policyRevision}
 	var (
 		rec ports.QuarantineRecord
 		err error
@@ -213,10 +217,16 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 		return storeExit
 	}
 	defer closer.Close()
+	// The reconciliation decision records the independent policy digest
+	// of the live route (E9-T3, L-18), not the route revision echo.
+	policyRev := ""
+	if route, ok := artifacts.cfg.Routes[routeID]; ok {
+		policyRev = config.PolicyRevision(route)
+	}
 	service := &reconcile.FullService{
 		Store: closer, Resolver: artifacts.resolver, Engine: artifacts.engine,
 		ResourceID: artifacts.resourceID, FileScope: artifacts.fileScope,
-		RouteRevision: artifacts.revision, PolicyRevision: artifacts.revision,
+		RouteRevision: artifacts.revision, PolicyRevision: policyRev,
 		MaxHash: artifacts.maxHash, Now: time.Now,
 		IntentBuilder: artifacts.reconcileIntentBuilder(),
 	}

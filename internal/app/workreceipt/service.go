@@ -19,6 +19,7 @@ import (
 	"github.com/irootkernel/agent-dispatch/internal/domain/ids"
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 	"github.com/irootkernel/agent-dispatch/internal/domain/state"
+	"github.com/irootkernel/agent-dispatch/internal/observability"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
@@ -101,6 +102,15 @@ type Service struct {
 	// in scope. Receipt paths it rejects never count as extra provenance
 	// (E8-T1, H-1.1).
 	OutsideScope func(path string) bool
+	// Log emits the declarative work.* lifecycle events at the receipt
+	// boundaries (E9-T3/L-17); nil skips emission. TraceID rides the
+	// causal correlation (the CLI owns the request's trace).
+	Log     *observability.Logger
+	TraceID string
+	// PolicyRevision is the independent policy digest of the live route
+	// (config.PolicyRevision): the follow-up decision the store may
+	// create records it instead of a route revision echo (E9-T3, L-18).
+	PolicyRevision string
 }
 
 // InvalidError reports a receipt rejected by validation; Reasons are the
@@ -188,7 +198,21 @@ func (s *Service) Begin(ctx context.Context, in BeginInput) (Result, error) {
 	if err := s.Store.InsertWorkReceipt(ctx, w); err != nil {
 		return Result{}, ports.WrapStore(err)
 	}
+	s.logEvent(observability.EventWorkBegun, in.DispatchID, in.RunID)
 	return Result{ReceiptID: w.ReceiptID, DispatchID: in.DispatchID, RunID: in.RunID, Status: "begun", RouteState: string(snap.State)}, nil
+}
+
+// logEvent emits one work.* lifecycle event at the receipt boundaries
+// when the operational logger is wired (E9-T3/L-17); nil skips
+// emission. The causal identity (trace, dispatch, run) rides the
+// correlation fields.
+func (s *Service) logEvent(event, dispatchID, runID string) {
+	if s.Log == nil {
+		return
+	}
+	s.Log.Log(observability.LevelInfo, event,
+		observability.Correlation{TraceID: s.TraceID, DispatchID: dispatchID, RunID: runID},
+		"work receipt lifecycle", map[string]any{"dispatch_id": dispatchID, "run_id": runID})
 }
 
 // Complete validates one completion manifest, records the terminal
@@ -282,6 +306,7 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 	// The completion already committed: a failed audit append is
 	// surfaced, never silently discarded (E5 audit round 7).
 	out.AuditWarning = auditErr
+	s.logEvent(observability.EventWorkCompleted, in.DispatchID, in.RunID)
 	return out, nil
 }
 
@@ -343,6 +368,7 @@ func (s *Service) Fail(ctx context.Context, in FailInput) (Result, error) {
 // route through UNCERTAIN instead (E8-T1, H-1.1).
 func (s *Service) applyCompletion(ctx context.Context, intent ports.IntentSnapshot, snap state.RouteSnapshot, w ports.WorkReceiptInput, base ports.ActiveCompletion, decision *AttributionDecision, dirty []ports.DirtyChange) (Result, error) {
 	base.FollowupRequest = nil
+	base.PolicyRevision = s.PolicyRevision
 	base.FollowupGeneration = intent.Generation + 1
 	storeNeedsFollowup := (snap.DirtyGeneration > 0 && !base.DirtySuppressed) || snap.PendingReconcile
 	overBudget := storeNeedsFollowup && base.FollowupGeneration > state.MaxConsecutiveFollowups
@@ -662,6 +688,11 @@ func (s *Service) auditInvalid(ctx context.Context, dispatchID, runID string, in
 	reasons, _ := json.Marshal(invalid.Reasons)
 	now := s.timestamp()
 	auditDoc, _ := json.Marshal(map[string]any{"run_id": runID, "reasons": json.RawMessage(string(reasons))})
+	if s.Log != nil {
+		s.Log.Warn(observability.EventWorkReceiptInvalid,
+			observability.Correlation{TraceID: s.TraceID, DispatchID: dispatchID, RunID: runID},
+			"work receipt rejected", map[string]any{"dispatch_id": dispatchID, "run_id": runID, "reasons": invalid.Reasons})
+	}
 	_ = s.Store.AuditWorkReceipt(ctx, "wr-"+dispatchID+"-"+runID+"-invalid-"+now+"-"+ids.RandomSuffix(),
 		dispatchID, "", "invalid", now, string(auditDoc))
 }

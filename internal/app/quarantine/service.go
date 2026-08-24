@@ -17,8 +17,9 @@ import (
 type Store interface {
 	ports.QuarantineStore
 	// ReleaseQuarantineWithRevision records the caller-computed current
-	// revision into the replacement decision (epic audit round-1 F001).
-	ReleaseQuarantineWithRevision(ctx context.Context, quarantineID, actor, reason, routeRevision, now string) (ports.QuarantineRecord, error)
+	// revision and policy digest into the replacement decision (epic
+	// audit round-1 F001; E9-T3, L-18).
+	ReleaseQuarantineWithRevision(ctx context.Context, quarantineID, actor, reason, routeRevision, policyRevision, now string) (ports.QuarantineRecord, error)
 }
 
 // Service applies the operator resolution semantics.
@@ -31,6 +32,11 @@ type Service struct {
 	// round-1 F001: never a derivation over historical intents). Empty
 	// keeps the quarantined decision's own revision.
 	RouteRevision string
+	// PolicyRevision is the caller-computed independent policy digest
+	// recorded into the replacement decision (E9-T3, L-18): never a
+	// route revision echo. Empty keeps the quarantined decision's own
+	// policy revision.
+	PolicyRevision string
 }
 
 // Release resolves one held item into a replacement reconciliation
@@ -44,7 +50,7 @@ func (s *Service) Release(ctx context.Context, quarantineID, actor, reason strin
 	var rec ports.QuarantineRecord
 	var err error
 	if s.RouteRevision != "" {
-		rec, err = s.Store.ReleaseQuarantineWithRevision(ctx, quarantineID, actor, reason, s.RouteRevision, s.Now())
+		rec, err = s.Store.ReleaseQuarantineWithRevision(ctx, quarantineID, actor, reason, s.RouteRevision, s.PolicyRevision, s.Now())
 	} else {
 		rec, err = s.Store.ReleaseQuarantine(ctx, quarantineID, actor, reason, s.Now())
 	}

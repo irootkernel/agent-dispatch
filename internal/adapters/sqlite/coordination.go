@@ -241,14 +241,18 @@ func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.Acti
 		}
 		if req.FollowupRequest != nil {
 			decisionID := "dec-" + req.FollowupRequest.DispatchID
-			// The follow-up inherits the revisions the completed dispatch
-			// was planned under; the policy derives from route
-			// configuration, so its revision is the route revision (the
-			// same convention plan, reprocess, and reconcile record).
+			// The follow-up decision records the independent policy
+			// digest of the live route (E9-T3, L-18); a caller without a
+			// live route leaves it empty and the route revision keeps the
+			// pre-L-18 value so the column never regresses to blank.
+			policyRevision := req.PolicyRevision
+			if policyRevision == "" {
+				policyRevision = req.FollowupRequest.RouteRevision
+			}
 			reasonCodes, _ := json.Marshal([]string{fmt.Sprintf("followup:%s", reason)})
 			if err := s.SaveDecision(tx, DecisionRecord{
 				DecisionID: decisionID, RouteID: req.RouteID, RouteRevision: req.FollowupRequest.RouteRevision,
-				PolicyRevision: req.FollowupRequest.RouteRevision, GenerationLineageJSON: lineageOr(req.DirtyLineageJSON),
+				PolicyRevision: policyRevision, GenerationLineageJSON: lineageOr(req.DirtyLineageJSON),
 				Disposition: "dispatch", Classification: "normal",
 				ReasonCodesJSON: string(reasonCodes), CreatedAt: now, Actor: req.Actor,
 			}); err != nil {

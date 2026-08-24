@@ -326,7 +326,7 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	}
 	// The submit phase needs the E4 sink adapter; the intent is durable
 	// and ready, and no automatic target fallback exists (DUR-008).
-	sink, err := resolveSink(artifacts.cfg, artifacts.target, artifacts.route)
+	sink, err := resolveSink(artifacts.cfg, artifacts.target, artifacts.route, opsLogger(stderr, artifacts.cfg))
 	if err != nil {
 		outcome.Close()
 		return writeSinkError(stderr, command, err)
@@ -400,7 +400,7 @@ func persistThroughCoordinator(command string, artifacts *planArtifacts, stderr 
 		writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
 		return persistOutcome{}, 20
 	} else if len(recovered) > 0 {
-		if sink, sinkErr := resolveSink(artifacts.cfg, artifacts.target, artifacts.route); sinkErr == nil {
+		if sink, sinkErr := resolveSink(artifacts.cfg, artifacts.target, artifacts.route, opsLogger(stderr, artifacts.cfg)); sinkErr == nil {
 			if backoff, bErr := backoffFromConfig(artifacts.route.Dispatch.SubmissionRetry); bErr == nil {
 				// The healed unknowns resolve now; a failure here never
 				// blocks the arrival, but it is never silent either — the
@@ -592,7 +592,7 @@ func buildHeldLineage(a *planArtifacts) (ports.Lineage, ports.QuarantineInput, e
 			},
 			Decision: ports.DecisionInput{
 				DecisionID: string(decisionID), BatchID: string(batchID), RouteID: a.opts.routeID,
-				RouteRevision: a.plan.Route.Revision, PolicyRevision: a.revision,
+				RouteRevision: a.plan.Route.Revision, PolicyRevision: config.PolicyRevision(a.route),
 				Disposition: a.plan.Disposition, Classification: classification,
 				ReasonCodesJSON: string(reasons), CreatedAt: now, Actor: "planner",
 			},

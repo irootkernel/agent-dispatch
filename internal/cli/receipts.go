@@ -127,7 +127,7 @@ func runDispatchesRefresh(command string, args []string, stdout, stderr io.Write
 	if !ok {
 		return planErr(stderr, command, "config_invalid", "configuration", fmt.Sprintf("target %q is not defined", route.Dispatch.Target), 3)
 	}
-	sink, err := resolveSink(cfg, target, route)
+	sink, err := resolveSink(cfg, target, route, opsLogger(stderr, cfg))
 	if err != nil {
 		return writeSinkError(stderr, command, err)
 	}

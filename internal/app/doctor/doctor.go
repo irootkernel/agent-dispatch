@@ -31,6 +31,20 @@ type Finding struct {
 	Summary     string   `json:"summary"`
 	Details     string   `json:"details,omitempty"`
 	Remediation string   `json:"remediation,omitempty"`
+	// TraceID carries the examining request's trace so a finding joins
+	// the structured log timeline (E9-T3/L-17); empty when the caller
+	// had no trace.
+	TraceID string `json:"trace_id,omitempty"`
+}
+
+// StampTrace sets the trace on every finding that lacks one.
+func StampTrace(findings []Finding, traceID string) []Finding {
+	for i := range findings {
+		if findings[i].TraceID == "" {
+			findings[i].TraceID = traceID
+		}
+	}
+	return findings
 }
 
 // RouteFact carries one route's durable runtime facts.

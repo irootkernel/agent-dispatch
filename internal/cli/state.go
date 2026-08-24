@@ -16,6 +16,7 @@ import (
 	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/domain/state"
+	"github.com/irootkernel/agent-dispatch/internal/observability"
 	"github.com/irootkernel/agent-dispatch/internal/platformpaths"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
@@ -80,8 +81,9 @@ type storeOp interface {
 	ports.WorkReceiptStore
 	ports.QuarantineStore
 	// ReleaseQuarantineWithRevision records the caller-computed current
-	// revision into the replacement decision (epic audit round-1 F001).
-	ReleaseQuarantineWithRevision(ctx context.Context, quarantineID, actor, reason, routeRevision, now string) (ports.QuarantineRecord, error)
+	// revision and policy digest into the replacement decision (epic
+	// audit round-1 F001; E9-T3, L-18).
+	ReleaseQuarantineWithRevision(ctx context.Context, quarantineID, actor, reason, routeRevision, policyRevision, now string) (ports.QuarantineRecord, error)
 	io.Closer
 	ListRoutes(ctx context.Context) ([]sqlite.RouteRow, error)
 	CountIntentsByState(ctx context.Context) (map[string]int64, error)
@@ -194,8 +196,11 @@ var webhookClientFactory = func(timeout time.Duration) hermeswebhook.HTTPClient 
 // installed Hermes version — all before any submission (HER-002,
 // HER-005). The hermes-webhook sink applies the same fail-closed gates
 // against its static, evidence-tied capability declaration. No
-// automatic fallback to any other target exists (DUR-008).
-func resolveSink(cfg *config.Config, target config.Target, route config.Route) (ports.Sink, error) {
+// automatic fallback to any other target exists (DUR-008). The log (with
+// the command's trace id) is attached so submission-time render
+// decisions such as mutex suppression are operator-visible (E9-T3,
+// T3-F007).
+func resolveSink(cfg *config.Config, target config.Target, route config.Route, log *observability.Logger) (ports.Sink, error) {
 	switch target.Type {
 	case "hermes-kanban":
 		limits, err := hermesProcessLimits(cfg, target)
@@ -207,6 +212,7 @@ func resolveSink(cfg *config.Config, target config.Target, route config.Route) (
 		if err != nil {
 			return nil, err
 		}
+		sink.Log, sink.TraceID = log, globalTraceID
 		if _, err := sink.Probe(context.Background()); err != nil {
 			return nil, fmt.Errorf("target %s: %w", route.Dispatch.Target, err)
 		}

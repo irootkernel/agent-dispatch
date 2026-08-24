@@ -179,7 +179,7 @@ func (a *reconcileArtifacts) reconcileIntentBuilder() func(routeID, reason, deci
 // resolved sink and backoff are returned for the head-of-submit recovery
 // wiring (E8-T2/H-6).
 func (a *reconcileArtifacts) submitRuntime(store storeOp) (*dispatch.Runtime, ports.Sink, dispatch.Backoff, error) {
-	sink, err := resolveSink(a.cfg, a.target, a.route)
+	sink, err := resolveSink(a.cfg, a.target, a.route, opsLogger(a.stderr, a.cfg))
 	if err != nil {
 		return nil, nil, dispatch.Backoff{}, err
 	}

@@ -266,6 +266,12 @@ func workService(command, configPath string, store storeOp, routeID string, stde
 		Resolver:      runtime.resolver,
 		FailureBudget: route.Dispatch.FailureBudget,
 		OutsideScope:  outsideScope,
+		Log:           opsLogger(stderr, cfg),
+		TraceID:       globalTraceID,
+		// The follow-up decision the store may create records the
+		// independent policy digest, not a route revision echo
+		// (E9-T3, L-18).
+		PolicyRevision: config.PolicyRevision(route),
 	}, 0
 }
 

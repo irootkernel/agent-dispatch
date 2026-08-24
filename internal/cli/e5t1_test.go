@@ -298,13 +298,22 @@ func TestWorkCompleteDirtySchedulesOneFollowup(t *testing.T) {
 	}
 
 	// The follow-up decision records the real revisions and
-	// encoder-produced reason codes — no placeholder policy revision.
+	// encoder-produced reason codes — the independent policy digest, not
+	// a route revision echo (E9-T3, L-18).
 	var policyRevision, routeRevision, reasonsJSON string
 	if err := store.QueryRow(`SELECT policy_revision, route_revision, reason_codes_json FROM policy_decisions WHERE decision_id = ?`, "dec-"+followup).Scan(&policyRevision, &routeRevision, &reasonsJSON); err != nil {
 		t.Fatalf("the follow-up decision must exist: %v", err)
 	}
-	if policyRevision != routeRevision || policyRevision == "" {
-		t.Fatalf("the follow-up decision must record the planned route revision, got policy %q route %q", policyRevision, routeRevision)
+	fixtureCfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedPolicy := config.PolicyRevision(fixtureCfg.Routes["wiki"])
+	if policyRevision != expectedPolicy || policyRevision == "" {
+		t.Fatalf("the follow-up decision must record the independent policy digest %q, got %q", expectedPolicy, policyRevision)
+	}
+	if policyRevision == routeRevision {
+		t.Fatalf("the policy digest must be independent of the route revision, got both %q", policyRevision)
 	}
 	var reasonCodes []string
 	if err := json.Unmarshal([]byte(reasonsJSON), &reasonCodes); err != nil || len(reasonCodes) != 1 {

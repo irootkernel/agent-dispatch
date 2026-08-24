@@ -29,7 +29,7 @@ func newGateSink(h *g3) (ports.Sink, error) {
 	}
 	route := cfg.Routes["wiki"]
 	target := cfg.Targets[route.Dispatch.Target]
-	return resolveSink(cfg, target, route)
+	return resolveSink(cfg, target, route, nil)
 }
 
 // Gate G3 (E4-T5): real end-to-end evidence for the Hermes Kanban
@@ -476,6 +476,12 @@ func TestG3AC303DowntimeAndRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.g3SetExecutable(t, down)
+	// The executable swap moves the route's behavior digest (E9-T3/
+	// T3-F006), so the operator re-acknowledges under the stand-in
+	// before dispatching — the pause the revision guard exists to force.
+	if _, _, errb, code := g3Run(t, h.bin, "route", "enable", "--route", "wiki", "--config", h.configPath, "--acknowledge-production-gate", g3RouteRevision(t, h.configPath), "--yes"); code != 0 {
+		t.Fatalf("re-acknowledge under the downtime stand-in: %s", errb)
+	}
 	if err := os.WriteFile(filepath.Join(h.vault, "Inbox", "down.md"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -509,9 +515,17 @@ func TestG3AC303DowntimeAndRestart(t *testing.T) {
 	// until the persisted backoff deadline passes and the work submits.
 	hermes, _ := exec.LookPath("hermes")
 	h.g3SetExecutable(t, hermes)
+	// The restore moves the behavior digest back, so the operator
+	// re-acknowledges the route under the restored executable before the
+	// drain (E9-T3/T3-F006: every executable swap is a re-acknowledge
+	// boundary, both directions).
+	if _, _, errb, code := g3Run(t, h.bin, "route", "enable", "--route", "wiki", "--config", h.configPath, "--acknowledge-production-gate", g3RouteRevision(t, h.configPath), "--yes"); code != 0 {
+		t.Fatalf("re-acknowledge under the restored executable: %s", errb)
+	}
 	// The operator resolves the downtime explicitly: retry returns the
-	// dead-lettered work to ready, and the drain resubmits the same
-	// idempotency key.
+	// dead-lettered work to ready, and the drain supersedes the stored
+	// plan — planned under the stand-in's revision — with a rebuilt
+	// request under the active configuration before submitting.
 	if _, _, errb, code := g3Run(t, h.bin, "dispatches", "retry", "--config", h.configPath, dispatchID, "--reason", "hermes downtime resolved"); code != 0 {
 		t.Fatalf("operator retry: %s", errb)
 	}
@@ -541,8 +555,35 @@ func TestG3AC303DowntimeAndRestart(t *testing.T) {
 	if row == nil {
 		t.Fatal("the downed dispatch never recovered after the target returned")
 	}
-	if row["dispatch_id"] != dispatchID {
-		t.Fatalf("recovered dispatch changed identity: %v vs %s", row["dispatch_id"], dispatchID)
+	// The recovered work is the stale-rebuilt replacement, not the
+	// original identity: the stored plan was superseded under the active
+	// configuration (E7-T3 staleness) because the executable swap moved
+	// the behavior digest between planning and recovery (E9-T3/T3-F006).
+	// The invariants that matter: the work was never lost, never
+	// duplicated, and the original is explicitly superseded — not
+	// abandoned beside an unrelated accepted dispatch.
+	h.g3AssertBoardTaskCount(t, 1)
+	store := e5t1Store(t, h.configPath)
+	defer store.Close()
+	var originalState string
+	if err := store.QueryRow(`SELECT state FROM dispatch_intents WHERE dispatch_id = ?`, dispatchID).Scan(&originalState); err != nil || originalState != "superseded" {
+		t.Fatalf("the downed original must be superseded by the rebuilt replacement, got %q %v", originalState, err)
+	}
+	// The accepted work is the recorded rebuild of exactly this
+	// original: the -rebuilt- identity tie plus the superseding
+	// decision linkage (RerunIntent records supersedes_decision_id).
+	if !strings.HasPrefix(row["dispatch_id"].(string), dispatchID+"-rebuilt-") {
+		t.Fatalf("the accepted work must be the original's rebuild: %v", row["dispatch_id"])
+	}
+	var supersedes string
+	if err := store.QueryRow(`SELECT p.supersedes_decision_id FROM policy_decisions p
+		JOIN dispatch_intents i ON i.decision_id = p.decision_id
+		WHERE i.dispatch_id = ?`, row["dispatch_id"]).Scan(&supersedes); err != nil || supersedes == "" {
+		t.Fatalf("the replacement's decision must supersede the original's: %q %v", supersedes, err)
+	}
+	var originalDecision string
+	if err := store.QueryRow(`SELECT decision_id FROM dispatch_intents WHERE dispatch_id = ?`, dispatchID).Scan(&originalDecision); err != nil || supersedes != originalDecision {
+		t.Fatalf("the superseded decision must be the original's: %q vs %q %v", supersedes, originalDecision, err)
 	}
 }
 
@@ -561,6 +602,14 @@ func TestG3AC304AmbiguousUnknownNoFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.g3SetExecutable(t, stub)
+	// Swapping the target executable changes the route's behavior digest
+	// (E9-T3/T3-F006: a route acknowledged under one binary never
+	// submits through another), so the operator re-acknowledges the
+	// route under the stub before dispatching — exactly the pause the
+	// revision guard exists to force.
+	if _, _, errb, code := g3Run(t, h.bin, "route", "enable", "--route", "wiki", "--config", h.configPath, "--acknowledge-production-gate", g3RouteRevision(t, h.configPath), "--yes"); code != 0 {
+		t.Fatalf("re-acknowledge under the stub executable: %s", errb)
+	}
 	if err := os.WriteFile(filepath.Join(h.vault, "Inbox", "amb.md"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}

@@ -89,6 +89,16 @@ func RouteRevision(cfg *Config, routeID string) (string, bool) {
 		},
 		"limits":       cfg.Limits,
 		"target_shape": map[string]any{"type": target.Type, "board": target.Board, "endpoint": target.Endpoint},
+		// Transport fields (E9-T3/T3-F006): swapping the target binary,
+		// its execution bounds, or its manifest byte bound is
+		// behavior-affecting — a route acknowledged under the old
+		// transport pauses until re-acknowledged.
+		"transport": map[string]any{
+			"executable":            target.Executable,
+			"submit_timeout":        target.SubmitTimeout,
+			"environment_allowlist": sortedCopy(target.EnvironmentAllowlist),
+			"max_manifest_bytes":    route.Batching.MaxManifestBytes,
+		},
 	}
 	// Batching and the retry structs marshal through fixed field order in
 	// their struct tags, which encoding/json keeps stable.
@@ -108,4 +118,41 @@ func sortedCopy(in []string) []string {
 	copy(out, in)
 	sort.Strings(out)
 	return out
+}
+
+// PolicyRevision computes the deterministic digest of exactly the
+// policy-evaluation surface of one route (E9-T3, L-18): the pattern
+// sets and resolved case mode the engine classifies under, the batching
+// thresholds the planner budgets with, and the structural actions the
+// planner chooses between. Every policy decision records it beside the
+// route revision so an audit can tell which policy content — not just
+// which route declaration — produced a disposition: two revisions of a
+// route with identical policy share a policy revision, and one policy
+// edit inside an unchanged route revision still moves it. Transport,
+// target, and dispatch-envelope fields cannot change a decision and
+// stay out; inert keys (unsafe_path_action) join only when they become
+// behavior-affecting.
+func PolicyRevision(route Route) string {
+	projection := map[string]any{
+		"case_mode": CaseMode(),
+		"include":   sortedCopy(route.Source.Include),
+		"exclude":   sortedCopy(route.Source.Exclude),
+		"batching": map[string]any{
+			"automatic_threshold": route.Batching.AutomaticThreshold,
+			"hard_limit":          route.Batching.HardLimit,
+		},
+		"policy": map[string]any{
+			"protected":             sortedCopy(route.Policy.Protected),
+			"immutable":             sortedCopy(route.Policy.Immutable),
+			"bulk_action":           route.Policy.BulkAction,
+			"overflow_action":       route.Policy.OverflowAction,
+			"fresh_instance_action": route.Policy.FreshInstanceAction,
+		},
+	}
+	enc, err := json.Marshal(projection)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(enc)
+	return "pol-" + hex.EncodeToString(sum[:12])
 }

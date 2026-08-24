@@ -27,7 +27,8 @@ const CreatedByAttribution = "agent-dispatch"
 type RenderOptions struct {
 	MaxManifestBytes int64
 	// ResourceMutexSupported suppresses --mutex-key when the target's
-	// capability report does not honor it (E8-T3, M-6).
+	// capability report does not honor it (E8-T3, M-6); the suppression
+	// is reported through RenderedTask.SuppressedMutex (E9-T3, T3-F007).
 	ResourceMutexSupported bool
 }
 
@@ -68,6 +69,9 @@ type RenderedTask struct {
 	Body          string
 	ManifestJSON  string
 	CreateOptions CreateOptions
+	// SuppressedMutex reports the render dropped a configured mutex key
+	// because the target lacks resource_mutex (E9-T3/T3-F007).
+	SuppressedMutex bool
 }
 
 // activationProjection is the untrusted manifest section: activation
@@ -89,27 +93,28 @@ type activationProjection struct {
 // trusted members; every untrusted value (manifest paths, digests,
 // flags) is confined to the delimited JSON manifest section and can
 // never alter the trusted fields (HER-006/HER-007, SEC-003).
-func Render(req ports.TaskRequest, opts RenderOptions) (RenderedTask, error) {
+func Render(req ports.TaskRequest, opts RenderOptions) (task RenderedTask, err error) {
+	suppressedMutex := false
 	if req.ContractVersion != ports.TaskRequestContractVersion {
-		return RenderedTask{}, &InvalidRequestError{Detail: fmt.Sprintf("contract version %q, want %q", req.ContractVersion, ports.TaskRequestContractVersion)}
+		return task, &InvalidRequestError{Detail: fmt.Sprintf("contract version %q, want %q", req.ContractVersion, ports.TaskRequestContractVersion)}
 	}
 	if req.DispatchID == "" {
-		return RenderedTask{}, &InvalidRequestError{Detail: "missing dispatch id"}
+		return task, &InvalidRequestError{Detail: "missing dispatch id"}
 	}
 	if req.IdempotencyKey == "" {
-		return RenderedTask{}, &InvalidRequestError{Detail: "missing idempotency key"}
+		return task, &InvalidRequestError{Detail: "missing idempotency key"}
 	}
 	if req.Route.ID == "" || req.Route.Revision == "" {
-		return RenderedTask{}, &InvalidRequestError{Detail: "missing route identity or revision"}
+		return task, &InvalidRequestError{Detail: "missing route identity or revision"}
 	}
 	if req.Resource.ID == "" || req.Resource.Workspace == "" {
-		return RenderedTask{}, &InvalidRequestError{Detail: "missing resource identity or workspace"}
+		return task, &InvalidRequestError{Detail: "missing resource identity or workspace"}
 	}
 	if !workspaceForm.MatchString(req.Resource.Workspace) {
-		return RenderedTask{}, &InvalidRequestError{Detail: fmt.Sprintf("workspace %q is not one of scratch, worktree, worktree:<path>, dir:<path>", truncate(req.Resource.Workspace, 80))}
+		return task, &InvalidRequestError{Detail: fmt.Sprintf("workspace %q is not one of scratch, worktree, worktree:<path>, dir:<path>", truncate(req.Resource.Workspace, 80))}
 	}
 	if req.Assignment != nil && req.Assignment.Profile == "" {
-		return RenderedTask{}, &InvalidRequestError{Detail: "assignment present without a profile"}
+		return task, &InvalidRequestError{Detail: "assignment present without a profile"}
 	}
 	// Interpolated trusted members are format-constrained: a value with
 	// control characters or option-like text would flow into the title,
@@ -123,28 +128,28 @@ func Render(req ports.TaskRequest, opts RenderOptions) (RenderedTask, error) {
 		{"content fingerprint", req.Activation.ContentFingerprint},
 	} {
 		if err := guardInterpolatedMember(member.name, member.value); err != nil {
-			return RenderedTask{}, err
+			return task, err
 		}
 	}
 	if req.ExecutionHints != nil {
 		if req.ExecutionHints.MaxRuntimeSeconds < 0 || req.ExecutionHints.MaxAttempts < 0 || req.ExecutionHints.MaxAttempts > 1<<31-1 {
-			return RenderedTask{}, &InvalidRequestError{Detail: "execution hints must be non-negative with attempts fitting the target field"}
+			return task, &InvalidRequestError{Detail: "execution hints must be non-negative with attempts fitting the target field"}
 		}
 	}
 	if req.Activation.Mode != "latest_state" {
-		return RenderedTask{}, &InvalidRequestError{Detail: fmt.Sprintf("activation mode %q is not latest_state", truncate(req.Activation.Mode, 40))}
+		return task, &InvalidRequestError{Detail: fmt.Sprintf("activation mode %q is not latest_state", truncate(req.Activation.Mode, 40))}
 	}
 	if req.Activation.Generation < 1 {
-		return RenderedTask{}, &InvalidRequestError{Detail: "activation generation must be >= 1"}
+		return task, &InvalidRequestError{Detail: "activation generation must be >= 1"}
 	}
 	if req.Activation.ContentFingerprint == "" {
-		return RenderedTask{}, &InvalidRequestError{Detail: "missing content fingerprint"}
+		return task, &InvalidRequestError{Detail: "missing content fingerprint"}
 	}
 	if len(req.AcceptanceCriteria) == 0 {
-		return RenderedTask{}, &InvalidRequestError{Detail: "acceptance criteria must not be empty"}
+		return task, &InvalidRequestError{Detail: "acceptance criteria must not be empty"}
 	}
 	if opts.MaxManifestBytes <= 0 {
-		return RenderedTask{}, &InvalidRequestError{Detail: "rendering requires a positive manifest byte bound"}
+		return task, &InvalidRequestError{Detail: "rendering requires a positive manifest byte bound"}
 	}
 
 	projection := activationProjection{
@@ -162,10 +167,10 @@ func Render(req ports.TaskRequest, opts RenderOptions) (RenderedTask, error) {
 	}
 	raw, err := json.Marshal(projection)
 	if err != nil {
-		return RenderedTask{}, &InvalidRequestError{Detail: "manifest serialization: " + truncate(err.Error(), 200)}
+		return task, &InvalidRequestError{Detail: "manifest serialization: " + truncate(err.Error(), 200)}
 	}
 	if int64(len(raw)) > opts.MaxManifestBytes {
-		return RenderedTask{}, &ManifestTooLargeError{Bytes: int64(len(raw)), Bound: opts.MaxManifestBytes}
+		return task, &ManifestTooLargeError{Bytes: int64(len(raw)), Bound: opts.MaxManifestBytes}
 	}
 
 	rendered := RenderedTask{
@@ -189,8 +194,15 @@ func Render(req ports.TaskRequest, opts RenderOptions) (RenderedTask, error) {
 	if req.Assignment != nil {
 		create.Assignee = req.Assignment.Profile
 		create.Skills = append([]string(nil), req.Assignment.Skills...)
-		if req.Assignment.MutexKey != "" && opts.ResourceMutexSupported {
-			create.MutexKey = req.Assignment.MutexKey
+		if req.Assignment.MutexKey != "" {
+			if opts.ResourceMutexSupported {
+				create.MutexKey = req.Assignment.MutexKey
+			} else {
+				// A mutex the target cannot honor is dropped rather than
+				// mis-sent; the flag makes the drop operator-visible
+				// (E9-T3, T3-F007).
+				suppressedMutex = true
+			}
 		}
 	}
 	create.Workspace = req.Resource.Workspace
@@ -203,6 +215,7 @@ func Render(req ports.TaskRequest, opts RenderOptions) (RenderedTask, error) {
 		}
 	}
 	rendered.CreateOptions = create
+	rendered.SuppressedMutex = suppressedMutex
 	return rendered, nil
 }
 

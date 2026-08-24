@@ -74,6 +74,6 @@ func TestResolutionErrorClassification(t *testing.T) {
 	}
 }
 
-func (s *stubStore) ReleaseQuarantineWithRevision(ctx context.Context, quarantineID, actor, reason, routeRevision, now string) (ports.QuarantineRecord, error) {
+func (s *stubStore) ReleaseQuarantineWithRevision(ctx context.Context, quarantineID, actor, reason, routeRevision, policyRevision, now string) (ports.QuarantineRecord, error) {
 	return s.ReleaseQuarantine(ctx, quarantineID, actor, reason, now)
 }

@@ -379,7 +379,7 @@ func runDispatchesReprocess(command string, args []string, stdout, stderr io.Wri
 		BatchID:         flags.positional,
 		RouteID:         batch.RouteID,
 		RouteRevision:   revision,
-		PolicyRevision:  revision,
+		PolicyRevision:  config.PolicyRevision(route),
 		Disposition:     disposition,
 		Classification:  classification,
 		ReasonCodesJSON: string(encoded),
@@ -502,7 +502,7 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 		return exit
 	}
 	defer closer.Close()
-	sink, err := resolveSink(cfg, target, route)
+	sink, err := resolveSink(cfg, target, route, opsLogger(stderr, cfg))
 	if err != nil {
 		return writeSinkError(stderr, command, err)
 	}

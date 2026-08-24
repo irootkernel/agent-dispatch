@@ -74,6 +74,7 @@ const (
 	EventDispatchUnknown         = "dispatch.unknown"
 	EventDispatchRetryScheduled  = "dispatch.retry_scheduled"
 	EventDispatchDeadLettered    = "dispatch.dead_lettered"
+	EventDispatchMutexSuppressed = "dispatch.mutex_suppressed"
 	EventDeliveryReconciled      = "delivery.reconciled"
 	EventRouteDirtyMarked        = "route.dirty_marked"
 	EventRouteFollowupCreated    = "route.followup_created"
@@ -272,6 +273,20 @@ func sanitizeValue(v any, policy PathPolicy) any {
 		return out
 	case map[string]any:
 		return sanitizeMap(t, policy)
+	case map[string]string:
+		// Typed string maps get the same key denylist as map[string]any
+		// (SEC-007): a value under a sensitive key is [redacted] before
+		// the path policy ever sees it (E9-T3, M-20's remainder; the
+		// key check is the round-1 security remediation).
+		out := make(map[string]string, len(t))
+		for k, v := range t {
+			if redactedKeys[k] {
+				out[k] = "[redacted]"
+				continue
+			}
+			out[k] = RenderPath(v, policy)
+		}
+		return out
 	case []any:
 		out := make([]any, len(t))
 		for i, item := range t {

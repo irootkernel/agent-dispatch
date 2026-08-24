@@ -1,5 +1,16 @@
 # SOT Changelog
 
+## 1.0.39 - 2026-08-24
+
+E9-T3: security, observability, and revision hygiene:
+
+- log sanitization covers string-map values (the M-20 remainder), so a path inside any map value rides the configured path policy;
+- a secret file owned by another uid is refused alongside the mode-bit check (L-15);
+- work.begun, work.completed, and work.receipt_invalid emit at the work command boundaries with trace/dispatch/run correlation, and doctor findings carry trace_id (L-17);
+- the route revision covers the transport fields — executable, submit_timeout, environment_allowlist, and the manifest byte bound — so swapping the target binary or its bounds pauses the acknowledged route (T3-F006);
+- a suppressed --mutex-key warns as dispatch.mutex_suppressed at submission instead of dropping silently (T3-F007);
+- every policy decision records config.PolicyRevision: an independent digest of the policy-evaluation surface, on arrival, reprocess, reconcile, follow-up, and quarantine-release decisions (L-18).
+
 ## 1.0.38 - 2026-08-24
 
 E9-T2: reconciliation and operator-surface hardening:

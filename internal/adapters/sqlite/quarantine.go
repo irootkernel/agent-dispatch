@@ -182,25 +182,25 @@ func (s *Store) ReleaseQuarantine(ctx context.Context, quarantineID, actor, reas
 	// which lags the configuration after any acknowledged change (epic
 	// audit round-1 F001). Callers that hold the live configuration use
 	// ReleaseQuarantineWithRevision with the computed current revision.
-	var routeRevision string
-	_ = s.QueryRowContext(ctx, `SELECT route_revision FROM policy_decisions WHERE decision_id = (SELECT decision_id FROM quarantine_items WHERE quarantine_id = ?)`, quarantineID).Scan(&routeRevision)
-	return s.resolveQuarantine(ctx, quarantineID, "released", actor, reason, now, true, routeRevision)
+	var routeRevision, policyRevision string
+	_ = s.QueryRowContext(ctx, `SELECT route_revision, policy_revision FROM policy_decisions WHERE decision_id = (SELECT decision_id FROM quarantine_items WHERE quarantine_id = ?)`, quarantineID).Scan(&routeRevision, &policyRevision)
+	return s.resolveQuarantine(ctx, quarantineID, "released", actor, reason, now, true, routeRevision, policyRevision)
 }
 
 // ReleaseQuarantineWithRevision resolves one held item with the
-// caller-computed current route revision recorded into the replacement
-// decision (the CLI loads the configuration and computes the revision;
-// the store cannot).
-func (s *Store) ReleaseQuarantineWithRevision(ctx context.Context, quarantineID, actor, reason, routeRevision, now string) (ports.QuarantineRecord, error) {
-	return s.resolveQuarantine(ctx, quarantineID, "released", actor, reason, now, true, routeRevision)
+// caller-computed current route revision and policy digest recorded into
+// the replacement decision (the CLI loads the configuration and computes
+// both; the store cannot).
+func (s *Store) ReleaseQuarantineWithRevision(ctx context.Context, quarantineID, actor, reason, routeRevision, policyRevision, now string) (ports.QuarantineRecord, error) {
+	return s.resolveQuarantine(ctx, quarantineID, "released", actor, reason, now, true, routeRevision, policyRevision)
 }
 
 // DiscardQuarantine resolves one held item without task creation.
 func (s *Store) DiscardQuarantine(ctx context.Context, quarantineID, actor, reason, now string) (ports.QuarantineRecord, error) {
-	return s.resolveQuarantine(ctx, quarantineID, "discarded", actor, reason, now, false, "")
+	return s.resolveQuarantine(ctx, quarantineID, "discarded", actor, reason, now, false, "", "")
 }
 
-func (s *Store) resolveQuarantine(ctx context.Context, quarantineID, action, actor, reason, now string, createReplacement bool, routeRevision string) (ports.QuarantineRecord, error) {
+func (s *Store) resolveQuarantine(ctx context.Context, quarantineID, action, actor, reason, now string, createReplacement bool, routeRevision, policyRevision string) (ports.QuarantineRecord, error) {
 	tx, err := s.BeginTx(ctx, nil)
 	if err != nil {
 		return ports.QuarantineRecord{}, err
@@ -241,10 +241,19 @@ func (s *Store) resolveQuarantine(ctx context.Context, quarantineID, action, act
 		// revision recorded work planned under a configuration the
 		// operator already changed — the released work re-evaluates
 		// under what is configured now, exactly like reprocess does.
+		// The replacement decision records the independent policy digest
+		// when the caller holds the live route (E9-T3, L-18); the
+		// default path passes the quarantined decision's own digest, so
+		// only a legacy row that somehow stored a blank falls back to
+		// the route revision (the pre-L-18 echo) rather than violating
+		// the NOT NULL column.
+		if policyRevision == "" {
+			policyRevision = routeRevision
+		}
 		if _, err := tx.Exec(`INSERT INTO policy_decisions (decision_id, route_id, route_revision, policy_revision, generation_lineage_json, disposition, classification, reason_codes_json, created_at, actor, supersedes_decision_id)
 			SELECT ?, route_id, ?, ?, ?, ?, ?, ?, ?, ?, decision_id
 			FROM policy_decisions WHERE decision_id = ?`,
-			replacementID, routeRevision, routeRevision,
+			replacementID, routeRevision, policyRevision,
 			auditJSON("route_id", routeID, "origin", "quarantine_release", "quarantine_id", quarantineID),
 			ports.DispositionReconcile, ports.ClassificationNormal,
 			releaseReasonCodes(quarantineID),

@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/config"
@@ -68,8 +69,16 @@ func Resolve(ctx context.Context, ref *config.SecretRef) (string, error) {
 		// (SEC-006, E7-T9/M-25): fail closed with the mode named so the
 		// operator can chmod it, instead of silently reading a
 		// world-readable credential.
-		if info, statErr := os.Stat(ref.Path); statErr == nil && info.Mode().Perm()&0o077 != 0 {
-			return "", &UnresolvedError{Ref: ref, Cause: fmt.Sprintf("secret file %s has permissive mode %v (chmod 600)", ref.Path, info.Mode().Perm())}
+		if info, statErr := os.Stat(ref.Path); statErr == nil {
+			if info.Mode().Perm()&0o077 != 0 {
+				return "", &UnresolvedError{Ref: ref, Cause: fmt.Sprintf("secret file %s has permissive mode %v (chmod 600)", ref.Path, info.Mode().Perm())}
+			}
+			// A secret file owned by another user is a configuration
+			// defect even with mode 0600: the owner can rotate or remove
+			// it out from under this process (E9-T3/L-15).
+			if stat, sysStatErr := info.Sys().(*syscall.Stat_t); sysStatErr && uint32(stat.Uid) != uint32(os.Getuid()) {
+				return "", &UnresolvedError{Ref: ref, Cause: fmt.Sprintf("secret file %s is owned by uid %d, not this process (uid %d)", ref.Path, stat.Uid, os.Getuid())}
+			}
 		}
 		file, err := os.Open(ref.Path)
 		if err != nil {

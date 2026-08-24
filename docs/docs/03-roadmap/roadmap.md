@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E9 (hardening, D-021) |
 | Current active task | None |
-| Next task | E9-T3 |
-| Completed tasks | 53 / 56 |
-| Planned tasks | 3 / 56 |
+| Next task | E9-T4 |
+| Completed tasks | 54 / 56 |
+| Planned tasks | 2 / 56 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -93,7 +93,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 51 | E8-T6 | Completed | Documentation truth restored and v0.1.2 released |
 | 52 | E9-T1 | Completed | Record schema truth and storage hardening |
 | 53 | E9-T2 | Completed | Reconciliation and operator-surface hardening |
-| 54 | E9-T3 | Planned | Security, observability, and revision hygiene |
+| 54 | E9-T3 | Completed | Security, observability, and revision hygiene |
 | 55 | E9-T4 | Planned | Test-coverage hardening |
 | 56 | E9-T5 | Planned | Documentation truth, dependency, and the v0.1.3 release |
 
@@ -2243,7 +2243,7 @@ Delivered as the reconciliation and operator-surface hardening: the reconciliati
 
 ## E9-T3: Security, Observability, and Revision Hygiene
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -2275,7 +2275,7 @@ E9-T2 Completed.
 
 ### Evidence
 
-Pending (E9-T3 not started).
+Delivered as the security, observability, and revision hygiene: observability `sanitizeValue` renders every `map[string]string` value through the configured path policy, so a path inside a string map can no longer survive the redacted policy (M-20's remainder; `TestE9T3MapValuePathSanitization`). The secret resolver refuses a secret file owned by another uid alongside its mode-bit check — a planted or swapped file is a configuration defect, never a secret to read (L-15; `TestE9T3SecretFileOwnershipChecked`, root-only transfer, same-uid resolution covered by the existing file test). The work commands emit `work.begun` and `work.completed` at the receipt boundaries and `work.receipt_invalid` on every rejection, each carrying TraceID/DispatchID/RunID correlation with the command logger wired through the CLI service, and every doctor finding carries the request's `trace_id` (L-17; `TestE9T3WorkLifecycleEventsCarryTrace`, `TestE9T3DoctorFindingsCarryTraceID`). The computed route revision now covers the transport fields — the target `executable`, `submit_timeout`, `environment_allowlist`, and the route's manifest byte bound — so replacing the target binary or its bounds pauses the acknowledged route like any behavior change (T3-F006; `TestE9T3RevisionCoversTransport`; the g3 downtime and ambiguity gates now re-acknowledge after every executable swap, and the downtime recovery asserts the stale-rebuilt replacement with exactly one board task — the identity-equality expectation encoded the old, revision-blind behavior). A render that drops a configured mutex key the target cannot honor reports `RenderedTask.SuppressedMutex`, and the sink emits one `dispatch.mutex_suppressed` warning carrying the trace, dispatch, route, and target identity while the submission itself still succeeds (T3-F007; renderer and sink tests). Every policy decision now records `config.PolicyRevision` — an independent `pol-` digest over the policy-evaluation surface (include/exclude, resolved case mode, batching thresholds, protected/immutable, bulk/overflow/fresh actions) — on arrival, reprocess, reconcile, follow-up completion, and quarantine-release replacement decisions; the no-live-route fallbacks keep the quarantined decision's own digest (the route-revision echo survives only in legacy rows written before this change) (L-18; `TestE9T3PolicyRevisionIndependentAndSensitive`, `TestE9T3ArrivalDecisionRecordsPolicyDigest`, and the e5t1 follow-up assertion updated to the new contract). Verified by `make verify` on darwin/arm64 (all checks green). Reviewed through two full-target Mulgae rounds (`r_01a0337c-17bd-7a34-a0fb-25e97db5c061`, remediation-eligible shape: zero committed findings, with the round-1 security report's typed-map denylist gap, the quarantine-fallback wording overstatement, and the g3 recovery's missing lineage tie all remediated in-tree — the denylist check now runs before the path policy with a regression test, the comment and this evidence phrase state the legacy-row echo honestly, and the downtime recovery asserts the original is superseded through the `-rebuilt-` identity tie and the superseding decision linkage; `r_01a03387-48d1-7857-92fd-aefcbacc9b00`, hardening-deferral-eligible: ci pass, coverage complete, publication committed, zero findings, every role confirming the six areas and the remediations). Changelog 1.0.39.
 
 ## E9-T4: Test-Coverage Hardening
 

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/observability"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
@@ -30,6 +31,12 @@ type Sink struct {
 	reportPath string
 	targetID   string
 	required   []string
+	// Log and TraceID make mutex suppression operator-visible: when
+	// rendering drops a configured mutex key the target cannot honor,
+	// Submit emits one dispatch.mutex_suppressed warning instead of
+	// failing silently (E9-T3, T3-F007). A nil Log keeps the sink quiet.
+	Log     *observability.Logger
+	TraceID string
 }
 
 // Compile-time contract check.
@@ -108,6 +115,16 @@ func (s *Sink) Submit(ctx context.Context, req ports.TaskRequest) (ports.SubmitR
 			return definiteNotSubmitted("manifest bound exceeded: " + tooLarge.Error()), nil
 		}
 		return definiteNotSubmitted(err.Error()), nil
+	}
+	if rendered.SuppressedMutex {
+		// The mutex key is configuration intent the target cannot honor:
+		// the drop is warned, never silent, and the key value itself is
+		// not logged (E9-T3, T3-F007).
+		s.Log.Warn(observability.EventDispatchMutexSuppressed, observability.Correlation{
+			TraceID: s.TraceID, DispatchID: req.DispatchID,
+			RouteID: req.Route.ID, RouteRevision: req.Route.Revision,
+			ResourceID: req.Resource.ID, TargetID: s.targetID,
+		}, "configured mutex key dropped: the target capability report lacks resource_mutex, so the task is submitted without mutual exclusion", nil)
 	}
 	task, err := s.adapter.client.Create(ctx, s.board, rendered.CreateOptions)
 	if err != nil {

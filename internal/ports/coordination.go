@@ -53,6 +53,13 @@ type ActiveCompletion struct {
 	// the caller prepared one; the store creates it only when the route
 	// actually needs a follow-up.
 	FollowupRequest *IntentInput
+	// PolicyRevision is the independent policy digest of the live route
+	// (config.PolicyRevision): the follow-up decision records it instead
+	// of echoing the route revision, so an audit can attribute the
+	// decision to policy content (E9-T3, L-18). Callers without a live
+	// route leave it empty and the store falls back to the route
+	// revision.
+	PolicyRevision string
 	// FollowupGeneration is the generation the follow-up prepared by this
 	// completion would carry (the completing dispatch's generation plus
 	// one); a generation beyond state.MaxConsecutiveFollowups moves the

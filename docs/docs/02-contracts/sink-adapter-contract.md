@@ -31,10 +31,10 @@ Unsupported methods return a typed `capability_unsupported` error and are not em
     "submit_idempotency_key": true,
     "lookup_by_idempotency_key": false,
     "lookup_by_external_ref": true,
-    "resource_mutex": false,
+    "resource_mutex": true,
     "execution_status": true,
-    "cancellation": false,
-    "result_receipt": false
+    "cancellation": true,
+    "result_receipt": true
   },
   "limits": {
     "maximum_request_bytes": 262144

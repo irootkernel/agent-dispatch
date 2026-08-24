@@ -20,7 +20,7 @@ import (
 // enable, and disable. `route plan` stays in plan.go.
 func runRoute(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		return usageError(stderr, "route", "route requires a subcommand: plan, list, show, enable, or disable")
+		return usageError(stderr, "route", "route requires a subcommand: plan, list, show, enable, disable, or stale")
 	}
 	switch args[0] {
 	case "plan":

@@ -30,7 +30,7 @@ Rules:
 agent-dispatch version
 agent-dispatch init
 agent-dispatch config validate|show
-agent-dispatch route list|show|plan|enable|disable
+agent-dispatch route list|show|plan|enable|disable|stale
 agent-dispatch watchman install|status|remove|test
 agent-dispatch dispatch
 agent-dispatch dispatches list|show|retry|reprocess|rerun|discard|refresh|drain

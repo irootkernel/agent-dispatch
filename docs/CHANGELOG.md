@@ -1,5 +1,12 @@
 # SOT Changelog
 
+## 1.0.45 - 2026-08-25
+
+E9-T7: header grammar and pinned-toolchain enforcement:
+
+- webhook header names validate against the complete RFC 9110 tchar allowlist at sink construction and through the configuration schema pattern on both `header_name` and `idempotency_header` (both copies byte-identical), with configuration-spec §5 stating the grammar and the regression tests pinning the identical separator class at both levels;
+- the new `go-version-check` target enforces the exact go.mod-pinned toolchain (1.26.6) before any build step of `make verify` and `make release` — the pin is read from the go directive, compared against the compiling toolchain, unit-tested, and prerequisite-ordered so `make -j` cannot bypass it; with GOTOOLCHAIN=auto the pinned toolchain is selected and the check passes;
+- VALIDATION.md's SCP-005 row and the release checklist's toolchain line state the enforced mechanism.
 ## 1.0.44 - 2026-08-25
 
 E9-T6: submission-gate revision and capability-report integrity:

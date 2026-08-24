@@ -406,17 +406,34 @@ func redact(secret, text string) string {
 	return strings.ReplaceAll(text, secret, "[redacted]")
 }
 
-// validHeaderName accepts RFC 9110 field-name tokens.
+// validHeaderName accepts RFC 9110 field-name tokens: every rune must be
+// a tchar (ALPHA, DIGIT, or one of !#$%&'*+-.^_`|~). The complete
+// allowlist rejects every other separator, quote, backslash, space,
+// control character, and non-ASCII rune before the configuration can
+// reach a submission attempt (E9-T7, D-023 F3); the configuration
+// schema carries the equivalent pattern.
 func validHeaderName(name string) bool {
 	if name == "" {
 		return false
 	}
 	for _, r := range name {
-		if r <= ' ' || r >= 0x7f || r == ':' {
+		if !isTchar(r) {
 			return false
 		}
 	}
 	return true
+}
+
+func isTchar(r rune) bool {
+	switch {
+	case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		return true
+	}
+	switch r {
+	case '!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~':
+		return true
+	}
+	return false
 }
 
 // validHeaderValue accepts RFC 9110 field-value content: visible

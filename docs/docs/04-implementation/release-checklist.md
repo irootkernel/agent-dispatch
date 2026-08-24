@@ -16,7 +16,7 @@
 
 ## Build and Supply Chain
 
-- [x] Go toolchain and dependencies are pinned (go 1.26.6; staticcheck as a tool dependency, SCP-005).
+- [x] Go toolchain and dependencies are pinned (go 1.26.6; staticcheck as a tool dependency, SCP-005); `make verify` and `make release` enforce the exact pin through `go-version-check` before any build step (E9-T7).
 - [x] Clean reproducible builds pass on macOS (darwin/arm64); Linux builds are reproducible but unverified at runtime (the recorded SCP-008 exception, D-017).
 - [x] Binaries and checksums are generated (make release; the byte-reproducibility double build is re-verified by E7-T12).
 - [x] Dependency/license review is complete (dependency-licenses.md, all 39 modules in the build graph: MIT, BSD, Apache, and MPL-2.0 tool-chain only, all compatible).

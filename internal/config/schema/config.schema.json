@@ -237,7 +237,8 @@
               ]
             },
             "header_name": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^[!#$%&'*+\\-.^_`|~0-9A-Za-z]+$"
             },
             "secret_ref": {
               "$ref": "#/$defs/secretRef"
@@ -249,7 +250,8 @@
         },
         "idempotency_header": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "pattern": "^[!#$%&'*+\\-.^_`|~0-9A-Za-z]+$"
         },
         "required_capabilities": {
           "type": "array",

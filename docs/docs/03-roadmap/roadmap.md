@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E9 (reopened by D-023) |
 | Current active task | None |
-| Next task | E9-T7 |
-| Completed tasks | 57 / 60 |
-| Planned tasks | 3 / 60 |
+| Next task | E9-T8 |
+| Completed tasks | 58 / 60 |
+| Planned tasks | 2 / 60 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -97,7 +97,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 55 | E9-T4 | Completed | Test-coverage hardening |
 | 56 | E9-T5 | Completed | Documentation truth, dependency, and the v0.1.3 release |
 | 57 | E9-T6 | Completed | Submission-gate revision and capability-report integrity |
-| 58 | E9-T7 | Planned | RFC 9110 header grammar and pinned-toolchain enforcement |
+| 58 | E9-T7 | Completed | RFC 9110 header grammar and pinned-toolchain enforcement |
 | 59 | E9-T8 | Planned | macOS-only support policy and Linux-surface removal |
 | 60 | E9-T9 | Planned | Documentation truth resynchronized and v0.1.4 released |
 
@@ -2396,7 +2396,7 @@ Delivered as the submission-gate revision and capability-report integrity: the c
 
 ## E9-T7: Header Grammar and Pinned-Toolchain Enforcement
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -2427,7 +2427,7 @@ E9-T6 Completed.
 
 ### Evidence
 
-Pending (E9-T7 not started).
+Delivered as the header grammar and pinned-toolchain enforcement: `validHeaderName` accepts exactly the RFC 9110 tchar set — ALPHA, DIGIT, and the fifteen specials — so every other separator, quote, and backslash the previous scan let through is rejected at sink construction for both `auth.header_name` and `idempotency_header` before any submission attempt (F3; `TestE9T7HeaderNameGrammar` pins the full separator class including `< > ? @ [ ]` that a partial regression could admit, and `TestE9T7SchemaRejectsNonTcharHeaderNames` pins the schema pattern against the identical list for both fields, with the valid tchar loads proven). The configuration schema carries the equivalent `pattern` on both fields with the two copies byte-identical, and configuration-spec §5 states the grammar in prose beside the collision rule it already documented. The new `go-version-check` target enforces the exact toolchain before any build: the pin is read from the go.mod go directive itself (single source of truth), `internal/tools/toolchaincheck` compares it against the toolchain compiling the check (`runtime.Version`), `VersionMatches` is unit-tested against the rejected-version matrix, and every compiling target carries the prerequisite edge so even `make -j` cannot start a build with a compiler that is not the pin (F4; with `GOTOOLCHAIN=auto` the go command selects the pinned toolchain itself and the check passes, which is the pin being honored). VALIDATION.md's SCP-005 row and the release checklist's toolchain line state the enforced mechanism in place of the go.mod-only reading. Verified by `make verify` on darwin/arm64 (all checks green, including a `make -j4` run confirming the check runs first) and a fresh `-count=1` full suite. Reviewed through two full-target Mulgae rounds (round 1 `r_01a0352e-419b-7031-bb71-098b8a06a324`: ci pass, coverage complete, zero committed findings, with the reports' material observations remediated in-tree — the parallel-make ordering edge, the GOTOOLCHAIN=auto wording precision, the configuration-spec §5 grammar sentence, the schema-level `header_name` coverage, and the test-comment correction; round 2 `r_01a0353a-d4a4-7105-ace2-742fb33f0402`: ci pass, coverage complete, publication committed, zero findings, every role confirming both gates; the residual report observations — the colon's absence from the sink grammar test's invalid list and the schema-test comment's "same invalid list" wording — carry to the E9 epic validation audit). Changelog 1.0.45.
 
 ## E9-T8: macOS-Only Support Policy and Linux-Surface Removal
 

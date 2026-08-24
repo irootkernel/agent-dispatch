@@ -12,9 +12,16 @@ LDFLAGS := -X $(PKG)/internal/version.Version=$(VERSION) \
            -X $(PKG)/internal/version.BuildTime=$(BUILDTIME)
 
 .PHONY: all build test test-race vet fmt-check staticcheck check-imports \
-        manifest-check schema-validation traceability verify clean
+        go-version-check manifest-check schema-validation traceability verify clean
 
 all: build
+
+# Every compiling or validating target requires the pinned-toolchain
+# check first, so even `make -j` cannot start a build with a compiler
+# that is not the pin (order is enforced by the prerequisite edge, not
+# by listing position).
+build test test-race vet staticcheck check-imports manifest-check \
+schema-validation traceability schedule-check: go-version-check
 
 build:
 	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/agent-dispatch
@@ -43,6 +50,20 @@ staticcheck:
 check-imports:
 	$(GO) run ./internal/importlint
 
+# Exact toolchain enforcement (SCP-005, E9-T7/D-023 F4): the pin reads
+# from the go.mod go directive so it can never drift from it, and the
+# check reports the toolchain actually compiling the check tool itself
+# (runtime.Version), which is the toolchain every later build step uses.
+# A build that would use a compiler other than the pin fails verify and
+# release before any build, test, or release artifact runs; with
+# GOTOOLCHAIN=auto the go command selects the pinned toolchain itself
+# and the check passes, which is the pin being honored.
+GO_VERSION_PIN := $(shell awk '/^go /{print $$2}' go.mod)
+
+go-version-check:
+	@test -n "$(GO_VERSION_PIN)" || { echo "go-version-check: go.mod carries no go directive"; exit 1; }
+	@$(GO) run ./internal/tools/toolchaincheck -want $(GO_VERSION_PIN)
+
 # Checksum verification of the SOT docs package; portable across macOS
 # (shasum) and Linux (sha256sum).
 manifest-check:
@@ -66,7 +87,7 @@ traceability:
 	@git diff --quiet -- docs/docs/00-sot/traceability-matrix.md || \
 	  (echo "traceability-matrix.md is stale; commit the regenerated file"; exit 1)
 
-verify: build fmt-check vet staticcheck check-imports test test-race manifest-check schema-validation traceability schedule-check
+verify: go-version-check build fmt-check vet staticcheck check-imports test test-race manifest-check schema-validation traceability schedule-check
 	@echo "verify: all checks passed"
 
 # E6-T3 release process (SCP-008): reproducible cross-platform
@@ -80,7 +101,7 @@ RELEASE_OS_ARCH := darwin/arm64 linux/amd64
 COMMIT_DATE ?= $(shell git show -s --format=%cI HEAD 2>/dev/null || echo 1970-01-01T00:00:00Z)
 RELEASE_COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 
-release:
+release: go-version-check
 	@if [ "$(RELEASE_COMMIT)" = "unknown" ]; then echo "release: git metadata absent — the commit stamp will be 'unknown' and the build time the epoch" >&2; fi
 	@rm -rf $(DIST_DIR) && mkdir -p $(DIST_DIR)
 	@for os_arch in $(RELEASE_OS_ARCH); do \

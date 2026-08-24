@@ -1,5 +1,12 @@
 # SOT Changelog
 
+## 1.0.46 - 2026-08-25
+
+E9-T8: the macOS-only support policy lands (D-023 finding F6):
+
+- the release output restricts to darwin/arm64 (one artifact plus SHA256SUMS); the linux/amd64 build leg, the systemd example assets, and the systemd leg of schedule-check are gone, and the uninstall script loses its systemd loop;
+- SCP-008 and AC-505 carry explicit D-023 supersession annotations with the D-020 closure records standing as history; the charter, testing strategy, implementation guide, configuration-spec, observability and Watchman guidance, and the installation guide state the macOS-only policy; the maintenance skill declares platforms macos and the root README names the only supported platform;
+- the schedule-example tests pin the reduced launchd-only set; historical release notes keep their Linux records with D-023 as the supersession authority.
 ## 1.0.45 - 2026-08-25
 
 E9-T7: header grammar and pinned-toolchain enforcement:

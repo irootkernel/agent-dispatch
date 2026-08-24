@@ -17,16 +17,16 @@
 ## Build and Supply Chain
 
 - [x] Go toolchain and dependencies are pinned (go 1.26.6; staticcheck as a tool dependency, SCP-005); `make verify` and `make release` enforce the exact pin through `go-version-check` before any build step (E9-T7).
-- [x] Clean reproducible builds pass on macOS (darwin/arm64); Linux builds are reproducible but unverified at runtime (the recorded SCP-008 exception, D-017).
+- [x] Clean reproducible builds pass on macOS (darwin/arm64 — the only supported platform under the D-023 policy; the earlier Linux-build line is superseded history).
 - [x] Binaries and checksums are generated (make release; the byte-reproducibility double build is re-verified by E7-T12).
 - [x] Dependency/license review is complete (dependency-licenses.md, all 39 modules in the build graph: MIT, BSD, Apache, and MPL-2.0 tool-chain only, all compatible).
 - [x] Build version, commit, and schema ranges are embedded (`version --output json`).
 
 ## Tests
 
-- [x] Unit, component, integration, race, multi-process, and crash tests pass (make verify including -race on darwin/arm64; the Linux leg carries the recorded exception).
+- [x] Unit, component, integration, race, multi-process, and crash tests pass (make verify including -race on darwin/arm64, the only supported platform).
 - [x] JSON Schemas parse and examples validate (make schema-validation, 12 schemas).
-- [x] All G0-G5 acceptance scenarios pass (re-verified 2026-08-23; AC-505 carries the recorded Linux exception).
+- [x] All G0-G5 acceptance scenarios pass (re-verified 2026-08-23; AC-505's Linux-host scenario is superseded by D-023 with its D-020 closure standing as history).
 - [x] Real Watchman test passes (2026.07.27.00).
 - [x] Real disposable Hermes Kanban test passes (0.19.1, disposable boards).
 - [x] Webhook fake/contract tests pass (TLS conformance suite).
@@ -65,7 +65,7 @@
 - [x] `doctor`, `status`, inspection, retry, reprocess, rerun, discard, reconcile, quarantine, and maintenance commands work (E7-T5/E7-T7 completed the surface).
 - [x] Retention dry-run and prune preserve unresolved lineage (and begun receipts while their dispatch is unresolved or holds the active slot; begun receipts prune with a terminal lineage past retention, E9 epic validation round-1 F001).
 - [x] Watchman install/status/remove is idempotent.
-- [x] `launchd` and `systemd --user` scheduled reconciliation examples are tested (make schedule-check on each platform; systemd verified where the tool exists).
+- [x] The `launchd` scheduled reconciliation example and the uninstall script are tested (make schedule-check on macOS; the systemd examples are retired under D-023).
 - [x] Upgrade and uninstall procedures are documented.
 
 ## Artifacts
@@ -76,5 +76,5 @@
 - [x] Default disabled config (two-key gate enforced, E7-T6).
 - [x] Verified Hermes capability report template and compatibility documentation.
 - [x] Hermes companion skill.
-- [x] Changelog and release notes (the v0.1.1 notes disclose the Linux exception).
+- [x] Changelog and release notes (the v0.1.1 notes disclose the Linux exception — historical; releases from v0.1.4 on are darwin/arm64-only under D-023).
 - [x] Acceptance reports (docs/VALIDATION.md; the archived compliance review under docs/reports/).

@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E9 (reopened by D-023) |
 | Current active task | None |
-| Next task | E9-T8 |
-| Completed tasks | 58 / 60 |
-| Planned tasks | 2 / 60 |
+| Next task | E9-T9 |
+| Completed tasks | 59 / 60 |
+| Planned tasks | 1 / 60 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -98,7 +98,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 56 | E9-T5 | Completed | Documentation truth, dependency, and the v0.1.3 release |
 | 57 | E9-T6 | Completed | Submission-gate revision and capability-report integrity |
 | 58 | E9-T7 | Completed | RFC 9110 header grammar and pinned-toolchain enforcement |
-| 59 | E9-T8 | Planned | macOS-only support policy and Linux-surface removal |
+| 59 | E9-T8 | Completed | macOS-only support policy and Linux-surface removal |
 | 60 | E9-T9 | Planned | Documentation truth resynchronized and v0.1.4 released |
 
 ---
@@ -2431,7 +2431,7 @@ Delivered as the header grammar and pinned-toolchain enforcement: `validHeaderNa
 
 ## E9-T8: macOS-Only Support Policy and Linux-Surface Removal
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -2462,7 +2462,7 @@ E9-T7 Completed.
 
 ### Evidence
 
-Pending (E9-T8 not started).
+Delivered as the macOS-only support policy and Linux-surface removal under the D-023 decision: the release output restricts to exactly `darwin/arm64` (proven by a throwaway `make release` run producing one artifact plus `SHA256SUMS`), the `linux/amd64` build leg is gone, the systemd service and timer examples leave `docs/examples/scripts/` with the uninstall script and the schedule examples README rewritten, and `schedule-check` lints the launchd artifact and the uninstall script only (the manifest check simplifies to `shasum`, the supported host's tool). SCP-008 in required-spec and AC-505 in acceptance-criteria carry explicit D-023 supersession annotations with the historical D-020 closure records standing as history; the charter's success definition, the testing strategy's release layer, the implementation guide's driver row, configuration-spec's pattern-mode wording, the observability and Watchman scheduling guidance, and the installation guide (header, release output, platform path table, scheduling section, validator wording) all state the macOS-only policy; the packaged maintenance skill declares `platforms: [macos]` and the root README names macOS as the only supported platform. Historical release notes keep their Linux-artifact records unchanged with D-023 as the supersession authority. The three tests that pinned the systemd artifacts carry the policy (the E6-T3 invocation and existence tests and the E9-T4 recipe test now pin the launchd recipe; `TestScheduleExamplesExistForMacOS` guards the reduced set), and a fresh sweep shows every remaining Linux mention in the active specification and operations documents carries its supersession or history context. Traceability and the manifest regenerate for the reduced file set. Verified by `make verify` on darwin/arm64 (all checks green) and the throwaway release artifact check. Reviewed through two full-target Mulgae rounds (`r_01a0354f-bc64-7ef5-b0a9-723dc80c1374`, remediation-eligible: ci pass with three findings — the missing AC-505 annotation itself (F001, medium: the roadmap's supersession claim had not landed in acceptance-criteria.md), VALIDATION.md's stale present-tense systemd claims (F002), and the release checklist's live systemd items (F003) — all three verified valid and remediated in-tree; `r_01a03557-b583-772b-aa67-38f130a31b6d`, hardening-deferral-eligible: ci pass, coverage complete, publication committed, zero findings, every role confirming the remediated annotations and the policy sweep). Changelog 1.0.46.
 
 ## E9-T9: Documentation Truth Resynchronization and the v0.1.4 Release
 

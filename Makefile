@@ -64,14 +64,10 @@ go-version-check:
 	@test -n "$(GO_VERSION_PIN)" || { echo "go-version-check: go.mod carries no go directive"; exit 1; }
 	@$(GO) run ./internal/tools/toolchaincheck -want $(GO_VERSION_PIN)
 
-# Checksum verification of the SOT docs package; portable across macOS
-# (shasum) and Linux (sha256sum).
+# Checksum verification of the SOT docs package (macOS-only policy,
+# D-023: shasum is the supported host's tool).
 manifest-check:
-	cd docs && if command -v shasum >/dev/null 2>&1; then \
-	  shasum -a 256 -c MANIFEST.sha256; \
-	else \
-	  sha256sum -c MANIFEST.sha256; \
-	fi
+	cd docs && shasum -a 256 -c MANIFEST.sha256
 
 # Draft 2020-12 schema and example validation (D-015; Python validator retired).
 schema-validation:
@@ -90,14 +86,15 @@ traceability:
 verify: go-version-check build fmt-check vet staticcheck check-imports test test-race manifest-check schema-validation traceability schedule-check
 	@echo "verify: all checks passed"
 
-# E6-T3 release process (SCP-008): reproducible cross-platform
-# binaries plus a portable checksum list under dist/. The Go toolchain
-# with -trimpath and the commit-pinned version, commit, and build time
-# produces byte-identical binaries for one commit, so the checksums are
-# generated over the binaries directly (archives would embed
-# machine-specific metadata).
+# E6-T3 release process, restricted by the D-023 support policy
+# (E9-T8): darwin/arm64 is the only supported platform, so the release
+# output is exactly one artifact set plus its checksum list under
+# dist/. The Go toolchain with -trimpath and the commit-pinned version,
+# commit, and build time produces byte-identical binaries for one
+# commit, so the checksums are generated over the binaries directly
+# (archives would embed machine-specific metadata).
 DIST_DIR := dist
-RELEASE_OS_ARCH := darwin/arm64 linux/amd64
+RELEASE_OS_ARCH := darwin/arm64
 COMMIT_DATE ?= $(shell git show -s --format=%cI HEAD 2>/dev/null || echo 1970-01-01T00:00:00Z)
 RELEASE_COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 
@@ -111,28 +108,21 @@ release: go-version-check
 	  -ldflags "-X $(PKG)/internal/version.Version=$(VERSION) -X $(PKG)/internal/version.Commit=$(RELEASE_COMMIT) -X $(PKG)/internal/version.BuildTime=$(COMMIT_DATE)" \
 	  -o $(DIST_DIR)/agent-dispatch-$(VERSION)-$$tag ./cmd/agent-dispatch || exit 1; \
 	done
-	@cd $(DIST_DIR) && if command -v shasum >/dev/null 2>&1; then \
-	  shasum -a 256 agent-dispatch-$(VERSION)-* | LC_ALL=C sort > SHA256SUMS; \
-	else \
-	  sha256sum agent-dispatch-$(VERSION)-* | LC_ALL=C sort > SHA256SUMS; \
-	fi
+	@cd $(DIST_DIR) && shasum -a 256 agent-dispatch-$(VERSION)-* | LC_ALL=C sort > SHA256SUMS
 	@cat $(DIST_DIR)/SHA256SUMS
 	@echo "release: artifacts in $(DIST_DIR) for $(VERSION)"
 
-# E6-T3 scheduling-artifact validation: the launchd and systemd
-# examples are verified with the platform tool where it exists
-# (SCP-008 "where possible"); a missing tool is reported, not fatal,
-# because the other platform validates its own artifact where it is deployed.
+# E6-T3 scheduling-artifact validation under the macOS-only policy
+# (D-023/E9-T8): the launchd example is linted with the platform tool
+# and the uninstall script with sh -n; the systemd examples are
+# superseded history (D-023).
 schedule-check:
-	@miss=0; \
-	if command -v plutil >/dev/null 2>&1; then \
+	@if command -v plutil >/dev/null 2>&1; then \
 	  plutil -lint docs/examples/scripts/agent-dispatch-reconcile.launchd.plist.example || exit 1; \
-	else miss=1; fi; \
-	if command -v systemd-analyze >/dev/null 2>&1; then \
-	  systemd-analyze verify docs/examples/scripts/agent-dispatch-reconcile.service.example docs/examples/scripts/agent-dispatch-reconcile.timer.example || exit 1; \
-	else miss=1; fi; \
+	else \
+	  echo "schedule-check: plutil absent; validated the shell script only (run on macOS to lint the launchd artifact)"; \
+	fi; \
 	sh -n docs/examples/scripts/agent-dispatch-uninstall.sh.example || exit 1; \
-	if [ $$miss -eq 1 ]; then echo "schedule-check: platform validator absent; validated the shell script only (run on the other platform to lint its artifact)"; fi; \
 	echo "schedule-check: done"
 
 clean:

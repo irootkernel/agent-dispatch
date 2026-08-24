@@ -1,9 +1,10 @@
 # Installation, Scheduling, Upgrade, and Backup
 
-E6-T3 packaging surface (SCP-008, OPS-006, OPS-007, OPS-009): how the
-binary, configuration, state, trigger, and daily reconciliation
-schedule are installed on macOS and Linux, and how the installation is
-upgraded, backed up, and removed. Agent Dispatch is a set of one-shot CLI
+E6-T3 packaging surface (SCP-008 as superseded by the D-023
+macOS-only policy, OPS-006, OPS-007, OPS-009): how the binary,
+configuration, state, trigger, and daily reconciliation schedule are
+installed on macOS — darwin/arm64, the only supported platform (E9-T8)
+— and how the installation is upgraded, backed up, and removed. Agent Dispatch is a set of one-shot CLI
 commands — **no daemon is installed or required** (OPS-007, ADR
 posture): Watchman owns sensing, the platform scheduler owns the daily
 reconciliation, and every agent-dispatch invocation opens SQLite, does its
@@ -15,11 +16,10 @@ Release artifacts are byte-reproducible binaries plus a portable
 `SHA256SUMS` file, built from the repository root:
 
 ```sh
-make release VERSION=<the-release-tag>  # e.g. v0.1.2
+make release VERSION=<the-release-tag>  # e.g. v0.1.3
 # dist/agent-dispatch-<version>-darwin-arm64
-# dist/agent-dispatch-<version>-linux-amd64
 # dist/SHA256SUMS
-cd dist && shasum -a 256 -c SHA256SUMS   # or: sha256sum -c SHA256SUMS
+cd dist && shasum -a 256 -c SHA256SUMS
 ```
 
 The build pins `-trimpath` and stamps the version, the full release
@@ -33,8 +33,7 @@ metadata). Copy the `agent-dispatch` binary for your platform onto the PATH
 
 | Platform | Default config | Default state directory |
 |---|---|---|
-| macOS | `~/.config/agent-dispatch/config.yaml` | `~/Library/Application Support/Agent Dispatch` |
-| Linux | `$XDG_CONFIG_HOME/agent-dispatch/config.yaml` (else `~/.config/agent-dispatch/config.yaml`) | `$XDG_STATE_HOME/agent-dispatch` (else `~/.local/state/agent-dispatch`) |
+| macOS (the only supported platform, D-023) | `~/.config/agent-dispatch/config.yaml` | `~/Library/Application Support/Agent Dispatch` |
 
 Precedence everywhere: an explicit `--config` path, then the
 `AGENT_DISPATCH_CONFIG` environment variable, then the platform default; the
@@ -77,12 +76,8 @@ Agent Dispatch daemon. Verified examples live in
 - **macOS (launchd)**: `agent-dispatch-reconcile.launchd.plist.example` —
   install into `~/Library/LaunchAgents/` and `launchctl load` it; it
   runs `agent-dispatch reconcile --route <id> --reason scheduled --output
-  json` daily at the configured time.
-- **Linux (systemd --user)**: `agent-dispatch-reconcile.service.example` and
-  `agent-dispatch-reconcile.timer.example` — install into
-  `~/.config/systemd/user/`, `systemctl --user daemon-reload`, and
-  `systemctl --user enable --now agent-dispatch-reconcile.timer` (`daily`,
-  persistent).
+  json` daily at the configured time. (The retired Linux systemd --user
+  examples are superseded history under the D-023 macOS-only policy.)
 
 The shipped recipes carry `--submit` (E9-T4/T2-F001): the two-key gate
 is the safety boundary. Before the production acknowledgement the
@@ -95,9 +90,9 @@ schedule is
 idempotently inspectable: `agent-dispatch status` reports
 `last_reconciled_at`, and `agent-dispatch doctor` flags
 `reconciliation_never_run` and `reconciliation_overdue` (over 25
-hours). `make verify` validates the artifacts with the platform tool
-(`plutil -lint`, `systemd-analyze verify`) with the tool present on the
-current host (SCP-008, where possible); GitHub Actions is not used.
+hours). `make verify` validates the launchd artifact with the platform tool
+(`plutil -lint`) and the uninstall script with `sh -n` (SCP-008 as
+superseded by D-023); GitHub Actions is not used.
 
 ## 5. Upgrade (OPS-009)
 

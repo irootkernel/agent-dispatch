@@ -31,7 +31,7 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | SCP-005 | The implementation **MUST** be written in Go and pin its toolchain and dependencies. |
 | SCP-006 | Operator configuration **MUST** be YAML and validated before side effects. |
 | SCP-007 | Durable local state **MUST** use SQLite on a local filesystem. Network filesystem state is unsupported. |
-| SCP-008 | v0.1 **MUST** be verified on macOS and one supported Linux environment. Hosted CI is not used; run `make verify` on each target platform. |
+| SCP-008 | v0.1 **MUST** be verified on macOS and one supported Linux environment. Hosted CI is not used; run `make verify` on each target platform. *(Superseded by D-023, E9-T8: darwin/arm64 is the only supported platform for the current product line — the Linux verification clause is retired with the Linux packaging surface; the historical D-020 closure record stands as history.)* |
 | SCP-009 | Git **MAY** enrich evidence but **MUST NOT** be required for basic ingestion and dispatch. |
 
 ## 4. Watchman Source

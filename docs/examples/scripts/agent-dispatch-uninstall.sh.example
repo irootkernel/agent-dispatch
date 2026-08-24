@@ -11,7 +11,6 @@ ROUTE="${AGENT_DISPATCH_ROUTE:-wiki-maintenance}"
 CONFIG="${AGENT_DISPATCH_CONFIG:-$HOME/.config/agent-dispatch/config.yaml}"
 BINARY="${AGENT_DISPATCH_BINARY:-/usr/local/bin/agent-dispatch}"
 PLIST="$HOME/Library/LaunchAgents/xyz.rootkernel.agent-dispatch.reconcile.plist"
-UNITS="$HOME/.config/systemd/user/agent-dispatch-reconcile.service $HOME/.config/systemd/user/agent-dispatch-reconcile.timer"
 
 purge_state=0
 for arg in "$@"; do
@@ -27,18 +26,13 @@ done
 # 2. Remove the managed Watchman trigger (never removes the watch root).
 "$BINARY" watchman remove --route "$ROUTE" --config "$CONFIG" --yes || true
 
-# 3. Remove the scheduled reconciliation units.
+# 3. Remove the scheduled reconciliation LaunchAgent (the retired
+# systemd units are superseded history under the D-023 macOS-only
+# policy).
 if [ -f "$PLIST" ]; then
     launchctl unload "$PLIST" 2>/dev/null || true
     rm -f "$PLIST"
 fi
-for unit in $UNITS; do
-    if [ -f "$unit" ]; then
-        systemctl --user disable --now "$(basename "$unit")" 2>/dev/null || true
-        rm -f "$unit"
-        systemctl --user daemon-reload 2>/dev/null || true
-    fi
-done
 
 # 4. Remove the binary.
 rm -f "$BINARY"

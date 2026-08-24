@@ -110,7 +110,7 @@ If a trustworthy source position is absent, leave `source_event_key` null and re
 
 `agent-dispatch reconcile --route <id>` enumerates the current configured Markdown scope safely, compares it with persisted path facts, and creates one reconciliation batch. It does not synthesize one source observation per file and does not invoke Watchman re-registration.
 
-Daily reconciliation is scheduled externally through `launchd`, `systemd --user`, cron, or another operator-owned scheduler. The schedule invokes the CLI and does not require a Agent Dispatch daemon.
+Daily reconciliation is scheduled externally through `launchd` or another operator-owned macOS scheduler (D-023: darwin/arm64 is the only supported platform). The schedule invokes the CLI and does not require a Agent Dispatch daemon.
 
 ## 11. Test Fixtures
 

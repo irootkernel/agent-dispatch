@@ -11,7 +11,7 @@
 | Multi-process | Race and lease correctness | helper processes + real SQLite |
 | Crash injection | Every side-effect boundary | helper process termination |
 | End-to-end | Real Watchman + disposable Hermes + test vault | installed tools |
-| Release | Clean-host install and upgrade | macOS/Linux environments |
+| Release | Clean-host install and upgrade | macOS (darwin/arm64, the only supported platform, D-023) |
 
 ## 2. Determinism
 

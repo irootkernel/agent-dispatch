@@ -195,54 +195,30 @@ func TestScheduleExamplesInvokeVerifiedCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := os.ReadFile("../../docs/examples/scripts/agent-dispatch-reconcile.service.example")
-	if err != nil {
-		t.Fatal(err)
-	}
 	if !strings.Contains(string(plist), "<string>--submit</string>") {
 		t.Fatalf("the launchd invocation must carry --submit")
 	}
-	var execSubmit bool
-	for _, line := range strings.Split(string(service), "\n") {
-		if strings.HasPrefix(line, "ExecStart=") && strings.Contains(line, "--submit") {
-			execSubmit = true
-		}
-	}
-	if !execSubmit {
-		t.Fatalf("the systemd ExecStart must carry --submit")
-	}
-	for _, artifact := range []string{string(plist), string(service)} {
-		if !strings.Contains(artifact, "reconcile") || !strings.Contains(artifact, "scheduled") {
-			t.Fatalf("schedule artifact does not invoke the scheduled reconciliation: %.80s", artifact)
-		}
+	if !strings.Contains(string(plist), "reconcile") || !strings.Contains(string(plist), "scheduled") {
+		t.Fatalf("schedule artifact does not invoke the scheduled reconciliation: %.80s", plist)
 	}
 	if strings.Contains(string(plist), "/tmp") {
 		t.Fatalf("launchd plist must not log to fixed /tmp paths")
 	}
-	if !strings.Contains(string(service), "Type=oneshot") {
-		t.Fatalf("systemd service must be a oneshot, not a daemon")
-	}
-	timer, err := os.ReadFile("../../docs/examples/scripts/agent-dispatch-reconcile.timer.example")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, must := range []string{"OnCalendar=daily", "Persistent=true", "WantedBy=timers.target"} {
-		if !strings.Contains(string(timer), must) {
-			t.Fatalf("timer example lost %s", must)
-		}
-	}
+	// The systemd service and timer examples are retired with the
+	// Linux packaging surface (D-023, E9-T8); the launchd recipe is
+	// the supported scheduling artifact.
 	var zout, zerr bytes.Buffer
 	if code := Run([]string{"completion", "zsh"}, &zout, &zerr); code != 0 || !strings.HasPrefix(zout.String(), "#compdef agent-dispatch") {
 		t.Fatalf("zsh completion lacks its header: %q", zout.String())
 	}
 }
 
-// TestScheduleExamplesExistForBothPlatforms guards the example set.
-func TestScheduleExamplesExistForBothPlatforms(t *testing.T) {
+// TestScheduleExamplesExistForMacOS guards the example set under the
+// D-023 macOS-only policy (E9-T8): the launchd recipe and the
+// uninstall script; the systemd examples are retired.
+func TestScheduleExamplesExistForMacOS(t *testing.T) {
 	for _, name := range []string{
 		"agent-dispatch-reconcile.launchd.plist.example",
-		"agent-dispatch-reconcile.service.example",
-		"agent-dispatch-reconcile.timer.example",
 		"agent-dispatch-uninstall.sh.example",
 	} {
 		if _, err := os.Stat(filepath.Join("../../docs/examples/scripts", name)); err != nil {

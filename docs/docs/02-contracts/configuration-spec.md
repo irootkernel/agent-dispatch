@@ -182,7 +182,7 @@ routes:
 - `**` recursive matching is required.
 - Exclude takes precedence over include.
 - Protected and immutable patterns are evaluated after include/exclude.
-- Pattern behavior must be identical on macOS and Linux for the same normalized path.
+- Pattern behavior is explicit per host through the resolved case mode (the supported host is macOS/darwin-arm64, D-023; the resolver stays host-derived so a future platform carries its own explicit mode).
 - Case sensitivity follows the configured policy, not an accidental host filesystem behavior. v0.1 default is `filesystem`, and the resolved behavior is recorded in the route revision.
 
 ## 8. Policy Actions

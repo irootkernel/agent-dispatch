@@ -100,7 +100,7 @@ For the first use case, the work request asks Hermes to evaluate the **latest st
 
 ## 8. Success Definition for v0.1
 
-Agent Dispatch v0.1 is complete when all release acceptance cases pass on macOS and a supported Linux environment (closed for v0.1.2 under D-020: `make verify` passed on linux/arm64 as a non-root user at `f00ed30` — the two permission-expectation tests self-skip under root; the real Hermes/Watchman legs and `systemd-analyze` remain macOS-verified only), a real Obsidian vault can be wired to Watchman, Hermes Kanban receives one durable task per effective route generation, restart and ambiguity tests do not silently lose work, and feedback-loop tests demonstrate bounded follow-up behavior.
+Agent Dispatch v0.1 is complete when all release acceptance cases pass on macOS (darwin/arm64, the only supported platform under the D-023 policy, E9-T8 — the earlier "and a supported Linux environment" clause is superseded, with the D-020 linux/arm64 verification standing as history), a real Obsidian vault can be wired to Watchman, Hermes Kanban receives one durable task per effective route generation, restart and ambiguity tests do not silently lose work, and feedback-loop tests demonstrate bounded follow-up behavior.
 
 ## 9. Product Constraints
 

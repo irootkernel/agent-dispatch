@@ -349,7 +349,6 @@ func TestE9T4FailureBudgetMirrorDrivesUncertain(t *testing.T) {
 func TestE9T4ScheduledRecipesCarrySubmit(t *testing.T) {
 	for _, name := range []string{
 		"agent-dispatch-reconcile.launchd.plist.example",
-		"agent-dispatch-reconcile.service.example",
 	} {
 		body, err := os.ReadFile(filepath.Join("..", "..", "docs", "examples", "scripts", name))
 		if err != nil {

@@ -4,7 +4,7 @@ description: "Companion skill for Hermes Kanban tasks created by Agent Dispatch:
 version: 1.0.0
 author: Agent Dispatch
 license: MIT
-platforms: [macos, linux]
+platforms: [macos]
 metadata:
   hermes:
     tags: [Agent Dispatch, wiki, maintenance, provenance, receipts]

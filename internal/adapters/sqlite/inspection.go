@@ -59,7 +59,12 @@ func (s *Store) ListIntents(ctx context.Context, f ports.IntentFilter) ([]ports.
 	if limit <= 0 {
 		limit = 100
 	}
-	query := `SELECT dispatch_id, route_id, target_id, generation, idempotency_key, state, attempt_count, next_attempt_at, created_at, updated_at
+	// The list rows carry the same schema-required members the show path
+	// emits (E9-T1/M-16; round-1 F002: the list previously returned the
+	// summary struct with the new members empty). The request document
+	// stays show-only: the list is a bounded index view.
+	query := `SELECT dispatch_id, route_id, target_id, generation, idempotency_key, state, attempt_count, next_attempt_at, created_at, updated_at,
+		decision_id, route_revision, resource_id, content_fingerprint
 		FROM dispatch_intents WHERE ` + strings.Join(where, " AND ") + ` ORDER BY created_at DESC, dispatch_id DESC LIMIT ?`
 	args = append(args, limit)
 	if f.Offset > 0 {
@@ -76,10 +81,13 @@ func (s *Store) ListIntents(ctx context.Context, f ports.IntentFilter) ([]ports.
 		var sum ports.IntentSummary
 		var next sql.NullString
 		if err := rows.Scan(&sum.DispatchID, &sum.RouteID, &sum.TargetID, &sum.Generation, &sum.IdempotencyKey,
-			&sum.State, &sum.AttemptCount, &next, &sum.CreatedAt, &sum.UpdatedAt); err != nil {
+			&sum.State, &sum.AttemptCount, &next, &sum.CreatedAt, &sum.UpdatedAt,
+			&sum.DecisionID, &sum.RouteRevision, &sum.ResourceID, &sum.ContentFingerprint); err != nil {
 			return nil, err
 		}
 		sum.NextAttemptAt = nullText(next)
+		sum.SchemaVersion = ports.IntentRecordSchemaVersion
+		sum.Route = ports.RouteRef{ID: sum.RouteID, Revision: sum.RouteRevision}
 		out = append(out, sum)
 	}
 	return out, rows.Err()
@@ -91,10 +99,15 @@ func (s *Store) LoadIntentLineage(ctx context.Context, dispatchID string) (ports
 	var lin ports.IntentLineage
 	var next sql.NullString
 	var storedVersion string
-	err := s.QueryRowContext(ctx, `SELECT dispatch_id, route_id, target_id, generation, idempotency_key, state, request_version, attempt_count, next_attempt_at, created_at, updated_at
+	// The summary selects every schema-required member of the intent
+	// record: the decision linkage, the route revision, the resource, the
+	// content fingerprint, and the request document (E9-T1/M-16).
+	err := s.QueryRowContext(ctx, `SELECT dispatch_id, route_id, target_id, generation, idempotency_key, state, request_version, attempt_count, next_attempt_at, created_at, updated_at,
+		decision_id, route_revision, resource_id, content_fingerprint, request_json
 		FROM dispatch_intents WHERE dispatch_id = ?`, dispatchID).Scan(
 		&lin.Intent.DispatchID, &lin.Intent.RouteID, &lin.Intent.TargetID, &lin.Intent.Generation, &lin.Intent.IdempotencyKey,
-		&lin.Intent.State, &storedVersion, &lin.Intent.AttemptCount, &next, &lin.Intent.CreatedAt, &lin.Intent.UpdatedAt)
+		&lin.Intent.State, &storedVersion, &lin.Intent.AttemptCount, &next, &lin.Intent.CreatedAt, &lin.Intent.UpdatedAt,
+		&lin.Intent.DecisionID, &lin.Intent.RouteRevision, &lin.Intent.ResourceID, &lin.Intent.ContentFingerprint, &lin.Intent.Request)
 	if errors.Is(err, sql.ErrNoRows) {
 		return lin, fmt.Errorf("%w: %s", ports.ErrIntentNotFound, dispatchID)
 	}
@@ -102,6 +115,8 @@ func (s *Store) LoadIntentLineage(ctx context.Context, dispatchID string) (ports
 		return lin, err
 	}
 	lin.Intent.NextAttemptAt = nullText(next)
+	lin.Intent.SchemaVersion = ports.IntentRecordSchemaVersion
+	lin.Intent.Route = ports.RouteRef{ID: lin.Intent.RouteID, Revision: lin.Intent.RouteRevision}
 	// DAT-009 (E7-T8/M-8): the same fail-closed version check the
 	// snapshot read enforces — empty is corruption, not legacy (the
 	// column is NOT NULL since schema v1; review M-15, E8 correction).
@@ -121,6 +136,7 @@ func (s *Store) LoadIntentLineage(ctx context.Context, dispatchID string) (ports
 			arows.Close()
 			return lin, err
 		}
+		a.SchemaVersion = ports.AttemptRecordSchemaVersion
 		a.CompletedAt, a.Outcome, a.ErrorCode, a.ResponseDigest, a.Diagnostic =
 			nullText(completed), nullText(outcome), nullText(code), nullText(digest), nullText(diag)
 		lin.Attempts = append(lin.Attempts, a)
@@ -143,6 +159,7 @@ func (s *Store) LoadIntentLineage(ctx context.Context, dispatchID string) (ports
 			rrows.Close()
 			return lin, err
 		}
+		r.SchemaVersion = ports.ReceiptRecordSchemaVersion
 		// DAT-009 (review M-15, E8 correction): the stored receipt's
 		// payload version was written but never read — a receipt this
 		// build did not produce fails closed on inspection instead of
@@ -241,6 +258,37 @@ func (s *Store) LoadIntentLineage(ctx context.Context, dispatchID string) (ports
 	wrows.Close()
 	if err := wrows.Err(); err != nil {
 		return lin, err
+	}
+	// The dead-letter view derives from the lineage when the dispatch is
+	// dead-lettered (E9-T1/M-16): the published schema's members, with
+	// the reason from the last dead-lettering transition.
+	if lin.Intent.State == records.IntentDeadLettered {
+		reasonCtx := ""
+		_ = s.QueryRowContext(ctx, `SELECT context_json FROM state_transitions
+			WHERE entity_type = 'dispatch_intent' AND entity_id = ? AND to_state = 'dead_lettered'
+			ORDER BY rowid DESC LIMIT 1`, dispatchID).Scan(&reasonCtx)
+		// The schema enum is the transition reason (unresolved_or_limit_
+		// reached | terminal_policy), never the raw context document
+		// (round-1 F001).
+		reason := ""
+		var ctxDoc map[string]any
+		if json.Unmarshal([]byte(reasonCtx), &ctxDoc) == nil {
+			if r, ok := ctxDoc["reason"].(string); ok {
+				reason = r
+			}
+		}
+		lin.DeadLetter = &ports.DeadLetterRecord{
+			SchemaVersion:    ports.DeadLetterRecordSchemaVersion,
+			DispatchID:       lin.Intent.DispatchID,
+			RouteID:          lin.Intent.RouteID,
+			TargetID:         lin.Intent.TargetID,
+			IdempotencyKey:   lin.Intent.IdempotencyKey,
+			State:            lin.Intent.State,
+			AttemptCount:     lin.Intent.AttemptCount,
+			DeadLetterReason: reason,
+			Attempts:         lin.Attempts,
+			CreatedAt:        lin.Intent.CreatedAt,
+		}
 	}
 	return lin, nil
 }
@@ -650,10 +698,10 @@ func (s *Store) saveIntentTakeOverOriginal(tx *sql.Tx, i IntentRecord, originalD
 // receipt id per refresh.
 func (s *Store) SaveExecutionProjection(ctx context.Context, in ports.ExecutionProjectionInput) error {
 	_, err := s.ExecContext(ctx, `INSERT INTO dispatch_receipts
-		(receipt_id, dispatch_id, receipt_kind, execution_state, durable, external_ref, target_observed_at, received_at, payload_version, bounded_payload)
-		VALUES (?,?, 'execution_projection', ?, NULL, ?, ?, ?, 'agent-dispatch.execution/v1', ?)`,
+		(receipt_id, dispatch_id, receipt_kind, execution_state, durable, external_ref, target_observed_at, received_at, payload_version, bounded_payload, route_revision)
+		SELECT ?, ?, 'execution_projection', ?, NULL, ?, ?, ?, 'agent-dispatch.execution/v1', ?, route_revision FROM dispatch_intents WHERE dispatch_id = ?`,
 		in.ReceiptID, in.DispatchID, string(in.ExecutionState), nullString(in.ExternalRef),
-		nullString(in.TargetObservedAt), in.ReceivedAt, in.BoundedPayload)
+		nullString(in.TargetObservedAt), in.ReceivedAt, in.BoundedPayload, in.DispatchID)
 	return err
 }
 

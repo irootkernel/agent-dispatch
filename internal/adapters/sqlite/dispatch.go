@@ -216,8 +216,11 @@ func (s *Store) AcquireAttempt(ctx context.Context, req ports.AcquireAttempt) (s
 	if n, _ := res.RowsAffected(); n == 0 {
 		return "", s.explainAcquireFailure(ctx, tx, req.DispatchID, now)
 	}
-	if _, err := tx.Exec(`INSERT INTO dispatch_attempts (attempt_id, dispatch_id, lease_owner, started_at) VALUES (?,?,?,?)`,
-		req.AttemptID, req.DispatchID, req.Owner, now); err != nil {
+	// route_revision rides the attempt from the creating intent
+	// (E9-T1/M-17).
+	if _, err := tx.Exec(`INSERT INTO dispatch_attempts (attempt_id, dispatch_id, lease_owner, started_at, route_revision)
+		SELECT ?, ?, ?, ?, route_revision FROM dispatch_intents WHERE dispatch_id = ?`,
+		req.AttemptID, req.DispatchID, req.Owner, now, req.DispatchID); err != nil {
 		return "", err
 	}
 	reason := state.ReasonLeaseAcquired
@@ -307,11 +310,11 @@ func (s *Store) CompleteAttempt(ctx context.Context, res ports.AttemptResult) er
 	}
 	if res.Receipt != nil {
 		if _, err := tx.Exec(`INSERT INTO dispatch_receipts
-			(receipt_id, dispatch_id, receipt_kind, acceptance_state, durable, external_ref, target_observed_at, received_at, payload_version, bounded_payload)
-			VALUES (?,?,'acceptance',?,?,?,?,?,?,?)`,
+			(receipt_id, dispatch_id, receipt_kind, acceptance_state, durable, external_ref, target_observed_at, received_at, payload_version, bounded_payload, route_revision)
+			SELECT ?, ?, 'acceptance', ?, ?, ?, ?, ?, ?, ?, route_revision FROM dispatch_intents WHERE dispatch_id = ?`,
 			res.Receipt.ReceiptID, res.DispatchID, string(res.Receipt.Acceptance), boolInt(res.Receipt.Durable),
 			nullString(res.Receipt.ExternalRef), nullString(res.Receipt.TargetObservedAt), res.Receipt.ReceivedAt,
-			nullString(res.Receipt.PayloadVersion), res.Receipt.BoundedPayload); err != nil {
+			nullString(res.Receipt.PayloadVersion), res.Receipt.BoundedPayload, res.DispatchID); err != nil {
 			return err
 		}
 		// The accepted external reference is also recorded on the

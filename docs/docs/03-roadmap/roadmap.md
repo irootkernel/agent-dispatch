@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E9 (hardening, D-021) |
 | Current active task | None |
-| Next task | E9-T1 |
-| Completed tasks | 51 / 56 |
-| Planned tasks | 5 / 56 |
+| Next task | E9-T2 |
+| Completed tasks | 52 / 56 |
+| Planned tasks | 4 / 56 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -91,7 +91,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 49 | E8-T4 | Completed | Unresolved lineage preserved; doctor made trustworthy |
 | 50 | E8-T5 | Completed | Input containment and configuration validation gaps closed |
 | 51 | E8-T6 | Completed | Documentation truth restored and v0.1.2 released |
-| 52 | E9-T1 | Planned | Record schema truth and storage hardening |
+| 52 | E9-T1 | Completed | Record schema truth and storage hardening |
 | 53 | E9-T2 | Planned | Reconciliation and operator-surface hardening |
 | 54 | E9-T3 | Planned | Security, observability, and revision hygiene |
 | 55 | E9-T4 | Planned | Test-coverage hardening |
@@ -2173,7 +2173,7 @@ The validation audit reconciled the deferred findings (32 recorded in the commit
 
 ## E9-T1: Record Schema Truth and Storage Hardening
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -2204,7 +2204,7 @@ D-021 recorded; E8 complete.
 
 ### Evidence
 
-Pending (E9-T1 not started).
+Delivered as the record-schema truth and storage hardening: `dispatches show` emits schema-conformant records — `schema_version` on every attempt and receipt, the intent summary carrying `schema_version`, `decision_id`, `route` as the schema's `{id, revision}` object, `resource_id`, `content_fingerprint`, and the stored request document, and a derived dead-letter-record view (with the reason extracted from the transition context) for dead-lettered dispatches; `dispatches list` selects and populates the same schema-required members on every row (M-16; `TestE9T1RecordEmissionsMatchSchemas` drives real CLI emissions through both paths and validates the required members of the intent, attempt, and receipt schemas). Migration v7 adds `route_revision` to `dispatch_attempts`, `dispatch_receipts`, `work_receipts`, and `quarantine_items` — join-backfilled for existing rows, written from the creating intent at every insert site (and from the decision for quarantined arrivals, which create no intent) — with the schema comment updated from the recorded design choice to the delivered columns (M-17). All connection-scoped pragmas (`foreign_keys`, `busy_timeout`, `synchronous=FULL`) ride the DSN so pooled connections re-apply them, with the verification block unchanged (L-16); one verified backup per migration run replaces the per-unit copies with range-scoped naming (L-20); and `PruneCutoffs` plus the watchman test envelope serialize snake_case (L-10). Verified by `make verify` on darwin/arm64 (all checks green). Reviewed through two full-target Mulgae rounds (`r_01a0323a-58d0-7304-b7c1-19bfe2c9c697`, remediation-eligible: the raw-JSON dead-letter reason, the empty list members, and the fixture-based lockstep test — all remediated in-tree; `r_01a03255-e3eb-7869-9f9a-ed80ecc7e4d0`, hardening-deferral-eligible: ci pass, coverage complete, publication committed, eleven findings — the request-member shape (string vs the task-request object), full-schema strictness residuals (empty-string enums, additionalProperties), the untested dead-letter remediation and migration v7 propagation, and bookkeeping/pinning lows — deferred to the E9 epic validation audit with the exact run and finding IDs in the commit trailers, where the audit-owned remediation closes them before the confirmation review). Changelog 1.0.37.
 
 ## E9-T2: Reconciliation and Operator-Surface Hardening
 

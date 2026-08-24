@@ -57,18 +57,16 @@ func Open(path string) (*Store, error) {
 			f.Close()
 		}
 	}
-	db, err := sql.Open("sqlite", path+"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
+	// All connection-scoped pragmas ride the DSN so a replacement pooled
+	// connection re-applies them (L-16, E9-T1); the pragma verification
+	// block below still proves each took effect.
+	db, err := sql.Open("sqlite", path+"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=synchronous(FULL)")
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
 	// Single-writer product: one connection keeps pragmas and locks
 	// coherent without pool-wide reconfiguration.
 	db.SetMaxOpenConns(1)
-	// synchronous returns no result row; apply it and verify the others.
-	if _, err := db.Exec("PRAGMA synchronous = FULL"); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("pragma synchronous: %w", err)
-	}
 	// A concurrent first open can hit SQLITE_BUSY switching the journal
 	// mode: that is transient initialization congestion (OPS-008,
 	// E7-T7/M-4/M-5), so the switch retries inside a bounded window

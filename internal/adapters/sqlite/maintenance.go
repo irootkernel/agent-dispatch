@@ -92,10 +92,10 @@ func resolvedTerminalStates() string {
 // PruneCutoffs carries the per-class retention cutoffs as canonical
 // timestamps.
 type PruneCutoffs struct {
-	Observations       string
-	Attempts           string
-	CompletedReceipts  string
-	ResolvedQuarantine string
+	Observations       string `json:"observations"`
+	Attempts           string `json:"attempts"`
+	CompletedReceipts  string `json:"completed_receipts"`
+	ResolvedQuarantine string `json:"resolved_quarantine"`
 }
 
 // PruneCounts reports the per-class prune counts of one plan or

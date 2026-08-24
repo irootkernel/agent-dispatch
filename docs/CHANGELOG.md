@@ -1,5 +1,14 @@
 # SOT Changelog
 
+## 1.0.37 - 2026-08-24
+
+E9-T1: record schema truth and storage hardening:
+
+- dispatches show and list emit the schema-required members of the intent, attempt, and receipt records (schema_version, decision and route linkage, resource, fingerprint, request document) with a real-emission lockstep test, and a derived dead-letter-record view appears for dead-lettered dispatches;
+- migration v7 adds route_revision to the four record tables (backfilled by join, written from the creating intent or decision at insert);
+- the connection pragmas ride the DSN, one verified backup covers a whole migration run, and the prune cutoffs and watchman envelope serialize snake_case;
+- eleven round-2 findings (request-member object shape, strict-schema residuals, covering tests) defer to the E9 validation audit.
+
 ## 1.0.36 - 2026-08-24
 
 D-021: the hardening inventory is accepted and epic E9 is registered:

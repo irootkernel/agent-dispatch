@@ -138,9 +138,11 @@ func TestBackupBeforeMigration(t *testing.T) {
 	if err := s.Migrate(backupDir); err != nil {
 		t.Fatal(err)
 	}
-	matches, err := filepath.Glob(filepath.Join(backupDir, "agent-dispatch-v1-*.backup"))
+	// One verified backup per migration run (E9-T1/L-20), named for the
+	// applied range instead of the unit.
+	matches, err := filepath.Glob(filepath.Join(backupDir, "agent-dispatch-v*-to-v*.backup"))
 	if err != nil || len(matches) != 1 {
-		t.Fatalf("expected one pre-migration backup, got %v (%v)", matches, err)
+		t.Fatalf("expected exactly one per-run pre-migration backup, got %v (%v)", matches, err)
 	}
 }
 

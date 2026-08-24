@@ -35,8 +35,12 @@ func (s *Store) CommitQuarantineLineage(ctx context.Context, lin ports.Lineage, 
 		return err
 	}
 	reasons, _ := json.Marshal(item.ReasonCodes)
-	if _, err := tx.Exec(`INSERT INTO quarantine_items (quarantine_id, batch_id, decision_id, reason_codes_json, state, created_at)
-		VALUES (?,?,?,?, 'held', ?)`, item.QuarantineID, nullString(item.BatchID), item.DecisionID, string(reasons), item.CreatedAt); err != nil {
+	// A quarantined arrival never creates a dispatch intent, so the
+	// revision rides from the decision row in the same transaction
+	// (E9-T1/M-17).
+	if _, err := tx.Exec(`INSERT INTO quarantine_items (quarantine_id, batch_id, decision_id, reason_codes_json, state, created_at, route_revision)
+		SELECT ?, ?, ?, ?, 'held', ?, route_revision FROM policy_decisions WHERE decision_id = ?`,
+		item.QuarantineID, nullString(item.BatchID), item.DecisionID, string(reasons), item.CreatedAt, item.DecisionID); err != nil {
 		return err
 	}
 	if err := s.AppendTransition(tx, item.QuarantineID+":held", "quarantine", item.QuarantineID, "", "held", item.CreatedAt,

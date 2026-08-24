@@ -22,8 +22,8 @@ const ConfigVersion = "1"
 // gate finding); v3 records the accepting target scope (E4 audit); v4
 // adds the work-receipt begin windows (E5 audit); v5 persists the
 // observation position (E7-T8); v6 adds the batch-sequence watermark
-// (E8-T1).
-const SchemaRange = "1-6"
+// (E8-T1); v7 adds the record revision columns (E9-T1).
+const SchemaRange = "1-7"
 
 // AdapterVersions returns the pinned adapter implementation versions the
 // build carries. Each entry names the delivered surface and its verified
@@ -32,7 +32,7 @@ func AdapterVersions() map[string]string {
 	return map[string]string{
 		"watchman":      "bounded parser and managed trigger lifecycle, verified watchman 2026.07.27.00 (E2)",
 		"localfs":       "containment resolver (E2-T2)",
-		"sqlite":        "schema-v1..v6 (v2 attempts uniqueness, v3 target scope, v4 work-receipt begin windows, v5 observation position, v6 batch sequence watermark)",
+		"sqlite":        "schema-v1..v7 (v2 attempts uniqueness, v3 target scope, v4 work-receipt begin windows, v5 observation position, v6 batch sequence watermark, v7 record revision columns)",
 		"hermeskanban":  "public-cli transport, capability probe, and durable sink, verified hermes 0.19.1 (E4-T1..T4)",
 		"hermeswebhook": "static-declaration HTTPS sink, transport acceptance only, from the E0-T4 s9 evidence (E6-T1)",
 	}

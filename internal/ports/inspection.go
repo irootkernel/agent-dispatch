@@ -31,22 +31,49 @@ type IntentFilter struct {
 	Offset int
 }
 
-// IntentSummary is one listed dispatch intent row.
+// Record schema versions the CLI emits beside their records
+// (docs/schemas/*.schema.json; E9-T1/M-16).
+const (
+	IntentRecordSchemaVersion     = "agent-dispatch.dispatch-intent/v1"
+	AttemptRecordSchemaVersion    = "agent-dispatch.dispatch-attempt/v1"
+	ReceiptRecordSchemaVersion    = "agent-dispatch.dispatch-receipt/v1"
+	DeadLetterRecordSchemaVersion = "agent-dispatch.dead-letter-record/v1"
+)
+
+// IntentSummary is one listed dispatch intent row. Every required member
+// of the published dispatch-intent schema is emitted (E9-T1/M-16).
 type IntentSummary struct {
-	DispatchID     string              `json:"dispatch_id"`
-	RouteID        string              `json:"route_id"`
-	TargetID       string              `json:"target_id"`
-	Generation     int64               `json:"generation"`
-	IdempotencyKey string              `json:"idempotency_key"`
-	State          records.IntentState `json:"state"`
-	AttemptCount   int                 `json:"attempt_count"`
-	NextAttemptAt  string              `json:"next_attempt_at"`
-	CreatedAt      string              `json:"created_at"`
-	UpdatedAt      string              `json:"updated_at"`
+	SchemaVersion string `json:"schema_version"`
+	DispatchID    string `json:"dispatch_id"`
+	DecisionID    string `json:"decision_id"`
+	RouteID       string `json:"-"`
+	RouteRevision string `json:"-"`
+	// Route is the schema's {id, revision} object (dispatch-intent
+	// schema-required member shape).
+	Route              RouteRef            `json:"route"`
+	TargetID           string              `json:"target_id"`
+	ResourceID         string              `json:"resource_id"`
+	Generation         int64               `json:"generation"`
+	IdempotencyKey     string              `json:"idempotency_key"`
+	ContentFingerprint string              `json:"content_fingerprint"`
+	State              records.IntentState `json:"state"`
+	Request            string              `json:"request,omitempty"`
+	AttemptCount       int                 `json:"attempt_count"`
+	NextAttemptAt      string              `json:"next_attempt_at"`
+	CreatedAt          string              `json:"created_at"`
+	UpdatedAt          string              `json:"updated_at"`
 }
 
-// AttemptRecord is one dispatch attempt row.
+// RouteRef is the schema's route{id, revision} object.
+type RouteRef struct {
+	ID       string `json:"id"`
+	Revision string `json:"revision"`
+}
+
+// AttemptRecord is one dispatch attempt row (schema-conformant:
+// schema_version first, E9-T1/M-16).
 type AttemptRecord struct {
+	SchemaVersion  string `json:"schema_version"`
 	AttemptID      string `json:"attempt_id"`
 	DispatchID     string `json:"dispatch_id"`
 	LeaseOwner     string `json:"lease_owner"`
@@ -58,8 +85,10 @@ type AttemptRecord struct {
 	Diagnostic     string `json:"diagnostic"`
 }
 
-// ReceiptRecord is one dispatch receipt row.
+// ReceiptRecord is one dispatch receipt row (schema-conformant:
+// schema_version first, E9-T1/M-16).
 type ReceiptRecord struct {
+	SchemaVersion    string                  `json:"schema_version"`
 	ReceiptID        string                  `json:"receipt_id"`
 	DispatchID       string                  `json:"dispatch_id"`
 	ReceiptKind      string                  `json:"receipt_kind"`
@@ -92,6 +121,25 @@ type IntentLineage struct {
 	Transitions []TransitionRecord   `json:"transitions"`
 	Decision    *DecisionLineage     `json:"decision,omitempty"`
 	WorkReceipt []WorkReceiptLineage `json:"work_receipt,omitempty"`
+	// DeadLetter carries the published dead-letter-record view when the
+	// dispatch is dead-lettered (schema-required members derived from the
+	// lineage; nil otherwise — E9-T1/M-16).
+	DeadLetter *DeadLetterRecord `json:"dead_letter_record,omitempty"`
+}
+
+// DeadLetterRecord is the dead-letter view of a dispatch lineage
+// (docs/schemas/dead-letter-record.schema.json).
+type DeadLetterRecord struct {
+	SchemaVersion    string              `json:"schema_version"`
+	DispatchID       string              `json:"dispatch_id"`
+	RouteID          string              `json:"route_id"`
+	TargetID         string              `json:"target_id"`
+	IdempotencyKey   string              `json:"idempotency_key"`
+	State            records.IntentState `json:"state"`
+	AttemptCount     int                 `json:"attempt_count"`
+	DeadLetterReason string              `json:"dead_letter_reason"`
+	Attempts         []AttemptRecord     `json:"attempts"`
+	CreatedAt        string              `json:"created_at"`
 }
 
 // DecisionLineage is the decision that created the dispatch with its

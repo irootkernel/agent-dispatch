@@ -271,11 +271,11 @@ func (s *Store) InitializeRouteState(tx *sql.Tx, routeID string) error {
 // paths and digests only, DAT-008).
 func (s *Store) SaveWorkReceipt(tx *sql.Tx, w WorkReceiptRecord) error {
 	_, err := execOn(tx, s.DB, `INSERT INTO work_receipts
-		(receipt_id, dispatch_id, run_id, resource_id, status, failure_code, external_task_id, base_revision, result_revision, changes_json, submitted_at, validation_state, validation_reasons_json, begun_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		(receipt_id, dispatch_id, run_id, resource_id, status, failure_code, external_task_id, base_revision, result_revision, changes_json, submitted_at, validation_state, validation_reasons_json, begun_at, route_revision)
+		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, route_revision FROM dispatch_intents WHERE dispatch_id = ?`,
 		w.ReceiptID, w.DispatchID, w.RunID, w.ResourceID, w.Status, nullString(w.FailureCode), nullString(w.ExternalTaskID),
 		nullString(w.BaseRevision), nullString(w.ResultRevision), w.ChangesJSON, w.SubmittedAt, w.ValidationState, w.ValidationReasonsJSON,
-		nullString(w.BegunAt))
+		nullString(w.BegunAt), w.DispatchID)
 	return err
 }
 

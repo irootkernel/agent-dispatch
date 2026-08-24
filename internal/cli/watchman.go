@@ -424,11 +424,23 @@ func runWatchmanTest(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return planErr(stderr, command, "source_malformed_json", "input_rejected", err.Error(), 4)
 	}
-	changes := input.Changes()
+	// The envelope maps the entries into snake_case wire entries:
+	// marshaling the domain structs directly leaked Go field names
+	// (L-10, E9-T1).
+	wire := make([]map[string]any, 0, len(input.Entries))
+	for _, e := range input.Entries {
+		entry := map[string]any{
+			"name": e.Name, "exists": e.Exists, "type": string(e.Type), "op": string(e.Op),
+		}
+		if e.Size != nil {
+			entry["size"] = *e.Size
+		}
+		wire = append(wire, entry)
+	}
 	return writeEnvelope(stdout, command, map[string]any{
 		"raw_payload_digest": input.RawDigest,
 		"source_event_key":   input.SourceEventKey("test-source"),
 		"flags":              env.Flags(),
-		"changes":            changes,
+		"changes":            wire,
 	})
 }

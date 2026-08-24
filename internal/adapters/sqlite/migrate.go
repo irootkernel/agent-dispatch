@@ -38,6 +38,7 @@ var Migrations = []Migration{
 	{Version: 4, Name: "work-receipts-begun-at", SQL: schemaV4WorkReceiptsBegunAt},
 	{Version: 5, Name: "observation-position", SQL: schemaV5ObservationPosition},
 	{Version: 6, Name: "batch-sequence-watermark", SQL: schemaV6BatchSequenceWatermark},
+	{Version: 7, Name: "record-revision-columns", SQL: schemaV7RecordRevisionColumns},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
@@ -155,6 +156,21 @@ func (s *Store) Migrate(backupDir string) error {
 			return fmt.Errorf("migration ledger entry %d does not match this binary's immutable history", version)
 		}
 	}
+	// One verified backup per migration run (L-20, E9-T1): the snapshot
+	// before the first pending unit already contains every pending unit's
+	// pre-state, so a per-unit copy multiplied backups by the pending
+	// count (a fresh open took six) without adding a restore point.
+	pending := 0
+	for _, m := range list {
+		if _, ok := applied[m.Version]; !ok {
+			pending++
+		}
+	}
+	if pending > 0 {
+		if err := s.Backup(fmt.Sprintf("%s/agent-dispatch-v%d-to-v%d-%s.backup", backupDir, newest, maxVersion, nowFileTimestamp())); err != nil {
+			return fmt.Errorf("pre-migration backup: %w", err)
+		}
+	}
 	for _, m := range list {
 		sum, ok := applied[m.Version]
 		if ok {
@@ -162,9 +178,6 @@ func (s *Store) Migrate(backupDir string) error {
 				return fmt.Errorf("migration %d checksum mismatch: ledger %s, binary %s (migrations are immutable)", m.Version, sum, m.checksum())
 			}
 			continue
-		}
-		if err := s.Backup(fmt.Sprintf("%s/agent-dispatch-v%d-%s.backup", backupDir, m.Version, nowFileTimestamp())); err != nil {
-			return fmt.Errorf("pre-migration backup: %w", err)
 		}
 		if err := s.applyMigration(m); err != nil {
 			return fmt.Errorf("migration %d (%s): %w", m.Version, m.Name, err)
@@ -444,4 +457,29 @@ UPDATE dispatch_intents SET base_batch_seq = COALESCE(
 	(SELECT COALESCE(MAX(b2.batch_seq), 0) FROM change_batches b2
 		WHERE b2.created_at <= dispatch_intents.created_at)
 );
+`
+
+// schemaV7RecordRevisionColumns adds the route revision to the four
+// record tables that previously reached it joinably (E9-T1, M-17): the
+// value is the creating intent's revision, backfilled by join; every
+// insert site writes it from the intent's revision from this version
+// on. state_transitions keeps its context-JSON lineage (its write
+// volume would duplicate the revision on every row for no query).
+const schemaV7RecordRevisionColumns = `
+ALTER TABLE dispatch_attempts ADD COLUMN route_revision TEXT NOT NULL DEFAULT '';
+UPDATE dispatch_attempts SET route_revision = (
+	SELECT i.route_revision FROM dispatch_intents i WHERE i.dispatch_id = dispatch_attempts.dispatch_id);
+ALTER TABLE dispatch_receipts ADD COLUMN route_revision TEXT NOT NULL DEFAULT '';
+UPDATE dispatch_receipts SET route_revision = (
+	SELECT i.route_revision FROM dispatch_intents i WHERE i.dispatch_id = dispatch_receipts.dispatch_id);
+ALTER TABLE work_receipts ADD COLUMN route_revision TEXT NOT NULL DEFAULT '';
+UPDATE work_receipts SET route_revision = (
+	SELECT i.route_revision FROM dispatch_intents i WHERE i.dispatch_id = work_receipts.dispatch_id);
+ALTER TABLE quarantine_items ADD COLUMN route_revision TEXT NOT NULL DEFAULT '';
+UPDATE quarantine_items SET route_revision = (
+	SELECT i.route_revision FROM dispatch_intents i WHERE i.decision_id = quarantine_items.decision_id);
+CREATE INDEX idx_attempts_route_revision ON dispatch_attempts(route_revision);
+CREATE INDEX idx_receipts_route_revision ON dispatch_receipts(route_revision);
+CREATE INDEX idx_work_receipts_route_revision ON work_receipts(route_revision);
+CREATE INDEX idx_quarantine_route_revision ON quarantine_items(route_revision);
 `

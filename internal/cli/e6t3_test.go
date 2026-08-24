@@ -225,6 +225,24 @@ func TestScheduleExamplesExistForMacOS(t *testing.T) {
 			t.Fatalf("scheduling example %s missing: %v", name, err)
 		}
 	}
+	// The retired Linux surface stays retired (D-023): the systemd
+	// examples must remain deleted and the uninstall script must not
+	// regress into systemctl guidance.
+	for _, name := range []string{
+		"agent-dispatch-reconcile.service.example",
+		"agent-dispatch-reconcile.timer.example",
+	} {
+		if _, err := os.Stat(filepath.Join("../../docs/examples/scripts", name)); err == nil {
+			t.Fatalf("retired systemd example %s must stay deleted under the D-023 macOS-only policy", name)
+		}
+	}
+	body, err := os.ReadFile(filepath.Join("../../docs/examples/scripts", "agent-dispatch-uninstall.sh.example"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "systemctl") {
+		t.Fatal("the uninstall script must not reference systemctl under the D-023 macOS-only policy")
+	}
 }
 
 // TestCompletionMatchesRegisteredTree proves the emitted scripts name

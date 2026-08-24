@@ -71,7 +71,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 29 | E5-T5 | Completed | Production-capable test-vault gate G4 |
 | 30 | E6-T1 | Completed | Explicit Hermes webhook adapter |
 | 31 | E6-T2 | Completed | Doctor, status, retention, and operational observability |
-| 32 | E6-T3 | Completed | macOS/Linux packaging and scheduled reconciliation |
+| 32 | E6-T3 | Completed | Packaging and scheduled reconciliation (macOS; the Linux leg is retired by D-023) |
 | 33 | E6-T4 | Completed | v0.1 release verification and final SOT reconciliation |
 | 34 | E7-T1 | Completed | Documentation truth restored after the compliance review |
 | 35 | E7-T2 | Completed | Crash recovery, rerun supersession, follow-up activation |
@@ -344,7 +344,7 @@ Config parsing, SQLite tables, Watchman, and Hermes invocation.
 - `Makefile` (`make verify`) is the single verification entrypoint: format, vet, staticcheck, import-direction lint, unit tests, race tests, docs manifest checksums, Go Draft 2020-12 schema/example validation, and traceability regeneration.
 - `internal/schemavalid` with migrated self-tests (`internal/schemavalid/selftest_test.go`); the Python subset validator `docs/scripts/validate-json-schemas.py` is retired.
 - `.gaori/tester.yaml` invokes the Makefile targets; `gaori config check` passes.
-- `.github/workflows/ci.yml` was removed on 2026-08-22: GitHub Actions is not used. Local `make verify` on macOS is the recorded evidence; run it on a supported Linux host before Linux-targeting releases (SCP-008).
+- `.github/workflows/ci.yml` was removed on 2026-08-22: GitHub Actions is not used. Local `make verify` on macOS is the recorded evidence; the earlier instruction to also run a supported Linux host before Linux-targeting releases rode SCP-008's Linux clause, which D-023 supersedes (macOS is the only supported platform).
 - `agent-dispatch version --output json` follows the CLI envelope (`internal/cli/cli_test.go`).
 
 ## E1-T2: Implement Configuration Loading, Validation, and Platform Paths
@@ -1429,9 +1429,11 @@ Delivered in `internal/observability` (the structured log: §3 event vocabulary,
 
 **Status:** Completed
 
+**Post-delivery note (D-023):** the Linux packaging and `systemd --user` scheduling this task delivered are retired by the macOS-only support policy (E9-T8); the task record below stands as the history of what shipped with v0.1.0.
+
 ### Objective
 
-Produce reproducible binaries, configuration/install procedures, Watchman trigger scripts, and daily reconciliation scheduling for macOS and Linux.
+Produce reproducible binaries, configuration/install procedures, Watchman trigger scripts, and daily reconciliation scheduling for macOS and Linux (as scoped before D-023).
 
 ### Deliverables
 

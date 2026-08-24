@@ -78,4 +78,4 @@
 - [x] Verified Hermes capability report template and compatibility documentation.
 - [x] Hermes companion skill.
 - [x] Changelog and release notes (the v0.1.1 notes disclose the Linux exception — historical; releases from v0.1.4 on are darwin/arm64-only under D-023).
-- [x] Acceptance reports (docs/VALIDATION.md; the archived compliance review under docs/reports/).
+- [x] Acceptance reports (docs/VALIDATION.md; the compliance-review findings live in the decision log's D-017/D-020/D-023 records).

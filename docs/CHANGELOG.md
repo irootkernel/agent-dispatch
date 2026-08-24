@@ -1,5 +1,13 @@
 # SOT Changelog
 
+## 1.0.44 - 2026-08-25
+
+E9-T6: submission-gate revision and capability-report integrity:
+
+- the computed route revision covers the webhook delivery-evidence surface (auth type, secret reference, auth header name, idempotency header, lookup timeout, capability-report path) and, by explicit disposition, the reconciliation block in and the retention block out (pruning bounds never change submission behavior); configuration-spec §13 states the complete rule including the E9-T3 transport fields;
+- `route enable` requires the capability report in every target-liveness state: the os.Stat guard is gone, a missing, unreadable, or unsupported-version report refuses at exit 3 while an unreachable executable stays a warning, and a report recording a Hermes outside the runtime-verified set refuses without a live target (Report.RecordedVersionSupported — the supported set is build-time evidence); only freshness against the installed binary rides the probe;
+- the unconditional durable/idempotency refusal is one shared closure across the probe branches; the cli-spec `route enable` contract states the precise liveness semantics;
+- the real-Hermes environment tests skip under TST-007 when the installed Hermes is outside the verified set (the host moved to 0.20.5 against the verified 0.19.1; widening is a fresh E0-T4 probe, not a test override).
 ## 1.0.43 - 2026-08-25
 
 D-023 registration (E9 reopened for the external compliance review):

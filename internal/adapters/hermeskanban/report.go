@@ -99,6 +99,25 @@ func (r *Report) VersionMatchsWith(v Version) bool {
 	return recorded == v.String()
 }
 
+// RecordedVersionSupported reports whether the report's recorded
+// hermes_version triple is one of the runtime-verified supported
+// versions (E0-T4 §10). It needs no live target — the supported set is
+// build-time evidence — so the enable gate can refuse a report probed
+// against an unsupported Hermes even while the executable is
+// unreachable (E9-T6).
+func (r *Report) RecordedVersionSupported() bool {
+	recorded := r.HermesVersion
+	if i := strings.IndexByte(recorded, ' '); i >= 0 {
+		recorded = recorded[:i]
+	}
+	for _, s := range SupportedVersions {
+		if recorded == s.String() {
+			return true
+		}
+	}
+	return false
+}
+
 // ValidateRequired checks the required capability names against actual
 // capabilities (HER-005). An unknown name fails closed: it is a
 // configuration defect, not a reduced guarantee. A missing capability is

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irootkernel/agent-dispatch/internal/adapters/hermeskanban"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/platformpaths"
@@ -179,6 +180,19 @@ func TestG5AC503PrunePreservesLineageAndAudit(t *testing.T) {
 // documented uninstall ordering (trigger removal requires Watchman and
 // is exercised by the E2-T5/E4-T3 suites).
 func TestG5AC504CleanHostInstallDispatchScheduleUninstall(t *testing.T) {
+	// The clean-host flow enables against the live target through the
+	// version-gated production gate (E8-T3): an installed Hermes outside
+	// the verified support set is an environment-dependent evidence gap
+	// (TST-007), not a flow defect — widening the set is a fresh E0-T4
+	// probe, not a test override.
+	if bin, lerr := exec.LookPath("hermes"); lerr == nil {
+		if verOut, verr := exec.Command(bin, "--version").Output(); verr == nil {
+			firstLine := strings.SplitN(strings.TrimSpace(string(verOut)), "\n", 2)[0]
+			if ver, perr := hermeskanban.ParseVersionOutput(firstLine); perr == nil && !ver.Supported() {
+				t.Skipf("installed hermes %s is outside the verified support set %s; the AC-504 clean-host flow needs a verified target (environment-dependent evidence gap, TST-007)", ver.String(), hermeskanban.SupportedRangeText())
+			}
+		}
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", "")

@@ -12,9 +12,9 @@
 |---|---|
 | Current epic | E9 (reopened by D-023) |
 | Current active task | None |
-| Next task | E9-T6 |
-| Completed tasks | 56 / 60 |
-| Planned tasks | 4 / 60 |
+| Next task | E9-T7 |
+| Completed tasks | 57 / 60 |
+| Planned tasks | 3 / 60 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -96,7 +96,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 54 | E9-T3 | Completed | Security, observability, and revision hygiene |
 | 55 | E9-T4 | Completed | Test-coverage hardening |
 | 56 | E9-T5 | Completed | Documentation truth, dependency, and the v0.1.3 release |
-| 57 | E9-T6 | Planned | Submission-gate revision and capability-report integrity |
+| 57 | E9-T6 | Completed | Submission-gate revision and capability-report integrity |
 | 58 | E9-T7 | Planned | RFC 9110 header grammar and pinned-toolchain enforcement |
 | 59 | E9-T8 | Planned | macOS-only support policy and Linux-surface removal |
 | 60 | E9-T9 | Planned | Documentation truth resynchronized and v0.1.4 released |
@@ -2361,7 +2361,7 @@ Documentation truth delivered: observability §3 now separates the thirteen even
 
 ## E9-T6: Submission-Gate Revision and Capability-Report Integrity
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -2372,9 +2372,9 @@ Close review findings F1 (High) and F2: the computed route revision must cover e
 
 - the revision projection gains the webhook transport fields: `auth.type`, `auth.secret_ref` (the reference name only; secret values stay excluded), `auth.header_name`, `idempotency_header`, `lookup_timeout`, and the `capability_report` path, so changing authentication or deduplication headers makes existing intents stale and requires route re-acknowledgement (F1);
 - the route's `reconciliation` and `retention` blocks receive explicit recorded dispositions in the revision contract (included or excluded with the reason), and the RouteRevision doc comment states the complete inclusion rule;
-- `route enable` always loads and validates the capability report for hermes-kanban targets — a missing, unreadable, or stale report refuses at exit 3 whether or not the executable is present, while an unreachable target stays a warning deferred to the submit path's run-time gate (F2);
+- `route enable` always loads and validates the capability report for hermes-kanban targets — a missing, unreadable, or unsupported-version report refuses at exit 3 whether or not the executable is present (the version set is build-time evidence), while an unreachable target stays a warning deferred to the submit path's run-time gate and only freshness against the installed binary rides the probe (F2);
 - the CLI contract's `route enable` wording loses the missing/unreadable ambiguity;
-- regression tests: each newly covered field moves the computed revision (unit level), an acknowledged route whose auth or idempotency fields change goes stale end to end (enable, mutate, submit → stale-revision refusal), and `route enable` with the executable absent and the report missing or unreadable exits 3.
+- regression tests: each newly covered field moves the computed revision (unit level), an acknowledged route whose delivery-evidence fields change goes stale end to end (enable, mutate, submit → stale-revision refusal; the end-to-end leg drives the lookup bound with the auth and header fields pinned at the revision unit level), and `route enable` with the executable absent and the report missing, unreadable, or recording an unsupported Hermes version exits 3.
 
 ### Requirements
 
@@ -2392,7 +2392,7 @@ D-023 recorded; E9-T5 Completed.
 
 ### Evidence
 
-Pending (E9-T6 not started).
+Delivered as the submission-gate revision and capability-report integrity: the computed route revision's transport projection gains the webhook delivery-evidence surface — `auth.type`, `auth.secret_ref` (the reference name; the resolved secret never joins, SEC-006), `auth.header_name`, `idempotency_header`, `lookup_timeout`, and the `capability_report` path — so changing how a dispatch authenticates or deduplicates pauses the acknowledged route like any behavior change (F1; `TestE9T6RevisionCoversWebhookDeliveryEvidence` pins each field through the webhook-target route, `TestE9T6DeliveryEvidenceChangePausesUntilReacknowledged` drives the end-to-end pause through a lookup-bound edit with the re-acknowledgement resuming the drain). The route's `reconciliation` block joins the projection by explicit disposition (`TestE9T6RevisionCoversReconciliation`) and the `retention` block stays out with the reason recorded in the code and configuration-spec §13 — pruning bounds never change submission behavior (`TestE9T6RetentionStaysOutOfRevision`); §13 also now states the E9-T3 transport fields it had been promised with, closing that wording debt. `route enable` treats the capability report as mandatory evidence in every target-liveness state: the `os.Stat` guard is gone, `LoadReport` runs unconditionally in the unavailable-executable branch, and a missing or unreadable report refuses at exit 3 (F2; `TestE9T6EnableGateRequiresReportWithoutExecutable` covers the missing-report, unreadable-report, unsupported-version, and honest-report-with-warning paths) — the round-1 review's material observation that a well-formed report recording a Hermes version outside the runtime-verified set still enabled is closed with `Report.RecordedVersionSupported`, because the supported set is build-time evidence needing no live target; only freshness against the installed binary rides the probe, exactly as the refined cli-spec wording and the gate comment now state. The unconditional-guarantees refusal is one shared closure across the available and unavailable branches. Two environment-dependent tests gained the TST-007 skip their absent-binary case already had: the host's Hermes moved to 0.20.5, outside the verified 0.19.1 set, so `TestRealHermesProbeIfAvailable` and the AC-504 clean-host flow skip with the installed version and the verified set named (widening the set is a fresh E0-T4 probe, not a test override; verified with the stash-isolated clean tree failing identically). Verified by `make verify` on darwin/arm64 (all checks green) and a fresh `-count=1` full suite. Reviewed through two full-target Mulgae rounds (`r_01a034f8-4a87-7634-a4a9-783f97dc2d5c`, remediation-eligible: ci pass, coverage complete, zero committed findings, with the round-1 reports' material observations remediated in-tree — the unsupported-version enable gap, the shared guarantees closure, the deliverable-to-test wording alignment, and the secret-value comment stating its structural enforcement; `r_01a0350f-0071-744c-a713-865b95a3ecbf`, hardening-deferral-eligible: ci pass, coverage complete, publication committed, zero findings, every role confirming the round-1 gap closed — the recorded-version gate mirrors `VersionMatchsWith` parsing, the freshness deferral is backed by the enforced submit-path probe, and every probe state either validates the report or refuses; the residual report observations — the gate comment's pre-existing "unusable target" phrasing, the unavailable-branch weak-guarantee coverage leg, `RecordedVersionSupported` boundary unit tests, `authProjection` nil-equivalence pinning, and the twin validation ladders across the cli/adapter boundary — carry to the E9 epic validation audit). Changelog 1.0.44.
 
 ## E9-T7: Header Grammar and Pinned-Toolchain Enforcement
 

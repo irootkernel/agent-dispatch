@@ -26,10 +26,21 @@ func CaseMode() string {
 // flag, submission retry, execution hints, failure budget, the
 // active-stale bound, the referenced target's capability requirements,
 // the referenced resource's root/file scope/git mode, the global limits
-// block, and the target's type/board/endpoint (E8-T3); it excludes comments,
-// display order, the state directory, log level, and secret values. Map
-// iteration order is neutralized by sorting, so the same behavior yields
-// the same revision on every run and platform.
+// block, the target's type/board/endpoint (E8-T3), the transport bounds
+// (executable, submit timeout, environment allowlist, manifest byte
+// bound; E9-T3), and the delivery-evidence surface (authentication type,
+// secret reference, auth header name, idempotency header, lookup
+// timeout, capability-report path; E9-T6): changing how a dispatch
+// authenticates or deduplicates must pause an acknowledged route like
+// any other behavior change. The route's reconciliation block joins the
+// projection (its flags change which arrivals produce work), while the
+// retention block stays out by explicit disposition: it bounds record
+// pruning (OPS-003) and never changes what a dispatch submits or how a
+// plan is classified. The projection excludes comments, display order,
+// the state directory, log level, and secret values — a secret
+// REFERENCE is behavior-affecting and joins; the resolved secret never
+// does. Map iteration order is neutralized by sorting, so the same
+// behavior yields the same revision on every run and platform.
 func RouteRevision(cfg *Config, routeID string) (string, bool) {
 	route, ok := cfg.Routes[routeID]
 	if !ok {
@@ -98,7 +109,25 @@ func RouteRevision(cfg *Config, routeID string) (string, bool) {
 			"submit_timeout":        target.SubmitTimeout,
 			"environment_allowlist": sortedCopy(target.EnvironmentAllowlist),
 			"max_manifest_bytes":    route.Batching.MaxManifestBytes,
+			// Delivery-evidence surface (E9-T6, D-023 F1): the lookup
+			// bound and the capability-evidence path gate the enable
+			// and reconciliation surfaces, so moving either must pause
+			// the acknowledged route.
+			"lookup_timeout":     target.LookupTimeout,
+			"capability_report":  target.CapabilityReport,
+			"idempotency_header": target.IdempotencyHeader,
+			// The authentication shape decides which header carries the
+			// secret and the deduplication key on the wire. The secret
+			// REFERENCE joins (repointing it changes the credential in
+			// use); the resolved secret value never does (SEC-006).
+			"auth": authProjection(target.Auth),
 		},
+		// The reconciliation flags change which arrivals produce work
+		// (the initial sweep and the daily-expected window), so they are
+		// behavior-affecting (E9-T6). The retention block stays out by
+		// the documented disposition: pruning bounds never change
+		// submission behavior.
+		"reconciliation": route.Reconciliation,
 	}
 	// Batching and the retry structs marshal through fixed field order in
 	// their struct tags, which encoding/json keeps stable.
@@ -118,6 +147,21 @@ func sortedCopy(in []string) []string {
 	copy(out, in)
 	sort.Strings(out)
 	return out
+}
+
+// authProjection renders the authentication reference for the revision
+// digest: an absent auth block and an explicitly empty one must hash
+// identically, and only the reference members (never the resolved
+// secret) join the projection.
+func authProjection(auth *Auth) map[string]any {
+	shape := map[string]any{"type": "", "secret_ref": "", "header_name": ""}
+	if auth == nil {
+		return shape
+	}
+	shape["type"] = auth.Type
+	shape["secret_ref"] = auth.SecretRef
+	shape["header_name"] = auth.HeaderName
+	return shape
 }
 
 // PolicyRevision computes the deterministic digest of exactly the

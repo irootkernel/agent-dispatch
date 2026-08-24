@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"time"
 
@@ -223,12 +222,18 @@ func runRouteEnable(command string, args []string, stdout, stderr io.Writer) int
 
 // routeEnableGate is the production enable precondition (E8-T3, H-7): a
 // hermes-kanban production route may only be enabled when the live
-// target probes available through the version-gated report (an
-// unreadable or stale report, an unsupported version, or an unusable
+// target probes available through the version-gated report (a missing,
+// unreadable, or stale report, an unsupported version, or an unusable
 // target fails closed at exit 3) and the report itself carries
 // durable_acceptance and submit_idempotency_key — the delivery
 // guarantees the durable core depends on, required unconditionally, not
-// at the operator's option.
+// at the operator's option. The capability report is mandatory evidence
+// regardless of target liveness (E9-T6, D-023 F2): an unreachable
+// executable warns and defers to the submit path's run-time gate, but it
+// never waives the report validation — and because the
+// runtime-verified version set is build-time evidence, a report
+// recording an unsupported Hermes refuses even while the executable is
+// down; only freshness against the installed binary rides the probe.
 func routeEnableGate(command string, cfg *config.Config, routeID string, stderr io.Writer) int {
 	route, ok := cfg.Routes[routeID]
 	if !ok {
@@ -244,6 +249,17 @@ func routeEnableGate(command string, cfg *config.Config, routeID string, stderr 
 	}
 	adapter := hermeskanban.New(route.Dispatch.Target, target.Executable, target.CapabilityReport, target.RequiredCapabilities, limits)
 	summary, caps, perr := adapter.ProbeVerbose(requestCtx())
+	// The unconditional delivery guarantees are shared by every liveness
+	// state: whichever branch proves the capabilities, the same refusal
+	// applies.
+	refuseUnlessUnconditional := func(caps ports.Capabilities) int {
+		if !caps.DurableAcceptance || !caps.SubmitIdempotencyKey {
+			return planErr(stderr, command, "config_capability_missing", "configuration",
+				fmt.Sprintf("target %s must report durable_acceptance and submit_idempotency_key for a production route (durable=%v, idempotent=%v)",
+					route.Dispatch.Target, caps.DurableAcceptance, caps.SubmitIdempotencyKey), 3)
+		}
+		return 0
+	}
 	if perr != nil {
 		// A persistent configuration defect (unreadable or stale report,
 		// unknown capability name, missing required capability) fails the
@@ -253,10 +269,8 @@ func routeEnableGate(command string, cfg *config.Config, routeID string, stderr 
 	}
 	switch summary.State {
 	case "available":
-		if !caps.DurableAcceptance || !caps.SubmitIdempotencyKey {
-			return planErr(stderr, command, "config_capability_missing", "configuration",
-				fmt.Sprintf("target %s must report durable_acceptance and submit_idempotency_key for a production route (durable=%v, idempotent=%v)",
-					route.Dispatch.Target, caps.DurableAcceptance, caps.SubmitIdempotencyKey), 3)
+		if code := refuseUnlessUnconditional(caps); code != 0 {
+			return code
 		}
 	case "version_unsupported":
 		return planErr(stderr, command, "config_invalid", "configuration",
@@ -265,25 +279,32 @@ func routeEnableGate(command string, cfg *config.Config, routeID string, stderr 
 		// Target liveness (an absent or unprobeable executable) is a
 		// warning, not an enable refusal: re-acknowledging a paused
 		// production route must not be hostage to the target being up
-		// (the submit path gates again at run time). A report that IS
-		// present still validates — parse, required capabilities, and the
-		// unconditional guarantees never depend on target liveness
-		// (E8-T3 round-1 F002); only a not-yet-placed report warns.
+		// (the submit path gates again at run time). The capability
+		// report is mandatory evidence in every liveness state (E9-T6,
+		// D-023 F2): a missing or unreadable report refuses the enable —
+		// the recorded defect let a route reach production-enabled with
+		// neither executable nor report — and a report recording a
+		// Hermes version outside the runtime-verified set refuses the
+		// same way, because the supported set is build-time evidence
+		// that needs no live target. Only freshness against the
+		// installed binary rides the probe and stays deferred to the
+		// submit path's run-time gate.
 		fmt.Fprintf(stderr, "warning: target %s probes %s: %s; the submit path re-gates at run time\n", route.Dispatch.Target, summary.State, summary.Detail)
-		if _, statErr := os.Stat(target.CapabilityReport); statErr == nil {
-			report, lerr := hermeskanban.LoadReport(target.CapabilityReport)
-			if lerr != nil {
-				return planErr(stderr, command, "config_invalid", "configuration", fmt.Sprintf("target %s: %v", route.Dispatch.Target, lerr), 3)
-			}
-			caps := report.PortCapabilities()
-			if verr := hermeskanban.ValidateRequired(route.Dispatch.Target, caps, target.RequiredCapabilities); verr != nil {
-				return planErr(stderr, command, "config_capability_missing", "configuration", verr.Error(), 3)
-			}
-			if !caps.DurableAcceptance || !caps.SubmitIdempotencyKey {
-				return planErr(stderr, command, "config_capability_missing", "configuration",
-					fmt.Sprintf("target %s must report durable_acceptance and submit_idempotency_key for a production route (durable=%v, idempotent=%v)",
-						route.Dispatch.Target, caps.DurableAcceptance, caps.SubmitIdempotencyKey), 3)
-			}
+		report, lerr := hermeskanban.LoadReport(target.CapabilityReport)
+		if lerr != nil {
+			return planErr(stderr, command, "config_invalid", "configuration", fmt.Sprintf("target %s: %v", route.Dispatch.Target, lerr), 3)
+		}
+		if !report.RecordedVersionSupported() {
+			return planErr(stderr, command, "config_invalid", "configuration",
+				fmt.Sprintf("target %s: the capability report records Hermes %q, outside the runtime-verified set %s; a production route cannot be enabled against it",
+					route.Dispatch.Target, report.HermesVersion, hermeskanban.SupportedRangeText()), 3)
+		}
+		reportCaps := report.PortCapabilities()
+		if verr := hermeskanban.ValidateRequired(route.Dispatch.Target, reportCaps, target.RequiredCapabilities); verr != nil {
+			return planErr(stderr, command, "config_capability_missing", "configuration", verr.Error(), 3)
+		}
+		if code := refuseUnlessUnconditional(reportCaps); code != 0 {
+			return code
 		}
 	}
 	return 0

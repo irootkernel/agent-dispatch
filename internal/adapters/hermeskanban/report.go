@@ -86,17 +86,23 @@ func (r *Report) PortCapabilities() ports.Capabilities {
 	return caps
 }
 
+// recordedTriple returns the dotted-triple prefix of the report's
+// hermes_version field ("0.19.1 (2026.7.30)" → "0.19.1"); the triple is
+// the identity both freshness and support comparisons use.
+func (r *Report) recordedTriple() string {
+	recorded := r.HermesVersion
+	if i := strings.IndexByte(recorded, ' '); i >= 0 {
+		recorded = recorded[:i]
+	}
+	return recorded
+}
+
 // VersionMatchsWith reports whether the report was probed against the
 // discovered installed version (configuration-spec: capability-report
 // freshness against the installed target). The report's hermes_version
 // field is the full first-line text; the dotted triple must prefix it.
 func (r *Report) VersionMatchsWith(v Version) bool {
-	recorded := r.HermesVersion
-	if i := strings.IndexByte(recorded, ' '); i >= 0 {
-		// "0.19.1 (2026.7.30)" → "0.19.1"
-		recorded = recorded[:i]
-	}
-	return recorded == v.String()
+	return r.recordedTriple() == v.String()
 }
 
 // RecordedVersionSupported reports whether the report's recorded
@@ -106,12 +112,8 @@ func (r *Report) VersionMatchsWith(v Version) bool {
 // against an unsupported Hermes even while the executable is
 // unreachable (E9-T6).
 func (r *Report) RecordedVersionSupported() bool {
-	recorded := r.HermesVersion
-	if i := strings.IndexByte(recorded, ' '); i >= 0 {
-		recorded = recorded[:i]
-	}
 	for _, s := range SupportedVersions {
-		if recorded == s.String() {
+		if r.recordedTriple() == s.String() {
 			return true
 		}
 	}

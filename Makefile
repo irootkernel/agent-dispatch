@@ -20,8 +20,8 @@ all: build
 # check first, so even `make -j` cannot start a build with a compiler
 # that is not the pin (order is enforced by the prerequisite edge, not
 # by listing position).
-build test test-race vet staticcheck check-imports manifest-check \
-schema-validation traceability schedule-check: go-version-check
+build test test-race vet fmt-check staticcheck check-imports \
+manifest-check schema-validation traceability schedule-check: go-version-check
 
 build:
 	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/agent-dispatch

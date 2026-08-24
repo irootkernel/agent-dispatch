@@ -62,9 +62,11 @@ func (s *Store) ListIntents(ctx context.Context, f ports.IntentFilter) ([]ports.
 	// The list rows carry the same schema-required members the show path
 	// emits (E9-T1/M-16; round-1 F002: the list previously returned the
 	// summary struct with the new members empty). The request document
-	// stays show-only: the list is a bounded index view.
+	// rides along as the object the schema requires — the list is
+	// bounded, so the payload stays bounded with it (reconciled by the
+	// E9 validation).
 	query := `SELECT dispatch_id, route_id, target_id, generation, idempotency_key, state, attempt_count, next_attempt_at, created_at, updated_at,
-		decision_id, route_revision, resource_id, content_fingerprint
+		decision_id, route_revision, resource_id, content_fingerprint, request_json
 		FROM dispatch_intents WHERE ` + strings.Join(where, " AND ") + ` ORDER BY created_at DESC, dispatch_id DESC LIMIT ?`
 	args = append(args, limit)
 	if f.Offset > 0 {
@@ -80,14 +82,16 @@ func (s *Store) ListIntents(ctx context.Context, f ports.IntentFilter) ([]ports.
 	for rows.Next() {
 		var sum ports.IntentSummary
 		var next sql.NullString
+		var reqJSON string
 		if err := rows.Scan(&sum.DispatchID, &sum.RouteID, &sum.TargetID, &sum.Generation, &sum.IdempotencyKey,
 			&sum.State, &sum.AttemptCount, &next, &sum.CreatedAt, &sum.UpdatedAt,
-			&sum.DecisionID, &sum.RouteRevision, &sum.ResourceID, &sum.ContentFingerprint); err != nil {
+			&sum.DecisionID, &sum.RouteRevision, &sum.ResourceID, &sum.ContentFingerprint, &reqJSON); err != nil {
 			return nil, err
 		}
 		sum.NextAttemptAt = nullText(next)
 		sum.SchemaVersion = ports.IntentRecordSchemaVersion
 		sum.Route = ports.RouteRef{ID: sum.RouteID, Revision: sum.RouteRevision}
+		sum.Request = json.RawMessage(reqJSON)
 		out = append(out, sum)
 	}
 	return out, rows.Err()
@@ -98,7 +102,7 @@ func (s *Store) ListIntents(ctx context.Context, f ports.IntentFilter) ([]ports.
 func (s *Store) LoadIntentLineage(ctx context.Context, dispatchID string) (ports.IntentLineage, error) {
 	var lin ports.IntentLineage
 	var next sql.NullString
-	var storedVersion string
+	var storedVersion, reqJSON string
 	// The summary selects every schema-required member of the intent
 	// record: the decision linkage, the route revision, the resource, the
 	// content fingerprint, and the request document (E9-T1/M-16).
@@ -107,7 +111,7 @@ func (s *Store) LoadIntentLineage(ctx context.Context, dispatchID string) (ports
 		FROM dispatch_intents WHERE dispatch_id = ?`, dispatchID).Scan(
 		&lin.Intent.DispatchID, &lin.Intent.RouteID, &lin.Intent.TargetID, &lin.Intent.Generation, &lin.Intent.IdempotencyKey,
 		&lin.Intent.State, &storedVersion, &lin.Intent.AttemptCount, &next, &lin.Intent.CreatedAt, &lin.Intent.UpdatedAt,
-		&lin.Intent.DecisionID, &lin.Intent.RouteRevision, &lin.Intent.ResourceID, &lin.Intent.ContentFingerprint, &lin.Intent.Request)
+		&lin.Intent.DecisionID, &lin.Intent.RouteRevision, &lin.Intent.ResourceID, &lin.Intent.ContentFingerprint, &reqJSON)
 	if errors.Is(err, sql.ErrNoRows) {
 		return lin, fmt.Errorf("%w: %s", ports.ErrIntentNotFound, dispatchID)
 	}
@@ -117,6 +121,10 @@ func (s *Store) LoadIntentLineage(ctx context.Context, dispatchID string) (ports
 	lin.Intent.NextAttemptAt = nullText(next)
 	lin.Intent.SchemaVersion = ports.IntentRecordSchemaVersion
 	lin.Intent.Route = ports.RouteRef{ID: lin.Intent.RouteID, Revision: lin.Intent.RouteRevision}
+	// The request document passes through verbatim as the object the
+	// published schema requires (E9-T1 audit F001, reconciled by the E9
+	// validation).
+	lin.Intent.Request = json.RawMessage(reqJSON)
 	// DAT-009 (E7-T8/M-8): the same fail-closed version check the
 	// snapshot read enforces — empty is corruption, not legacy (the
 	// column is NOT NULL since schema v1; review M-15, E8 correction).
@@ -137,8 +145,16 @@ func (s *Store) LoadIntentLineage(ctx context.Context, dispatchID string) (ports
 			return lin, err
 		}
 		a.SchemaVersion = ports.AttemptRecordSchemaVersion
-		a.CompletedAt, a.Outcome, a.ErrorCode, a.ResponseDigest, a.Diagnostic =
-			nullText(completed), nullText(outcome), nullText(code), nullText(digest), nullText(diag)
+		// An in-flight attempt has no outcome yet: the published enum
+		// calls that state `open`, never an empty string (E9-T1 audit
+		// F008, reconciled by the E9 validation). The nullable members
+		// render null, not "".
+		a.Outcome = nullText(outcome)
+		if a.Outcome == "" {
+			a.Outcome = "open"
+		}
+		a.CompletedAt, a.ErrorCode, a.ResponseDigest, a.Diagnostic =
+			nullPtr(completed), nullPtr(code), nullPtr(digest), nullPtr(diag)
 		lin.Attempts = append(lin.Attempts, a)
 	}
 	arows.Close()
@@ -171,7 +187,7 @@ func (s *Store) LoadIntentLineage(ctx context.Context, dispatchID string) (ports
 		r.AcceptanceState = records.AcceptanceState(nullText(acceptance))
 		r.ExecutionState = records.ExecutionState(nullText(execution))
 		r.Durable = durable.Valid && durable.Int64 == 1
-		r.ExternalRef, r.TargetObservedAt = nullText(ref), nullText(observed)
+		r.ExternalRef, r.TargetObservedAt = nullPtr(ref), nullPtr(observed)
 		lin.Receipts = append(lin.Receipts, r)
 	}
 	rrows.Close()
@@ -276,6 +292,13 @@ func (s *Store) LoadIntentLineage(ctx context.Context, dispatchID string) (ports
 			if r, ok := ctxDoc["reason"].(string); ok {
 				reason = r
 			}
+		}
+		// The published enum admits exactly the two transition reasons;
+		// a missing or malformed transition context degrades to the
+		// unresolved-or-limit default rather than an empty string
+		// (E9-T1 audit F006/F009, reconciled by the E9 validation).
+		if reason != string(state.ReasonUnresolvedOrLimit) && reason != string(state.ReasonTerminalPolicy) {
+			reason = string(state.ReasonUnresolvedOrLimit)
 		}
 		lin.DeadLetter = &ports.DeadLetterRecord{
 			SchemaVersion:    ports.DeadLetterRecordSchemaVersion,
@@ -772,8 +795,8 @@ func (s *Store) listDispatchReceipts(ctx context.Context, f ports.ReceiptFilter,
 		rec.AcceptanceState = records.AcceptanceState(acceptance.String)
 		rec.ExecutionState = records.ExecutionState(execution.String)
 		rec.Durable = durable.Int64 == 1
-		rec.ExternalRef = external.String
-		rec.TargetObservedAt = observed.String
+		rec.ExternalRef = nullPtr(external)
+		rec.TargetObservedAt = nullPtr(observed)
 		out = append(out, rec)
 	}
 	return out, rows.Err()
@@ -795,7 +818,7 @@ func (s *Store) loadWorkReceipt(ctx context.Context, receiptID string) (ports.Re
 		return detail, err
 	}
 	detail.ReceiptKind = "work"
-	detail.ExternalRef = external.String
+	detail.ExternalRef = nullPtr(external)
 	switch status.String {
 	case "completed":
 		detail.ExecutionState = records.ExecSucceeded
@@ -847,7 +870,7 @@ func (s *Store) listWorkReceipts(ctx context.Context, f ports.ReceiptFilter) ([]
 			return nil, err
 		}
 		rec.ReceiptKind = "work"
-		rec.ExternalRef = external.String
+		rec.ExternalRef = nullPtr(external)
 		// The work-receipt status is the agent run's execution outcome;
 		// it maps onto the portable execution axis (begun=running,
 		// completed=succeeded, failed=failed).
@@ -883,8 +906,8 @@ func (s *Store) LoadReceipt(ctx context.Context, receiptID string) (ports.Receip
 	detail.AcceptanceState = records.AcceptanceState(acceptance.String)
 	detail.ExecutionState = records.ExecutionState(execution.String)
 	detail.Durable = durable.Int64 == 1
-	detail.ExternalRef = external.String
-	detail.TargetObservedAt = observed.String
+	detail.ExternalRef = nullPtr(external)
+	detail.TargetObservedAt = nullPtr(observed)
 	detail.BoundedPayload = payload.String
 	return detail, nil
 }

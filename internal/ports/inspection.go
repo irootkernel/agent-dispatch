@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
@@ -57,11 +58,17 @@ type IntentSummary struct {
 	IdempotencyKey     string              `json:"idempotency_key"`
 	ContentFingerprint string              `json:"content_fingerprint"`
 	State              records.IntentState `json:"state"`
-	Request            string              `json:"request,omitempty"`
-	AttemptCount       int                 `json:"attempt_count"`
-	NextAttemptAt      string              `json:"next_attempt_at"`
-	CreatedAt          string              `json:"created_at"`
-	UpdatedAt          string              `json:"updated_at"`
+	// Request is the stored task-request document passed through as the
+	// object the published schema requires — never a JSON string (E9-T1
+	// audit F001, reconciled by the E9 validation).
+	Request json.RawMessage `json:"request"`
+	// Operator convenience members the published schema's
+	// additionalProperties: false excludes; internal-only (E9-T1 audit
+	// F002).
+	AttemptCount  int    `json:"-"`
+	NextAttemptAt string `json:"-"`
+	UpdatedAt     string `json:"-"`
+	CreatedAt     string `json:"created_at"`
 }
 
 // RouteRef is the schema's route{id, revision} object.
@@ -73,30 +80,32 @@ type RouteRef struct {
 // AttemptRecord is one dispatch attempt row (schema-conformant:
 // schema_version first, E9-T1/M-16).
 type AttemptRecord struct {
-	SchemaVersion  string `json:"schema_version"`
-	AttemptID      string `json:"attempt_id"`
-	DispatchID     string `json:"dispatch_id"`
-	LeaseOwner     string `json:"lease_owner"`
-	StartedAt      string `json:"started_at"`
-	CompletedAt    string `json:"completed_at"`
-	Outcome        string `json:"outcome"`
-	ErrorCode      string `json:"error_code"`
-	ResponseDigest string `json:"response_digest"`
-	Diagnostic     string `json:"diagnostic"`
+	SchemaVersion  string  `json:"schema_version"`
+	AttemptID      string  `json:"attempt_id"`
+	DispatchID     string  `json:"dispatch_id"`
+	LeaseOwner     string  `json:"lease_owner"`
+	StartedAt      string  `json:"started_at"`
+	CompletedAt    *string `json:"completed_at"`
+	Outcome        string  `json:"outcome"`
+	ErrorCode      *string `json:"error_code"`
+	ResponseDigest *string `json:"response_digest"`
+	Diagnostic     *string `json:"diagnostic"`
 }
 
 // ReceiptRecord is one dispatch receipt row (schema-conformant:
-// schema_version first, E9-T1/M-16).
+// schema_version first, E9-T1/M-16). The enum members drop when unset
+// and the nullable members render null, never empty strings (E9-T1
+// audit F007, reconciled by the E9 validation).
 type ReceiptRecord struct {
 	SchemaVersion    string                  `json:"schema_version"`
 	ReceiptID        string                  `json:"receipt_id"`
 	DispatchID       string                  `json:"dispatch_id"`
 	ReceiptKind      string                  `json:"receipt_kind"`
-	AcceptanceState  records.AcceptanceState `json:"acceptance_state"`
-	ExecutionState   records.ExecutionState  `json:"execution_state"`
+	AcceptanceState  records.AcceptanceState `json:"acceptance_state,omitempty"`
+	ExecutionState   records.ExecutionState  `json:"execution_state,omitempty"`
 	Durable          bool                    `json:"durable"`
-	ExternalRef      string                  `json:"external_ref"`
-	TargetObservedAt string                  `json:"target_observed_at"`
+	ExternalRef      *string                 `json:"external_ref"`
+	TargetObservedAt *string                 `json:"target_observed_at"`
 	ReceivedAt       string                  `json:"received_at"`
 }
 

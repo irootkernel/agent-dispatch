@@ -218,7 +218,7 @@ func TestRefreshAppendsHistory(t *testing.T) {
 	}
 	// The acceptance receipt is untouched and still present.
 	acceptance, err := service.Store.ListReceipts(context.Background(), ports.ReceiptFilter{DispatchID: acceptedDispatchID, Kind: "acceptance"})
-	if err != nil || len(acceptance) != 1 || acceptance[0].ExternalRef != "t_6253023d" {
+	if err != nil || len(acceptance) != 1 || acceptance[0].ExternalRef == nil || *acceptance[0].ExternalRef != "t_6253023d" {
 		t.Fatalf("acceptance evidence must remain: %+v err=%v", acceptance, err)
 	}
 }
@@ -243,7 +243,7 @@ func TestWorkReceiptsUnionAndKind(t *testing.T) {
 	if err != nil || len(kind) != 1 {
 		t.Fatalf("work kind filter: %+v err=%v", kind, err)
 	}
-	if kind[0].ReceiptKind != "work" || kind[0].ExecutionState != records.ExecSucceeded || kind[0].ExternalRef != "t_6253023d" {
+	if kind[0].ReceiptKind != "work" || kind[0].ExecutionState != records.ExecSucceeded || kind[0].ExternalRef == nil || *kind[0].ExternalRef != "t_6253023d" {
 		t.Fatalf("work receipt mapping wrong: %+v", kind[0])
 	}
 

@@ -355,6 +355,17 @@ func nullText(n sql.NullString) string {
 	return ""
 }
 
+// nullPtr maps a nullable column onto the JSON null shape: absent stays
+// nil (marshals null), present becomes a string pointer (E9-T1 audit
+// F007/F008, reconciled by the E9 validation).
+func nullPtr(n sql.NullString) *string {
+	if !n.Valid {
+		return nil
+	}
+	s := n.String
+	return &s
+}
+
 func boolInt(b bool) int {
 	if b {
 		return 1

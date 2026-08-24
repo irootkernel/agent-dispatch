@@ -1,5 +1,15 @@
 # SOT Changelog
 
+## 1.0.41 - 2026-08-24
+
+E9-T5: documentation truth and the dependency advisory:
+
+- observability §3 lists the events actually emitted (thirteen, including dispatch.mutex_suppressed and the work lifecycle trio) and marks the rest of the vocabulary reserved; §5 documents status --output json's real payload and doctor's always-JSON findings envelope; §7 names the offline construction gate;
+- the roadmap E4-T5 evidence section lands and E5-T4's reason vocabulary is corrected to the delivered nine values;
+- configuration-spec states the 1.0-10.0 multiplier range, notes the inert git.mode and unsafe_path_action keys with their digest exclusion, and documents the .md/.markdown scope (SCP-003); SCP-001 carries the certification-posture note;
+- the error-model exit-13 row states the code truth and the reserved code names are tabulated with their activation conditions (L-21);
+- golang.org/x/text is bumped v0.14.0 -> v0.41.0 (GO-2026-5970) with the aligned indirects; full suite green.
+
 ## 1.0.40 - 2026-08-24
 
 E9-T4: test-coverage hardening:

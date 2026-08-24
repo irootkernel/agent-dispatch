@@ -37,34 +37,29 @@ No correlation field replaces a foreign-key relationship in SQLite.
 
 ## 3. Structured Log Event Names
 
-Recommended stable event names:
+Events actually emitted by the v0.1 CLI (each appears on the operational
+log — stderr JSON lines — with the correlation fields of §2; the
+info-level events are visible under `--log-level info`, the default warn
+level carries the warn/error emissions):
 
 ```text
-source.received
-source.rejected
-observation.persisted
-batch.planned
-policy.decided
-dispatch.intent_created
-dispatch.attempt_started
-dispatch.accepted
-dispatch.rejected
-dispatch.unknown
-dispatch.retry_scheduled
-dispatch.dead_lettered
-delivery.reconciled
-route.dirty_marked
-route.followup_created
-work.begun
-work.completed
-work.receipt_invalid
-feedback.suppressed_exact
-feedback.unresolved
-quarantine.created
-quarantine.released
-reconciliation.requested
-maintenance.pruned, maintenance.vacuumed, maintenance.backed_up
+dispatch.attempt_started    dispatch.accepted      dispatch.rejected
+dispatch.unknown            dispatch.retry_scheduled
+dispatch.mutex_suppressed   (warn; E9-T3/T3-F007)
+work.begun                  work.completed         work.receipt_invalid
+maintenance.pruned          maintenance.vacuumed   maintenance.backed_up
 doctor.finding
+```
+
+The wider vocabulary below is reserved for later surfaces; no v0.1
+command emits these yet, and a name from it never appears in a log line:
+
+```text
+source.received  source.rejected  observation.persisted  batch.planned
+policy.decided  dispatch.intent_created  dispatch.dead_lettered
+delivery.reconciled  route.dirty_marked  route.followup_created
+feedback.suppressed_exact  feedback.unresolved  quarantine.created
+quarantine.released  reconciliation.requested
 ```
 
 ## 4. Log Levels
@@ -78,19 +73,24 @@ A normal excluded path is not an error.
 
 ## 5. Metrics
 
-v0.1 does not require a metrics server. `agent-dispatch status --json` and `doctor --json` should expose counters computed from SQLite:
+v0.1 does not require a metrics server. The inspectable counters are the
+JSON envelopes of `status` (taken with `--output json`; the flag's
+only value is `json`) and `doctor` (always JSON):
 
-- observations by disposition;
-- active routes;
-- dirty routes;
-- ready/retry/unknown/dead-letter counts;
-- dispatch acceptance latency;
-- retry counts;
-- quarantine count;
-- last successful reconciliation;
-- database size and oldest retained unresolved record.
+- `status --output json` exposes `routes` (per route: activation and
+  route state, dirty generation, pending-reconcile flag, active dispatch
+  id, `last_reconciled_at`), `queues` (dispatch intents by state),
+  `quarantine` (items by state), `oldest_unresolved`, `database_bytes`,
+  and `targets` (the offline capability summary per target), with the
+  dirty/pending/unknown/dead-letter/held conditions repeated as envelope
+  warnings;
+- `doctor` always emits its findings envelope on stdout (no `--output`
+  flag required; `--output json` is accepted and ignored): `findings` (stable code, severity, summary, details,
+  remediation, and the request's `trace_id`) and `findings_count`.
 
-A later daemon may export OpenTelemetry metrics under a separate ADR.
+Latency and retry counters are not computed in v0.1; the durable attempt
+history in SQLite carries the raw evidence for any later derivation. A
+later daemon may export OpenTelemetry metrics under a separate ADR.
 
 ## 6. Audit History
 
@@ -121,7 +121,7 @@ Audit rows are append-only through application code. Retention may compact resol
 - SQLite open, journal mode, integrity, migration version, and local filesystem placement;
 - Watchman presence and trigger definition;
 - Hermes executable/endpoint presence;
-- target capability match;
+- the target construction gate: the frozen capability report validated against the route's required capabilities offline — no process execution, no endpoint I/O (the installed-version probe is the dispatch-time gate, E8-T4/H-4);
 - secret reference resolvability without printing the value;
 - stale leases;
 - unknown or dead-lettered dispatches;

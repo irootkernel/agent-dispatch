@@ -33,7 +33,7 @@ Messages are safe for humans. Machine behavior uses `code`, `category`, and pers
 | 10 | transient local | Local lock, temporary filesystem, or definite pre-submit transient failure. |
 | 11 | target unavailable | Target definitely unavailable before possible acceptance; retry scheduled or possible. |
 | 12 | target rejected | Target definitely rejected the request. |
-| 13 | acceptance unknown | Target may have accepted; local state records `unknown`. |
+| 13 | acceptance unknown | Target may have accepted; the Watchman protocol surface exits 13 (`target_response_invalid`) when the server's response cannot be trusted after a possible side effect, while the plain `dispatch` command records `unknown` in its exit-0 envelope. |
 | 14 | conflict | Active route, lease, or state transition conflict prevented requested action. |
 | 20 | storage | SQLite open, write, integrity, or local durability failure. |
 | 21 | migration | Unsupported or failed schema migration. |
@@ -92,7 +92,6 @@ The v0.1 registry is closed: implementations emit only the codes below. Adding o
 | `path_absolute_rejected` | `input_rejected` | 4 |
 | `file_too_large` | `input_rejected` | 4 |
 | `work_receipt_invalid` | `input_rejected` | 4 |
-| `unsafe_path_quarantined` | `quarantined` | 5 |
 | `sqlite_busy` | `transient_local` | 10 |
 | `sqlite_query_failed` | `storage` | 20 |
 | `hermes_executable_missing` | `target_unavailable` | 11 |
@@ -125,6 +124,14 @@ The v0.1 registry is closed: implementations emit only the codes below. Adding o
 | `path_traversal_rejected` | `security` | 30 |
 | `path_symlink_escape` | `security` | 30 |
 | `source_unsafe_path` | `security` | 30 |
+
+Reserved code names — defined, never emitted in v0.1:
+
+| Reserved code | Intended category | Condition that would activate it |
+|---|---|---|
+| `batch_hard_limit` | `quarantined` (5) | A future policy that durably stores overflow evidence before holding it (today overflow converts to a reconciliation generation or refuses the context at exit 4). |
+| `protected_path_quarantined` | `quarantined` (5) | The same future durable-hold policy for protected paths (today a protected hold is an exit-0 disposition envelope). |
+| `unsafe_path_quarantined` | `quarantined` (5) | The same future durable-hold policy for unsafe paths (today the containment rejection fires first at exit 30). |
 
 Boundary notes:
 

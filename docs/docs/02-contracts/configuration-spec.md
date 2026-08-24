@@ -65,8 +65,8 @@ resources:
 | resource key | `^[a-z][a-z0-9._-]{0,63}$` |
 | `type` | `directory` in v0.1 |
 | `root` | Existing absolute directory; canonicalizable and readable |
-| `file_scope` | `markdown` in v0.1 |
-| `git.mode` | `disabled` or `optional`; `required` is reserved for future routes |
+| `file_scope` | `markdown` in v0.1: the scope predicate admits the `.md` and `.markdown` extensions (SCP-003's delivered scope, L-26) |
+| `git.mode` | `disabled` or `optional`; `required` is reserved for future routes. Inert in v0.1: no code path consumes the mode yet — it is recorded in the computed route revision and the durable resource registration, so changing it pauses the acknowledged route without changing behavior until a consumer lands |
 
 A resource root is resolved to a canonical identity during validation. Symlinks inside the root remain subject to containment checks.
 
@@ -197,6 +197,8 @@ Allowed actions:
 
 Protected and unsafe paths default to quarantine. Overflow and fresh instance default to reconcile.
 
+Two keys are inert in v0.1 and stated as such (L-3): `unsafe_path_action` is validated and recorded in the computed route revision but no code path consumes it — the unsafe-path containment rejection (exit 30, `source_unsafe_path`) fires before any policy action today, so the key cannot change an outcome until a consuming policy lands; and `git.mode` (see §4) is likewise revision-recorded only. Both stay outside the independent policy digest (E9-T3/L-18) until they become behavior-affecting.
+
 ## 9. Retry and Failure Budget Configuration
 
 Submission retry applies only to attempts to deliver the same dispatch intent. It does not control Hermes execution retries.
@@ -206,7 +208,7 @@ Validation rules:
 - `max_attempts` from 1 to 10;
 - positive initial and maximum backoff;
 - maximum >= initial;
-- multiplier >= 1.0;
+- multiplier from 1.0 through 10.0;
 - jitter fraction from 0.0 through 0.5.
 
 A remote ambiguity does not consume a normal retry until reconciliation proves non-acceptance.

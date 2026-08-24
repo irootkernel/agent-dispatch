@@ -24,9 +24,9 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 
 | ID | Requirement |
 |---|---|
-| SCP-001 | The certified v0.1 use case **MUST** support one Obsidian vault, one Watchman source, one route, and one primary Hermes Kanban target. |
+| SCP-001 | The certified v0.1 use case **MUST** support one Obsidian vault, one Watchman source, one route, and one primary Hermes Kanban target. (Certification posture, L-25: v0.1 carries no formal certification process — the claim means this shape is the verified, `make verify`-gated configuration; anything beyond it is untested by the gates.) |
 | SCP-002 | Internal configuration structures **SHOULD** use named resources and routes so later multi-vault support does not require a format replacement. |
-| SCP-003 | v0.1 **MUST** process Markdown files with the `.md` extension. |
+| SCP-003 | v0.1 **MUST** process Markdown files with the `.md` extension. (Delivered scope, L-26: the scope predicate also admits the `.markdown` extension — both are in scope wherever `file_scope: markdown` applies.) |
 | SCP-004 | Attachments, PDFs, images, Canvas files, and arbitrary binary files **MUST** be out of scope for automatic dispatch in v0.1. |
 | SCP-005 | The implementation **MUST** be written in Go and pin its toolchain and dependencies. |
 | SCP-006 | Operator configuration **MUST** be YAML and validated before side effects. |

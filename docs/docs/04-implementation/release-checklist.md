@@ -1,16 +1,17 @@
-# v0.1.1 Release Checklist
+# v0.1.4 Release Checklist
 
-> Operated 2026-08-23 for the E7 remediation release (D-017). The v0.1.0
-> checklist was never operated; its unchecked state was finding M-31.
-> This pass checks every item against the v0.1.1 state with notes where
-> the honest answer is narrower than the item's literal text.
+> Operated 2026-08-25 for the reopened E9 remediation release (D-023,
+> closed by D-024). The v0.1.1-era basis (33/45 task counts, the open
+> SCP-008 exception) was finding F5 of the 2026-08-25 review; this pass
+> rewrites the checklist against the current 60-task, macOS-only,
+> toolchain-enforced state. The earlier v0.1.1 record stands as history.
 
 ## SOT and Roadmap
 
-- [x] Every roadmap task E0-T1 through E6-T4 is Completed (verified 2026-08-23; the E7 tasks are tracked separately).
-- [x] No task is In Progress, In Review, or Blocked (the E7 remediation sequence is the active work and is tracked in the task index).
-- [x] Required specification and implementation are reconciled (E7-T1 restored the documentation truth; every MUST is implemented or carries the recorded SCP-008 exception).
-- [x] Traceability contains evidence for every MUST (regenerated for 45 tasks; the MUST-closure matrix is recorded in VALIDATION by E7-T12).
+- [x] Every roadmap task E0-T1 through E9-T9 is Completed (verified 2026-08-25; 10 epics, 60 tasks, 60/60).
+- [x] No task is In Progress, In Review, or Blocked (epic E9 is re-closed by D-024; the roadmap's current epic is None).
+- [x] Required specification and implementation are reconciled (every MUST is implemented, carries a recorded supersession (SCP-008 under D-023), or stands as a maintained exception).
+- [x] Traceability contains evidence for every MUST (regenerated for 60 tasks; the D-023 finding dispositions are recorded in D-023/D-024).
 - [x] Accepted ADRs match the implementation (per-task Mulgae rounds and the epic validation audit own the residual drift).
 - [x] Future work is not partially enabled (the deferred list stands apart).
 
@@ -18,7 +19,7 @@
 
 - [x] Go toolchain and dependencies are pinned (go 1.26.6; staticcheck as a tool dependency, SCP-005); `make verify` and `make release` enforce the exact pin through `go-version-check` before any build step (E9-T7).
 - [x] Clean reproducible builds pass on macOS (darwin/arm64 — the only supported platform under the D-023 policy; the earlier Linux-build line is superseded history).
-- [x] Binaries and checksums are generated (make release; the byte-reproducibility double build is re-verified by E7-T12).
+- [x] Binaries and checksums are generated (make release; the byte-reproducibility double build is verified for v0.1.4 by E9-T9).
 - [x] Dependency/license review is complete (dependency-licenses.md, all 39 modules in the build graph: MIT, BSD, Apache, and MPL-2.0 tool-chain only, all compatible).
 - [x] Build version, commit, and schema ranges are embedded (`version --output json`).
 
@@ -26,9 +27,9 @@
 
 - [x] Unit, component, integration, race, multi-process, and crash tests pass (make verify including -race on darwin/arm64, the only supported platform).
 - [x] JSON Schemas parse and examples validate (make schema-validation, 12 schemas).
-- [x] All G0-G5 acceptance scenarios pass (re-verified 2026-08-23; AC-505's Linux-host scenario is superseded by D-023 with its D-020 closure standing as history).
+- [x] All G0-G5 acceptance scenarios pass (re-verified on the reopened delta 2026-08-25; AC-505's Linux-host scenario is superseded by D-023 with its D-020 closure standing as history).
 - [x] Real Watchman test passes (2026.07.27.00).
-- [x] Real disposable Hermes Kanban test passes (0.19.1, disposable boards).
+- [x] Real disposable Hermes Kanban test passes (0.19.1, disposable boards; under an installed Hermes outside the verified set the real-environment legs skip as TST-007 evidence gaps — E9-T6).
 - [x] Webhook fake/contract tests pass (TLS conformance suite).
 - [x] No production vault was used for destructive tests.
 

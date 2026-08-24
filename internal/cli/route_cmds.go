@@ -221,10 +221,10 @@ func runRouteEnable(command string, args []string, stdout, stderr io.Writer) int
 }
 
 // routeEnableGate is the production enable precondition (E8-T3, H-7): a
-// hermes-kanban production route may only be enabled when the live
-// target probes available through the version-gated report (a missing,
-// unreadable, or stale report, an unsupported version, or an unusable
-// target fails closed at exit 3) and the report itself carries
+// hermes-kanban production route may only be enabled when the target's
+// evidence passes the version-gated report (a missing, unreadable, or
+// stale report, an unsupported version, or a missing required
+// capability fails closed at exit 3) and the report itself carries
 // durable_acceptance and submit_idempotency_key — the delivery
 // guarantees the durable core depends on, required unconditionally, not
 // at the operator's option. The capability report is mandatory evidence

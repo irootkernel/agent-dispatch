@@ -10,11 +10,11 @@
 
 | Field | Value |
 |---|---|
-| Current epic | E9 (reopened by D-023) |
+| Current epic | None (E9 re-closed by D-024) |
 | Current active task | None |
-| Next task | E9-T9 |
-| Completed tasks | 59 / 60 |
-| Planned tasks | 1 / 60 |
+| Next task | None (60/60 complete) |
+| Completed tasks | 60 / 60 |
+| Planned tasks | 0 / 60 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -34,7 +34,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | E6 | Hermes Webhook, Operations, Packaging, and v0.1 Release | **Completed** | 4 | G5 |
 | E7 | MVP Compliance Review Remediation | **Completed** | 12 | MUST closure + v0.1.1 |
 | E8 | v0.1.2 Compliance Remediation | **Completed** | 6 | MUST closure + v0.1.2 |
-| E9 | Deferred-Inventory Hardening | **In Progress** | 9 | Deferred closure + review remediation + v0.1.4 |
+| E9 | Deferred-Inventory Hardening | **Completed** | 9 | Deferred closure + review remediation + v0.1.4 |
 
 ## 3. Task Status Index
 
@@ -99,7 +99,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 57 | E9-T6 | Completed | Submission-gate revision and capability-report integrity |
 | 58 | E9-T7 | Completed | RFC 9110 header grammar and pinned-toolchain enforcement |
 | 59 | E9-T8 | Completed | macOS-only support policy and Linux-surface removal |
-| 60 | E9-T9 | Planned | Documentation truth resynchronized and v0.1.4 released |
+| 60 | E9-T9 | Completed | Documentation truth resynchronized and v0.1.4 released |
 
 ---
 
@@ -2181,7 +2181,7 @@ The validation audit reconciled the deferred findings (32 recorded in the commit
 
 # E9: Deferred-Inventory Hardening
 
-**Epic status:** In Progress (reopened 2026-08-25 by the D-023 formal audit; E9-T1 through E9-T5 remain Completed with their D-022 evidence)  
+**Epic status:** Completed (reopened 2026-08-25 by the D-023 formal audit and re-closed 2026-08-25 by D-024 with all nine tasks Completed)  
 **Purpose:** Close the hardening inventory E8 recorded for the next cycle (D-021): the four Deferred mediums, the resolution remainders, the seventeen Deferred lows, the member-task test-coverage deferrals, and the documentation sub-wording items — every remaining D-020 disposition that is not a maintained exception or a D-018 acceptance. Reopened by D-023 for the 2026-08-25 external MVP compliance review: its six findings (F1 through F6) remediate through E9-T6 through E9-T9 under the darwin/arm64-only support policy D-023 records, and the epic re-closes with the v0.1.4 patch release.  
 **Gate:** every D-020 row reads Fixed, maintained exception, or explicit D-018 acceptance — with the whole-epic review (diff from 148bf57, covering the E8 correction delta) converged and v0.1.3 released from the tagged tree. Reopened gate (D-023): every review finding dispositioned in-tree or by recorded supersession, the whole-epic review converged over the reopened delta, and v0.1.4 released from the re-closed tree.
 
@@ -2466,7 +2466,7 @@ Delivered as the macOS-only support policy and Linux-surface removal under the D
 
 ## E9-T9: Documentation Truth Resynchronization and the v0.1.4 Release
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -2497,7 +2497,7 @@ E9-T8 Completed.
 
 ### Evidence
 
-Pending (E9-T9 not started).
+Delivered as the documentation truth resynchronization and the v0.1.4 release (F5): the status surfaces agree with the decision record — `docs/README.md` carries SOT 1.0.47 with the shipped v0.1.4 target line and a Roadmap State narrative through the D-023 reopen and D-024 re-closure, `docs/VALIDATION.md` records the post-D-024 validation with the 60-task completion statement, the roadmap's summary and current-state block read the re-closed epic with 60/60, and the release checklist is rewritten from its v0.1.1-era basis to the current 60-task, macOS-only, toolchain-enforced posture. The member-task residual observations are reconciled in-tree by this task's audit: the enable-gate comment's opening clause states the evidence rule rather than the unreachable-target exception, `TestE9T6EnableGateRequiresReportWithoutExecutable` gains the unavailable-branch weak-guarantee leg, `TestE9T6RecordedVersionSupportedBoundaries` pins the recorded-version gate's parsing boundaries (the bare triple, the foreign format, the prefix-adjacent 0.19.10), `TestE9T6AuthProjectionNilEquivalence` pins the nil-versus-empty auth projection, the sink grammar test's invalid list gains the colon, and the schema-test comment states the separator-list relationship precisely; the twin validation ladders across the cli/adapter boundary are recorded in D-024 as an architectural observation for the next hardening cycle rather than forced at closeout. RELEASE-NOTES-v0.1.4 discloses the one-time re-acknowledgement under the widened revision, the enforced toolchain pin, the macOS-only artifact set, the runtime-verified Hermes set with the TST-007 skip posture, and the TST-008 gate remaining disabled. The task's own review passed through two full-target Mulgae rounds (`r_01a0356d-5993-7a83-9d16-48b13021b3e7`, remediation-eligible: ci pass, coverage complete, zero committed findings, with every role confirming the six reconciliations and the resynchronized surfaces; `r_01a03575-3871-7cae-8931-afd540997698`, hardening-deferral-eligible: ci pass, coverage complete, publication committed, zero findings). The whole-epic validation over the reopened delta and the v0.1.4 release follow this task commit, recorded in D-024. Changelog 1.0.47.
 
 ---
 

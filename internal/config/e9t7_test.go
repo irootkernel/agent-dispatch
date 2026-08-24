@@ -8,9 +8,10 @@ import (
 // TestE9T7SchemaRejectsNonTcharHeaderNames proves the schema pattern
 // (E9-T7, D-023 F3): a header name outside the RFC 9110 tchar set fails
 // configuration validation itself — before any sink construction or
-// submission attempt — for both header fields, using the same invalid
-// list the sink-level grammar test pins, while the equivalent tchar
-// names load.
+// submission attempt — for both header fields, using the same separator
+// list the sink-level grammar test pins (the sink list additionally
+// covers tab and non-ASCII names), while the equivalent tchar names
+// load.
 func TestE9T7SchemaRejectsNonTcharHeaderNames(t *testing.T) {
 	base := string(e9t6WebhookYAML(t))
 	invalid := []string{

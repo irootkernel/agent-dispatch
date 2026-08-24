@@ -90,6 +90,19 @@ func TestE9T6EnableGateRequiresReportWithoutExecutable(t *testing.T) {
 	if code, stderr, _ := enable(); code != 3 || !strings.Contains(stderr, "outside the runtime-verified set") {
 		t.Fatalf("an unsupported-version report with an absent executable must refuse at exit 3, got %d: %s", code, stderr)
 	}
+	// A weak-guarantee report in the same liveness state: refused through
+	// the shared closure, not only on the probed path (the round-2
+	// residual observation).
+	writeWeakGuaranteeReport := func() {
+		body := `{"schema_version":"agent-dispatch.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":false,"submit_idempotency_key":true,"lookup_by_idempotency_key":false,"lookup_by_external_ref":true,"resource_mutex":true,"execution_status":true,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
+		if err := os.WriteFile(reportPath, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeWeakGuaranteeReport()
+	if code, stderr, _ := enable(); code != 3 || !strings.Contains(stderr, "config_capability_missing") || !strings.Contains(stderr, "durable_acceptance") {
+		t.Fatalf("a weak-guarantee report with an absent executable must refuse at exit 3 through the shared closure, got %d: %s", code, stderr)
+	}
 	// The honest report enables with the liveness warning preserved.
 	writeReport("0.19.1 (2026.7.30)")
 	code, stderr, stdout := enable()

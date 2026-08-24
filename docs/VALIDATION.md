@@ -1,7 +1,7 @@
 # SOT Package Validation
 
-> **Validated:** 2026-08-25 (post D-023: the external MVP compliance review is accepted and epic E9 is reopened with E9-T6 through E9-T9)  
-> **Package target:** Agent Dispatch SOT 1.0.43 / implementation v0.1.3 (v0.1.4 under remediation in reopened epic E9)
+> **Validated:** 2026-08-25 (post D-024: epic E9 re-closed 9/9 with every D-023 finding dispositioned and v0.1.4 released from the validated tree)  
+> **Package target:** Agent Dispatch SOT 1.0.47 / implementation v0.1.4 (shipped)
 
 ## Completed Checks
 
@@ -18,14 +18,14 @@
 - Markdown code fences are balanced.
 - The roadmap contains exactly 10 epics and 60 task headings (the 33 v0.1 tasks, the 12 E7 tasks from D-017, the 6 E8 tasks from D-020, the 5 E9 tasks from D-021, and the 4 E9 tasks from D-023).
 - Every task uses one allowed status value.
-- The v0.1, E7, and E8 sequences and E9-T1 through E9-T5 are fully Completed; the four reopened E9 remediation tasks are tracked live in the task status index (see D-023).
+- The v0.1, E7, and E8 sequences and all nine E9 tasks (the five D-021 hardening tasks and the four D-023 remediation tasks) are fully Completed; epic E9 is re-closed by D-024.
 - Required-spec IDs are unique.
 - Acceptance-scenario IDs are unique.
 - `docs/docs/00-sot/` contains no em dash characters (the rest of the package preserves its original formatting).
 
 ## Package Statistics at Validation
 
-- Markdown files: 65 on the manifest basis (every file under this package, including this report and the v0.1.2 release notes)
+- Markdown files: 67 on the manifest basis (every file under this package, including this report and the v0.1.2 through v0.1.4 release notes)
 - JSON Schemas: 12
 - Example files: 12
 - Integration reports: 2 (Hermes public interface E0-T4, Watchman public interface E0-T5)

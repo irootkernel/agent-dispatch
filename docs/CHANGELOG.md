@@ -1,5 +1,13 @@
 # SOT Changelog
 
+## 1.0.47 - 2026-08-25
+
+E9-T9 and the D-024 closeout: documentation truth and the v0.1.4 release:
+
+- the status surfaces resynchronize (README SOT and narrative, VALIDATION post-D-024 record, the roadmap's re-closed summary and current state, and the release checklist rewritten to the 60-task macOS-only toolchain-enforced basis) closing D-023 F5;
+- the member-task residual observations reconcile in-tree: the unavailable-branch weak-guarantee coverage leg, the RecordedVersionSupported boundary unit tests, the authProjection nil-equivalence pin, the gate-comment phrasing, the grammar-test colon, and the schema-test comment wording (the twin validation ladders are recorded in D-024 as an architectural observation);
+- RELEASE-NOTES-v0.1.4 discloses the one-time re-acknowledgement under the widened revision projection, the enforced toolchain pin, the macOS-only artifact set, and the known Hermes-set posture;
+- D-024 re-closes epic E9 9/9 with every D-023 finding dispositioned and v0.1.4 tagged at the final tree after the byte-identical double build.
 ## 1.0.46 - 2026-08-25
 
 E9-T8: the macOS-only support policy lands (D-023 finding F6):

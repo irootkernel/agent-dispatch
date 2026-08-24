@@ -15,7 +15,7 @@ import (
 // and the colon.)
 func TestE9T7HeaderNameGrammar(t *testing.T) {
 	invalid := []string{
-		"Bad(Name", "Bad)Name", "Bad,Name", "Bad/Name", `Bad"Name`, `Bad\Name`,
+		"Bad(Name", "Bad)Name", "Bad,Name", "Bad/Name", `Bad"Name`, `Bad\Name`, "Bad:Name",
 		"Bad Name", "Bad;Name", "Bad=Name", "Bad{Name", "Bad}Name",
 		"Bad<Name", "Bad>Name", "Bad?Name", "Bad@Name", "Bad[Name", "Bad]Name",
 		"Bad\tName", "Bäd", "リクエスト",

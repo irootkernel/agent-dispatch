@@ -89,6 +89,17 @@ func TestE9T6RevisionCoversReconciliation(t *testing.T) {
 	}
 }
 
+// TestE9T6AuthProjectionNilEquivalence pins the projection's nil
+// handling: an absent auth block and an explicitly empty one must hash
+// identically, so only a real authentication change moves the revision.
+func TestE9T6AuthProjectionNilEquivalence(t *testing.T) {
+	nilAuth := authProjection(nil)
+	emptyAuth := authProjection(&Auth{})
+	if nilAuth["type"] != emptyAuth["type"] || nilAuth["secret_ref"] != emptyAuth["secret_ref"] || nilAuth["header_name"] != emptyAuth["header_name"] {
+		t.Fatalf("nil and empty auth must project identically: %v vs %v", nilAuth, emptyAuth)
+	}
+}
+
 // TestE9T6RetentionStaysOutOfRevision pins the exclusion half of the
 // disposition: the retention block bounds record pruning (OPS-003) and
 // never changes what a dispatch submits or how a plan is classified, so

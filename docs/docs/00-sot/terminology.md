@@ -15,6 +15,7 @@ Normative words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** 
 | **Source event key** | Stable source-provided identity or position used to recognize retransmission. It is distinct from a Agent Dispatch ID. |
 | **Settled** | Watchman trigger mode invokes Agent Dispatch only after observed changes stop for a quiet period. The payload is already one settled batch, so Agent Dispatch adds no second settle delay. |
 | **Change item** | One normalized relative-path create, modify, or delete observation. |
+| **Follow-up** | The single latest-state dispatch scheduled when a completed generation leaves unresolved work (a dirty generation or a pending reconciliation). A route holds at most one pending follow-up; consecutive follow-up chains are bounded (`MaxConsecutiveFollowups`) and resolve through UNCERTAIN when exceeded (E8-T1). |
 | **Change batch** | A bounded, deterministically ordered set of relevant change items evaluated together. |
 | **Manifest** | A bounded list of normalized relative paths and digests attached to a task or work receipt. It is untrusted activation evidence, not an instruction or a state snapshot. |
 | **Route generation** | The logical maintenance generation for a route. While one Hermes task is unresolved, later batches increment its durable dirty generation instead of creating parallel work. |

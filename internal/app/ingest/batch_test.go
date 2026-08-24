@@ -297,7 +297,10 @@ func TestRepeatedSaveResolvesToOneFinalChange(t *testing.T) {
 	build(t, r, e, NoFacts{}, entry("trigger-repeated.md", records.OpCreate))
 	write(t, root, "trigger-repeated.md", "v2")
 	build(t, r, e, NoFacts{}, entry("trigger-repeated.md", records.OpModify))
-	write(t, root, "trigger-repeated.md", "v3")
+	// A byte-identical rewrite of the final content: the coalesced batch
+	// must resolve to the same final digest (the earlier variant wrote
+	// three different digests and never pinned this, review L-5).
+	write(t, root, "trigger-repeated.md", "v2")
 	res := build(t, r, e, NoFacts{}, entry("trigger-repeated.md", records.OpModify))
 	if len(res.Changes) != 1 {
 		t.Fatalf("three saves resolve to one final change, got %+v", res.Changes)

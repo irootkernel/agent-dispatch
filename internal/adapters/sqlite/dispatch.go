@@ -158,8 +158,11 @@ func (s *Store) LoadIntent(ctx context.Context, dispatchID string) (ports.Intent
 	}
 	// DAT-009 (E7-T8/M-8): the stored request's contract version is
 	// load-bearing. A stored major this build does not speak fails
-	// closed on read instead of being mis-rendered at submit time.
-	if snap.RequestVersion != "" && snap.RequestVersion != ports.TaskRequestContractVersion {
+	// closed on read instead of being mis-rendered at submit time. The
+	// column is NOT NULL since schema v1, so an empty value is a
+	// corruption, not pre-versioning legacy — it fails closed too
+	// (review M-15, E8 correction).
+	if snap.RequestVersion != ports.TaskRequestContractVersion {
 		return snap, fmt.Errorf("stored request version %q is not a contract this build speaks (%s): fail closed", snap.RequestVersion, ports.TaskRequestContractVersion)
 	}
 	snap.ExternalRef, snap.LeaseOwner, snap.LeaseExpiresAt, snap.NextAttemptAt =

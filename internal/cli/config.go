@@ -14,6 +14,7 @@ import (
 	"github.com/irootkernel/agent-dispatch/internal/adapters/hermeswebhook"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
 	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/domain/policy"
 )
 
 // runConfig implements the config command tree (cli-spec §3): config
@@ -137,6 +138,9 @@ func runConfigValidate(args []string, stdout, stderr io.Writer) int {
 	// need no live target. Only the freshness check against the
 	// installed version stays probe-gated, because it needs the
 	// executable.
+	if code := validatePatterns(command, cfg, stderr); code != 0 {
+		return code
+	}
 	offlineWarnings, code := validateTargetsOffline(command, cfg, stderr)
 	if code != 0 {
 		return code
@@ -168,6 +172,30 @@ func runConfigValidate(args []string, stdout, stderr io.Writer) int {
 // capability the report does not carry is a configuration defect at exit
 // 3 — the old probe-only gating let `config validate` pass
 // configurations the targets could never honor.
+// validatePatterns compiles every route's pattern sets with the same
+// engine the dispatch path uses (§12 pattern safety, E8 correction of
+// review M-18: the patterns previously compiled only at route
+// plan/dispatch time, so an invalid glob passed validation).
+func validatePatterns(command string, cfg *config.Config, stderr io.Writer) int {
+	ids := make([]string, 0, len(cfg.Routes))
+	for id := range cfg.Routes {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		route := cfg.Routes[id]
+		mode := policy.CaseSensitive
+		if config.CaseMode() == "insensitive" {
+			mode = policy.CaseInsensitive
+		}
+		if _, err := policy.NewEngine(route.Source.Include, route.Source.Exclude, route.Policy.Protected, route.Policy.Immutable, mode); err != nil {
+			return planErr(stderr, command, "config_invalid", "configuration",
+				fmt.Sprintf("route %q pattern sets do not compile: %v", id, err), 3)
+		}
+	}
+	return 0
+}
+
 func validateTargetsOffline(command string, cfg *config.Config, stderr io.Writer) ([]string, int) {
 	var warnings []string
 	for _, id := range sortedTargetIDs(cfg) {

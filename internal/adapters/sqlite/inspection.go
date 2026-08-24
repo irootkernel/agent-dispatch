@@ -103,8 +103,9 @@ func (s *Store) LoadIntentLineage(ctx context.Context, dispatchID string) (ports
 	}
 	lin.Intent.NextAttemptAt = nullText(next)
 	// DAT-009 (E7-T8/M-8): the same fail-closed version check the
-	// snapshot read enforces.
-	if storedVersion != "" && storedVersion != ports.TaskRequestContractVersion {
+	// snapshot read enforces — empty is corruption, not legacy (the
+	// column is NOT NULL since schema v1; review M-15, E8 correction).
+	if storedVersion != ports.TaskRequestContractVersion {
 		return lin, fmt.Errorf("stored request version %q is not a contract this build speaks (%s): fail closed", storedVersion, ports.TaskRequestContractVersion)
 	}
 
@@ -129,18 +130,26 @@ func (s *Store) LoadIntentLineage(ctx context.Context, dispatchID string) (ports
 		return lin, err
 	}
 
-	rrows, err := s.QueryContext(ctx, `SELECT receipt_id, dispatch_id, receipt_kind, acceptance_state, execution_state, durable, external_ref, target_observed_at, received_at
+	rrows, err := s.QueryContext(ctx, `SELECT receipt_id, dispatch_id, receipt_kind, acceptance_state, execution_state, durable, external_ref, target_observed_at, received_at, payload_version
 		FROM dispatch_receipts WHERE dispatch_id = ? ORDER BY received_at, receipt_id`, dispatchID)
 	if err != nil {
 		return lin, err
 	}
 	for rrows.Next() {
 		var r ports.ReceiptRecord
-		var acceptance, execution, ref, observed sql.NullString
+		var acceptance, execution, ref, observed, payloadVersion sql.NullString
 		var durable sql.NullInt64
-		if err := rrows.Scan(&r.ReceiptID, &r.DispatchID, &r.ReceiptKind, &acceptance, &execution, &durable, &ref, &observed, &r.ReceivedAt); err != nil {
+		if err := rrows.Scan(&r.ReceiptID, &r.DispatchID, &r.ReceiptKind, &acceptance, &execution, &durable, &ref, &observed, &r.ReceivedAt, &payloadVersion); err != nil {
 			rrows.Close()
 			return lin, err
+		}
+		// DAT-009 (review M-15, E8 correction): the stored receipt's
+		// payload version was written but never read — a receipt this
+		// build did not produce fails closed on inspection instead of
+		// surfacing mis-rendered evidence.
+		if pv := nullText(payloadVersion); pv != "" && pv != ports.TaskRequestContractVersion {
+			rrows.Close()
+			return lin, fmt.Errorf("stored receipt %s payload version %q is not a contract this build speaks (%s): fail closed", r.ReceiptID, pv, ports.TaskRequestContractVersion)
 		}
 		r.AcceptanceState = records.AcceptanceState(nullText(acceptance))
 		r.ExecutionState = records.ExecutionState(nullText(execution))

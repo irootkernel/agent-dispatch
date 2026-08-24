@@ -1,11 +1,16 @@
 package sqlite
 
 // schemaV1 is the initial durable schema (persistence-and-state-machines
-// §2): one table per canonical record (DAT-001), real columns for every
-// query-relevant and causal field (DAT-007), no note bodies (DAT-008),
-// foreign keys and unique constraints enforcing the invariants, and the
-// append-only audit history (DUR-011). Bounded JSON payloads carry their
-// schema version.
+// §2): one table per canonical record (DAT-001), real columns for the
+// query-relevant and causal fields the primary lineages carry (DAT-007),
+// no note bodies (DAT-008), foreign keys and unique constraints enforcing
+// the invariants, and the append-only audit history (DUR-011). Bounded
+// JSON payloads carry their schema version. Revision columns live on the
+// lineage heads (change_batches, policy_decisions, dispatch_intents);
+// the attempt, receipt, work-receipt, quarantine, and transition tables
+// reach their route and policy revisions joinably through their
+// dispatch or decision keys — a recorded design choice, not an
+// oversight (review M-17, E8 correction).
 const schemaV1 = `
 CREATE TABLE resources (
 	resource_id    TEXT PRIMARY KEY,

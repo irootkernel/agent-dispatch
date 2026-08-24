@@ -177,6 +177,10 @@ func (l *Logger) Log(level Level, event string, corr Correlation, message string
 	if l == nil || l.w == nil || !l.Enabled(level) {
 		return
 	}
+	// The message path is sanitized like every value: credential-shaped
+	// fragments are redacted even in free text (review M-20, E8
+	// correction — the field was safe by convention only).
+	message = RenderPath(message, PathsRedacted)
 	line := map[string]any{
 		"time":    l.clock().UTC().Format(time.RFC3339Nano),
 		"level":   level.String(),

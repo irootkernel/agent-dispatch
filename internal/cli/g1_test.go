@@ -153,7 +153,7 @@ func TestG1AC105DeterministicExclusions(t *testing.T) {
 // nothing outside the root and are rejected.
 func TestG1AC106UnsafeInputsRejected(t *testing.T) {
 	h := newG1(t)
-	for _, name := range []string{"/etc/passwd", "../outside.md"} {
+	for _, name := range []string{"/etc/passwd", "../outside.md", "a\x00b.md"} {
 		// Lexically unsafe names are rejected by the parser before any
 		// file access.
 		payload := `[{"name":"` + name + `","exists":true,"new":true,"size":1,"type":"f"}]`

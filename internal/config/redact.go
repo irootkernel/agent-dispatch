@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"sort"
+	"strings"
 )
 
 // Normalized returns a deterministic redacted projection of the
@@ -90,8 +91,11 @@ func normalizedTargets(in map[string]Target) map[string]normalizedTarget {
 			SubmitTimeout:        v.SubmitTimeout,
 			LookupTimeout:        v.LookupTimeout,
 			EnvironmentAllowlist: sortedCopy(v.EnvironmentAllowlist),
-			Endpoint:             v.Endpoint,
-			IdempotencyHeader:    v.IdempotencyHeader,
+			// The endpoint prints with its query string masked: webhook
+			// tokens ride in query parameters, and config show echoed
+			// them verbatim (review M-20, E8 correction).
+			Endpoint:          maskEndpointQuery(v.Endpoint),
+			IdempotencyHeader: v.IdempotencyHeader,
 		}
 		if v.Auth != nil {
 			n.Auth = &normalizedAuth{
@@ -130,4 +134,21 @@ func sortedKeys(m map[string]Route) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// maskEndpointQuery replaces every query parameter's value with
+// [redacted] while keeping the parameter names visible for operators.
+func maskEndpointQuery(endpoint string) string {
+	i := strings.IndexByte(endpoint, '?')
+	if i < 0 {
+		return endpoint
+	}
+	base, query := endpoint[:i], endpoint[i+1:]
+	parts := strings.Split(query, "&")
+	for j, p := range parts {
+		if k := strings.IndexByte(p, '='); k >= 0 {
+			parts[j] = p[:k+1] + "[redacted]"
+		}
+	}
+	return base + "?" + strings.Join(parts, "&")
 }

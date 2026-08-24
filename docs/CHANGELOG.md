@@ -1,5 +1,9 @@
 # SOT Changelog
 
+## 1.0.34 - 2026-08-23
+
+E8 epic validation: the four-round whole-epic review converged (ci pass, zero medium-or-above findings; two low test-quality observations recorded for the next cycle), the audit remediations landed (the quarantine-release revision seam, the fail-closed stale precondition, the honest runbook exits, the route tree and example alignments), and the deferred findings are reconciled - E8 closes 6/6 with v0.1.2 tagged.
+
 ## 1.0.33 - 2026-08-23
 
 E8-T6: documentation truth restored and v0.1.2 released:

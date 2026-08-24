@@ -1,5 +1,14 @@
 # SOT Changelog
 
+## 1.0.42 - 2026-08-24
+
+E9 closeout and v0.1.3:
+
+- the E9-T1 audit's eleven deferred findings reconcile in-tree: the intent emission carries the request document as the schema's object (show and list), the schema-excluded operator members leave the wire, an in-flight attempt reports the open outcome, nullable members render null, the derived dead-letter reason clamps to the enum, migration v7's backfill is pinned over a rewound v6 shape, and the record emissions validate against the full published schemas from real runs;
+- the whole-epic validation (148bf57..HEAD, including the E8 correction delta) converges through three remediation rounds plus a clean confirmation: the retention prune no longer wedges on a terminal dispatch's begun receipt (in-flight anchors stay protected through non-terminality and the active slot), the typed-map denylist case-folds, the terminal-lineage and denylist guards are single shared predicates, and the release-checklist retention wording states the exact semantics;
+- D-022 closes the epic (56/56 tasks, every D-021 inventory item dispositioned) and records the D-011 scheduled-submit supersession plus the E9-T2 provenance correction;
+- v0.1.3 is tagged at the final tree, built twice byte-identically, with the release notes disclosing the hardening and the TST-008 gate remaining disabled.
+
 ## 1.0.41 - 2026-08-24
 
 E9-T5: documentation truth and the dependency advisory:

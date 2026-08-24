@@ -10,11 +10,11 @@
 
 | Field | Value |
 |---|---|
-| Current epic | E9 (hardening, D-021) |
+| Current epic | None (E9 closed by D-022) |
 | Current active task | None |
-| Next task | E9-T5 |
-| Completed tasks | 55 / 56 |
-| Planned tasks | 1 / 56 |
+| Next task | None (56/56 complete) |
+| Completed tasks | 56 / 56 |
+| Planned tasks | 0 / 56 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -95,7 +95,7 @@ The SOT documents created in this package satisfy E0-T1 through E0-T3. E0-T4 com
 | 53 | E9-T2 | Completed | Reconciliation and operator-surface hardening |
 | 54 | E9-T3 | Completed | Security, observability, and revision hygiene |
 | 55 | E9-T4 | Completed | Test-coverage hardening |
-| 56 | E9-T5 | Planned | Documentation truth, dependency, and the v0.1.3 release |
+| 56 | E9-T5 | Completed | Documentation truth, dependency, and the v0.1.3 release |
 
 ---
 
@@ -2177,7 +2177,7 @@ The validation audit reconciled the deferred findings (32 recorded in the commit
 
 # E9: Deferred-Inventory Hardening
 
-**Epic status:** Planned  
+**Epic status:** Completed  
 **Purpose:** Close the hardening inventory E8 recorded for the next cycle (D-021): the four Deferred mediums, the resolution remainders, the seventeen Deferred lows, the member-task test-coverage deferrals, and the documentation sub-wording items — every remaining D-020 disposition that is not a maintained exception or a D-018 acceptance.  
 **Gate:** every D-020 row reads Fixed, maintained exception, or explicit D-018 acceptance — with the whole-epic review (diff from 148bf57, covering the E8 correction delta) converged and v0.1.3 released from the tagged tree.
 
@@ -2323,7 +2323,7 @@ Delivered as the coverage hardening: the E8 member-task deferrals each carry an 
 
 ## E9-T5: Documentation Truth, Dependency, and the v0.1.3 Release
 
-**Status:** Planned  
+**Status:** Completed  
 **Design Gate impact:** Not required (no design gate registry is enrolled in this repository; legacy rule recorded).
 
 ### Objective
@@ -2353,7 +2353,7 @@ E9-T4 Completed.
 
 ### Evidence
 
-Documentation truth delivered: observability §3 now separates the thirteen events the v0.1 CLI actually emits (including the E9-T3 `dispatch.mutex_suppressed` and the work lifecycle trio) from the reserved vocabulary no command emits yet; §5 documents the real surfaces — `status --output json` with its actual payload (`routes`, `queues`, `quarantine`, `oldest_unresolved`, `database_bytes`, `targets`) and `doctor`'s always-JSON findings envelope with `trace_id` — in place of the `--json` flag and the latency/retry counters that do not exist; §7 names the target check as the offline construction gate (report validation, no process execution) with the installed-version probe credited to dispatch time. The roadmap's E4-T5 gained its Evidence section (the five-test G3 harness covering the six acceptance scenarios over real components, the VALIDATION G3 table, and the E9-T3 transport-coverage semantics the downtime gate now asserts), and E5-T4's reason vocabulary is corrected to the delivered nine values (`initial, scheduled, overflow, fresh-instance, lost-cursor, manual, delivery, stale-active, startup`) in both the deliverable and the evidence. configuration-spec §9 states the multiplier range 1.0–10.0 the schema already enforces; §4 and §8 note the two inert keys (`git.mode`, `unsafe_path_action`) with their revision-recorded-but-unconsumed semantics and their exclusion from the policy digest; the `file_scope` row documents the `.md`/`.markdown` scope (SCP-003's delivered scope, L-26) and SCP-001 carries the certification-posture note (L-25: no formal certification process exists; the claim means the verified `make verify`-gated shape). The error-model's exit-13 row states the code truth (the Watchman protocol surface exits 13 on `target_response_invalid`; the plain dispatch command records `unknown` in its exit-0 envelope), and the reserved code names (`batch_hard_limit`, `protected_path_quarantined`, `unsafe_path_quarantined`) moved out of the emitted registry into an explicit reserved table with their activation conditions (L-21). L-27 resolved by a real bump: `golang.org/x/text` v0.14.0 → v0.41.0 (GO-2026-5970) with the aligned `x/mod`, `x/sync`, and `x/tools` indirects, `go mod tidy` clean, full suite green — no offline constraint needed. The epic validation, the v0.1.3 release, and the closeout decision record follow below in this section as they complete. Reviewed through two full-target Mulgae rounds (`r_01a03414-3a5e-7f15-b90e-330916d4b6be`, remediation-eligible: one low finding — configuration-spec §4 understated git.mode's recording sites — plus three wording residuals, all remediated in-tree: both recording sites stated, the five-test G3 count, doctor's accepted-and-ignored `--output json`, and the §3 log-level hedge; `r_01a03423-f206-7108-be8c-782a975ff2e0`, hardening-deferral-eligible: ci pass, coverage complete, publication committed, zero findings, every role confirming the documentation truth and the dependency bump).
+Documentation truth delivered: observability §3 now separates the thirteen events the v0.1 CLI actually emits (including the E9-T3 `dispatch.mutex_suppressed` and the work lifecycle trio) from the reserved vocabulary no command emits yet; §5 documents the real surfaces — `status --output json` with its actual payload (`routes`, `queues`, `quarantine`, `oldest_unresolved`, `database_bytes`, `targets`) and `doctor`'s always-JSON findings envelope with `trace_id` — in place of the `--json` flag and the latency/retry counters that do not exist; §7 names the target check as the offline construction gate (report validation, no process execution) with the installed-version probe credited to dispatch time. The roadmap's E4-T5 gained its Evidence section (the five-test G3 harness covering the six acceptance scenarios over real components, the VALIDATION G3 table, and the E9-T3 transport-coverage semantics the downtime gate now asserts), and E5-T4's reason vocabulary is corrected to the delivered nine values (`initial, scheduled, overflow, fresh-instance, lost-cursor, manual, delivery, stale-active, startup`) in both the deliverable and the evidence. configuration-spec §9 states the multiplier range 1.0–10.0 the schema already enforces; §4 and §8 note the two inert keys (`git.mode`, `unsafe_path_action`) with their revision-recorded-but-unconsumed semantics and their exclusion from the policy digest; the `file_scope` row documents the `.md`/`.markdown` scope (SCP-003's delivered scope, L-26) and SCP-001 carries the certification-posture note (L-25: no formal certification process exists; the claim means the verified `make verify`-gated shape). The error-model's exit-13 row states the code truth (the Watchman protocol surface exits 13 on `target_response_invalid`; the plain dispatch command records `unknown` in its exit-0 envelope), and the reserved code names (`batch_hard_limit`, `protected_path_quarantined`, `unsafe_path_quarantined`) moved out of the emitted registry into an explicit reserved table with their activation conditions (L-21). L-27 resolved by a real bump: `golang.org/x/text` v0.14.0 → v0.41.0 (GO-2026-5970) with the aligned `x/mod`, `x/sync`, and `x/tools` indirects, `go mod tidy` clean, full suite green — no offline constraint needed. The epic validation, the v0.1.3 release, and the closeout decision record: the whole-epic review over 148bf57..HEAD (covering the E8 correction delta, closing its confirmation-evidence gap explicitly) converged through three remediation rounds plus a clean confirmation — round 1 (`r_01a0344b-e13f`) surfaced one medium (the retention prune wedging on a terminal dispatch's old begun receipt — its un-cascaded foreign key blocked the intent delete) and the typed-map denylist case-folding gap, both fixed with regression tests; round 2 (`r_01a03463-de2c`) carried the by-design untracked review-file disposition and the test-comment gap; round 3 (`r_01a0346e-656e`) carried four lows (the release-checklist retention wording, the slot-guard pin, the shared terminal predicate, the shared denylist helper), all fixed; the confirmation round (`r_01a03482-6db2`) committed clean with zero findings. The E9-T1 audit's eleven deferred findings are reconciled in-tree (the request object on show and list, the schema-excluded members off the wire, the open outcome, the null shapes, the enum-clamped dead-letter reason with the degraded-context test, the v7 backfill pin over a rewound v6 shape, and the wire pins — full-schema validation from real runs replaces the presence checks), and the E9-T2 F003 provenance correction is recorded in D-022. v0.1.3 is released from this tree: `make release VERSION=v0.1.3` twice byte-identically, the tag at the final commit, RELEASE-NOTES-v0.1.3 disclosing the hardening and the TST-008 gate remaining disabled. D-022 closes the epic: every D-021 inventory item reads Fixed, maintained exception (M-8), or D-018 acceptance (L-13, L-14), with the D-011 scheduled-submit supersession recorded. Changelog 1.0.42. Reviewed through two full-target Mulgae rounds (`r_01a03414-3a5e-7f15-b90e-330916d4b6be`, remediation-eligible: one low finding — configuration-spec §4 understated git.mode's recording sites — plus three wording residuals, all remediated in-tree: both recording sites stated, the five-test G3 count, doctor's accepted-and-ignored `--output json`, and the §3 log-level hedge; `r_01a03423-f206-7108-be8c-782a975ff2e0`, hardening-deferral-eligible: ci pass, coverage complete, publication committed, zero findings, every role confirming the documentation truth and the dependency bump).
 
 ---
 

@@ -1,7 +1,8 @@
 # ADR-0009: Allow One Active Maintenance Task and Collapse Later Changes
 
-> **Status:** Accepted  
+> **Status:** Superseded
 > **Date:** 2026-08-19
+> **Superseded by:** ADR-0016 for v0.1.5; retained as v0.1.4 history
 
 ## Context
 
@@ -10,6 +11,9 @@ Obsidian save bursts and Hermes-generated edits can create many activations. Par
 ## Decision
 
 Each route has at most one unresolved Hermes maintenance task. Later meaningful changes are persisted as a dirty generation. Completion creates at most one follow-up latest-state task.
+
+ADR-0016 preserves this invariant per `(route_id, destination_id)` lane in
+v0.1.5 so independent workstreams can progress concurrently.
 
 ## Consequences
 

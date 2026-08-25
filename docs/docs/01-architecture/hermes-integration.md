@@ -174,3 +174,24 @@ The conservative response mapping (WHK-004, DUR-005): 2xx is acceptance of the t
 ## 11. Future Hermes Plugin
 
 A future optional plugin may expose Agent Dispatch status, route pause/resume, quarantine, receipts, and manual operations inside Hermes. It remains a management surface. Sensing, SQLite state, policy, and dispatch correctness must continue to work when the plugin is absent or Hermes is stopped.
+
+## 12. v0.1.5 Capability and Destination Target
+
+ADR-0017 replaces the exact-version production gate with minimum-version
+eligibility followed by capability probing. Versions below 0.19.1 fail before
+probing; later versions have no fixed maximum. A route is compatible only when
+the public command and response shapes needed by every configured destination
+are usable under the process bounds in §3.
+
+Profile enumeration uses `kanban assignees --json` and requires `on_disk=true`.
+Enabled skills use the current public profile-scoped `skills list` command with
+color disabled and a fixed wide rendering. Because Hermes does not expose JSON
+for that command today, Agent Dispatch accepts only the complete known table
+shape and rejects truncation or drift. This is an adapter constraint, not a
+Hermes change or permission to inspect private profile storage.
+
+Evidence is cached by executable absolute path and digest, reported version,
+and probe-contract version. Production activation records the evidence
+fingerprint beside the route revision. A mismatch pauses submission and emits
+integration drift; it is never treated as proof of incompatibility or silently
+accepted.

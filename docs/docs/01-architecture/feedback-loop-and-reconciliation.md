@@ -135,3 +135,20 @@ The `reconcile --reason` CLI values map to these types: `initial`, `scheduled`, 
 - `quarantine release <id>`: explicit operator decision creating new lineage.
 
 No generic `replay` command exists.
+
+## 10. v0.1.5 Work Outcomes and Fencing
+
+The feedback loop runs independently per destination lane. A validated
+`work-receipt/v2` result has these effects:
+
+- `completed`: close the child and evaluate only that lane's dirty generation;
+- `partially_completed`: require bounded completed and remaining scope, then
+  close the child and create at most one budgeted remaining-scope follow-up;
+- `blocked`: retain evidence and enter manual intervention without auto-retry;
+- `failed`: apply the persisted failure budget and then fail terminally.
+
+Hermes task acceptance and status remain evidence projections. Neither is work
+completion without an attributable receipt. Full reconciliation captures the
+resource observation revision before enumeration and commits only if it still
+matches. A conflict or twice-unstable file remains visible and requests another
+bounded reconciliation rather than overwriting newer facts.

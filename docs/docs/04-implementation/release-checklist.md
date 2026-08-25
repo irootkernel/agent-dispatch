@@ -79,3 +79,20 @@
 - [x] Hermes companion skill.
 - [x] Changelog and release notes (the v0.1.1 notes disclose the Linux exception — historical; releases from v0.1.4 on are darwin/arm64-only under D-023).
 - [x] Acceptance reports (docs/VALIDATION.md; the compliance-review findings live in the decision log's D-017/D-020/D-023 records).
+
+## Planned v0.1.5 Addendum
+
+The checked items above are v0.1.4 release history. E13-T4 may check the items
+below only after G6 through G9 carry executable evidence:
+
+- [ ] Effective nested Watchman binding and complete managed-trigger removal.
+- [ ] Reconciliation fence and bounded-growing-file evidence.
+- [ ] Frozen real Hermes 0.19.1 plus installed newer-version probe evidence,
+      with no Hermes source/private-state modification.
+- [ ] Destination config/schema migration, multi-profile/workstream fan-out,
+      independent retry, and work-receipt/v2 evidence.
+- [ ] Notification outbox, webhook/log sinks, dedup, retry, and redaction.
+- [ ] Versioned operator and worker skills plus isolated operational walkthrough.
+- [ ] SOT/roadmap/VALIDATION/release-note truth synchronized at 75/75.
+- [ ] Two byte-identical darwin/arm64 builds and local v0.1.5 tag; no push or
+      production activation.

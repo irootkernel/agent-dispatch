@@ -6,20 +6,22 @@
 
 | Requirement group | Citing tasks | Final verification |
 |---|---|---|
-| `BND-*` | E0-T1, E0-T4, E5-T2 | E6-T4 |
-| `CLI-*` | E1-T1, E2-T4, E3-T3, E5-T1, E5-T4, E6-T2, E7-T5, E7-T6, E7-T11, E8-T1, E8-T2, E8-T4, E9-T2, E9-T6 | E6-T4 |
-| `CON-*` | E3-T1, E3-T4, E5-T3, E5-T5, E7-T2, E8-T1, E8-T3 | E5-T5 |
-| `DAT-*` | E0-T2, E1-T3, E1-T4, E2-T3, E7-T8, E7-T11, E8-T1, E8-T5, E9-T1 | E3-T5 |
-| `DUR-*` | E0-T2, E1-T4, E3-T1, E3-T2, E3-T3, E3-T5, E4-T3, E4-T5, E7-T2, E7-T6, E7-T7, E8-T2 | E3-T5, E4-T5 |
-| `FBK-*` | E0-T2, E3-T4, E5-T1, E5-T2, E5-T3, E5-T5, E7-T2, E7-T9, E8-T1 | E5-T5 |
-| `HER-*` | E0-T2, E0-T4, E4-T1, E4-T2, E4-T3, E4-T4, E4-T5, E7-T8, E7-T9, E8-T3, E9-T6 | E4-T5, E6-T4 |
-| `OPS-*` | E1-T2, E1-T4, E2-T5, E3-T5, E4-T4, E5-T4, E6-T2, E6-T3, E7-T2, E7-T5, E7-T6, E7-T7, E7-T9, E7-T11, E8-T2, E8-T4, E9-T1, E9-T2, E9-T3 | E6-T4 |
+| `BND-*` | E0-T1, E0-T4, E5-T2, E11-T4, E13-T3 | E6-T4, E13-T4 |
+| `CLI-*` | E1-T1, E2-T4, E3-T3, E5-T1, E5-T4, E6-T2, E7-T5, E7-T6, E7-T11, E8-T1, E8-T2, E8-T4, E9-T2, E9-T6, E11-T1, E11-T3, E11-T4, E12-T3, E13-T2, E13-T3, E13-T4 | E6-T4, E11-T4, E13-T3, E13-T4 |
+| `CON-*` | E3-T1, E3-T4, E5-T3, E5-T5, E7-T2, E8-T1, E8-T3, E12-T2, E12-T4, E13-T4 | E5-T5, E12-T4, E13-T4 |
+| `DAT-*` | E0-T2, E1-T3, E1-T4, E2-T3, E7-T8, E7-T11, E8-T1, E8-T5, E9-T1, E11-T1, E12-T1, E12-T3, E13-T1, E13-T4 | E3-T5, E12-T4, E13-T4 |
+| `DUR-*` | E0-T2, E1-T4, E3-T1, E3-T2, E3-T3, E3-T5, E4-T3, E4-T5, E7-T2, E7-T6, E7-T7, E8-T2, E10-T1, E10-T3, E13-T1, E13-T4 | E3-T5, E4-T5, E10-T3, E13-T1, E13-T4 |
+| `FAN-*` | E11-T1, E12-T1, E12-T2, E12-T3, E12-T4, E13-T4 | E12-T4, E13-T4 |
+| `FBK-*` | E0-T2, E3-T4, E5-T1, E5-T2, E5-T3, E5-T5, E7-T2, E7-T9, E8-T1, E12-T3, E12-T4, E13-T3, E13-T4 | E5-T5, E12-T4, E13-T3, E13-T4 |
+| `HER-*` | E0-T2, E0-T4, E4-T1, E4-T2, E4-T3, E4-T4, E4-T5, E7-T8, E7-T9, E8-T3, E9-T6, E11-T2, E11-T3, E11-T4, E13-T4 | E4-T5, E6-T4, E11-T4, E13-T4 |
+| `NTF-*` | E13-T1, E13-T2, E13-T3, E13-T4 | E13-T3, E13-T4 |
+| `OPS-*` | E1-T2, E1-T4, E2-T5, E3-T5, E4-T4, E5-T4, E6-T2, E6-T3, E7-T2, E7-T5, E7-T6, E7-T7, E7-T9, E7-T11, E8-T2, E8-T4, E9-T1, E9-T2, E9-T3, E10-T1, E10-T2, E10-T3, E11-T1, E11-T3, E12-T3, E13-T1, E13-T4 | E6-T4, E10-T3, E11-T4, E13-T4 |
 | `POL-*` | E1-T2, E2-T4, E5-T4, E7-T3, E7-T6, E8-T3, E9-T3, E9-T6 | E5-T5 |
-| `PTH-*` | E1-T2, E2-T2, E2-T3, E5-T4, E7-T3, E7-T6, E7-T9, E8-T5, E9-T2 | E2-T5, E5-T5 |
+| `PTH-*` | E1-T2, E2-T2, E2-T3, E5-T4, E7-T3, E7-T6, E7-T9, E8-T5, E9-T2, E10-T2, E10-T3, E13-T4 | E2-T5, E5-T5, E10-T3, E13-T4 |
 | `SCP-*` | E0-T1, E1-T1, E1-T2, E1-T4, E2-T3, E6-T3, E7-T1, E7-T4, E7-T9, E7-T10, E8-T5, E9-T7, E9-T8 | E6-T3, E6-T4 |
-| `SEC-*` | E0-T2, E1-T2, E2-T1, E2-T2, E2-T4, E4-T1, E4-T2, E5-T1, E6-T1, E6-T2, E7-T3, E7-T9, E7-T11, E8-T3, E8-T4, E8-T5, E9-T3, E9-T6 | E5-T5, E6-T4 |
-| `SRC-*` | E0-T5, E2-T1, E2-T3, E2-T5, E5-T4, E7-T8, E7-T9, E8-T5, E9-T2 | E2-T5, E6-T3 |
-| `TST-*` | E0-T3, E0-T4, E0-T5, E1-T1, E1-T3, E1-T4, E2-T1, E2-T3, E2-T4, E2-T5, E3-T1, E3-T2, E3-T3, E3-T5, E4-T3, E4-T5, E5-T5, E7-T1, E7-T4, E7-T10, E8-T3, E9-T4, E9-T7, E9-T8 | E6-T4 |
+| `SEC-*` | E0-T2, E1-T2, E2-T1, E2-T2, E2-T4, E4-T1, E4-T2, E5-T1, E6-T1, E6-T2, E7-T3, E7-T9, E7-T11, E8-T3, E8-T4, E8-T5, E9-T3, E9-T6, E11-T2, E12-T2, E13-T2, E13-T4 | E5-T5, E6-T4, E11-T4, E13-T2, E13-T4 |
+| `SRC-*` | E0-T5, E2-T1, E2-T3, E2-T5, E5-T4, E7-T8, E7-T9, E8-T5, E9-T2, E10-T2, E10-T3, E13-T4 | E2-T5, E6-T3, E10-T3, E13-T4 |
+| `TST-*` | E0-T3, E0-T4, E0-T5, E1-T1, E1-T3, E1-T4, E2-T1, E2-T3, E2-T4, E2-T5, E3-T1, E3-T2, E3-T3, E3-T5, E4-T3, E4-T5, E5-T5, E7-T1, E7-T4, E7-T10, E8-T3, E9-T4, E9-T7, E9-T8, E10-T1, E10-T2, E10-T3, E11-T2, E11-T4, E12-T4, E13-T2, E13-T3, E13-T4 | E6-T4, E13-T4 |
 | `WHK-*` | E6-T1, E7-T11 | E6-T4 |
 
 E6-T4 additionally cites every requirement group as the release gate
@@ -37,3 +39,10 @@ covered by the Final verification column and is not expanded above.
 | E4 | Delivers one effective durable Hermes Kanban task and observes acceptance safely. |
 | E5 | Controls recursive edits, dirty generations, protected cases, and reconciliation. |
 | E6 | Adds explicit webhook delivery, operational tooling, packaging, and release proof. |
+| E7 | Remediates the first post-release MVP compliance review. |
+| E8 | Closes the second review's lifecycle, gate, and documentation gaps. |
+| E9 | Hardens deferred contracts and releases through v0.1.4. |
+| E10 | Fences reconciliation and binds Watchman to the configured subtree. |
+| E11 | Adds capability-driven Hermes preflight and guided disabled setup. |
+| E12 | Adds aggregate events and independent destination lifecycle. |
+| E13 | Adds durable notifications, operational proof, and the v0.1.5 release. |

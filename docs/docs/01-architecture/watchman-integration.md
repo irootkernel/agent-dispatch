@@ -130,3 +130,18 @@ Fixtures must cover:
 - symlink escape;
 - non-UTF-8 or invalid path representation supported by the platform abstraction;
 - concurrent trigger processes.
+
+## 10. v0.1.5 Effective Binding Target
+
+E10 replaces exact-root assumptions with the four-part managed binding defined
+in ADR-0018's companion design: configured root, actual Watchman root,
+configured-root-relative `relative_root`, and stable trigger name. Installation
+persists the binding. Status reports it and compares it with current Watchman
+state; test uses its logical root; remove searches stored and current watch
+roots and succeeds only after the exact managed trigger is absent everywhere.
+
+The trigger is subtree-constrained before input reaches the adapter. The
+adapter still validates `WATCHMAN_ROOT` plus `WATCHMAN_RELATIVE_ROOT` against
+the configured root, so a forged or drifted environment fails closed. Route
+patterns remain configured-root-relative and exclusions run before every read
+or downstream record. See SRC-009 through SRC-012 and AC-601 through AC-603.

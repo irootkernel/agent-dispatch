@@ -154,3 +154,14 @@ Boundary notes:
 ## 6. Redaction
 
 Errors may include relative path, resource ID, route ID, and target ID. They must not include note body, resolved secret, authorization header, or unrestricted subprocess output.
+
+## 7. Planned v0.1.5 Typed Failures
+
+The existing categories remain stable. New reason codes distinguish effective
+Watchman binding drift, reconciliation fence conflict, file growth/instability,
+capability shape drift, missing on-disk profile, missing enabled skill,
+ambiguous destination selector, completion evidence missing, notification
+delivery unknown, and notification terminal refusal. Reconciliation conflict
+and notification outcome are durable domain results; they are not mislabeled as
+SQLite storage failures. Every operator-facing failure carries one concrete
+next command.

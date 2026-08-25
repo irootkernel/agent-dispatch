@@ -372,3 +372,43 @@ Corrected D-018 records: the T4/Low `lookup_by_idempotency_key` entry ("the repo
 **Context.** D-023 reopened the epic the external review audited so the remediation stays inside its evidence trail; re-closing after the four tasks converged (each with two full-target review rounds clean at zero unresolved findings) keeps the roadmap the single authority. The revision-projection widening is an operator-visible change: every acknowledged route re-acknowledges once under v0.1.4, which the release notes disclose.
 
 **Consequences.** v0.1.4 supersedes v0.1.3 as the tagged latest (one darwin/arm64 artifact set plus SHA256SUMS; the Linux artifact line ends with the D-023 policy); the release output, scheduling assets, and active documentation are macOS-only; the toolchain pin is enforced, not merely documented. SOT 1.0.47.
+
+
+## D-025 - 2026-08-25 - v0.1.5 operational MVP baseline approved without Hermes modification
+
+**Decision.** The Hermes operations feature/change request is accepted as the
+complete v0.1.5 target and registered through four new sequential epics E10
+through E13. The release must close correct Watchman subtree binding,
+reconciliation fencing, Hermes 0.19.1+ capability probing, per-destination
+profile and skill preflight, discoverable setup, aggregate event fan-out,
+bounded work outcomes, and durable notifications. Hermes core, source,
+versions, tags, private storage, and plugin surface remain outside Agent
+Dispatch authority. The integration must use the current public Hermes CLI;
+profile enumeration uses bounded JSON, and profile-scoped skill availability
+uses a strict fail-closed parser over the existing public `skills list`
+surface. Configuration keeps `version: 1` but makes a clean cutover from the
+legacy route `dispatch` block to `destinations[]`; legacy config is rejected
+with regeneration guidance rather than automatically migrated. Existing
+database evidence is forward-migrated and remains queryable. A valid
+`partially_completed` work receipt creates one budgeted remaining-scope
+follow-up; `blocked` requires manual intervention and is not auto-retried.
+
+**Context.** v0.1.4 proves a durable single-route/single-task path, but the
+request identifies two correctness defects and the missing operational layer
+needed for multi-agent Wiki maintenance. The owner confirmed that there are no
+deployed configuration consumers requiring a compatibility shim and corrected
+an earlier planning assumption: this project was started on the explicit
+condition that Hermes itself would not need to change. A source-only proposal
+would leave contradictory higher-authority requirements in place, so this
+decision approves SOT 1.1.0 as the planned baseline while retaining v0.1.4 as
+the latest shipped release.
+
+**Consequences.** ADR-0016 supersedes ADR-0009's route-wide serialization for
+v0.1.5 with a per-destination lane; ADR-0017 through ADR-0019 freeze the
+capability, reconciliation, and notification decisions. The roadmap becomes
+14 epics and 75 tasks, with 60 Completed, 15 Planned, and E10-T1 next. G6
+through G9 block v0.1.5. Executable schemas, examples, packaged skills, release
+notes, code, artifacts, and tags are not changed by this design-baseline update;
+their owning roadmap tasks must deliver them with tests. Rollback keeps the
+upgraded database aside and restores the pre-migration backup with the previous
+binary and config. SOT 1.1.0.

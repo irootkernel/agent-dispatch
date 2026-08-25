@@ -18,7 +18,7 @@ Agent Dispatch supplies that missing boundary.
 
 An operator can declare:
 
-> When meaningful changes occur in this governed vault, create one effective, durable, reviewable work request for the designated Hermes agent under a fixed route policy, with enough evidence to deduplicate, reconcile, retry, and audit the request safely.
+> When meaningful changes occur in this governed vault, create one effective, durable, reviewable work request per selected destination/workstream under a fixed route policy, with enough evidence to deduplicate, reconcile, retry, aggregate, notify, and audit the work safely.
 
 For the first use case, the work request asks Hermes to evaluate the **latest state** of the Obsidian vault from an LLM Wiki perspective and update or review indexing, referencing, and grouping according to the configured Hermes skill and runtime permissions.
 
@@ -35,9 +35,9 @@ For the first use case, the work request asks Hermes to evaluate the **latest st
 - immutable identity, fingerprint, and idempotency derivation;
 - durable local spooling before side effects;
 - submission retries and ambiguous-delivery reconciliation;
-- route-level single-active-work coordination;
+- destination-lane single-active-work coordination and aggregate event status;
 - quarantine and operator-visible failure;
-- delivery receipts, provenance receipts, retention, and audit records.
+- delivery receipts, provenance receipts, durable notification attempts, retention, and audit records.
 
 ### Hermes owns
 
@@ -66,12 +66,13 @@ For the first use case, the work request asks Hermes to evaluate the **latest st
 2. Watchman emits a settled trigger batch.
 3. Agent Dispatch validates the source, resource, paths, and source position.
 4. Agent Dispatch ignores non-meaningful changes, persists meaningful observations, and creates or extends one route generation.
-5. If no unresolved Hermes maintenance task exists, Agent Dispatch durably creates one dispatch intent and submits one Hermes Kanban task.
+5. For every selected destination whose lane has no unresolved task, Agent Dispatch durably creates one child dispatch intent and submits one Hermes Kanban task.
 6. Hermes executes the configured LLM Wiki maintenance skill against the latest vault state.
 7. If Hermes changes the vault, a bundled Agent Dispatch work-receipt CLI may record the run and changed paths without modifying Hermes core.
 8. Changes observed while work is active are retained as a dirty generation.
-9. When the active work completes, Agent Dispatch creates at most one follow-up maintenance request if the vault became dirty.
-10. Unknown delivery or attribution never causes silent deletion or blind duplicate submission.
+9. When active work completes, Agent Dispatch creates at most one follow-up for that destination lane if the vault became dirty.
+10. Aggregate status and configured notifications expose completion, failure, quarantine, drift, and manual intervention without changing task outcomes.
+11. Unknown delivery or attribution never causes silent deletion or blind duplicate submission.
 
 ## 6. Goals
 
@@ -83,6 +84,8 @@ For the first use case, the work request asks Hermes to evaluate the **latest st
 6. Protected, oversized, overflow, and structurally uncertain changes fail visibly and conservatively.
 7. Operators can inspect why an event was ignored, merged, quarantined, dispatched, retried, or reconciled.
 8. The core remains independent of Hermes implementation details through a sink port and public interface adapter.
+9. One event can coordinate independent indexing, referencing, or grouping workstreams for different or repeated Hermes profiles.
+10. Setup, preflight, status, and notifications make routine operation possible without direct SQLite or Watchman administration.
 
 ## 7. Non-Goals for v0.1
 
@@ -101,6 +104,15 @@ For the first use case, the work request asks Hermes to evaluate the **latest st
 ## 8. Success Definition for v0.1
 
 Agent Dispatch v0.1 is complete when all release acceptance cases pass on macOS (darwin/arm64, the only supported platform under the D-023 policy, E9-T8 — the earlier "and a supported Linux environment" clause is superseded, with the D-020 linux/arm64 verification standing as history), a real Obsidian vault can be wired to Watchman, Hermes Kanban receives one durable task per effective route generation, restart and ambiguity tests do not silently lose work, and feedback-loop tests demonstrate bounded follow-up behavior.
+
+## 8.1 Success Definition for v0.1.5
+
+v0.1.5 is complete only when a nested configured Wiki is scoped correctly,
+reconciliation cannot erase newer facts, Hermes 0.19.1+ compatibility is
+capability-probed without modifying Hermes, profiles and skills preflight, one
+event can fan out to independent destination lanes, bounded receipts distinguish
+completed/partial/blocked/failed work, and configured notifications are durable
+and retryable. Gates G6 through G9 are cumulative and currently Planned.
 
 ## 9. Product Constraints
 

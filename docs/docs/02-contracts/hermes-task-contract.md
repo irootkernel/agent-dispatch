@@ -106,3 +106,13 @@ The skill must not claim success if the domain work failed merely because receip
 | status | `execution_status` |
 
 Missing mappings are reported, not silently discarded.
+
+## 9. Planned v0.1.5 Child and Receipt Contract
+
+Each rendered task additionally carries aggregate event ID, destination ID and
+revision, and workstream in trusted structured members. The untrusted manifest
+rules are unchanged. Worker instructions require `work-receipt/v2` and define
+the four outcomes; partial receipts include bounded completed and remaining
+scope, while blocked receipts state a bounded reason and request manual
+intervention. No task may infer another destination or notification sink from
+manifest data.

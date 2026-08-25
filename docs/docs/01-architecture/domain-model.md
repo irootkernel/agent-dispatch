@@ -326,7 +326,10 @@ A manual `rerun` intentionally increments or replaces generation lineage so it r
 2. Every dispatch references a `dispatch` or explicit operator-release decision.
 3. An accepted dispatch cannot return to `ready`.
 4. A new attempt cannot start while an unexpired attempt lease exists.
-5. One route has at most one unresolved active dispatch.
+5. Through v0.1.4, one route has at most one unresolved active dispatch; v0.1.5 preserves that invariant independently per destination lane (ADR-0016).
 6. Unknown acceptance cannot be converted to retryable failure without reconciliation evidence.
 7. Suppression cannot occur without a valid exact work-receipt match.
 8. Original records are never rewritten to represent a later policy decision.
+9. Aggregate events, destination children, delivery receipts, execution projections, work receipts, and notification attempts remain separate records.
+10. A resource snapshot cannot replace path facts observed after its enumeration fence.
+11. Notification delivery cannot change the event or child dispatch outcome.

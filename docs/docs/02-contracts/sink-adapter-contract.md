@@ -111,3 +111,12 @@ Every sink adapter must pass tests for:
 - excessive output;
 - secret redaction;
 - cancellation of timed-out child process.
+
+## 10. v0.1.5 Notification Sink Contract
+
+Notification sinks consume `notification-event/v1`, return a definite success,
+definite refusal, ambiguous outcome, or retryable pre-delivery failure, and
+never mutate dispatch state. Every attempt uses the stable notification
+idempotency key. The initial implementations are structured stdout/log and
+authenticated HTTPS webhook; channel-specific adapters must preserve this
+contract and cannot become dispatch fallbacks.

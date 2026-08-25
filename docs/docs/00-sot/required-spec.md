@@ -2,7 +2,7 @@
 
 ## 1. Interpretation
 
-This document is normative. Each requirement has a stable ID used by the roadmap and acceptance matrix.
+This document is normative. Each requirement has a stable ID used by the roadmap and acceptance matrix. v0.1.4 is the shipped baseline; requirements introduced by D-025 are the approved v0.1.5 target and block that release until gates G6 through G9 close.
 
 - **MUST** requirements block v0.1 release.
 - **SHOULD** requirements require an explicit recorded exception if not met.
@@ -15,7 +15,7 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | BND-001 | Agent Dispatch **MUST** operate as an event-ingress and activation gateway, not as an agent runtime or semantic knowledge engine. |
 | BND-002 | Hermes **MUST** be treated as the authoritative runtime for task execution and semantic outcomes. |
 | BND-003 | v0.1 **MUST NOT** modify Hermes core, access Hermes internal storage, or require a Hermes plugin. |
-| BND-004 | Hermes integration **MUST** use public machine interfaces. A Agent Dispatch-owned adapter, CLI, or skill is permitted. |
+| BND-004 | Hermes integration **MUST** use public interfaces. Machine-readable forms are required where the public command provides them; D-025 permits a bounded fail-closed Agent Dispatch parser for the public profile-scoped skill list because Hermes exposes no JSON form. A Agent Dispatch-owned adapter, CLI, or skill is permitted. |
 | BND-005 | Agent Dispatch **MUST NOT** directly edit governed vault content. |
 | BND-006 | Agent Dispatch **MUST NOT** perform open-ended LLM classification inside the bridge. |
 | BND-007 | A future Hermes management plugin **MAY** be documented but **MUST NOT** be a v0.1 dependency. |
@@ -46,6 +46,10 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | SRC-006 | Agent Dispatch **MUST NOT** add a second time-based settle delay in one-shot trigger mode. It **MUST** treat the Watchman trigger input as the source batch. |
 | SRC-007 | Trigger registration **MUST** use an explicit unique trigger name and **MUST** avoid destructive unnecessary re-registration. |
 | SRC-008 | The source adapter **MUST** support deterministic fixture input without a running Watchman daemon for tests. |
+| SRC-009 | A managed Watchman binding **MUST** retain the configured resource root, actual Watchman root, effective relative root, and trigger name as distinct values. |
+| SRC-010 | `watchman install`, `status`, `test`, and `remove` **MUST** resolve and report the same effective binding. |
+| SRC-011 | Installation **MUST** constrain the trigger to the configured resource subtree with `relative_root` or an equivalent expression. |
+| SRC-012 | A successful remove **MUST** prove that no trigger with the managed identity remains on any applicable Watchman root. |
 
 ## 5. Meaningful Change and Path Policy
 
@@ -59,6 +63,7 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | PTH-006 | A modify **MUST** be meaningful only when the effective content digest differs from the last known digest or when no prior digest is available. |
 | PTH-007 | Metadata-only changes, Watchman bookkeeping, `.git/**`, and configured Obsidian UI state files **MUST** be excluded by default. |
 | PTH-008 | Protected-path changes **MUST** be quarantined by default and **MUST NOT** be included in an automatic maintenance task. |
+| PTH-009 | Exact files, file globs, exact directories, recursive directories, and multiple exclusions **MUST** be evaluated relative to the configured resource root and before reading, hashing, batching, fan-out, rendering, or notification. |
 
 ## 6. Canonical Records and Identity
 
@@ -73,6 +78,11 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | DAT-007 | Records **MUST** retain route ID, route revision, policy revision, source ID, resource ID, timestamps, and causal parent IDs. |
 | DAT-008 | Note bodies **MUST NOT** be persisted by default. Only path evidence, hashes, source metadata, decisions, states, and bounded receipts may be stored. |
 | DAT-009 | Stored machine payloads **MUST** be versioned. Unknown future major versions **MUST** fail closed. |
+| DAT-010 | An aggregate event, each selected destination child, each destination revision, and each notification intent or attempt **MUST** have separate durable identity and lineage. |
+| DAT-011 | Aggregate status **MUST** remain a projection over child delivery, execution, and work-receipt records; it **MUST NOT** replace those authoritative records. |
+| DAT-012 | Historical single-destination database evidence **MUST** remain queryable after the v0.1.5 forward migration. |
+| DAT-013 | Unresolved legacy work **MUST NOT** be silently submitted under a new destination contract. |
+| DAT-014 | The child idempotency projection **MUST** include route ID and revision, source generation and fingerprint, destination ID and revision, workstream, target scope, and contract version. |
 
 ## 7. Batching and Policy
 
@@ -103,17 +113,25 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | DUR-010 | Process crash, machine reboot, and temporary Hermes unavailability **MUST NOT** silently lose committed work. |
 | DUR-011 | State transitions **MUST** be transactional, validated, and appended to an audit history. |
 | DUR-012 | Concurrent one-shot processes **MUST** use database constraints and leases so only one process owns a dispatch attempt. |
+| DUR-013 | Each resource **MUST** carry a monotonic path-fact observation revision advanced by every durable path-fact mutation. |
+| DUR-014 | Full reconciliation **MUST** replace a resource snapshot only when the pre-enumeration observation revision still matches, with replacement and revision advancement atomic. |
+| DUR-015 | A reconciliation fence conflict **MUST** preserve newer facts, record a typed concurrent-change outcome, and leave one due reconciliation generation. |
+| DUR-016 | State transitions that require notification **MUST** create their notification intent in the same transaction; delivery occurs after commit and cannot roll back or alter the underlying state. |
 
 ## 9. Route Concurrency and Latest-State Processing
 
 | ID | Requirement |
 |---|---|
-| CON-001 | The Obsidian maintenance route **MUST** allow at most one unresolved authoritative Hermes maintenance task at a time. |
+| CON-001 | The Obsidian maintenance route **MUST** allow at most one unresolved authoritative Hermes maintenance task per `(route_id, destination_id)` lane. *(ADR-0016 supersedes the v0.1.4 route-wide scope while preserving single-active and latest-state collapse within each lane.)* |
 | CON-002 | Relevant changes received while a task is unresolved **MUST** be durably retained as a dirty generation and **MUST NOT** be silently dropped. |
 | CON-003 | Multiple dirty observations during one active task **MUST** collapse into at most one follow-up dispatch after completion or reconciliation. |
 | CON-004 | Hermes **MUST** be instructed to evaluate the latest vault state at execution time. Event hashes are evidence, not a content snapshot contract. |
 | CON-005 | A stale event **MUST NOT** force Hermes to recreate an obsolete historical state. |
 | CON-006 | Route-level serialization **MUST** use a stable resource mutex when Hermes exposes that capability and local route-state enforcement regardless. |
+| CON-007 | A destination lane's rejection, retry, unknown delivery, block, or completion **MUST NOT** prevent eligible sibling destinations from progressing. |
+| CON-008 | Dirty observations **MUST** collapse independently within each destination lane. |
+| CON-009 | Retrying one child **MUST** preserve its idempotency identity and **MUST NOT** duplicate accepted or completed siblings. |
+| CON-010 | A behavior-affecting destination change **MUST** create a new destination revision and pause incompatible reuse until production acknowledgement. |
 
 ## 10. Hermes Kanban Integration
 
@@ -129,6 +147,14 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | HER-008 | Hermes Kanban acceptance and Hermes execution status **MUST** be modeled separately. |
 | HER-009 | If Hermes cannot provide machine-readable durable acceptance or lookup, the adapter **MUST** surface the limitation and the roadmap task **MAY** become blocked pending an explicit product decision. |
 | HER-010 | The adapter **MUST NOT** access a Hermes internal database or private API. |
+| HER-011 | Hermes versions below 0.19.1 **MUST** be rejected; versions at or above 0.19.1 **MUST** be treated as probe-eligible rather than automatically compatible, with no fixed maximum. |
+| HER-012 | The product **MUST** provide a bounded public-interface capability probe and an inspectable cached report without requiring an operator-authored capability file. |
+| HER-013 | Cached capability evidence **MUST** be invalidated when the executable path or digest, reported version, or probe-contract version changes. |
+| HER-014 | Activation and submission **MUST** fail closed when required command or response shapes are absent, malformed, truncated, ambiguous, or over-bound. |
+| HER-015 | Profiles **MUST** be enumerated through the public Hermes interface and a configured destination profile **MUST** exist on disk before enablement. |
+| HER-016 | Every required skill **MUST** be proven enabled for the configured profile through the public profile-scoped Hermes interface before enablement. |
+| HER-017 | Profile and skill failures **MUST** report bounded sorted alternatives and a concrete preflight remediation. |
+| HER-018 | Route activation **MUST** bind the accepted capability-evidence fingerprint in addition to the computed route revision. |
 
 ## 11. Hermes Webhook Integration
 
@@ -152,6 +178,10 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | FBK-006 | A bundled Hermes companion skill **SHOULD** instruct the agent to use the receipt CLI and to process latest state. |
 | FBK-007 | Git commits and commit messages **MAY** support attribution but **MUST NOT** be the sole trust anchor. |
 | FBK-008 | Uncertain attribution **MUST** prefer an extra bounded follow-up over silent loss. |
+| FBK-009 | Work receipts **MUST** distinguish `completed`, `partially_completed`, `blocked`, and `failed`. |
+| FBK-010 | `partially_completed` **MUST** identify bounded completed and remaining scope; valid remaining scope creates at most one budgeted follow-up in the same destination lane. |
+| FBK-011 | `blocked` **MUST** require manual intervention and **MUST NOT** trigger automatic work retry. |
+| FBK-012 | Kanban acceptance or a terminal task status without an attributable bounded work receipt **MUST NOT** be reported as completed work. |
 
 ## 13. CLI and Operator Control
 
@@ -165,6 +195,13 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | CLI-006 | Manual release from quarantine **MUST** record actor, reason, previous decision, and new decision lineage. |
 | CLI-007 | Destructive maintenance commands **MUST** require explicit flags and **MUST NOT** run from Watchman input. |
 | CLI-008 | Exit codes **MUST** be stable and documented. |
+| CLI-009 | The root command and every command group **MUST** support `-h` and `--help` with summaries, examples, defaults, side effects, exit codes, approval requirements, and the next safe command. |
+| CLI-010 | The product **MUST** expose `hermes probe`, `hermes capabilities`, `hermes profiles`, and `route preflight`. |
+| CLI-011 | The product **MUST** expose destination-qualified profile and skill updates and reject an ambiguous route-only update when multiple destinations exist. |
+| CLI-012 | `setup wiki` **MUST** create disabled configuration, probe dependencies, install/test the Watchman binding, run initial reconciliation, and stop before enablement without explicit production approval. |
+| CLI-013 | The product **MUST** expose aggregate event inspection and notification test, list, retry, and drain commands. |
+| CLI-014 | Empty machine-readable collections **MUST** be `[]` or `{}`, never `null`. |
+| CLI-015 | Configuration-mutating helpers **MUST** validate a candidate and replace the file atomically without modifying unrelated routes or destinations. |
 
 ## 14. Security and Privacy
 
@@ -180,6 +217,10 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | SEC-008 | Database and configuration permissions **SHOULD** be owner-only by default. |
 | SEC-009 | Payload size, path length, file count, environment size, and subprocess output **MUST** have explicit limits. |
 | SEC-010 | Dispatch **MUST** revalidate the active route revision and target capability requirements immediately before side effects. |
+| SEC-011 | Notification payloads **MUST NOT** contain document contents, front matter, resolved secrets, authorization values, or unredacted sensitive paths. |
+| SEC-012 | Notification endpoints and credentials **MUST** be trusted configuration using secret references; event and worker data **MUST NOT** select a sink. |
+| SEC-013 | Webhook notifications **MUST** use HTTPS, reject redirects and ambient proxy routing, and bound request, response, and execution time. |
+| SEC-014 | Hermes skill-list probing **MUST** use a fixed non-interactive rendering environment, bounded output, and fail-closed parsing without reading Hermes private storage. |
 
 ## 15. Observability, Retention, and Operations
 
@@ -194,6 +235,12 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | OPS-007 | Daily reconciliation **SHOULD** be installed through platform scheduling recipes rather than a Agent Dispatch daemon in v0.1. |
 | OPS-008 | SQLite **MUST** enable foreign keys, a busy timeout, crash-safe journaling appropriate for concurrent one-shot processes, and documented synchronous durability. |
 | OPS-009 | Database migrations **MUST** be forward-only, transactional where SQLite permits, and tested against interrupted upgrades. |
+| OPS-010 | Status **MUST** expose configured and actual watch roots, relative root, effective patterns, trigger identity, and installed/missing/drifted state. |
+| OPS-011 | Status **MUST** distinguish detection, planning, quarantine, pending delivery, acceptance, running, work outcomes, unknown delivery, reconciliation, and manual intervention. |
+| OPS-012 | Reconciliation hashing **MUST** read at most `max_file_bytes + 1`; a stable over-bound file is quarantined and a file unstable twice remains explicit reconciliation evidence. |
+| OPS-013 | Capability, profile, skill, Watchman, and reconciliation drift **MUST** be visible in status and eligible for configured notifications. |
+| OPS-014 | v0.1.5 configuration **MUST** retain `version: 1`, require `destinations[]`, and reject legacy `dispatch` with a concrete regeneration path. |
+| OPS-015 | Rollback **MUST** preserve the upgraded database separately and restore the verified pre-migration backup with the previous readable binary and configuration; down migrations are not required. |
 
 ## 16. Test and Release Quality
 
@@ -208,3 +255,39 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | TST-007 | A real Hermes compatibility test **MUST** run before release when a real public interface is available. |
 | TST-008 | Automatic agent writes **MUST NOT** be enabled until all production-capable acceptance gates pass. |
 | TST-009 | Every roadmap task **MUST** add or update tests, documentation, and traceability before completion. |
+| TST-010 | Real or frozen-real Watchman evidence **MUST** cover ancestor roots, relative roots, exclusion forms, drift, test, and complete removal. |
+| TST-011 | Reconciliation tests **MUST** race ordinary path-fact updates against full enumeration and prove that a growing file cannot exceed the read bound. |
+| TST-012 | The same probe path **MUST** evaluate the frozen real Hermes 0.19.1 interface and the installed newer Hermes interface without modifying either Hermes installation. |
+| TST-013 | Fan-out tests **MUST** cover different profiles, repeated profiles with distinct workstreams, sibling isolation, independent retry, destination revision changes, and aggregate reruns. |
+| TST-014 | Notification tests **MUST** cover transactional intent creation, deduplication, ambiguous delivery, retry, sink isolation, and content/secret redaction. |
+
+## 17. Multi-Destination Fan-Out
+
+| ID | Requirement |
+|---|---|
+| FAN-001 | A route **MUST** declare one or more destinations under `destinations[]`; every destination has a unique stable ID and non-empty workstream. |
+| FAN-002 | Destinations **MAY** select different profiles or use the same profile for different workstreams. |
+| FAN-003 | Each selected destination **MUST** create one independent durable child intent beneath the aggregate event. |
+| FAN-004 | Destination selection **MUST** use only closed structural conditions over path, operation, classification, and policy outcome. |
+| FAN-005 | Values within one condition class use OR; present condition classes use AND; absent conditions select the destination. |
+| FAN-006 | The v0.1.5 `fanout_mode` vocabulary contains only `all`; any other value **MUST** fail configuration validation. |
+| FAN-007 | Re-running an aggregate event **MUST** reuse accepted or completed child outcomes and create only missing or explicitly new-generation work. |
+| FAN-008 | One child's delivery or work failure **MUST NOT** roll back or rewrite sibling outcomes. |
+| FAN-009 | Every child task **MUST** preserve the trusted-instruction and untrusted-manifest boundary. |
+| FAN-010 | Aggregate inspection **MUST** expose selection reason, destination revision, child identity, acceptance, execution, receipt, and retry state. |
+| FAN-011 | A route may reference named targets per destination, while the certified v0.1.5 path remains one Hermes Kanban target with multiple destinations. |
+| FAN-012 | Configuration ordering **MUST NOT** affect destination revision, selection, event identity, or child idempotency. |
+
+## 18. Operator Notifications
+
+| ID | Requirement |
+|---|---|
+| NTF-001 | Notifications **MUST** be configurable per route, event type, and sink and disabled when no sinks are configured. |
+| NTF-002 | When sinks exist and events are omitted, defaults **MUST** cover completed work, exhausted failure, unknown delivery, quarantine, reconciliation required, integration drift, and Watchman drift. |
+| NTF-003 | Notification identity **MUST** include event, optional destination, transition, sink, and notification-policy revision. |
+| NTF-004 | Every notification attempt and outcome **MUST** be durable and inspectable. |
+| NTF-005 | Notification failure or unknown delivery **MUST NOT** modify event, child dispatch, acceptance, execution, or work-receipt state. |
+| NTF-006 | The release **MUST** ship a channel-neutral event contract plus structured stdout/log and HTTPS webhook sinks. |
+| NTF-007 | Retry **MUST** reuse a stable notification idempotency key and remain at-least-once under ambiguous transport outcomes. |
+| NTF-008 | Operators **MUST** be able to test a sink without creating a source event or Hermes task. |
+| NTF-009 | Adding a future channel adapter **MUST NOT** require changing dispatch or work-completion state semantics. |

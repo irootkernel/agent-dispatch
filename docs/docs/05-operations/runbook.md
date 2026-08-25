@@ -188,3 +188,24 @@ Collect:
 - database integrity result.
 
 Do not collect note bodies or secrets unless the operator deliberately handles them outside the standard support bundle.
+
+## 14. Planned v0.1.5 Operational Flow
+
+1. Run `setup wiki`; review the disabled config and effective Watchman binding.
+2. Run `hermes probe` and `route preflight`; resolve every missing profile,
+   skill, capability, sink, and trigger finding.
+3. Run the initial reconciliation and inspect aggregate status.
+4. Enable only with the exact route revision and capability-evidence
+   fingerprint shown by the production gate.
+5. Use `events show` for parent/child state and `notifications list` for sink
+   state; retry them independently.
+
+Capability or executable drift pauses delivery. Watchman drift is repaired by
+an explicit replace after status review. A reconciliation fence conflict is
+normal retryable evidence, not data loss. Partial work follows the remaining
+scope; blocked work stays manual. Notification failure never justifies retrying
+or rewriting an otherwise successful Hermes task.
+
+For rollback, disable the route and remove the managed trigger, preserve the
+v0.1.5 database, restore the verified pre-migration database/config backup, and
+run the v0.1.4 doctor before resuming. Never point v0.1.4 at the upgraded DB.

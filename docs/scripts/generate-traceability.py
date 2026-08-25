@@ -26,21 +26,23 @@ OUT = DOCS / "docs/00-sot/traceability-matrix.md"
 # Release-gate tasks per group. Manually curated; these are verification
 # endpoints, not citation coverage.
 FINAL_VERIFICATION = {
-    "BND": "E6-T4",
+    "BND": "E6-T4, E13-T4",
     "SCP": "E6-T3, E6-T4",
-    "SRC": "E2-T5, E6-T3",
-    "PTH": "E2-T5, E5-T5",
-    "DAT": "E3-T5",
+    "SRC": "E2-T5, E6-T3, E10-T3, E13-T4",
+    "PTH": "E2-T5, E5-T5, E10-T3, E13-T4",
+    "DAT": "E3-T5, E12-T4, E13-T4",
     "POL": "E5-T5",
-    "DUR": "E3-T5, E4-T5",
-    "CON": "E5-T5",
-    "HER": "E4-T5, E6-T4",
+    "DUR": "E3-T5, E4-T5, E10-T3, E13-T1, E13-T4",
+    "CON": "E5-T5, E12-T4, E13-T4",
+    "HER": "E4-T5, E6-T4, E11-T4, E13-T4",
     "WHK": "E6-T4",
-    "FBK": "E5-T5",
-    "CLI": "E6-T4",
-    "SEC": "E5-T5, E6-T4",
-    "OPS": "E6-T4",
-    "TST": "E6-T4",
+    "FBK": "E5-T5, E12-T4, E13-T3, E13-T4",
+    "CLI": "E6-T4, E11-T4, E13-T3, E13-T4",
+    "SEC": "E5-T5, E6-T4, E11-T4, E13-T2, E13-T4",
+    "OPS": "E6-T4, E10-T3, E11-T4, E13-T4",
+    "TST": "E6-T4, E13-T4",
+    "FAN": "E12-T4, E13-T4",
+    "NTF": "E13-T3, E13-T4",
 }
 
 EPIC_CONTRIBUTION = """\
@@ -52,7 +54,14 @@ EPIC_CONTRIBUTION = """\
 | E3 | Makes planned work durable, serializable, retryable, and recoverable. |
 | E4 | Delivers one effective durable Hermes Kanban task and observes acceptance safely. |
 | E5 | Controls recursive edits, dirty generations, protected cases, and reconciliation. |
-| E6 | Adds explicit webhook delivery, operational tooling, packaging, and release proof. |"""
+| E6 | Adds explicit webhook delivery, operational tooling, packaging, and release proof. |
+| E7 | Remediates the first post-release MVP compliance review. |
+| E8 | Closes the second review's lifecycle, gate, and documentation gaps. |
+| E9 | Hardens deferred contracts and releases through v0.1.4. |
+| E10 | Fences reconciliation and binds Watchman to the configured subtree. |
+| E11 | Adds capability-driven Hermes preflight and guided disabled setup. |
+| E12 | Adds aggregate events and independent destination lifecycle. |
+| E13 | Adds durable notifications, operational proof, and the v0.1.5 release. |"""
 
 
 def load_spec_groups() -> dict[str, list[int]]:

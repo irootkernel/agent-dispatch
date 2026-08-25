@@ -169,3 +169,13 @@ The architecture permits, but v0.1 does not implement:
 - a Hermes management plugin.
 
 Future features must preserve the same record separation and authority boundary.
+
+## 13. Approved v0.1.5 Increment
+
+The shipped v0.1.4 topology remains valid history. D-025 adds a configured-root
+Watchman binding and resource fence before planning, an aggregate-event layer
+with independent destination lanes after planning, public-interface Hermes
+preflight before activation, and a notification outbox after state transitions.
+The full target diagram and invariants are in
+`multi-destination-operational-loop.md`. E10 through E13 own implementation;
+no G6-G9 behavior is claimed as delivered by this architecture update.

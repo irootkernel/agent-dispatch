@@ -148,3 +148,27 @@ Do not fingerprint arbitrary marshaled domain structs because adding a field cou
 - Required semantic changes create a new major contract version.
 - SQLite migration version and JSON contract version are independent.
 - Examples are validated against schemas by `make schema-validation` inside `make verify` (hosted CI is not used; D-017).
+
+## 10. Planned v0.1.5 Record Families
+
+| Contract | Required purpose |
+|---|---|
+| `agent-dispatch.aggregate-event/v1` | One normalized source/policy occurrence and destination-selection summary |
+| `agent-dispatch.destination-revision/v1` | Canonical behavior projection for one destination ID |
+| `agent-dispatch.child-dispatch/v1` | Aggregate/destination lineage and independent intent identity |
+| `agent-dispatch.work-receipt/v2` | Completed, partial, blocked, or failed bounded worker evidence |
+| `agent-dispatch.hermes-capabilities/v2` | Executable identity, version, command/shape evidence, profiles, and required skills |
+| `agent-dispatch.notification-event/v1` | Channel-neutral safe transition payload |
+| `agent-dispatch.notification-attempt/v1` | Sink attempt, outcome, retry schedule, and stable idempotency identity |
+
+Aggregate event identity is independently generated and never substitutes for
+content fingerprint. Child identity is independently generated; its
+idempotency key is the canonical digest defined by DAT-014. Receipt v2 partial
+results require completed and remaining scope, and all receipt paths remain
+bounded, relative, containment-validated data. Notification contracts prohibit
+document bodies and resolved secrets and carry only safe identities, states,
+reason codes, timestamps, configured-safe paths, and digests.
+
+These record contracts become executable schemas and examples only in their
+owning E11-E13 tasks. Until then, the checked-in JSON schemas describe the
+shipped v0.1.4 wire surface and remain unchanged.

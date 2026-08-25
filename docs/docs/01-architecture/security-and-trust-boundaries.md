@@ -117,3 +117,16 @@ Security review is required before:
 - introducing a daemon or network listener;
 - adding MCP;
 - adding a Hermes plugin.
+
+## 9. v0.1.5 Boundary Additions
+
+- Destination profile, skill, workstream, workspace, target, mutex, conditions,
+  and notification sinks come only from trusted configuration.
+- Hermes profile/skill probing uses public commands with fixed non-interactive
+  rendering, bounded output, and no private-storage fallback.
+- Exclusions apply before file access and before any child or notification is
+  rendered.
+- Notification events never carry note bodies, front matter, resolved secrets,
+  authorization values, or event-selected endpoints.
+- Webhook notification transport is HTTPS-only, ignores ambient proxy settings,
+  does not follow redirects, and bounds payload, response, and duration.

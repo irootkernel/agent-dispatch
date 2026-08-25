@@ -291,3 +291,39 @@ Successful commands use:
 ```
 
 Errors use the error contract. Command-specific schemas may be added without changing this outer envelope within v1.
+
+## 18. Planned v0.1.5 Command Surface
+
+```text
+agent-dispatch --help
+agent-dispatch setup wiki
+agent-dispatch hermes probe
+agent-dispatch hermes capabilities [--refresh]
+agent-dispatch hermes profiles
+agent-dispatch route preflight --route <id>
+agent-dispatch route set-profile <route>:<destination> <profile>
+agent-dispatch route set-skills <route>:<destination> <skill>...
+agent-dispatch events show <event-id>
+agent-dispatch notifications test
+agent-dispatch notifications list
+agent-dispatch notifications retry <notification-id>
+agent-dispatch notifications drain
+```
+
+Every root and group parser accepts `-h` and `--help`. Help states required
+flags, defaults, output modes, exit codes, side effects, production approval,
+examples, shell completion, and the next safe command. A destination qualifier
+may be omitted by `set-profile` or `set-skills` only when the route has exactly
+one destination; otherwise the command is a usage error.
+
+`setup wiki` is an interactive TTY workflow. It selects root and patterns,
+probes Hermes, selects the board/profile/skills/workstreams and notification
+sinks, writes disabled config, installs/tests Watchman, performs initial
+reconciliation, and prints the exact production-gate command. It never accepts
+production approval implicitly. JSON commands use the existing envelope and
+represent empty collections as `[]` or `{}`.
+
+Stable v0.1.5 usage/refusal codes join the error registry before implementation;
+integration drift maps to target/capability refusal, ambiguous notification
+delivery remains notification state rather than a dispatch exit, and config
+mutation never partially writes a file.

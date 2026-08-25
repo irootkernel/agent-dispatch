@@ -156,3 +156,21 @@ No SQLite transaction may remain open while calling Watchman, hashing a large fi
 ## 9. Backups and Corruption
 
 Before a schema migration, create a SQLite online backup or a safely checkpointed copy. `doctor` must run `PRAGMA quick_check` by default and allow an explicit full integrity check. A corrupt database must never be silently replaced. Recovery procedures are defined in the operations runbook.
+
+## 10. v0.1.5 Aggregate and Fence Additions
+
+The forward migration adds resource observation revisions, aggregate events,
+destination revisions and lanes, child-event relationships, capability
+evidence, and notification intents/attempts. Old dispatch history is attached
+to a synthetic legacy aggregate/destination for inspection. Nonterminal legacy
+work blocks route enablement and is never auto-submitted under a new config.
+
+Path-fact writers increment the resource revision. Full snapshot replacement
+uses a compare-and-swap on the captured revision and advances it in the same
+transaction; conflict records pending reconciliation without deleting facts.
+
+Per ADR-0016, the existing route state machine is instantiated per destination
+lane. The aggregate event has no competing lifecycle enum: its status is
+derived from child, quarantine, and reconciliation records. Per ADR-0019, a
+reportable transition and notification intent commit together, while delivery
+attempts occur outside that transaction.

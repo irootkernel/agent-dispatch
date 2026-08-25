@@ -78,3 +78,12 @@ The application layer maps errors to rejection, quarantine, or reconciliation ac
 ## 7. Future Sources
 
 Future adapters for Git, webhook ingress, timers, processes, or queues must implement the same observation boundary. They may have different source-position structures, but they cannot add authority-bearing route hints to the canonical observation.
+
+## 8. v0.1.5 Watchman Binding Contract
+
+The Watchman adapter receives and validates both the actual root and effective
+relative root. Their canonical combination must resolve exactly to the trusted
+configured resource root before any path is accepted. Trigger lifecycle output
+exposes the four binding fields and effective patterns. A binding mismatch,
+missing relative root for an ancestor watch, or out-of-subtree path is a typed
+source-binding refusal and creates no event or task.

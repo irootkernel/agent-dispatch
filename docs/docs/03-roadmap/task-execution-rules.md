@@ -30,7 +30,7 @@ The next task cannot start while the current task is In Review. Review fixes rem
 Tasks execute by numeric order:
 
 ```text
-E0-T1 -> E0-T2 -> ... -> E6-T4
+E0-T1 -> E0-T2 -> ... -> E9-T9 -> E10-T1 -> ... -> E13-T4
 ```
 
 A later task may start only when every earlier non-deferred task is Completed. A Blocked task stops the roadmap. Skipping requires an explicit SOT or roadmap decision recorded in an ADR or decision log.

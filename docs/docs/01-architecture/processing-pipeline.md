@@ -155,3 +155,13 @@ Before an external submit, compare the intent's recorded route revision with the
 - If target, resource, profile, skills, path policy, or capability requirements changed, do not mutate the intent. Mark it `superseded` and create a new policy decision from the retained batch or generation lineage, which plans a replacement intent.
 - If only retention or display settings changed, submission may continue.
 - An already accepted task is not withdrawn or changed automatically.
+
+## 11. v0.1.5 Fan-Out Stage
+
+After one structural policy decision is persisted, the planner evaluates the
+closed destination conditions against normalized path/operation evidence and
+the decision classification/outcome. It records selection or non-selection for
+every destination, then commits independent child intents for selected lanes.
+Submission and latest-state collapse run per lane. Reportable transitions
+enqueue notification intents transactionally after the authoritative state
+change; sink delivery occurs only after commit.

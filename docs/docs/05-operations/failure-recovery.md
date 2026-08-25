@@ -27,3 +27,16 @@
 4. Reconciliation observes authoritative current state; it does not rewrite history.
 5. Database repair never uses Hermes internal storage as a substitute source of truth.
 6. A redundant bounded follow-up is safer than silent loss, but parallel unbounded tasks are not.
+
+## 8. v0.1.5 Recovery Additions
+
+- **Watch binding drift:** disable the route, inspect configured/actual roots,
+  replace only after review, test, then re-enable with the current revision.
+- **Reconciliation conflict:** keep the newer facts and drain the single due
+  reconciliation; never force snapshot replacement.
+- **Capability/profile/skill drift:** run `hermes probe --refresh` and
+  `route preflight`; explicit route re-acknowledgement is required.
+- **Partial work:** inspect completed/remaining scope and allow only the bounded
+  lane follow-up. **Blocked work:** resolve manually; do not retry blindly.
+- **Notification failure:** retry the notification ID only. Do not rerun a
+  successful child task to obtain another notification.

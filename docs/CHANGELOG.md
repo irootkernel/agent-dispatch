@@ -1,5 +1,15 @@
 # SOT Changelog
 
+## 1.1.0 - 2026-08-25
+
+D-025 approves the v0.1.5 planned baseline without implementing or releasing it:
+
+- the accepted Hermes operations request is retained under `docs/99-source/`, with the clean config-v1 cutover, no-Hermes-change boundary, and partial/blocked work policy recorded as owner clarifications;
+- ADR-0016 through ADR-0019 freeze aggregate destination lanes, capability-probed Hermes compatibility, resource observation fencing, and the durable notification outbox;
+- required-spec and acceptance criteria gain the Watch binding, reconciliation, Hermes preflight, fan-out, work receipt, setup/help, and notification contracts plus planned gates G6-G9;
+- roadmap epics E10-E13 add 15 Planned tasks, bringing the package to 14 epics and 75 tasks (60 Completed, E10-T1 next); v0.1.4 remains the shipped release;
+- executable schemas, examples, packaged skills, release notes, code, artifacts, and tags remain at v0.1.4 until their owning roadmap tasks deliver tested changes.
+
 ## 1.0.47 - 2026-08-25
 
 E9-T9 and the D-024 closeout: documentation truth and the v0.1.4 release:

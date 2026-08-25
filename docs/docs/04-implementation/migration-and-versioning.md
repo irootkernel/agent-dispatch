@@ -55,3 +55,18 @@ A change to a MUST requirement, authority boundary, delivery guarantee, state ma
 5. acceptance test update.
 
 Editorial clarification that changes no behavior may update the SOT patch version.
+
+## 8. v0.1.5 Cutover Plan
+
+The configuration schema identifier remains v1, but D-025 authorizes a clean
+behavioral cutover: `destinations[]` is required and legacy `dispatch` fails
+with an exact `setup wiki` regeneration path. No compatibility loader or down
+migration is implemented.
+
+SQLite remains forward-only. The migration creates aggregate/destination,
+resource-fence, capability-evidence, and notification tables or columns and
+backfills historical dispatches beneath a synthetic legacy destination. It
+must be restart-safe, preserve accepted task references and receipts, and block
+automatic submission of unresolved legacy work. The mandatory pre-migration
+verified backup is the v0.1.4 rollback boundary; rollback preserves the
+upgraded database separately and restores the backup plus old configuration.

@@ -140,3 +140,13 @@ watch root), remove the schedule units, remove the binary — and
 automatically, because that history is the dedup and reconciliation
 evidence. Discarding the state directory is a manual, backed-up
 operator decision.
+
+## Planned v0.1.5 Setup
+
+E11-T4 replaces the manual multi-step initial path with `agent-dispatch setup
+wiki`. The wizard writes only disabled v0.1.5 configuration and stops at the
+production gate. It may print public Hermes skill installation commands but
+does not modify Hermes or install a skill without a separate operator action.
+Legacy `dispatch` config is not accepted; regenerate it as `destinations[]`.
+The currently shipped installation commands remain authoritative for v0.1.4
+until G9 closes.

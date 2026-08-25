@@ -154,3 +154,18 @@ A support bundle command may be added only if it:
 - requires explicit operator destination.
 
 It is not required for v0.1.
+
+## 10. v0.1.5 Status and Notifications
+
+Status adds aggregate event counts, child states per destination, configured
+and actual Watchman roots, effective relative root and patterns, capability
+evidence fingerprint, profile/skill preflight, reconciliation conflicts, and
+notification retries. Human output groups the projections; JSON preserves
+their separate records and emits empty collections rather than null.
+
+Configured reportable transitions create a durable channel-neutral
+notification intent. The default event set, when at least one sink is present
+and no event list is supplied, is work completed, exhausted failure, delivery
+unknown, quarantine, reconciliation required, integration drift, and Watchman
+drift. Structured stdout/log and HTTPS webhook are the shipped sinks. Delivery
+failure is visible and retryable but never mutates task outcome.

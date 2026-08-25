@@ -265,3 +265,70 @@ Beyond schema validation, the validator must check:
 The operator does not manually enter a route revision. Agent Dispatch computes it from normalized behavior-affecting configuration. Canonical route revision input includes source binding, resource ID, normalized patterns, batch limits, policy actions, target ID, profile, skills, mutex, latest-state flag, submission retry, execution hints, failure budget, capability requirements, the referenced resource's root, file scope, and git mode, the global limits block, the target's type, board, and endpoint (E8-T3: repointing a vault or moving a board is behavior-affecting — it changes the idempotency key and pauses the acknowledged route), the transport bounds — the executable, submit timeout, environment allowlist, and manifest byte bound (E9-T3: swapping the target binary or its bounds pauses the acknowledged route) — and the delivery-evidence surface: the authentication type, secret reference, auth header name, idempotency header, lookup timeout, and capability-report path, plus the route's reconciliation flags (E9-T6: changing how a dispatch authenticates, deduplicates, reconciles, or proves capability must pause the acknowledged route like any other behavior change).
 
 It excludes comments, display order, state directory, the command-line log level, and resolved secret values — a secret REFERENCE is behavior-affecting and joins the digest, the resolved secret never does — and, by explicit disposition, the retention block: pruning bounds (§10, OPS-003) never change what a dispatch submits or how a plan is classified, so a retention edit does not pause an acknowledged route.
+
+## 14. Planned v0.1.5 Configuration Contract
+
+This section is the approved target contract. The executable schema and example
+remain the shipped v0.1.4 contract until E11-T1 implements and validates the
+cutover.
+
+```yaml
+version: 1
+
+routes:
+  wiki-maintenance:
+    enabled: false
+    source:
+      type: watchman-trigger
+      resource: main-wiki
+      include: ["**/*.md"]
+      exclude: ["**/B/**", "_exchange/**", "deliverables/**"]
+    fanout_mode: all
+    destinations:
+      - id: indexing
+        target: hermes-main
+        profile: wolyeong
+        skills: [llm-wiki, agent-dispatch-wiki-maintenance]
+        workstream: indexing
+        workspace: "dir:/srv/knowledge/A"
+        mutex_key: wiki-publish
+        conditions:
+          path_include: ["**/*.md"]
+          path_exclude: ["archive/**"]
+          operations: [create, modify]
+          classifications: [normal]
+          policy_outcomes: [dispatch, merge_pending]
+    notifications:
+      events: [work_completed, work_failed, delivery_unknown]
+      sinks:
+        - id: operations-webhook
+          type: webhook
+          endpoint: https://notify.example.invalid/agent-dispatch
+          auth:
+            type: bearer
+            secret_ref: AGENT_DISPATCH_NOTIFICATION_TOKEN
+
+hermes_targets:
+  hermes-main:
+    executable: hermes
+    minimum_version: 0.19.1
+    compatibility: capability_probe
+```
+
+Destination IDs are unique within a route; workstream is non-empty; skills are
+a unique non-empty list; `fanout_mode` accepts only `all`. Condition keys are a
+closed vocabulary. Values within a key use OR and present keys use AND.
+Destination map order is non-semantic and canonicalization sorts by ID.
+
+The route revision includes the normalized source and pattern policy, sorted
+destination set and each destination revision, fan-out conditions, runtime and
+retry hints, notification policy and sink references, plus every previously
+documented behavior-affecting field. Destination revision includes its target,
+profile, skills, workstream, workspace, mutex, hints, and conditions. Resolved
+secret values remain excluded.
+
+Legacy `routes.<id>.dispatch` is an actionable validation error under D-025;
+there is no load-time conversion or migration preview. `setup wiki` and the
+configuration mutation commands write a validated temporary file, preserve
+mode, fsync, and atomically replace the requested config while leaving it
+disabled or revision-paused.

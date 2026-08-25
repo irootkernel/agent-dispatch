@@ -8,7 +8,14 @@ Normative words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** 
 | **One-shot** | The v0.1 execution mode: a short-lived CLI process per trigger invocation. SQLite, not a daemon, coordinates concurrent processes. |
 | **Resource** | A trusted operator-configured workspace alias, such as `vault-main`, resolved to an absolute local root only inside Agent Dispatch. |
 | **Workspace** | The approved target-side working location a task is bound to, such as `dir:` plus a resolved root. It is fixed by configuration and cannot be changed by event payloads. |
-| **Route** | A versioned operator policy binding one source, one resource, filtering rules, structural dispositions, and one explicit target. |
+| **Route** | A versioned operator policy binding one source, one resource, filtering rules, structural dispositions, and one or more named destinations. |
+| **Destination** | A stable route-owned ID binding a target, profile, skills, workstream, workspace, mutex, hints, and optional structural conditions. |
+| **Destination revision** | Canonical digest of one destination's behavior-affecting configuration. Incompatible changes cannot reuse older child work. |
+| **Destination lane** | The `(route_id, destination_id)` coordination unit with at most one unresolved authoritative task and one collapsed pending generation. |
+| **Aggregate event** | Durable parent record for one normalized source/policy occurrence and the destination-selection results. Its status is derived from child records. |
+| **Child dispatch** | One destination-specific durable dispatch intent and lifecycle beneath an aggregate event. |
+| **Effective Watchman binding** | Configured logical resource root, actual Watchman root, effective relative root, and managed trigger identity treated as one lifecycle binding. |
+| **Resource observation revision** | Monotonic fence advanced by path-fact mutation and compared before a full snapshot may replace resource facts. |
 | **Route revision** | A canonical digest Agent Dispatch computes from behavior-affecting normalized route configuration. Decisions and records carry it; a change requires explicit operator acknowledgement before the route activates. |
 | **Policy revision** | A canonical digest of the policy subset of route configuration. A not-yet-submitted batch is re-evaluated against the active policy revision before dispatch. |
 | **Source observation** | An immutable record of what a source reported at one source position. It is evidence, not authority. |
@@ -23,7 +30,7 @@ Normative words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** 
 | **Policy decision** | Immutable output of deterministic route policy evaluation. It records a disposition and machine-readable reasons. |
 | **Disposition** | One of `drop`, `dispatch`, `merge_pending`, `quarantine`, or `reconcile`. |
 | **Sink** | A target adapter that maps a dispatch intent to one explicit public target interface and returns acceptance evidence. It never decides whether a dispatch should exist. |
-| **Capability report** | A versioned, evidence-backed record of a target's verified public capabilities and limits. Route validation checks required capabilities against it. |
+| **Capability report** | A versioned, evidence-backed record of a target executable identity, public capabilities, response shapes, profiles, skills, and limits. Route activation binds its fingerprint. |
 | **Reduced guarantee** | An explicitly documented operating mode for a route whose target lacks a required capability. The limitation is surfaced, never silently emulated. |
 | **Dispatch intent** | An immutable, durable request Agent Dispatch intends to submit to one target. |
 | **Dispatch attempt** | One concrete external submission attempt. Attempts may be retried while the dispatch intent remains the same. |
@@ -32,6 +39,8 @@ Normative words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** 
 | **Dead letter** | Terminal dispatch state where automatic progress has stopped. A dead-lettered dispatch remains inspectable and requires an explicit retry, reprocess, rerun, or discard action. |
 | **Execution projection** | Optional target status such as queued, running, succeeded, failed, or canceled. It is not required from every sink. |
 | **Work receipt** | A record submitted by a cooperating Hermes task or agent describing run identity and changed paths/digests. It supports feedback attribution but is not trusted until validated. |
+| **Notification intent** | Durable channel-neutral work created transactionally from a configured state transition and delivered independently of task outcome. |
+| **Notification attempt** | One bounded sink delivery attempt using the notification's stable idempotency identity. |
 | **Content fingerprint** | SHA-256 of a canonical, sorted projection of normalized change evidence. It compares effective content evidence and is not an event ID. |
 | **Idempotency key** | Stable key supplied to a target so repeated submission of the same dispatch intent can resolve to one accepted task. |
 | **Observation ID** | Time-ordered unique Agent Dispatch ID for a source observation. |

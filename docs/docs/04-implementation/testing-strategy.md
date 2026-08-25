@@ -162,3 +162,18 @@ A test required by the current task cannot be skipped merely because the externa
 ## 11. Coverage
 
 Coverage percentage is secondary to state and failure-path completeness. Require explicit tests for every transition, error class, and acceptance scenario. Critical packages should have high branch coverage, but no release claim relies on a single aggregate percentage.
+
+## 12. v0.1.5 Gate Strategy
+
+G6 races real SQLite path-fact writers against full enumeration and uses a real
+disposable Watchman ancestor/subtree. G7 replays the frozen real Hermes 0.19.1
+evidence and probes the currently installed newer public CLI through the same
+adapter; neither Hermes source nor private state is changed. G8 uses deterministic
+fake sinks for concurrency and idempotency plus an isolated `HERMES_HOME` and
+disposable board for the public-interface walkthrough. G9 uses local webhook
+fixtures to prove dedup, ambiguity, retry, redaction, and sink independence.
+
+Environment-dependent evidence must state whether it is frozen-contract,
+current live read-only, or disposable runtime evidence. A skipped real leg
+cannot be promoted to current runtime proof. `make verify` remains the single
+deterministic repository gate.

@@ -7,9 +7,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
+	"time"
 
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
 	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/domain/ids"
 )
 
 // runWatchman implements the managed Watchman trigger lifecycle (cli-spec
@@ -154,6 +158,90 @@ func managedCommand(routeID, configPath string) ([]string, error) {
 	return argv, nil
 }
 
+// effectiveBinding is one resolved managed Watchman binding (E10-T2,
+// SRC-009/SRC-010): the identical four values install, status, test, and
+// remove resolve and report.
+type effectiveBinding struct {
+	ConfiguredRoot string `json:"configured_root"`
+	ActualRoot     string `json:"actual_root"`
+	RelativeRoot   string `json:"relative_root"`
+	TriggerName    string `json:"trigger_name"`
+}
+
+// resolveServerBinding resolves the effective binding against the live
+// Watchman server: the configured root is watched (EnsureWatch
+// canonicalizes the actual root, which may be an ancestor), and the
+// relative root is the pure configured-root-relative path between the
+// two (SRC-011). This is the one resolver every server-contacting
+// lifecycle command shares.
+func resolveServerBinding(ctx context.Context, client *watchman.Client, resource config.Resource, triggerName string) (string, effectiveBinding, error) {
+	actual, err := client.EnsureWatch(ctx, resource.Root)
+	if err != nil {
+		return "", effectiveBinding{}, err
+	}
+	rel, err := watchman.RelativeRootBetween(actual, resource.Root)
+	if err != nil {
+		return "", effectiveBinding{}, &watchman.LifecycleError{Command: "watch-project", Message: err.Error()}
+	}
+	return actual, effectiveBinding{
+		ConfiguredRoot: resource.Root,
+		ActualRoot:     actual,
+		RelativeRoot:   rel,
+		TriggerName:    triggerName,
+	}, nil
+}
+
+// persistBinding stores the resolved binding on the route (SRC-009):
+// installation is the durable record the other commands and the
+// dispatch-side ancestor-root validation read.
+func persistBinding(configPath, routeID, resourceID string, binding effectiveBinding) error {
+	store, err := openStateStore(resolveConfigPath(configPath))
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	return store.SaveWatchBinding(context.Background(), watchman.Binding{
+		RouteID: routeID, ResourceID: resourceID,
+		ConfiguredRoot: binding.ConfiguredRoot, ActualRoot: binding.ActualRoot,
+		RelativeRoot: binding.RelativeRoot, TriggerName: binding.TriggerName,
+		UpdatedAt: ids.CanonicalTimestamp(time.Now()),
+	})
+}
+
+// storedBindingFor loads the persisted binding for every surface that
+// reads it — the lifecycle commands, the dispatch-side ancestor
+// validation, and test's logical root (round-1 review: one loader, one
+// absent contract). Absent is reported as hasStored=false, never an
+// error.
+func storedBindingFor(configPath, routeID string) (watchman.Binding, bool, error) {
+	binding, err := loadStoredBinding(resolveConfigPath(configPath), routeID)
+	if err != nil {
+		return watchman.Binding{}, false, err
+	}
+	if binding == nil {
+		return watchman.Binding{}, false, nil
+	}
+	return *binding, true, nil
+}
+
+// loadStoredBinding is the single storage reader for the managed
+// binding; a nil result means no binding is persisted.
+func loadStoredBinding(configPath, routeID string) (*watchman.Binding, error) {
+	store, err := openStateStore(configPath)
+	if err != nil {
+		return nil, err
+	}
+	defer store.Close()
+	binding, err := store.LoadWatchBinding(context.Background(), routeID)
+	if err != nil {
+		if errors.Is(err, sqlite.ErrWatchBindingNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &binding, nil
+}
+
 func runWatchmanInstall(args []string, stdout, stderr io.Writer) int {
 	command := "watchman install"
 	opts, code := parseWatchmanFlags(command, args, stderr)
@@ -168,7 +256,11 @@ func runWatchmanInstall(args []string, stdout, stderr io.Writer) int {
 	if code != 0 {
 		return code
 	}
-	watchRoot, err := client.EnsureWatch(ctx, resource.Root)
+	// The effective binding resolves against the live server before
+	// anything is installed (E10-T2, SRC-009/SRC-011): the actual watch
+	// root may be an ancestor of the configured root, and the trigger is
+	// then subtree-constrained through its relative_root.
+	watchRoot, binding, err := resolveServerBinding(ctx, client, resource, route.Source.TriggerName)
 	if err != nil {
 		return lifecycleErr(stderr, command, err)
 	}
@@ -176,7 +268,7 @@ func runWatchmanInstall(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return planErr(stderr, command, "internal_unclassified", "internal", err.Error(), 40)
 	}
-	expected := watchman.ManagedTrigger(route.Source.TriggerName, cmdArgv)
+	expected := watchman.ManagedTrigger(route.Source.TriggerName, cmdArgv, binding.RelativeRoot)
 
 	// The install is the operator's first-use entry point: it also
 	// materializes the route's durable registration (resource, route
@@ -190,38 +282,62 @@ func runWatchmanInstall(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return lifecycleErr(stderr, command, err)
 	}
+	// Topology self-heal (round-1 review): a reinstall after the watch
+	// moved (the stored actual root differs from the resolved one)
+	// removes the stale managed trigger from the previous actual root —
+	// deleting an absent trigger is idempotent — so the old root cannot
+	// keep firing the managed command.
+	if stored, hasStored, err := storedBindingFor(opts.configPath, opts.routeID); err != nil {
+		writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
+		return 20
+	} else if hasStored && watchman.CanonicalRoot(stored.ActualRoot) != watchman.CanonicalRoot(watchRoot) {
+		if _, err := client.TriggerDelete(ctx, stored.ActualRoot, route.Source.TriggerName); err != nil {
+			var protocol *watchman.LifecycleError
+			if !errors.As(err, &protocol) {
+				return lifecycleErr(stderr, command, err)
+			}
+			// An unwatchable previous root is structurally free of the
+			// trigger; the server refusal is reported, not hidden.
+			fmt.Fprintf(stderr, "note: the previous actual root %q is no longer watchable; its managed trigger is gone with the watch\n", stored.ActualRoot)
+		}
+	}
+	noop := false
 	if current, exists := watchman.FindTrigger(installed, expected.Name); exists {
 		if current.Equal(expected) {
 			// Identical reinstall is a true no-op that preserves the
 			// incremental position (E0-T5 lifecycle evidence).
-			return writeEnvelope(stdout, command, map[string]any{
-				"route":                          opts.routeID,
-				"watch_root":                     watchRoot,
-				"trigger":                        expected.Name,
-				"action":                         "noop",
-				"disposition":                    "already_defined",
-				"initial_reconciliation_pending": route.Reconciliation.Initial,
-			})
-		}
-		if !opts.replace {
+			noop = true
+		} else if !opts.replace {
 			return planErr(stderr, command, "watchman_trigger_conflict", "conflict",
 				fmt.Sprintf("trigger %q exists with a different definition; pass --replace to replace it (replacement resets the incremental position)", expected.Name), 14)
 		}
 	}
-	disposition, err := client.TriggerInstall(ctx, watchRoot, expected)
-	if err != nil {
-		return lifecycleErr(stderr, command, err)
+	disposition := "already_defined"
+	if !noop {
+		var installErr error
+		disposition, installErr = client.TriggerInstall(ctx, watchRoot, expected)
+		if installErr != nil {
+			return lifecycleErr(stderr, command, installErr)
+		}
 	}
-	// The conflict gate above is advisory against same-user concurrency:
-	// if the server replaced a definition we believed equal or absent,
-	// surface it instead of silently claiming a clean install.
-	if disposition == "replaced" && !opts.replace {
+	// The resolved binding is durable from a successful install (and an
+	// identical no-op): every other lifecycle command and the
+	// dispatch-side ancestor-root validation read this record (SRC-009).
+	if err := persistBinding(opts.configPath, opts.routeID, route.Source.Resource, binding); err != nil {
+		writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
+		return 20
+	}
+	action := "installed"
+	if noop {
+		action = "noop"
+	} else if disposition == "replaced" && !opts.replace {
+		// The conflict gate above is advisory against same-user
+		// concurrency: if the server replaced a definition we believed
+		// equal or absent, surface it instead of silently claiming a
+		// clean install.
 		return writeEnvelopeWithWarnings(stdout, command, map[string]any{
-			"route":                          opts.routeID,
-			"watch_root":                     watchRoot,
-			"trigger":                        expected.Name,
-			"action":                         "installed",
-			"disposition":                    disposition,
+			"route": opts.routeID, "watch_root": watchRoot, "binding": binding,
+			"trigger": expected.Name, "action": action, "disposition": disposition,
 			"initial_reconciliation_pending": route.Reconciliation.Initial,
 		}, []string{"the trigger definition changed between the pre-check and the install; the managed definition was reinstalled and the incremental position reset"})
 	}
@@ -230,11 +346,8 @@ func runWatchmanInstall(args []string, stdout, stderr io.Writer) int {
 	// which the E2-T4 planner converts to exactly one initial
 	// reconciliation (SRC-005, architecture watchman-integration §7).
 	return writeEnvelope(stdout, command, map[string]any{
-		"route":                          opts.routeID,
-		"watch_root":                     watchRoot,
-		"trigger":                        expected.Name,
-		"action":                         "installed",
-		"disposition":                    disposition,
+		"route": opts.routeID, "watch_root": watchRoot, "binding": binding,
+		"trigger": expected.Name, "action": action, "disposition": disposition,
 		"initial_reconciliation_pending": route.Reconciliation.Initial,
 	})
 }
@@ -274,21 +387,44 @@ func runWatchmanStatus(args []string, stdout, stderr io.Writer) int {
 	}
 	// Status never creates a watch: an unwatched root reports missing
 	// rather than establishing one.
+	stored, hasStored, err := storedBindingFor(opts.configPath, opts.routeID)
+	if err != nil {
+		writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
+		return 20
+	}
 	watched, err := client.IsWatched(ctx, resource.Root)
 	if err != nil {
 		return lifecycleErr(stderr, command, err)
 	}
 	if !watched {
+		state := "missing"
+		var binding any
+		if hasStored {
+			// The persisted record is reported exactly when it is stale
+			// (round-1 review): nothing watches the configured root, so
+			// the stored topology cannot be current.
+			state = "drifted"
+			binding = effectiveBinding{
+				ConfiguredRoot: stored.ConfiguredRoot, ActualRoot: stored.ActualRoot,
+				RelativeRoot: stored.RelativeRoot, TriggerName: stored.TriggerName,
+			}
+		}
 		return writeEnvelope(stdout, command, map[string]any{
 			"route":            opts.routeID,
 			"watch_root":       resource.Root,
 			"watch_root_state": "not_watched",
+			"binding":          binding,
 			"watchman_version": version,
 			"trigger":          route.Source.TriggerName,
-			"state":            "missing",
+			"include":          route.Source.Include,
+			"exclude":          route.Source.Exclude,
+			"state":            state,
 		})
 	}
-	watchRoot, err := client.EnsureWatch(ctx, resource.Root)
+	// The same server resolver install uses resolves the effective
+	// binding (SRC-010): configured root, actual watch root (possibly an
+	// ancestor), relative root, and trigger identity.
+	watchRoot, binding, err := resolveServerBinding(ctx, client, resource, route.Source.TriggerName)
 	if err != nil {
 		return lifecycleErr(stderr, command, err)
 	}
@@ -300,7 +436,15 @@ func runWatchmanStatus(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return planErr(stderr, command, "internal_unclassified", "internal", err.Error(), 40)
 	}
-	expected := watchman.ManagedTrigger(route.Source.TriggerName, cmdArgv)
+	expected := watchman.ManagedTrigger(route.Source.TriggerName, cmdArgv, binding.RelativeRoot)
+	// Drift (OPS-010): the persisted binding no longer matches the live
+	// watch topology — the actual root moved (a different ancestor is
+	// watched now) or the trigger identity changed — independent of the
+	// trigger definition comparison.
+	drifted := hasStored && (watchman.CanonicalRoot(stored.ActualRoot) != watchman.CanonicalRoot(binding.ActualRoot) ||
+		stored.TriggerName != binding.TriggerName ||
+		stored.ConfiguredRoot != binding.ConfiguredRoot ||
+		watchman.ToSlashClean(stored.RelativeRoot) != watchman.ToSlashClean(binding.RelativeRoot))
 	state := "missing"
 	current, exists := watchman.FindTrigger(installed, expected.Name)
 	if exists {
@@ -310,11 +454,21 @@ func runWatchmanStatus(args []string, stdout, stderr io.Writer) int {
 			state = "diverged"
 		}
 	}
+	if drifted {
+		// Binding drift outranks the trigger comparison (round-1
+		// review): even with the trigger absent, a stale persisted
+		// binding is the operator-visible defect — ancestor dispatches
+		// stay refused until install re-persists the record.
+		state = "drifted"
+	}
 	return writeEnvelope(stdout, command, map[string]any{
 		"route":            opts.routeID,
 		"watch_root":       watchRoot,
+		"binding":          binding,
 		"watchman_version": version,
 		"trigger":          expected.Name,
+		"include":          route.Source.Include,
+		"exclude":          route.Source.Exclude,
 		"state":            state,
 		"expected":         expected,
 		"installed":        current,
@@ -350,49 +504,134 @@ func runWatchmanRemove(args []string, stdout, stderr io.Writer) int {
 	if code != 0 {
 		return code
 	}
-	// Remove never creates a watch either: an unwatched root is already
-	// free of the managed trigger.
-	watched, err := client.IsWatched(ctx, resource.Root)
+	// Remove never creates a watch: an unwatched configured root is
+	// already free of the managed trigger there — but the proof still
+	// searches every applicable root (SRC-012): the persisted binding's
+	// actual root and every root the server currently watches, because a
+	// re-watched ancestor may still carry the managed trigger.
+	stored, hasStored, err := storedBindingFor(opts.configPath, opts.routeID)
+	if err != nil {
+		writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
+		return 20
+	}
+	// A trigger can only exist on a root the server actually watches:
+	// the proof set is the current watch-list, plus the stored actual
+	// root while it stays watched (a trigger-list on an unwatched path
+	// is a server error, and absence there is structural).
+	watchRoots, err := client.WatchList(ctx)
 	if err != nil {
 		return lifecycleErr(stderr, command, err)
 	}
-	if !watched {
-		return writeEnvelope(stdout, command, map[string]any{
-			"route":      opts.routeID,
-			"watch_root": resource.Root,
-			"trigger":    route.Source.TriggerName,
-			"action":     "noop",
-		})
+	candidateRoots := append([]string{}, watchRoots...)
+	if hasStored {
+		watched, err := client.IsWatched(ctx, stored.ActualRoot)
+		if err != nil {
+			return lifecycleErr(stderr, command, err)
+		}
+		if watched && !containsRoot(watchRoots, stored.ActualRoot) {
+			candidateRoots = append(candidateRoots, stored.ActualRoot)
+		}
 	}
-	watchRoot, err := client.EnsureWatch(ctx, resource.Root)
-	if err != nil {
-		return lifecycleErr(stderr, command, err)
+	// Deduplicated in canonical order so the proof is deterministic.
+	seen := map[string]bool{}
+	var roots []string
+	for _, root := range candidateRoots {
+		if root == "" {
+			continue
+		}
+		key := watchman.CanonicalRoot(root)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		roots = append(roots, key)
 	}
+	sort.Strings(roots)
+	primaryRoot := watchman.CanonicalRoot(resource.Root)
+	if hasStored {
+		primaryRoot = watchman.CanonicalRoot(stored.ActualRoot)
+	}
+
 	// Removes only the exact managed trigger; deleting an absent trigger
-	// is idempotent. The watch root is never removed.
-	deleted, err := client.TriggerDelete(ctx, watchRoot, route.Source.TriggerName)
-	if err != nil {
-		return lifecycleErr(stderr, command, err)
+	// is idempotent. The watch roots themselves are never removed.
+	action := "noop"
+	removedFrom := map[string]bool{}
+	for _, root := range roots {
+		defs, err := client.TriggerList(ctx, root)
+		if err != nil {
+			return lifecycleErr(stderr, command, err)
+		}
+		if _, exists := watchman.FindTrigger(defs, route.Source.TriggerName); !exists {
+			continue
+		}
+		deleted, err := client.TriggerDelete(ctx, root, route.Source.TriggerName)
+		if err != nil {
+			return lifecycleErr(stderr, command, err)
+		}
+		if deleted {
+			action = "removed"
+			removedFrom[root] = true
+		}
 	}
-	action := "removed"
-	if !deleted {
-		action = "noop"
+	// The removal proof (SRC-012): the command succeeds only after the
+	// managed trigger is absent on every applicable root; each root's
+	// post-delete listing is re-read rather than assumed.
+	proof := make([]map[string]any, 0, len(roots))
+	for _, root := range roots {
+		defs, err := client.TriggerList(ctx, root)
+		if err != nil {
+			return lifecycleErr(stderr, command, err)
+		}
+		if _, present := watchman.FindTrigger(defs, route.Source.TriggerName); present {
+			return planErr(stderr, command, "watchman_trigger_conflict", "conflict",
+				fmt.Sprintf("the managed trigger %q is still present on watch root %q after removal", route.Source.TriggerName, root), 14)
+		}
+		proof = append(proof, map[string]any{"watch_root": root, "removed_from": removedFrom[root], "present": false})
+	}
+	binding := effectiveBinding{
+		ConfiguredRoot: resource.Root, ActualRoot: primaryRoot,
+		RelativeRoot: ".", TriggerName: route.Source.TriggerName,
+	}
+	if hasStored {
+		binding = effectiveBinding{
+			ConfiguredRoot: stored.ConfiguredRoot, ActualRoot: stored.ActualRoot,
+			RelativeRoot: stored.RelativeRoot, TriggerName: stored.TriggerName,
+		}
 	}
 	return writeEnvelope(stdout, command, map[string]any{
 		"route":      opts.routeID,
-		"watch_root": watchRoot,
+		"watch_root": primaryRoot,
+		"binding":    binding,
 		"trigger":    route.Source.TriggerName,
 		"action":     action,
+		"proof":      proof,
 	})
+}
+
+// containsRoot reports exact membership after canonicalization.
+func containsRoot(roots []string, root string) bool {
+	want := watchman.CanonicalRoot(root)
+	for _, r := range roots {
+		if watchman.CanonicalRoot(r) == want {
+			return true
+		}
+	}
+	return false
 }
 
 // runWatchmanTest parses a supplied or built-in fixture payload with a
 // synthetic environment and prints the normalized source input DTO —
 // entries, operation mapping, raw digest, and flags — with no Watchman
-// contact, no configuration load, and no Hermes side effects (SRC-008).
+// contact, no Hermes side effects, and no mutation (SRC-008). With
+// --route it also resolves the same effective binding the other
+// lifecycle commands report, from its logical root — the persisted
+// binding when one exists, the configured root otherwise (E10-T2,
+// SRC-010: test never contacts the server).
 func runWatchmanTest(args []string, stdout, stderr io.Writer) int {
 	command := "watchman test"
 	fixture := ""
+	routeID := ""
+	configPath := ""
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--fixture":
@@ -401,8 +640,45 @@ func runWatchmanTest(args []string, stdout, stderr io.Writer) int {
 			}
 			i++
 			fixture = args[i]
+		case "--route":
+			if i+1 >= len(args) {
+				return usageError(stderr, command, "--route requires an id")
+			}
+			i++
+			routeID = args[i]
+		case "--config":
+			if i+1 >= len(args) {
+				return usageError(stderr, command, "--config requires a path")
+			}
+			i++
+			configPath = args[i]
 		default:
 			return usageError(stderr, command, fmt.Sprintf("unknown argument %q", args[i]))
+		}
+	}
+	var binding any
+	if routeID != "" {
+		_, route, resource, code := loadRoute(configPath, routeID, command, stderr)
+		if code != 0 {
+			return code
+		}
+		stored, hasStored, err := storedBindingFor(configPath, routeID)
+		if err != nil {
+			writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
+			return 20
+		}
+		if hasStored {
+			binding = effectiveBinding{
+				ConfiguredRoot: stored.ConfiguredRoot, ActualRoot: stored.ActualRoot,
+				RelativeRoot: stored.RelativeRoot, TriggerName: stored.TriggerName,
+			}
+		} else {
+			// No persisted binding yet: the logical root is the
+			// configured root with a trivial relative root.
+			binding = effectiveBinding{
+				ConfiguredRoot: resource.Root, ActualRoot: resource.Root,
+				RelativeRoot: ".", TriggerName: route.Source.TriggerName,
+			}
 		}
 	}
 	payload := []byte(`[{"name":"Inbox/new-note.md","exists":true,"new":true,"size":24,"type":"f"}]`)
@@ -442,5 +718,6 @@ func runWatchmanTest(args []string, stdout, stderr io.Writer) int {
 		"source_event_key":   input.SourceEventKey("test-source"),
 		"flags":              env.Flags(),
 		"changes":            wire,
+		"binding":            binding,
 	})
 }

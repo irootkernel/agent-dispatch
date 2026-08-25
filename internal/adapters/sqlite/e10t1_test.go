@@ -219,8 +219,9 @@ func TestE10T1MigrationV8BackfillAndIntegrity(t *testing.T) {
 	// no longer records v8, exactly as a pre-upgrade (or interrupted-
 	// upgrade) database would look.
 	for _, stmt := range []string{
+		`DROP TABLE watch_bindings`,
 		`ALTER TABLE resources DROP COLUMN observation_revision`,
-		`DELETE FROM schema_migrations WHERE version = 8`,
+		`DELETE FROM schema_migrations WHERE version IN (8, 9)`,
 	} {
 		if _, err := crashed.Exec(stmt); err != nil {
 			t.Fatalf("rewind %q: %v", stmt, err)

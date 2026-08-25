@@ -40,6 +40,7 @@ var Migrations = []Migration{
 	{Version: 6, Name: "batch-sequence-watermark", SQL: schemaV6BatchSequenceWatermark},
 	{Version: 7, Name: "record-revision-columns", SQL: schemaV7RecordRevisionColumns},
 	{Version: 8, Name: "resource-observation-revision", SQL: schemaV8ResourceObservationRevision},
+	{Version: 9, Name: "watch-bindings", SQL: schemaV9WatchBindings},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
@@ -493,4 +494,24 @@ CREATE INDEX idx_quarantine_route_revision ON quarantine_items(route_revision);
 // after the upgrade simply observes whatever the next mutation advances.
 const schemaV8ResourceObservationRevision = `
 ALTER TABLE resources ADD COLUMN observation_revision INTEGER NOT NULL DEFAULT 0 CHECK (observation_revision >= 0);
+`
+
+// schemaV9WatchBindings persists the four-part managed Watchman binding
+// per route (E10-T2, SRC-009): the configured resource root, the actual
+// watch root Watchman canonicalized at install time (which may be an
+// ancestor of the configured root), the configured-root-relative path
+// between them, and the stable trigger name. Every lifecycle command
+// resolves and reports the same record; the dispatch-side binding
+// validation accepts an ancestor root only through this record, so a
+// forged or drifted environment fails closed (SRC-011).
+const schemaV9WatchBindings = `
+CREATE TABLE watch_bindings (
+	route_id        TEXT PRIMARY KEY REFERENCES routes(route_id) ON DELETE CASCADE,
+	resource_id     TEXT NOT NULL REFERENCES resources(resource_id) ON DELETE CASCADE,
+	configured_root TEXT NOT NULL,
+	actual_root     TEXT NOT NULL,
+	relative_root   TEXT NOT NULL,
+	trigger_name    TEXT NOT NULL,
+	updated_at      TEXT NOT NULL
+);
 `

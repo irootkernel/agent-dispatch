@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -528,6 +529,9 @@ func TestFirstUseRegistrationFlow(t *testing.T) {
 			t.Fatalf("watchman install: %s", errb.String())
 		}
 		Run([]string{"watchman", "remove", "--route", "wiki", "--config", configPath, "--yes"}, &out, &errb)
+		if client := watchman.NewClient(""); client != nil {
+			_ = client.WatchDelete(context.Background(), vault)
+		}
 	}
 
 	// A dispatched change reaches acceptance with no manual seeding.

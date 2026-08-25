@@ -10,6 +10,7 @@ package watchman
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 )
@@ -136,22 +137,129 @@ func SourceEventKey(sourceID string, pos Position, digest records.Digest) string
 	return fmt.Sprintf("watchman:%s:%s:%s:%s", sourceID, pos.Since, pos.Clock, digest)
 }
 
+// Binding is the persisted managed Watchman binding (E10-T2, SRC-009):
+// the four distinct values every lifecycle command resolves and reports
+// identically — the configured resource root, the actual watch root
+// Watchman canonicalized (which may be an ancestor of the configured
+// root), the configured-root-relative path between them, and the stable
+// trigger name.
+type Binding struct {
+	RouteID        string
+	ResourceID     string
+	ConfiguredRoot string
+	ActualRoot     string
+	RelativeRoot   string // "." when the actual root is the configured root
+	TriggerName    string
+	UpdatedAt      string
+}
+
 // ValidateBinding checks that the trusted environment matches the trusted
 // route binding (SRC-003): the invoked trigger must be the route's trigger
-// and the watch root must be the resource root. The payload plays no part
-// in binding, so it can never select a route or resource. Roots compare
-// after cleaning separators, and — when either side exists on disk —
-// after symlink resolution, so a configured root expressed through a
-// symlink (macOS /tmp vs /private/tmp) still binds against Watchman's
-// canonical WATCHMAN_ROOT.
-func ValidateBinding(env Env, triggerName, resourceRoot string) error {
+// and the watch root must resolve to the configured resource root. The
+// payload plays no part in binding, so it can never select a route or
+// resource. Roots compare after cleaning separators, and — when either
+// side exists on disk — after symlink resolution, so a configured root
+// expressed through a symlink (macOS /tmp vs /private/tmp) still binds
+// against Watchman's canonical WATCHMAN_ROOT.
+//
+// An ancestor actual root binds only through the persisted managed
+// binding (E10-T2, SRC-011). The frozen interface evidence
+// (trigger-invocation-environment) records that Watchman sets
+// WATCHMAN_RELATIVE_ROOT to the ABSOLUTE subdirectory path while
+// WATCHMAN_ROOT remains the watch root, so the absolute form is the
+// accepted truth; the relative form is accepted only when it is exactly
+// the persisted relative root. Either way the recorded actual root must
+// match the environment watch root and the join of the two must resolve
+// to the configured resource root, so a forged or drifted pair fails
+// closed, and plan/dry-run surfaces with no stored binding validate the
+// exact root only.
+func ValidateBinding(env Env, triggerName, resourceRoot string, stored *Binding) error {
 	if env.Trigger != triggerName {
 		return fmt.Errorf("trigger binding mismatch: environment trigger %q is not the configured trigger %q", env.Trigger, triggerName)
 	}
-	if !rootsEquivalent(env.Root, resourceRoot) {
+	if !env.HasRelative {
+		if rootsEquivalent(env.Root, resourceRoot) {
+			return nil
+		}
 		return fmt.Errorf("root binding mismatch: environment root %q is not the configured resource root %q (symlinked roots must resolve to the same directory)", env.Root, resourceRoot)
 	}
+	if stored == nil {
+		return fmt.Errorf("root binding mismatch: environment reports relative root %q under watch root %q, but no managed Watchman binding is persisted for this route; run watchman install", env.RelativeRoot, env.Root)
+	}
+	if env.Trigger != stored.TriggerName {
+		return fmt.Errorf("trigger binding mismatch: environment trigger %q is not the bound trigger %q", env.Trigger, stored.TriggerName)
+	}
+	if CanonicalRoot(env.Root) != CanonicalRoot(stored.ActualRoot) {
+		return fmt.Errorf("root binding mismatch: environment root %q is not the bound actual watch root %q (the binding drifted; rerun watchman install)", env.Root, stored.ActualRoot)
+	}
+	if filepath.IsAbs(env.RelativeRoot) {
+		// The frozen-evidence absolute form: the environment names the
+		// configured root itself, and it must be exactly where the
+		// stored relative root lands under the stored actual root.
+		if !rootsEquivalent(env.RelativeRoot, resourceRoot) {
+			return fmt.Errorf("root binding mismatch: environment relative root %q does not resolve to the configured resource root %q", env.RelativeRoot, resourceRoot)
+		}
+		joined := filepath.Join(CanonicalRoot(stored.ActualRoot), filepath.FromSlash(stored.RelativeRoot))
+		if !rootsEquivalent(joined, resourceRoot) {
+			return fmt.Errorf("root binding mismatch: the bound actual root %q joined with the bound relative root %q does not resolve to the configured resource root %q", stored.ActualRoot, stored.RelativeRoot, resourceRoot)
+		}
+		return nil
+	}
+	if ToSlashClean(env.RelativeRoot) != ToSlashClean(stored.RelativeRoot) {
+		return fmt.Errorf("root binding mismatch: environment relative root %q is not the bound relative root %q", env.RelativeRoot, stored.RelativeRoot)
+	}
+	joined := filepath.Join(env.Root, filepath.FromSlash(env.RelativeRoot))
+	if !rootsEquivalent(joined, resourceRoot) {
+		return fmt.Errorf("root binding mismatch: watch root %q joined with relative root %q does not resolve to the configured resource root %q", env.Root, env.RelativeRoot, resourceRoot)
+	}
 	return nil
+}
+
+// RelativeRootBetween returns the configured-root-relative path from the
+// actual watch root to the configured resource root (SRC-011's pure
+// computation, shared by every lifecycle command): "." when the two
+// resolve to the same directory, or a failure when the configured root is
+// not inside the actual root. Both sides are cleaned and, when they
+// exist, symlink-resolved before the relationship is decided.
+func RelativeRootBetween(actualRoot, configuredRoot string) (string, error) {
+	ca, cb := canonicalRoot(actualRoot), canonicalRoot(configuredRoot)
+	if ca == cb {
+		return ".", nil
+	}
+	rel, err := filepath.Rel(ca, cb)
+	if err != nil {
+		return "", fmt.Errorf("configured root %q cannot be expressed relative to the watch root %q", configuredRoot, actualRoot)
+	}
+	rel = filepath.ToSlash(rel)
+	if rel == ".." || strings.HasPrefix(rel, "../") || strings.HasPrefix(rel, "/") {
+		return "", fmt.Errorf("configured root %q is outside the actual watch root %q", configuredRoot, actualRoot)
+	}
+	return rel, nil
+}
+
+// CanonicalRoot cleans a root and resolves symlinks when the path exists
+// (the exported form the lifecycle surfaces use for drift comparison).
+func CanonicalRoot(root string) string {
+	return canonicalRoot(root)
+}
+
+// ToSlashClean normalizes a relative root for comparison: cleaned, forward
+// slashes, no trailing separator.
+func ToSlashClean(rel string) string {
+	cleaned := filepath.ToSlash(filepath.Clean(rel))
+	if cleaned == "/" {
+		return "."
+	}
+	return cleaned
+}
+
+// canonicalRoot cleans a root and resolves symlinks when the path exists.
+func canonicalRoot(root string) string {
+	c := filepath.Clean(root)
+	if resolved, err := filepath.EvalSymlinks(c); err == nil {
+		return resolved
+	}
+	return c
 }
 
 // rootsEquivalent compares two absolute roots after cleaning and, when

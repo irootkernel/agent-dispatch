@@ -180,6 +180,7 @@ routes:
 
 - Patterns apply to normalized slash-separated relative paths.
 - `**` recursive matching is required.
+- Exclude patterns are directory-aware (E10-T2, PTH-009): a pattern that matches a path prefix at a segment boundary excludes everything inside that directory, so an exact-directory exclusion (`Secrets`) covers its whole subtree exactly like a recursive one (`Secrets/**`), and a file or glob pattern also covers a same-named directory.
 - Exclude takes precedence over include.
 - Protected and immutable patterns are evaluated after include/exclude.
 - Pattern behavior is explicit per host through the resolved case mode (the supported host is macOS/darwin-arm64, D-023; the resolver stays host-derived so a future platform carries its own explicit mode).

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
 	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
 	"github.com/irootkernel/agent-dispatch/internal/app/ingest"
 	"github.com/irootkernel/agent-dispatch/internal/config"
@@ -100,4 +101,12 @@ func staleRebuilderOf(store storeOp, cfg *config.Config) func(context.Context, s
 	return func(ctx context.Context, dispatchID string) (string, error) {
 		return op.RebuildStale(ctx, dispatchID, "agent-dispatch")
 	}
+}
+
+// storedBinding feeds the dispatch-side ancestor-root validation
+// (E10-T2, SRC-011) from the one shared loader; a route with no
+// persisted binding returns nil, leaving the exact-root validation in
+// force.
+func storedBinding(configPath, routeID string) (*watchman.Binding, error) {
+	return loadStoredBinding(resolveConfigPath(configPath), routeID)
 }

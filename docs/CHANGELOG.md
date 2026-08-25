@@ -1,5 +1,44 @@
 # SOT Changelog
 
+## 1.1.3 - 2026-08-26
+
+E10-T2: the effective Watchman binding and route-relative exclusions
+close the second v0.1.5 correctness defect (SRC-009 through SRC-012,
+PTH-009, OPS-010):
+
+- schema v9 persists the four-part managed binding per route — the
+  configured resource root, the actual Watchman root (which may be an
+  ancestor), the configured-root-relative path, and the stable trigger
+  name — resolved by the one server resolver install and status share,
+  read by remove from the persisted record plus the live watch list,
+  and reported by watchman test from its logical root with no server
+  contact; a reinstall after the watch moved also removes the stale
+  managed trigger from the previous actual root;
+- installation subtree-constrains the trigger through relative_root so
+  an ancestral watch root cannot fire the managed command outside the
+  configured subtree, and the dispatch-side binding validation accepts
+  an ancestor environment only through the exact persisted record — a
+  forged or drifted ancestor-plus-relative pair fails closed;
+- exclusions gain exact-directory semantics (an exclusion naming a
+  directory covers its whole subtree) alongside exact files, file
+  globs, and recursive directories, all evaluated configured-root-
+  relative before any read, hash, batch, or downstream record;
+- status exposes the configured and actual roots, the relative root,
+  the effective include/exclude patterns, the trigger identity, and the
+  installed/missing/diverged/drifted states, where drifted means the
+  persisted binding no longer matches the live watch topology;
+- remove searches every watched root plus the stored actual root and
+  succeeds only after re-listing proves the managed trigger absent
+  everywhere;
+- the dispatch-side ancestor validation accepts the frozen-evidence
+  environment form (WATCHMAN_RELATIVE_ROOT as the subdirectory's
+  absolute path) plus the persisted relative form, both only through
+  the exact persisted binding;
+- real disposable nested Watchman tree evidence covers the ancestor
+  root, relative root, exclusion forms, drift, test, and complete
+  removal including a stray managed trigger planted on a second watched
+  root (TST-010).
+
 ## 1.1.2 - 2026-08-26
 
 E10-T1: the resource observation fence and bounded reconciliation reads

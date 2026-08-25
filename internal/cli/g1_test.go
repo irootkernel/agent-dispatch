@@ -329,6 +329,9 @@ func TestWatchmanCLILifecycle(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		_, _, _, _ = run("remove", "--yes")
+		if client := watchman.NewClient(""); client != nil {
+			_ = client.WatchDelete(context.Background(), vault)
+		}
 	})
 
 	// First install creates and reports the pending initial
@@ -359,7 +362,7 @@ func TestWatchmanCLILifecycle(t *testing.T) {
 		t.Fatalf("ensure watch: %v", err)
 	}
 	exe, _ := os.Executable()
-	diverged := watchman.ManagedTrigger("agent-dispatch.wiki.test", []string{exe, "dispatch", "--route", "wiki", "--input", "watchman", "--unexpected"})
+	diverged := watchman.ManagedTrigger("agent-dispatch.wiki.test", []string{exe, "dispatch", "--route", "wiki", "--input", "watchman", "--unexpected"}, "")
 	if _, err := client.TriggerInstall(ctx, watchRoot, diverged); err != nil {
 		t.Fatalf("diverge: %v", err)
 	}

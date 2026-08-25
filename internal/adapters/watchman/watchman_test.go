@@ -361,16 +361,16 @@ func TestSourceEventKeyPositionRule(t *testing.T) {
 
 func TestValidateBindingTrustedConfigOnly(t *testing.T) {
 	env := Env{Trigger: "trig", Root: "/vault/a"}
-	if err := ValidateBinding(env, "trig", "/vault/a"); err != nil {
+	if err := ValidateBinding(env, "trig", "/vault/a", nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := ValidateBinding(env, "trig", "/vault/a/"); err != nil {
+	if err := ValidateBinding(env, "trig", "/vault/a/", nil); err != nil {
 		t.Fatalf("trailing separator should be cleaned: %v", err)
 	}
-	if err := ValidateBinding(env, "other", "/vault/a"); err == nil {
+	if err := ValidateBinding(env, "other", "/vault/a", nil); err == nil {
 		t.Fatal("trigger mismatch must fail")
 	}
-	if err := ValidateBinding(env, "trig", "/vault/b"); err == nil {
+	if err := ValidateBinding(env, "trig", "/vault/b", nil); err == nil {
 		t.Fatal("root mismatch must fail")
 	}
 }
@@ -405,10 +405,10 @@ func TestValidateBindingSymlinkedRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	env := Env{Trigger: "trig", Root: real}
-	if err := ValidateBinding(env, "trig", alias); err != nil {
+	if err := ValidateBinding(env, "trig", alias, nil); err != nil {
 		t.Fatalf("symlinked configured root must bind against the canonical env root: %v", err)
 	}
-	if err := ValidateBinding(Env{Trigger: "trig", Root: alias}, "trig", real); err != nil {
+	if err := ValidateBinding(Env{Trigger: "trig", Root: alias}, "trig", real, nil); err != nil {
 		t.Fatalf("canonical configured root must bind against the symlinked env root: %v", err)
 	}
 }

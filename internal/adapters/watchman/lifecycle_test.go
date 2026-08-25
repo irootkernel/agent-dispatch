@@ -55,7 +55,7 @@ func TestLifecycleInstallNoOpReplaceAndRemove(t *testing.T) {
 	client := hasWatchman(t)
 	ctx := context.Background()
 	root := tempRoot(t)
-	def := ManagedTrigger("agent-dispatch-test-lifecycle", []string{"/bin/true"})
+	def := ManagedTrigger("agent-dispatch-test-lifecycle", []string{"/bin/true"}, "")
 
 	watchRoot, err := client.EnsureWatch(ctx, root)
 	if err != nil {
@@ -66,6 +66,9 @@ func TestLifecycleInstallNoOpReplaceAndRemove(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		_, _ = client.TriggerDelete(ctx, watchRoot, def.Name)
+		// The disposable watch is dropped so repeated runs do not
+		// accumulate FSEvent streams (E10-T2 round-1 remediation).
+		_ = client.WatchDelete(context.Background(), watchRoot)
 	})
 
 	// Fresh install creates.
@@ -109,12 +112,12 @@ func TestLifecycleInstallNoOpReplaceAndRemove(t *testing.T) {
 }
 
 func TestTriggerDefinitionComparison(t *testing.T) {
-	a := ManagedTrigger("n", []string{"/bin/true"})
-	b := ManagedTrigger("n", []string{"/bin/true"})
+	a := ManagedTrigger("n", []string{"/bin/true"}, "")
+	b := ManagedTrigger("n", []string{"/bin/true"}, "")
 	if !a.Equal(b) {
 		t.Fatal("identical definitions must compare equal")
 	}
-	c := ManagedTrigger("other", []string{"/bin/true"})
+	c := ManagedTrigger("other", []string{"/bin/true"}, "")
 	if a.Equal(c) {
 		t.Fatal("different names must compare unequal")
 	}

@@ -15,9 +15,9 @@
 | Release target | v0.1.5 |
 | Current epic | E10 (In Progress) |
 | Current active task | None |
-| Next task | E10-T2 |
-| Completed tasks | 61 / 75 |
-| Planned tasks | 14 / 75 |
+| Next task | E10-T3 |
+| Completed tasks | 62 / 75 |
+| Planned tasks | 12 / 75 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -113,7 +113,7 @@
 | 59 | E9-T8 | Completed | macOS-only support policy and Linux-surface removal |
 | 60 | E9-T9 | Completed | Documentation truth resynchronized and v0.1.4 released |
 | 61 | E10-T1 | Completed | Resource observation fence and bounded reconciliation reads |
-| 62 | E10-T2 | Planned | Effective Watchman binding and route-relative exclusions |
+| 62 | E10-T2 | Completed | Effective Watchman binding and route-relative exclusions |
 | 63 | E10-T3 | Planned | Source/reconciliation integrity gate G6 |
 | 64 | E11-T1 | Planned | Config v1 destination cutover and forward migration |
 | 65 | E11-T2 | Planned | Hermes 0.19.1+ capability probe and evidence cache |
@@ -2575,7 +2575,7 @@ Delivered as the resource observation fence and bounded reconciliation reads: sc
 
 ## E10-T2: Effective Watchman Binding and Route-Relative Exclusions
 
-**Status:** Planned
+**Status:** Completed
 **Design Gate impact:** Not required; the source contract owns the behavior.
 
 ### Objective
@@ -2607,7 +2607,7 @@ E10-T1 Completed.
 
 ### Evidence
 
-None — Planned.
+Delivered as the effective Watchman binding and route-relative exclusions: schema v9 persists the four-part managed binding per route (`watch_bindings`; `TestE10T2WatchBindingPersistence` pins the upsert, round-trip, replace-whole, and typed not-found arms), resolved by the one server resolver install and status share (`resolveServerBinding`), read by remove from the persisted record plus the live watch list, and reported by `watchman test --route` from its logical root with no server contact (`TestE10T2AncestorRootBindingLifecycle` drives the whole set against the real Watchman over a disposable nested tree: the ancestor is watched first so the configured nested root binds ancestrally, the installed definition carries `relative_root` `workspace/vault`, the persisted record round-trips, status reports the identical binding and patterns, test reports the persisted record, and remove proves the managed trigger absent on every watched root including a stray copy planted on a second watched root — AC-601 and AC-603; `TestE10T2DriftDetection` pins the OPS-010 drifted state after the recorded topology moves). Installation subtree-constrains the trigger through `relative_root` (`TestE10T2ManagedTriggerSubtreeConstraint`), a reinstall after the watch moved removes the stale managed trigger from the previous actual root, and `IsWatched` treats a root nested under a watched ancestor as watched with the filesystem-root watch covering everything (`TestE10T2CoversRoot`). The dispatch-side binding validation accepts the frozen-evidence environment form — WATCHMAN_RELATIVE_ROOT as the subdirectory's absolute path (trigger-invocation-environment corpus) — plus the persisted relative form, both only through the exact persisted binding, so a forged or drifted ancestor pair fails closed (`TestE10T2ValidateBindingAncestorFailsClosed` at the adapter, `TestE10T2DispatchValidatesAncestorBinding` end to end: no binding refuses, the exact binding dispatches, drift refuses again). Exclusions gained exact-directory semantics — a pattern matching a path prefix at a segment boundary excludes the whole subtree — alongside exact files, file globs, and recursive directories, all configured-root-relative and evaluated before any read (`TestE10T2ExclusionFormsConfiguredRootRelative`, `TestE10T2ExclusionRunsBeforeInclude`, `TestE10T2DirectoryExclusionBoundaries`; `TestE10T2ExcludedAndOutOfRootChangesCreateNoRecords` proves the excluded-only burst drops with no observation beyond the drop lineage, no intent, and no hash — AC-602), with the segment DP deduplicated behind one `matchRow` shared by the whole-path and directory-aware matchers. The real-Watchman tests drop their disposable watches on cleanup so repeated runs no longer exhaust FSEvent streams. Verified by `make verify` on darwin/arm64 (all checks green, test-race included) against the frozen Watchman 2026.07.27.00 baseline. Reviewed through two full-target Mulgae rounds (`r_01a03a5e-eb51-7f1c-a743-b616115d6d2c`, remediation-eligible: ci pass, coverage complete, publication committed, zero findings — its reports' verified in-scope observations were remediated in-tree: the frozen-evidence absolute WATCHMAN_RELATIVE_ROOT form the validation had rejected, the stale-trigger self-heal on the previous actual root after topology drift, status drifted outranking missing with the persisted binding surfaced on the not-watched path, the single shared binding loader, the deduplicated segment DP, the filesystem-root coverage fix, the CHANGELOG/configuration-spec/section-numbering documentation sync, and the FSEvent watch hygiene across every real-Watchman test; `r_01a03a7f-3731-749b-9f29-a517f6cc2ca7`, hardening-deferral-eligible: ci pass, coverage complete, publication committed, zero findings, every role confirming the remediations closed — the residual advisory observations carry to the E10 epic validation audit and the E10-T3 documentation-truth pass: the watch-binding row having no removal path at `watchman remove`, the remaining duplicate heading number in watchman-integration.md, the untested install-self-heal and status-drift arms, remove's same-name deletion across every watched root on a shared server, the textual configured-root drift comparison, the synthesized never-actual fallback binding, the install-persist-failure envelope, the three-site stored-to-effective mapping, the cli-spec's undocumented new surfaces, and the end-to-end real-trigger firing limitation the managed command's test-binary argv imposes). Structured extraction was reports_only in both rounds; the accepted reports remain authoritative. Changelog 1.1.3.
 
 ## E10-T3: Source and Reconciliation Integrity Gate G6
 

@@ -1,11 +1,13 @@
 package sqlite
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"time"
 
+	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 	"github.com/irootkernel/agent-dispatch/internal/domain/state"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
@@ -387,4 +389,48 @@ func normalizeTimestamp(ts string) string {
 		return ts
 	}
 	return parsed.UTC().Truncate(time.Second).Format(time.RFC3339)
+}
+
+// The watch-binding record reuses the watchman adapter's Binding type
+// (the source contract owns the shape; the importlint layer rules allow
+// adapter-to-adapter and one precedent exists — recorded here so the
+// direction is a settled choice, not an accident).
+
+// ErrWatchBindingNotFound reports no persisted managed Watchman binding
+// for the route (E10-T2, SRC-009): the lifecycle surfaces materialize it
+// through install, and the dispatch-side ancestor-root validation treats
+// its absence as fail-closed.
+var ErrWatchBindingNotFound = errors.New("watch binding not found")
+
+// SaveWatchBinding upserts the route's persisted managed Watchman
+// binding (E10-T2, SRC-009): one record per route carrying the four
+// distinct binding values every lifecycle command resolves and reports
+// identically.
+func (s *Store) SaveWatchBinding(ctx context.Context, b watchman.Binding) error {
+	_, err := s.ExecContext(ctx, `INSERT INTO watch_bindings
+		(route_id, resource_id, configured_root, actual_root, relative_root, trigger_name, updated_at)
+		VALUES (?,?,?,?,?,?,?)
+		ON CONFLICT(route_id) DO UPDATE SET resource_id=excluded.resource_id, configured_root=excluded.configured_root,
+		actual_root=excluded.actual_root, relative_root=excluded.relative_root, trigger_name=excluded.trigger_name, updated_at=excluded.updated_at`,
+		b.RouteID, b.ResourceID, b.ConfiguredRoot, b.ActualRoot, b.RelativeRoot, b.TriggerName, b.UpdatedAt)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// LoadWatchBinding returns the route's persisted managed Watchman
+// binding, or ErrWatchBindingNotFound when install never persisted one.
+func (s *Store) LoadWatchBinding(ctx context.Context, routeID string) (watchman.Binding, error) {
+	var b watchman.Binding
+	err := s.QueryRowContext(ctx, `SELECT route_id, resource_id, configured_root, actual_root, relative_root, trigger_name, updated_at
+		FROM watch_bindings WHERE route_id = ?`, routeID).
+		Scan(&b.RouteID, &b.ResourceID, &b.ConfiguredRoot, &b.ActualRoot, &b.RelativeRoot, &b.TriggerName, &b.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return watchman.Binding{}, fmt.Errorf("%w: route %s", ErrWatchBindingNotFound, routeID)
+	}
+	if err != nil {
+		return watchman.Binding{}, err
+	}
+	return b, nil
 }

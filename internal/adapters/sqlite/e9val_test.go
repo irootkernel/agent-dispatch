@@ -45,7 +45,8 @@ func TestE9ValidationMigrationV7BackfillsAndPropagates(t *testing.T) {
 		`ALTER TABLE work_receipts DROP COLUMN route_revision`,
 		`ALTER TABLE quarantine_items DROP COLUMN route_revision`,
 		`ALTER TABLE resources DROP COLUMN observation_revision`,
-		`DELETE FROM schema_migrations WHERE version IN (7, 8)`,
+		`DROP TABLE watch_bindings`,
+		`DELETE FROM schema_migrations WHERE version IN (7, 8, 9)`,
 	} {
 		if _, err := s.Exec(stmt); err != nil {
 			t.Fatalf("rewind %q: %v", stmt, err)

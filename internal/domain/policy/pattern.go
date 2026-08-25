@@ -218,7 +218,11 @@ func (e *Engine) Classify(path string) (Status, error) {
 	if e.fold {
 		names = foldAll(names)
 	}
-	if matchAny(e.exclude, names) || !matchAny(e.include, names) {
+	// Exclusions are directory-aware (E10-T2, PTH-009): an
+	// exact-directory exclusion like "Secrets" excludes the whole
+	// subtree, while include, protected, and immutable keep whole-path
+	// semantics.
+	if matchAnyDirAware(e.exclude, names) || !matchAny(e.include, names) {
 		return StatusExcluded, nil
 	}
 	if matchAny(e.protected, names) {
@@ -272,12 +276,47 @@ func matchAny(set [][]segment, names []string) bool {
 	return false
 }
 
+// matchAnyDirAware matches an exclusion set against the whole path or
+// any of its ancestor directories, so an exact-directory pattern (one
+// naming a directory without a trailing glob) excludes everything inside
+// that directory (E10-T2, PTH-009).
+func matchAnyDirAware(set [][]segment, names []string) bool {
+	for _, pat := range set {
+		if matchSegmentsDirAware(pat, names) {
+			return true
+		}
+	}
+	return false
+}
+
 // matchSegments matches compiled pattern segments against path segments in
 // O(len(pat)*len(names)) dynamic programming, so any number of `**`
 // segments cannot cause exponential backtracking. `**` matches zero or
-// more whole segments; `*` and `?` stay inside one segment.
+// more whole segments; `*` and `?` stay inside one segment. Both the
+// whole-path and the directory-aware matchers read the one DP row, so
+// they can never silently diverge (round-1 review).
 func matchSegments(pat []segment, names []string) bool {
-	// dp[j] is true when the pattern consumed so far matches names[:j].
+	dp := matchRow(pat, names)
+	return dp[len(names)]
+}
+
+// matchSegmentsDirAware reports whether the pattern matches the whole
+// path or consumes any proper ancestor prefix: the same DP row already
+// evaluates every prefix, so the directory semantics is one scan of the
+// final row.
+func matchSegmentsDirAware(pat []segment, names []string) bool {
+	dp := matchRow(pat, names)
+	for j := 1; j <= len(names); j++ {
+		if dp[j] {
+			return true
+		}
+	}
+	return false
+}
+
+// matchRow computes the shared segment DP: dp[j] is true when the whole
+// pattern consumed so far matches names[:j].
+func matchRow(pat []segment, names []string) []bool {
 	dp := make([]bool, len(names)+1)
 	dp[0] = true
 	for i := 0; i < len(pat); i++ {
@@ -298,7 +337,7 @@ func matchSegments(pat []segment, names []string) bool {
 		}
 		dp[0] = false
 	}
-	return dp[len(names)]
+	return dp
 }
 
 // matchSegment implements single-segment glob matching with `*` (any run

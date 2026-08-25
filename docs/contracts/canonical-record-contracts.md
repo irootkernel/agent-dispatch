@@ -49,7 +49,7 @@ Dry-run output omits persistent IDs that would imply a committed record.
 
 See `schemas/dispatch-intent.schema.json`.
 
-The `request` object is immutable and stores the logical Hermes task request defined in `docs/02-contracts/hermes-task-contract.md` §2 verbatim (`schemas/hermes-task-request.schema.json`). Envelope fields such as `dispatch_id`, `route`, `generation`, `idempotency_key`, and `content_fingerprint` are deliberately duplicated inside `request` so the record is a self-contained audit artifact. Resolved secret material is never included.
+The `request` object is immutable and stores the logical Hermes task request defined in `docs/contracts/hermes-task-contract.md` §2 verbatim (`schemas/hermes-task-request.schema.json`). Envelope fields such as `dispatch_id`, `route`, `generation`, `idempotency_key`, and `content_fingerprint` are deliberately duplicated inside `request` so the record is a self-contained audit artifact. Resolved secret material is never included.
 
 ## 5. Dispatch Receipt
 

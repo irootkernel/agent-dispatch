@@ -32,7 +32,7 @@ Document change
 
 The complete original request remains at the path above. This source record is
 intentionally concise: normative behavior is restated under stable IDs in
-`docs/00-sot/required-spec.md`, design decisions live in ADR-0016 through
+`docs/specs/required-spec.md`, design decisions live in ADR-0016 through
 ADR-0019, and implementation ownership lives in roadmap epics E10 through E13.
 
 ## Accepted Clarifications

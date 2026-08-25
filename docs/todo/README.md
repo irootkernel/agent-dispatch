@@ -1,4 +1,7 @@
-# Future Work
+# TODO and Future Work
+
+This directory is the sole owner of future epic-sized candidates that have not
+entered the roadmap. Items here have no roadmap identity or lifecycle status.
 
 Future work is not permission to partially implement these features during v0.1 tasks. Each item requires a new roadmap, requirement changes, and where noted a new ADR/security review.
 

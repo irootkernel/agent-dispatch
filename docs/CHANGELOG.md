@@ -1,10 +1,22 @@
 # SOT Changelog
 
+## 1.1.1 - 2026-08-25
+
+D-026 migrates the documentation package to explicit canonical role owners
+without changing product behavior or roadmap lifecycle:
+
+- specifications, architecture, ADRs, implementation tips, roadmap, deferred feedback, and TODO each have one top-level owner and README index;
+- contracts, operations, and source provenance remain distinct top-level supporting collections with their owning role and precedence recorded in `docs/README.md`;
+- the v0.1.5 feature map connects the four approved capability groups to G6-G9 and E10-E13 while keeping detailed requirements, design, and lifecycle authority separate;
+- every tracked live path reference, traceability input/output, validation instruction, and manifest entry moves atomically to the new tree;
+- the traceability drift guard compares the generated matrix with its pre-run content, preserving the stale-file failure without depending on staging or Git-index state;
+- all established E/T identities, 14 epics, 75 tasks, statuses, completed history, the v0.1.4 shipped boundary, and the v0.1.5 planned boundary remain unchanged.
+
 ## 1.1.0 - 2026-08-25
 
 D-025 approves the v0.1.5 planned baseline without implementing or releasing it:
 
-- the accepted Hermes operations request is retained under `docs/99-source/`, with the clean config-v1 cutover, no-Hermes-change boundary, and partial/blocked work policy recorded as owner clarifications;
+- the accepted Hermes operations request is retained under `docs/source/`, with the clean config-v1 cutover, no-Hermes-change boundary, and partial/blocked work policy recorded as owner clarifications;
 - ADR-0016 through ADR-0019 freeze aggregate destination lanes, capability-probed Hermes compatibility, resource observation fencing, and the durable notification outbox;
 - required-spec and acceptance criteria gain the Watch binding, reconciliation, Hermes preflight, fan-out, work receipt, setup/help, and notification contracts plus planned gates G6-G9;
 - roadmap epics E10-E13 add 15 Planned tasks, bringing the package to 14 epics and 75 tasks (60 Completed, E10-T1 next); v0.1.4 remains the shipped release;
@@ -306,7 +318,7 @@ E7-T1: documentation truth restored after the 2026-08-22 MVP compliance review:
 
 - every surviving false verification claim is corrected at its source with one accurate statement: no successful `make verify` run on a supported Linux host is recorded, hosted CI is not used, and the review's own diagnostic linux/arm64 container runs failed (exit 2). Corrected locations: the roadmap's CI-based acceptance and evidence wording (E1-T1, E6-T2, E6-T3, E6-T4, including the "all MUST requirements pass" acceptance bullet, now marked superseded by the open 14 MUST gaps under D-017), the AC-505 criterion and the charter's success definition (a supported Linux host, with the v0.1.1 exception recorded), the record-contract and examples README validation sentences, the implementation-guide CGO policy row, and the 1.0.10/1.0.11 entries below (inline markers);
 - `docs/README.md` and `docs/VALIDATION.md` align on SOT 1.0.14;
-- `docs/VALIDATION.md` is truthful about its evidence: the header and package statistics are current (12 schemas, 8 epics, 45 tasks, the archived review report included), the em-dash check is scoped to what is true (`docs/docs/00-sot/`), the G2 crash-boundary scope states which boundaries are in-process only, AC-203 and AC-207 rows carry the review's corrections (hollow fake-sink assertion; always-skipping migration test) with their E7-T2/E7-T4 restoration owners, the G4 header records the store-direct follow-up-activation bypass, the G5 section states AC-505's status and the failed diagnostic runs, and the nonexistent `TestG2MigrationInterruptedUpgrade` citation is removed;
+- `docs/VALIDATION.md` is truthful about its evidence: the header and package statistics are current (12 schemas, 8 epics, 45 tasks, the archived review report included), the em-dash check is scoped to what is true (`docs/specs/`), the G2 crash-boundary scope states which boundaries are in-process only, AC-203 and AC-207 rows carry the review's corrections (hollow fake-sink assertion; always-skipping migration test) with their E7-T2/E7-T4 restoration owners, the G4 header records the store-direct follow-up-activation bypass, the G5 section states AC-505's status and the failed diagnostic runs, and the nonexistent `TestG2MigrationInterruptedUpgrade` citation is removed;
 - the roadmap's status artifacts agree (task index, current-state counts, and epic status carry E7-T1 In Progress);
 - no source code changed; `make verify` passes with the corrected package.
 
@@ -360,7 +372,7 @@ E6-T3: packaging and scheduled reconciliation (SCP-008, OPS-006, OPS-007, OPS-00
 - the scheduling examples exist and are validated: the launchd LaunchAgent plist (`plutil -lint` on macOS), the systemd --user service and timer (`systemd-analyze verify` on Linux), and the uninstall script (`sh -n`), wired as `make schedule-check` inside `make verify` so each host lints its own artifact where the tool exists (SCP-008, where possible; corrected in 1.0.14: hosted CI is not used); both schedules invoke the verified `reconcile --reason scheduled` one-shot shape with no daemon, omitting `--submit` before the production gate;
 - `agent-dispatch completion bash|zsh` emits the static v0.1 command-tree completion, completing the registered CLI tree;
 - `agent-dispatch maintenance backup --output <path>` writes the runbook §8 built-in backup: an owner-only `VACUUM INTO` snapshot with a post-write quick check that refuses to overwrite (cli-spec §11 updated);
-- `docs/docs/05-operations/installation.md` documents the install, platform config/state paths (macOS and XDG Linux), first-use clean-host scenario, daily scheduling, upgrade, backup, and uninstall procedures;
+- `docs/operations/installation.md` documents the install, platform config/state paths (macOS and XDG Linux), first-use clean-host scenario, daily scheduling, upgrade, backup, and uninstall procedures;
 - the uninstall example follows runbook §10 and retains SQLite and configuration by design — `--purge-state` only prints the manual backup guidance; the acceptance lines are pinned by tests (clean-host init through the default paths with owner-only perms and idempotent refusal, backup standalone-open and integrity, schedule shapes, no recursive deletion);
 - the Linux CI leg of `make verify` (existing ubuntu-latest matrix) validates the binary, configuration, SQLite, and — with this change — the systemd unit syntax. (Corrected in 1.0.14: no CI run was ever recorded and no successful Linux `make verify` exists; this claim was false as written.)
 
@@ -509,14 +521,14 @@ Implementation bootstrap errata (E1-T1):
 
 ## 1.0.3 - 2026-08-19
 
-Design-review errata on 1.0.2 (see `docs/00-sot/decision-log.md`):
+Design-review errata on 1.0.2 (see `docs/specs/decision-log.md`):
 
 - the route failure budget is an explicit `failure_budget` field (1 through 10, required, revision-affecting), ending the `execution_hints.max_attempts` overload introduced in D-009; the three budgets are documented together in configuration-spec §9 (D-013);
 - completed the partially applied 1.0.2 fixes: no remaining "trusted environment" label in the architecture overview, `SinkCapabilities` no longer embeds `maximum_request_bytes`, and `work-receipt.schema.json` enforces the closed failure-code set with a required non-null code on failed receipts (D-014).
 
 ## 1.0.2 - 2026-08-19
 
-Multi-agent design-review errata (see `docs/00-sot/decision-log.md`):
+Multi-agent design-review errata (see `docs/specs/decision-log.md`):
 
 - made policy-driven unsafe-path quarantine expressible in the closed error registry via `unsafe_path_quarantined` (exit class 5) (D-007);
 - clarified decision lineage: a policy decision references either an immutable batch or a durable generation lineage, resolving the follow-up and reconciliation conflict with invariant 1 (D-008);
@@ -527,7 +539,7 @@ Multi-agent design-review errata (see `docs/00-sot/decision-log.md`):
 
 ## 1.0.1 - 2026-08-19
 
-Design-review errata and post-baseline decisions (see `docs/00-sot/decision-log.md`):
+Design-review errata and post-baseline decisions (see `docs/specs/decision-log.md`):
 
 - made the Hermes logical task request single-sourced in the task contract, added `hermes-task-request.schema.json`, and constrained `dispatch-intent.request` with a `$ref` to it (D-001);
 - enumerated error categories 1:1 with exit-code classes, closed the error code registry with per-code category/exit mapping, assigned the adapter error codes, and defined exit code 1 as never emitted with panic recovery to exit 40 (D-002);

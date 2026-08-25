@@ -29,7 +29,7 @@ has been replaced by the Go Draft 2020-12 validator (D-015).
 ## Workflow rules
 
 Task order, status vocabulary, transitions, and the single-active-task
-rule are defined in `docs/docs/03-roadmap/task-execution-rules.md` and are
+rule are defined in `docs/roadmap/task-execution-rules.md` and are
 authoritative. Every task must add or update tests, documentation, and
 traceability before completion (TST-009): update the roadmap status,
 regenerate the traceability matrix (`make traceability`), and refresh the

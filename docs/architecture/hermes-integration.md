@@ -75,7 +75,7 @@ Route validation compares `required_capabilities` with actual capabilities. A mi
 
 ## 5. Logical Kanban Request
 
-The core supplies a target-neutral request to the adapter. Its shape, field names, and schema are defined once in [`docs/02-contracts/hermes-task-contract.md`](../02-contracts/hermes-task-contract.md) §2 (`schemas/hermes-task-request.schema.json`); this document does not restate them.
+The core supplies a target-neutral request to the adapter. Its shape, field names, and schema are defined once in [`docs/contracts/hermes-task-contract.md`](../contracts/hermes-task-contract.md) §2 (`schemas/hermes-task-request.schema.json`); this document does not restate them.
 
 The adapter maps this request to the real public Hermes interface. It does not add semantic instructions.
 

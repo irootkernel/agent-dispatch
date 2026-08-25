@@ -117,7 +117,7 @@ earlier "six" undercount and adds the undocumented packages):
 
 - `LICENSE` at the repository root was absent through v0.1.0 and added
   2026-08-23 (M-27), together with
-  `docs/04-implementation/dependency-licenses.md`.
+  `docs/implementation-tips/dependency-licenses.md`.
 - `migrations/` is an empty untracked directory: SQL migrations live
   inside `internal/adapters/sqlite` (schema.go consts, migrate.go) by
   D-015's single-entrypoint design; the directory exists only for some

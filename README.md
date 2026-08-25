@@ -10,7 +10,7 @@ under [`docs/`](docs/README.md); start there.
 - `cmd/agent-dispatch/` CLI entry point.
 - `internal/` application services, domain, ports, adapters, config, CLI,
   observability, and platform paths (see
-  `docs/docs/04-implementation/repository-layout.md`).
+  `docs/implementation-tips/repository-layout.md`).
 - `internal/schemavalid/` Draft 2020-12 validator for the SOT schema and
   example documents.
 - `internal/importlint/` package dependency-direction enforcement.
@@ -35,5 +35,5 @@ envelope.
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). The roadmap under
-`docs/docs/03-roadmap/roadmap.md` is authoritative for task order and
+`docs/roadmap/roadmap.md` is authoritative for task order and
 status.

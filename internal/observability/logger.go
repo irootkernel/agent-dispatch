@@ -1,7 +1,7 @@
 // Package observability implements the structured operational log
 // (OPS-001, SEC-007): one JSON object per line on standard error, the
 // stable event-name vocabulary from
-// docs/docs/01-architecture/observability-and-operations.md §3, the
+// docs/architecture/observability-and-operations.md §3, the
 // causal correlation fields from §2, the level semantics from §4, and
 // the path-privacy policy from retention-and-privacy.md §4. Log lines
 // never carry note bodies, resolved secrets, or authorization material;

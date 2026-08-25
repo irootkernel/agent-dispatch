@@ -8,7 +8,7 @@ superseded history), generated from the verified `reconcile` and
 the launchd artifact on macOS and the CLI test suite pins the safety
 properties. Replace the placeholder binary path, route id, and
 review the uninstall script before use — see
-`docs/docs/05-operations/installation.md` for the full install,
+`docs/operations/installation.md` for the full install,
 schedule, upgrade, and backup procedures.
 
 - `agent-dispatch-reconcile.launchd.plist.example` — macOS LaunchAgent

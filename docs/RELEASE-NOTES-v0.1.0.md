@@ -48,7 +48,7 @@ restore the pre-upgrade backup per the installation guide.
 
 ## Known deferred work
 
-See `docs/future-work.md`: managed daemon, multi-vault certification,
+See `docs/todo/README.md`: managed daemon, multi-vault certification,
 MCP server, additional source adapters, and the optional Hermes
 management plugin remain future work. The post-closeout hardening
 deferrals recorded in the E6 member-task commits are reconciled by the

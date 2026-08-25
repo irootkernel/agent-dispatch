@@ -39,7 +39,7 @@ precedence over skill defaults.
 ### Repository overrides
 
 - Source of truth: `docs/` is the specification package; the authoritative roadmap
-  is `docs/docs/03-roadmap/roadmap.md`.
+  is `docs/roadmap/roadmap.md`.
 - Verification: `make verify` (D-015) is the single deterministic entrypoint covering
   format, vet, staticcheck, import direction, unit and race tests, docs manifest
   checksums, schema/example validation, and traceability regeneration.

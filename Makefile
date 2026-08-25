@@ -77,12 +77,12 @@ schema-validation:
 # Regenerate the traceability matrix and fail if it drifted from the
 # roadmap and required-spec.
 traceability:
-	python3 docs/scripts/generate-traceability.py
-	@if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
-	  echo "traceability drift check requires a git repository"; exit 1; \
-	fi
-	@git diff --quiet -- docs/docs/00-sot/traceability-matrix.md || \
-	  (echo "traceability-matrix.md is stale; commit the regenerated file"; exit 1)
+	@trace_before=$$(mktemp) || exit 1; \
+	 trap 'rm -f "$$trace_before"' EXIT HUP INT TERM; \
+	 cp docs/specs/traceability-matrix.md "$$trace_before" || exit 1; \
+	 python3 docs/scripts/generate-traceability.py || exit 1; \
+	 cmp -s "$$trace_before" docs/specs/traceability-matrix.md || \
+	   { echo "traceability-matrix.md was stale; keep the regenerated file"; exit 1; }
 
 verify: go-version-check build fmt-check vet staticcheck check-imports test test-race manifest-check schema-validation traceability schedule-check
 	@echo "verify: all checks passed"

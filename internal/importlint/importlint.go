@@ -1,5 +1,5 @@
 // Command importlint enforces the package dependency direction rules from
-// docs/docs/04-implementation/repository-layout.md so the skeleton stays
+// docs/implementation-tips/repository-layout.md so the skeleton stays
 // enforceable from the first commit:
 //
 //   - internal/domain imports nothing from internal/{app,config,cli,

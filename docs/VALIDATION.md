@@ -1,7 +1,7 @@
 # SOT Package Validation
 
 > **Validated:** 2026-08-26 (E10 delivers gate G6; implementation gates G7-G9 remain Planned)
-> **Package target:** Agent Dispatch SOT 1.1.1 / implementation v0.1.5 (planned); v0.1.4 is shipped
+> **Package target:** Agent Dispatch SOT 1.1.4 / implementation v0.1.5 (planned); v0.1.4 is shipped
 
 ## Completed Checks
 

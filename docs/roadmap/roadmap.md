@@ -13,10 +13,10 @@
 | Shipped release | v0.1.4 |
 | Planned SOT baseline | 1.1.0 ([D-025](../specs/decision-log.md)) |
 | Release target | v0.1.5 |
-| Current epic | E10 (In Progress) |
+| Current epic | E11 (Planned by D-025) |
 | Current active task | None |
-| Next task | E10-T3 |
-| Completed tasks | 62 / 75 |
+| Next task | E11-T1 |
+| Completed tasks | 63 / 75 |
 | Planned tasks | 12 / 75 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
@@ -43,7 +43,7 @@
 | E7 | MVP Compliance Review Remediation | **Completed** | 12 | MUST closure + v0.1.1 |
 | E8 | v0.1.2 Compliance Remediation | **Completed** | 6 | MUST closure + v0.1.2 |
 | E9 | Deferred-Inventory Hardening | **Completed** | 9 | Deferred closure + review remediation + v0.1.4 |
-| E10 | Source and Reconciliation Integrity | **In Progress** | 3 | G6 |
+| E10 | Source and Reconciliation Integrity | **Completed** | 3 | G6 |
 | E11 | Hermes Preflight and Operator Setup | **Planned** | 4 | G7 |
 | E12 | Multi-Destination Lifecycle | **Planned** | 4 | G8 |
 | E13 | Notifications and v0.1.5 Release | **Planned** | 4 | G9 |
@@ -114,7 +114,7 @@
 | 60 | E9-T9 | Completed | Documentation truth resynchronized and v0.1.4 released |
 | 61 | E10-T1 | Completed | Resource observation fence and bounded reconciliation reads |
 | 62 | E10-T2 | Completed | Effective Watchman binding and route-relative exclusions |
-| 63 | E10-T3 | Planned | Source/reconciliation integrity gate G6 |
+| 63 | E10-T3 | Completed | Source/reconciliation integrity gate G6 |
 | 64 | E11-T1 | Planned | Config v1 destination cutover and forward migration |
 | 65 | E11-T2 | Planned | Hermes 0.19.1+ capability probe and evidence cache |
 | 66 | E11-T3 | Planned | Destination profile/skill validation and route preflight |
@@ -2532,7 +2532,7 @@ Delivered as the documentation truth resynchronization and the v0.1.4 release (F
 
 # E10: Source and Reconciliation Integrity
 
-**Epic status:** In Progress
+**Epic status:** Completed (2026-08-26: all three tasks Completed and gate G6 evidenced in VALIDATION.md)
 **Purpose:** Close the two current-state correctness defects before widening dispatch behavior.
 **Gate:** G6
 
@@ -2611,7 +2611,7 @@ Delivered as the effective Watchman binding and route-relative exclusions: schem
 
 ## E10-T3: Source and Reconciliation Integrity Gate G6
 
-**Status:** Planned
+**Status:** Completed
 **Design Gate impact:** Not required; this task validates the accepted design.
 
 ### Objective
@@ -2642,7 +2642,7 @@ E10-T2 Completed.
 
 ### Evidence
 
-None — Planned.
+Delivered as the source and reconciliation integrity gate: the executable G6 suite drives every criterion through the real CLI surface — `TestG6AC601EffectiveBindingReported` (the effective binding over a disposable nested real-Watchman tree: configured root, actual ancestor root, relative root, subtree-constrained trigger, and the identical binding through status and `watchman test`), `TestG6AC602OutOfRootAndExcludedCreateNoRecords` (the excluded burst drops with zero intents and zero excluded-path digests while the in-scope burst under the same ancestor environment creates exactly one task), `TestG6AC603RemoveProvesAbsenceEverywhere` (a stray managed trigger planted on a second watched root; the removal proof re-lists every watched root), `TestG6AC604FencedReconciliation` (a real ingestion landing inside the enumeration window; either arm ends with the newer fact in the retry's stored snapshot, with the deterministic refusal pinned by the service-level trap and named in the VALIDATION table), `TestG6AC605BoundedHashingEvidence` (the growing file starts inside the bound so growth itself pushes the read past it; a digested file carries no evidence flags and an unknown digest carries exactly one evidence entry), and `TestG6FreshDatabaseMigration` (a brand-new state directory migrates to the v9 baseline on first operator use and the version surface reports the shipped schema range). The documentation truth synchronized: VALIDATION.md carries the Gate G6 evidence table with the member-task deterministic proofs named per criterion and the review residuals recorded for the epic audit, OPS-012 names the configured hash bound, the cli-spec documents the binding-aware watchman command surfaces, and the watchman-integration section numbering is canonical. The round-1 remediations also closed the suite's long-standing real-Watchman instability at its root: test-installed triggers no longer spawn nested full-suite runs (the trigger-shaped invocation of the test binary is a documented no-op through TestMain) and the WatchDelete response-field fix makes every real-Watchman test drop its disposable watch — a full cli+watchman suite run now leaves zero residual watches and completes in a fraction of the degraded time. Verified by `make verify` on darwin/arm64 (all checks green, test-race included) against the frozen Watchman 2026.07.27.00 baseline. Reviewed through two full-target Mulgae rounds (`r_01a03ab4-ebd8-73a0-979e-54b1c037c393`, remediation-eligible: ci pass, coverage complete, publication committed, zero findings — its reports' verified in-scope observations were remediated in-tree: the architecture docs' stale hash-bound name and pre-remediation fence wording, the roadmap header arithmetic, the near-vacuous AC-605 postcondition replaced by the exact either-arm enforcement, the growing-file leg moved inside the bound, the gate suite's duplicated helpers unified with the e10t2 lifecycle helpers, and the fixture root resolved through the configuration loader; `r_01a03abf-6374-7784-adeb-05b54b20712f`, hardening-deferral-eligible: ci pass, coverage complete, publication committed, zero findings — the residual advisory observations carry to the E10 epic validation audit: the two surviving published `max_file_bytes` occurrences and the stale VALIDATION SOT-version line, the cli-spec's `not_watched` field-shape wording, the AC-604 concurrent-writer goroutine's swallowed failure modes, the watch-del confirmation parsing lacking a server-free assertion, the TestMain placement and its argv-shape duplication, and the ambient-environment-sensitive gate registration helper). Structured extraction was reports_only in both rounds; the accepted reports remain authoritative. Changelog 1.1.4.
 
 ---
 

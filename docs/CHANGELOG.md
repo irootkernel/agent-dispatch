@@ -1,5 +1,30 @@
 # SOT Changelog
 
+## 1.1.4 - 2026-08-26
+
+E10-T3: the source and reconciliation integrity gate G6 closes (SRC-009
+through SRC-012, PTH-009, DUR-013 through DUR-015, OPS-010, OPS-012,
+TST-010, TST-011):
+
+- the executable gate suite drives AC-601 through AC-605 through the
+  real CLI surface: the effective binding over a disposable nested
+  real-Watchman tree, the out-of-root and exclusion evidence, the
+  changed-topology removal proof, the fenced reconciliation with its
+  retry, and the bounded hashing evidence, plus the fresh-database
+  migration leg reporting the shipped schema range;
+- the per-criterion evidence table lands in VALIDATION.md under Gate
+  G6 with the member-task deterministic proofs named per criterion and
+  the review residuals recorded for the epic audit;
+- documentation truth synchronizes: OPS-012 names the configured hash
+  bound (`limits.max_hash_file_bytes`), the cli-spec documents the
+  binding-aware watchman install/status/remove/test surfaces, and the
+  watchman-integration section numbering is canonical;
+- the real-trigger test hygiene closes the suite's long-standing
+  watchman instability: test-installed triggers no longer spawn nested
+  full-suite runs (the trigger-shaped invocation of the test binary is
+  a documented no-op) and every real-Watchman test drops its disposable
+  watch, so repeated runs leave zero residual watches.
+
 ## 1.1.3 - 2026-08-26
 
 E10-T2: the effective Watchman binding and route-relative exclusions

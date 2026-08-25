@@ -131,8 +131,7 @@ Fixtures must cover:
 - non-UTF-8 or invalid path representation supported by the platform abstraction;
 - concurrent trigger processes.
 
-## 11. v0.1.5 Effective Binding Target
-
+## 12. v0.1.5 Effective Binding Target
 E10 replaces exact-root assumptions with the four-part managed binding defined
 in ADR-0018's companion design: configured root, actual Watchman root,
 configured-root-relative `relative_root`, and stable trigger name. Installation

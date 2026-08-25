@@ -237,7 +237,7 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | OPS-009 | Database migrations **MUST** be forward-only, transactional where SQLite permits, and tested against interrupted upgrades. |
 | OPS-010 | Status **MUST** expose configured and actual watch roots, relative root, effective patterns, trigger identity, and installed/missing/drifted state. |
 | OPS-011 | Status **MUST** distinguish detection, planning, quarantine, pending delivery, acceptance, running, work outcomes, unknown delivery, reconciliation, and manual intervention. |
-| OPS-012 | Reconciliation hashing **MUST** read at most `max_file_bytes + 1`; a stable over-bound file is quarantined and a file unstable twice remains explicit reconciliation evidence. |
+| OPS-012 | Reconciliation hashing **MUST** read at most `max_hash_file_bytes + 1` (the configured hash bound, `limits.max_hash_file_bytes`); a stable over-bound file is quarantined and a file unstable twice remains explicit reconciliation evidence. |
 | OPS-013 | Capability, profile, skill, Watchman, and reconciliation drift **MUST** be visible in status and eligible for configured notifications. |
 | OPS-014 | v0.1.5 configuration **MUST** retain `version: 1`, require `destinations[]`, and reject legacy `dispatch` with a concrete regeneration path. |
 | OPS-015 | Rollback **MUST** preserve the upgraded database separately and restore the verified pre-migration backup with the previous readable binary and configuration; down migrations are not required. |

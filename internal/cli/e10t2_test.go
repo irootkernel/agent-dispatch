@@ -136,11 +136,16 @@ func TestE10T2AncestorRootBindingLifecycle(t *testing.T) {
 		t.Fatalf("watch ancestor: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _, _, _ = runWatchmanArgs(t, configPath, "remove", "--yes")
+		_, _, errb, code := runWatchmanArgs(t, configPath, "remove", "--yes")
+		if code != 0 {
+			t.Logf("cleanup remove: %s", errb.String())
+		}
 		// The disposable tree's watch is dropped so repeated runs do not
 		// accumulate FSEvent streams (the managed remove never touches
 		// watch roots by design).
-		_ = client.WatchDelete(context.Background(), actual)
+		if err := client.WatchDelete(context.Background(), actual); err != nil {
+			t.Logf("cleanup watch-del %s: %v", actual, err)
+		}
 	})
 
 	res, _, errb, code := runWatchmanArgs(t, configPath, "install")
@@ -219,7 +224,11 @@ func TestE10T2AncestorRootBindingLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = client.WatchDelete(context.Background(), secondRoot) })
+	t.Cleanup(func() {
+		if err := client.WatchDelete(context.Background(), secondRoot); err != nil {
+			t.Logf("cleanup second watch-del %s: %v", secondRoot, err)
+		}
+	})
 	stray := watchman.ManagedTrigger("agent-dispatch.wiki.e10t2", []string{"/bin/true"}, "")
 	if _, err := client.TriggerInstall(ctx, secondRoot, stray); err != nil {
 		t.Fatalf("plant stray trigger: %v", err)
@@ -469,4 +478,19 @@ func TestE10T2DispatchValidatesAncestorBinding(t *testing.T) {
 		t.Fatalf("a drifted relative root must fail closed: %s", errb.String())
 	}
 	_ = sqlite.ErrWatchBindingNotFound
+}
+
+// TestMain guards the real-trigger lifecycle tests: a managed Watchman
+// trigger installed by a test fires this test binary as its command
+// (managedCommand pins os.Executable()), and a Go test binary invoked
+// directly runs the whole suite — recursively, with every nested run
+// installing and firing more triggers. Serving the trigger-shaped
+// invocation as a documented no-op keeps the lifecycle evidence honest
+// without the cascade (E10-T3; the managed command's production argv is
+// served by the installed binary, which a test binary cannot be).
+func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && os.Args[1] == "dispatch" {
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
 }

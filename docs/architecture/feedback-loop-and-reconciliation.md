@@ -150,5 +150,7 @@ The feedback loop runs independently per destination lane. A validated
 Hermes task acceptance and status remain evidence projections. Neither is work
 completion without an attributable receipt. Full reconciliation captures the
 resource observation revision before enumeration and commits only if it still
-matches. A conflict or twice-unstable file remains visible and requests another
-bounded reconciliation rather than overwriting newer facts.
+matches. A fence conflict stays a typed concurrent-change outcome with one due
+reconciliation; a stable over-bound file is explicit quarantine evidence and a
+twice-unstable file explicit reconciliation evidence, with both digests left
+unknown rather than overwriting newer facts.

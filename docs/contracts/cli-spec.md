@@ -101,11 +101,15 @@ Side-effect-free. Prints a versioned dispatch plan. It may read files under the 
 agent-dispatch watchman install --route <id> [--replace]
 ```
 
-Creates or verifies the route trigger. No replacement occurs without `--replace`.
+Creates or verifies the route trigger. No replacement occurs without `--replace`. Install resolves and persists the managed binding (E10-T2, SRC-009): the configured resource root, the actual watch root Watchman canonicalized (which may be an ancestor of the configured root), the configured-root-relative path between them, and the trigger name. When the actual root is an ancestor, the trigger is installed with `relative_root` so only the configured subtree can invoke the managed command; a reinstall after the watch moved also removes the stale managed trigger from the previous actual root. The success envelope reports the binding alongside the watch root and disposition.
 
 ### `watchman status`
 
-Shows installed vs expected trigger definition and source health.
+```text
+agent-dispatch watchman status --route <id>
+```
+
+Reports the same effective binding, the effective include/exclude patterns, the expected and installed trigger definitions, and the state: `installed`, `missing`, `diverged` (definition mismatch), or `drifted` (the persisted binding no longer matches the live watch topology). An unwatched configured root reports `not_watched` with the persisted binding when one exists.
 
 ### `watchman remove`
 
@@ -113,11 +117,15 @@ Shows installed vs expected trigger definition and source health.
 agent-dispatch watchman remove --route <id> --yes
 ```
 
-Removes only the exact managed trigger. It never removes the Watchman watch root automatically.
+Removes only the exact managed trigger, searching the persisted binding's actual root and every root the server currently watches (SRC-012): it succeeds only after re-listing proves the managed trigger absent on every applicable root, and reports the per-root proof. It never removes the Watchman watch root automatically.
 
 ### `watchman test`
 
-Uses a temporary or supplied fixture and prints normalized source input without Hermes side effects.
+```text
+agent-dispatch watchman test [--fixture <path>] [--route <id>]
+```
+
+Uses a temporary or supplied fixture and prints normalized source input without Hermes side effects. With `--route`, it also resolves and reports the same effective binding the other lifecycle commands use, from the persisted record (or the configured root with a trivial relative root when none is persisted) — with no server contact.
 
 ## 5. Dispatch Command
 

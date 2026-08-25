@@ -1,6 +1,6 @@
 # SOT Package Validation
 
-> **Validated:** 2026-08-25 (D-026 canonical documentation-role migration; implementation gates G6-G9 remain Planned)
+> **Validated:** 2026-08-26 (E10 delivers gate G6; implementation gates G7-G9 remain Planned)
 > **Package target:** Agent Dispatch SOT 1.1.1 / implementation v0.1.5 (planned); v0.1.4 is shipped
 
 ## Completed Checks
@@ -50,7 +50,7 @@ All package checks are reachable from the repository root through the Makefile, 
 
 These checks cannot be completed by a design-only SOT package:
 
-- gates G6 through G9 and AC-601 through AC-906; their task owners are E10 through E13 and no executable evidence is claimed by SOT 1.1.1;
+- gates G7 through G9 and AC-701 through AC-906; their task owners are E11 through E13 and no executable evidence is claimed for them yet (gate G6 and AC-601 through AC-605 are delivered by E10 and evidenced below);
 - the v0.1.5 executable config/record schemas, examples, packaged skills, database migrations, code, release notes, artifacts, and tag;
 
 - automated cross-reference/filename integrity and roadmap-prose consistency assertions for the docs package (currently covered by the manual checks above), deferred to a future internal task;
@@ -161,6 +161,21 @@ Verified 2026-08-22 by executable acceptance tests in `internal/cli/e6t4_test.go
 | AC-506 release artifacts present and version-compatible | `TestG5AC506ReleaseArtifactsPresent` selects the latest release notes semantically (numeric version components, never lexical), derives the version from that one file with a body assertion, proves the release-way build reports it, and — when the release artifacts are present (a fresh checkout without `make release` skips this leg) — verifies every `dist/SHA256SUMS` digest against the hashed artifact itself, not just the line structure (E8-T6 audit); the digest-identical double `make release VERSION=v0.1.2` and the tag close the set |
 
 Upgrade and backup rehearsal (release-checklist durability): `TestG5UpgradeAndBackupRehearsal` drives the documented procedure — built-in backup with verification, doctor, full integrity, one reconciliation — and restores the backup standalone with its lineage intact. The migration interruption and checksum-immutability evidence remains `internal/adapters/sqlite` (`TestBackupBeforeMigration`, `TestMigrationChecksumImmutability`, `TestNewerSchemaRefused`, `TestFreshAndMigratedSchemasIdentical`).
+
+## Gate G6: Source and Reconciliation Integrity (E10)
+
+Validated 2026-08-26 on darwin/arm64 against the frozen Watchman 2026.07.27.00 baseline with `make verify` all checks green (test-race included). Every criterion drives the real CLI surface; the deterministic interleaving and bound proofs run at the store and service levels and are named below.
+
+| Criterion | Evidence |
+|---|---|
+| AC-601 effective binding reported (configured root, actual ancestor root, relative root, subtree-constrained trigger) | `TestG6AC601EffectiveBindingReported` (real Watchman over a disposable nested tree; the ancestor is watched first so the configured root binds ancestrally), with `TestE10T2AncestorRootBindingLifecycle` driving install, status, and test through the identical resolver |
+| AC-602 out-of-root and excluded changes create no event, child task, hash, or notification | `TestG6AC602OutOfRootAndExcludedCreateNoRecords` (excluded burst drops with exactly one drop observation and zero intents and zero excluded-path digests while the in-scope burst under the same ancestor environment creates exactly one task), with `TestE10T2ExcludedAndOutOfRootChangesCreateNoRecords` and the exclusion-form suite `TestE10T2ExclusionFormsConfiguredRootRelative` |
+| AC-603 changed-topology remove proves no managed trigger on any watch root | `TestG6AC603RemoveProvesAbsenceEverywhere` (a stray managed trigger planted on a second watched root; the removal proof re-lists every watched root), with `TestE10T2AncestorRootBindingLifecycle`'s removal arm |
+| AC-604 stale snapshot refused, newer facts survive, one retryable reconciliation | `TestG6AC604FencedReconciliation` (a real ingestion landing inside the enumeration window; either arm ends with the newer fact in the stored snapshot after the retry), with the deterministic interleaving `TestE10T1ConcurrentFactUpdateSurvivesFullReconciliation` and the store-level CAS arms `TestE10T1ReplacePathFactsCAS` |
+| AC-605 bounded reads with explicit quarantine/reconciliation evidence | `TestG6AC605BoundedHashingEvidence` (stable over-bound file quarantined with an unknown digest; a growing file yields only a stable digest or explicit evidence), with the exact max+1 bound proof `TestE10T1BoundedReadNeverExceedsMaxPlusOne` and the stability predicate `TestE10T1HashStableRejectsChangedFile` |
+| fresh database migration and interrupted upgrade | `TestG6FreshDatabaseMigration` (a brand-new state directory migrates to the shipped v9 baseline on first operator use and the version surface reports schema range 1-9), with `TestFreshAndMigratedSchemasIdentical`, `TestE10T1MigrationV8BackfillAndIntegrity` (interrupted window heals on reopen), and `TestE10T2WatchBindingPersistence` |
+
+Residuals carried from the member-task reviews to the epic audit: the watch-binding row has no removal path at `watchman remove`; the install-self-heal and two status-drift arms lack dedicated tests; remove deletes a same-named trigger from every watched root on a shared server; the configured-root drift comparison is textual; the never-removed synthesized fallback binding and the install-persist-failure envelope; the three-site stored-to-effective mapping; and the end-to-end real-trigger firing limitation (the managed command pins this binary's dispatch argv, which a test binary cannot serve — the frozen corpus and the subtree-constrained definition cover that seam).
 
 ## MUST-Closure Matrix (E8-T6, D-020) — supersedes the E7-T12 matrix
 

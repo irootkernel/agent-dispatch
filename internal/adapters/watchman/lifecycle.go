@@ -133,17 +133,18 @@ func ManagedTrigger(name string, command []string, relativeRoot string) TriggerD
 
 // response is the common envelope of every watchman reply.
 type response struct {
-	Version     string              `json:"version"`
-	Error       string              `json:"error"`
-	Disposition string              `json:"disposition"`
-	TriggerID   string              `json:"triggerid"`
-	Deleted     *bool               `json:"deleted"`
-	Trigger     string              `json:"trigger"`
-	Triggers    []TriggerDefinition `json:"triggers"`
-	Watch       string              `json:"watch"`
-	Watcher     string              `json:"watcher"`
-	Clock       string              `json:"clock"`
-	Warning     string              `json:"warning"`
+	Version      string              `json:"version"`
+	Error        string              `json:"error"`
+	Disposition  string              `json:"disposition"`
+	TriggerID    string              `json:"triggerid"`
+	Deleted      *bool               `json:"deleted"`
+	WatchDeleted bool                `json:"watch-del"`
+	Trigger      string              `json:"trigger"`
+	Triggers     []TriggerDefinition `json:"triggers"`
+	Watch        string              `json:"watch"`
+	Watcher      string              `json:"watcher"`
+	Clock        string              `json:"clock"`
+	Warning      string              `json:"warning"`
 }
 
 // run executes one `-j` array command and parses the response, branching
@@ -351,7 +352,9 @@ func (c *Client) WatchDelete(ctx context.Context, root string) error {
 	if err != nil {
 		return err
 	}
-	if resp.Deleted == nil || !*resp.Deleted {
+	// watch-del confirms through its namesake member (the frozen
+	// interface reports {"watch-del": true}), not a "deleted" member.
+	if !resp.WatchDeleted {
 		return &LifecycleError{Command: "watch-del", Message: "watch was not deleted"}
 	}
 	return nil

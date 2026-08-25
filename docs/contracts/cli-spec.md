@@ -109,7 +109,7 @@ Creates or verifies the route trigger. No replacement occurs without `--replace`
 agent-dispatch watchman status --route <id>
 ```
 
-Reports the same effective binding, the effective include/exclude patterns, the expected and installed trigger definitions, and the state: `installed`, `missing`, `diverged` (definition mismatch), or `drifted` (the persisted binding no longer matches the live watch topology). An unwatched configured root reports `not_watched` with the persisted binding when one exists.
+Reports the same effective binding, the effective include/exclude patterns, the expected and installed trigger definitions, and the state: `installed`, `missing`, `diverged` (definition mismatch), or `drifted` (the persisted binding no longer matches the live watch topology). An unwatched configured root sets the separate `watch_root_state` member to `not_watched` (the `state` member stays `missing`, or `drifted` when a persisted binding is stale) and reports the persisted binding when one exists.
 
 ### `watchman remove`
 

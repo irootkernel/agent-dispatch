@@ -50,10 +50,11 @@ snapshot only in a transaction that still observes `N`. A mismatch preserves
 all newer facts, records a typed concurrent-change outcome, and leaves one due
 reconciliation generation.
 
-Hashing reads at most `max_hash_file_bytes + 1` (the configured hash bound, `limits.max_hash_file_bytes`). A stable over-bound file is
-quarantined without hashing. A file whose identity or size changes during the
-bounded read is retried once; a second instability is quarantined and requests
-reconciliation. No conflict or unstable-file path deletes newer evidence.
+Hashing reads at most `max_hash_file_bytes + 1` (the configured hash bound,
+`limits.max_hash_file_bytes`). A stable over-bound file is explicit quarantine
+evidence without hashing. A file whose identity or size changes during the
+bounded read is retried once; a second instability is explicit reconciliation
+evidence. No conflict or unstable-file path deletes newer evidence.
 
 ## 4. Aggregate Event and Destination Lanes
 

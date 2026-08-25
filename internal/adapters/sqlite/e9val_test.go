@@ -44,7 +44,8 @@ func TestE9ValidationMigrationV7BackfillsAndPropagates(t *testing.T) {
 		`ALTER TABLE dispatch_receipts DROP COLUMN route_revision`,
 		`ALTER TABLE work_receipts DROP COLUMN route_revision`,
 		`ALTER TABLE quarantine_items DROP COLUMN route_revision`,
-		`DELETE FROM schema_migrations WHERE version = 7`,
+		`ALTER TABLE resources DROP COLUMN observation_revision`,
+		`DELETE FROM schema_migrations WHERE version IN (7, 8)`,
 	} {
 		if _, err := s.Exec(stmt); err != nil {
 			t.Fatalf("rewind %q: %v", stmt, err)
@@ -55,8 +56,8 @@ func TestE9ValidationMigrationV7BackfillsAndPropagates(t *testing.T) {
 		t.Fatalf("re-applying migration v7 over the v6-era shape: %v", err)
 	}
 	var version int
-	if err := s.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 7 {
-		t.Fatalf("the ledger must record v7 as newest: %d %v", version, err)
+	if err := s.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != MaxSchemaVersion {
+		t.Fatalf("the ledger must record the current baseline as newest: %d %v", version, err)
 	}
 	for _, table := range []string{"dispatch_attempts", "dispatch_receipts", "work_receipts", "quarantine_items"} {
 		var rev string

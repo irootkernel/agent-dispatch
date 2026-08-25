@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -32,6 +33,23 @@ func (d Digest) String() string { return string(d) }
 func SumDigest(data []byte) Digest {
 	sum := sha256.Sum256(data)
 	return Digest("sha256:" + hex.EncodeToString(sum[:]))
+}
+
+// SumBounded reads at most max+1 bytes from r and hashes them, so a
+// growing stream can never push the read past the configured bound
+// (E10-T1, OPS-012: the read, not only the stat, is bounded). It
+// reports the bytes consumed and over=true when the stream carried
+// more than max, leaving the digest structurally unknown in that case.
+func SumBounded(r io.Reader, max int64) (digest Digest, n int64, over bool, err error) {
+	h := sha256.New()
+	n, err = io.Copy(h, io.LimitReader(r, max+1))
+	if err != nil {
+		return "", n, false, err
+	}
+	if n > max {
+		return "", n, true, nil
+	}
+	return Digest("sha256:" + hex.EncodeToString(h.Sum(nil))), n, false, nil
 }
 
 // NormalizePath validates and normalizes a relative path for canonical

@@ -55,8 +55,12 @@ func (s *Store) CommitLineage(ctx context.Context, lin ports.Lineage) error {
 // ingestion transaction (processing-pipeline §6 step 5, E7-T3/H-2): every
 // hashed path records its latest fact so the next arrival's unchanged
 // and metadata-only suppression is durable. A delete records absence; an
-// unhashed modify keeps the prior fact (conservative, never false).
+// unhashed modify keeps the prior fact (conservative, never false). Every
+// applied fact advances the resource's observation revision in the same
+// transaction (DUR-013), so a full reconciliation enumerating against an
+// older revision fences instead of overwriting these newer facts.
 func (s *Store) upsertPathFacts(tx *sql.Tx, resourceID string, changes []ports.ObservationChange, observedAt string) error {
+	applied := false
 	for _, c := range changes {
 		if c.AfterDigest == "" && c.ExistsAfter {
 			continue
@@ -66,6 +70,17 @@ func (s *Store) upsertPathFacts(tx *sql.Tx, resourceID string, changes []ports.O
 			resourceID, c.Path, c.AfterDigest, c.ExistsAfter, observedAt); err != nil {
 			return err
 		}
+		applied = true
+	}
+	if !applied {
+		return nil
+	}
+	res, err := tx.Exec(`UPDATE resources SET observation_revision = observation_revision + 1 WHERE resource_id = ?`, resourceID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("%w: resource %s", ports.ErrResourceNotFound, resourceID)
 	}
 	return nil
 }

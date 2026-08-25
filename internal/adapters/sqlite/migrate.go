@@ -39,6 +39,7 @@ var Migrations = []Migration{
 	{Version: 5, Name: "observation-position", SQL: schemaV5ObservationPosition},
 	{Version: 6, Name: "batch-sequence-watermark", SQL: schemaV6BatchSequenceWatermark},
 	{Version: 7, Name: "record-revision-columns", SQL: schemaV7RecordRevisionColumns},
+	{Version: 8, Name: "resource-observation-revision", SQL: schemaV8ResourceObservationRevision},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
@@ -482,4 +483,14 @@ CREATE INDEX idx_attempts_route_revision ON dispatch_attempts(route_revision);
 CREATE INDEX idx_receipts_route_revision ON dispatch_receipts(route_revision);
 CREATE INDEX idx_work_receipts_route_revision ON work_receipts(route_revision);
 CREATE INDEX idx_quarantine_route_revision ON quarantine_items(route_revision);
+`
+
+// schemaV8ResourceObservationRevision gives every resource the monotonic
+// path-fact observation revision (E10-T1, DUR-013): each durable path-fact
+// mutation advances it inside its own transaction, and full reconciliation
+// fences its snapshot replacement on the pre-enumeration value (DUR-014).
+// Existing rows backfill to revision 0 — the first fenced reconciliation
+// after the upgrade simply observes whatever the next mutation advances.
+const schemaV8ResourceObservationRevision = `
+ALTER TABLE resources ADD COLUMN observation_revision INTEGER NOT NULL DEFAULT 0 CHECK (observation_revision >= 0);
 `

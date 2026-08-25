@@ -102,8 +102,17 @@ type QuarantineStore interface {
 	// another actor marked inside the window is never wiped (cleared
 	// reports the miss).
 	ClearPendingReconcile(ctx context.Context, routeID string, expected bool, now string) (cleared bool, err error)
-	// ReplacePathFacts stores one full-scope path-fact snapshot.
-	ReplacePathFacts(ctx context.Context, resourceID string, facts []PathFact, observedAt string) error
+	// ObservationRevision returns the resource's current monotonic
+	// path-fact observation revision (DUR-013): full reconciliation reads
+	// it before enumeration so the snapshot replacement can fence on it.
+	ObservationRevision(ctx context.Context, resourceID string) (int64, error)
+	// ReplacePathFacts stores one full-scope path-fact snapshot through
+	// the observation fence (DUR-014): the replacement and the revision
+	// advancement commit atomically, and only when the resource's current
+	// observation revision still equals expectedRevision. A newer
+	// durable path-fact mutation refuses with ErrObservationConflict and
+	// leaves the stored facts untouched (DUR-015).
+	ReplacePathFacts(ctx context.Context, resourceID string, expectedRevision int64, facts []PathFact, observedAt string) error
 	// LoadPathFacts returns the stored full-scope snapshot.
 	LoadPathFacts(ctx context.Context, resourceID string) (map[string]PathFact, error)
 	// CommitReconcileDecision persists one batch-less reconciliation
@@ -123,6 +132,17 @@ type PathFact struct {
 	Exists     bool
 	ObservedAt string
 }
+
+// ErrObservationConflict reports the observation-fence refusal (E10-T1,
+// DUR-014): the resource's path-fact observation revision moved after the
+// caller's pre-enumeration read, so the full-snapshot replacement was
+// refused instead of overwriting newer durable facts.
+var ErrObservationConflict = errors.New("path-fact observation revision conflict")
+
+// ErrResourceNotFound reports a store call against a resource row that
+// does not exist; path-fact writers and readers treat it as a storage
+// failure, never a silent empty snapshot.
+var ErrResourceNotFound = errors.New("resource row not found")
 
 // ErrReasonRequired reports an operator resolution without a reason
 // (CLI-006: actor and reason are mandatory lineage).

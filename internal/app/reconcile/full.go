@@ -7,13 +7,11 @@ package reconcile
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -61,11 +59,24 @@ type FullResult struct {
 	// Skipped lists the entries the enumeration could not verify —
 	// unreadable subtrees and (E9-T2/M-24) escaping symlinks — so the
 	// operator sees exactly what the snapshot retained instead.
-	Skipped           []string `json:"skipped,omitempty"`
-	PendingReconcile  bool     `json:"pending_reconcile"`
-	DecisionID        string   `json:"decision_id"`
-	ReconcileDispatch string   `json:"reconcile_dispatch_id,omitempty"`
-	SnapshotStored    bool     `json:"snapshot_stored"`
+	Skipped []string `json:"skipped,omitempty"`
+	// ConcurrentChange reports the observation-fence refusal (E10-T1,
+	// DUR-015): a newer durable path-fact mutation landed inside this
+	// run's enumeration window, the stale snapshot was not stored, the
+	// newer facts stand, and one due reconciliation generation remains.
+	ConcurrentChange bool `json:"concurrent_change,omitempty"`
+	// QuarantinedOverBound lists stable files beyond the configured
+	// hashing bound — explicit quarantine evidence; their digests stay
+	// unknown (E10-T1, OPS-012).
+	QuarantinedOverBound []string `json:"quarantined_over_bound,omitempty"`
+	// UnstableAfterRetry lists files still unstable after one retry —
+	// explicit reconciliation evidence; their digests stay unknown
+	// (E10-T1, OPS-012).
+	UnstableAfterRetry []string `json:"unstable_after_retry,omitempty"`
+	PendingReconcile   bool     `json:"pending_reconcile"`
+	DecisionID         string   `json:"decision_id"`
+	ReconcileDispatch  string   `json:"reconcile_dispatch_id,omitempty"`
+	SnapshotStored     bool     `json:"snapshot_stored"`
 }
 
 // FullService performs full-scope reconciliation for one route.
@@ -108,6 +119,15 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 	if err != nil {
 		return FullResult{}, ports.WrapStore(err)
 	}
+	// The resource's observation revision joins the route snapshot as the
+	// pre-enumeration fence (E10-T1, DUR-014): any durable path-fact
+	// mutation that lands inside the enumeration window advances it, and
+	// the snapshot replacement below then refuses as a typed concurrent
+	// change instead of overwriting the newer facts.
+	observedRevision, err := s.Store.ObservationRevision(ctx, s.ResourceID)
+	if err != nil {
+		return FullResult{}, ports.WrapStore(err)
+	}
 	// cli-spec section 9: a route that is not enabled fails closed with
 	// transition_invalid unconditionally — in every route state, not
 	// only when work happens to be due on an idle route (E8-T4, M-12).
@@ -115,16 +135,19 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 		return FullResult{}, fmt.Errorf("%w: route %s activation state is %q, not enabled; reconcile refuses until the route is enabled",
 			ports.ErrStateNotEligible, routeID, snap.ActivationState)
 	}
-	current, skipped, err := s.enumerate()
+	current, skipped, overBound, unstable, err := s.enumerate()
 	if err != nil {
 		return FullResult{}, err
 	}
 	sort.Strings(skipped)
+	sort.Strings(overBound)
+	sort.Strings(unstable)
 	stored, err := s.Store.LoadPathFacts(ctx, s.ResourceID)
 	if err != nil {
 		return FullResult{}, ports.WrapStore(err)
 	}
-	out := FullResult{RouteID: routeID, Reason: reason, Enumerated: len(current), Compared: len(stored), Skipped: skipped}
+	out := FullResult{RouteID: routeID, Reason: reason, Enumerated: len(current), Compared: len(stored),
+		Skipped: skipped, QuarantinedOverBound: overBound, UnstableAfterRetry: unstable}
 	currentMap := map[string]ports.PathFact{}
 	for _, f := range current {
 		currentMap[f.Path] = f
@@ -266,7 +289,21 @@ func (s *FullService) Run(ctx context.Context, routeID, reason string) (FullResu
 			}
 		}
 	}
-	if err := s.Store.ReplacePathFacts(ctx, s.ResourceID, snapshot, now); err != nil {
+	if err := s.Store.ReplacePathFacts(ctx, s.ResourceID, observedRevision, snapshot, now); err != nil {
+		// The observation fence refused the replacement (DUR-015): a
+		// durable path-fact mutation landed inside this run's
+		// enumeration window, so the enumerated snapshot is stale. The
+		// newer facts stand untouched, the outcome is typed, and exactly
+		// one due reconciliation generation remains for the retry.
+		if errors.Is(err, ports.ErrObservationConflict) {
+			if markErr := s.Store.MarkPendingReconcile(ctx, routeID, "", now); markErr != nil {
+				return FullResult{}, ports.WrapStore(markErr)
+			}
+			out.PendingReconcile = true
+			out.ConcurrentChange = true
+			out.SnapshotStored = false
+			return out, nil
+		}
 		return FullResult{}, ports.WrapStore(err)
 	}
 	out.SnapshotStored = true
@@ -378,16 +415,13 @@ func digestStatusOf(digest string) records.DigestStatus {
 
 // enumerate walks the resource root under the resolver's containment
 // defense, the route's include/exclude patterns, and the file scope,
-// hashing every in-scope regular file with the configured bound.
-func (s *FullService) enumerate() ([]ports.PathFact, []string, error) {
-	var facts []ports.PathFact
-	var skippedPrefixes []string
-	// Unclassifiable paths (over-long, non-UTF-8) isolated as
-	// exists-but-unverifiable facts rather than aborting the pass
-	// (E7-T9/M-24).
+// hashing every in-scope regular file with the configured bound. Files
+// beyond the bound or unstable across their read are returned as
+// explicit evidence lists, never silently dropped (E10-T1, OPS-012).
+func (s *FullService) enumerate() (facts []ports.PathFact, skippedPrefixes, overBound, unstable []string, err error) {
 	var unverifiable []ports.PathFact
 	root := s.Resolver.Root()
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			// An unreadable subtree is reported by absence, never a
 			// whole-command abort: one blocked entry must not stop the
@@ -456,31 +490,124 @@ func (s *FullService) enumerate() ([]ports.PathFact, []string, error) {
 			facts = append(facts, fact)
 			return nil
 		}
-		digest, ok := s.hash(relPath)
-		if ok {
+		digest, outcome := s.hash(relPath)
+		switch outcome {
+		case hashKnown:
 			fact.Digest = digest
+		case hashOverBound:
+			overBound = append(overBound, relPath)
+		case hashUnstable:
+			unstable = append(unstable, relPath)
 		}
 		facts = append(facts, fact)
 		return nil
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	sort.Slice(facts, func(i, j int) bool { return facts[i].Path < facts[j].Path })
-	return append(facts, unverifiable...), skippedPrefixes, nil
+	return append(facts, unverifiable...), skippedPrefixes, overBound, unstable, nil
 }
 
-func (s *FullService) hash(rel string) (string, bool) {
-	f, _, err := s.Resolver.OpenRegular(rel, s.MaxHash)
+// hashOutcome classifies one enumerated file's hashing outcome so the
+// bounded-read, stability, and retry contract (E10-T1, OPS-012,
+// ADR-0018) surfaces as explicit evidence instead of a silent unknown
+// digest.
+type hashOutcome int
+
+const (
+	// hashKnown means a digest was accepted from a bounded read of a
+	// file that held still across it.
+	hashKnown hashOutcome = iota
+	// hashOverBound means the file provably sits beyond the configured
+	// hashing bound and held still across two stats — quarantine
+	// evidence, not a read.
+	hashOverBound
+	// hashUnstable means the file changed across its read twice (the
+	// initial attempt and the one retry) — explicit reconciliation
+	// evidence.
+	hashUnstable
+	// hashUnreadable means the open or read failed (vanished, EACCES,
+	// non-regular): the digest stays unknown without a quarantine or
+	// instability claim.
+	hashUnreadable
+)
+
+// hash reads at most MaxHash+1 bytes per attempt and accepts a digest
+// only from a file whose size and modification time held still across
+// the read (ADR-0018). An unstable or newly over-bound file is retried
+// exactly once; after the retry the file is reported as explicit
+// evidence with its digest left unknown. A file already beyond the
+// bound at the stat precheck is confirmed stable by a second stat
+// before it is called a stable over-bound quarantine (a file caught
+// mid-growth is unstable evidence instead).
+func (s *FullService) hash(rel string) (string, hashOutcome) {
+	var lastOverBoundSize int64 = -1
+	for attempt := 0; attempt < 2; attempt++ {
+		f, info, err := s.Resolver.OpenRegular(rel, s.MaxHash)
+		if err != nil {
+			if !errors.Is(err, localfs.ErrTooLarge) {
+				return "", hashUnreadable // unreadable or non-regular: digest unknown
+			}
+			confirm, statErr := s.Resolver.StatContained(rel)
+			if statErr != nil {
+				return "", hashUnreadable
+			}
+			if attempt == 1 {
+				if confirm.Size() == lastOverBoundSize {
+					return "", hashOverBound
+				}
+				return "", hashUnstable
+			}
+			lastOverBoundSize = confirm.Size()
+			continue
+		}
+		digest, n, stable, readErr := hashStable(f, info, s.MaxHash)
+		f.Close()
+		if readErr != nil {
+			return "", hashUnreadable
+		}
+		if !stable {
+			continue // one retry; a second unstable read reports below
+		}
+		if n > s.MaxHash {
+			// The stream carried more than the bound while the stats held
+			// still: the honest classification is over-bound — the read
+			// was cut at MaxHash+1 and the digest stays unknown.
+			return "", hashOverBound
+		}
+		return digest, hashKnown
+	}
+	return "", hashUnstable
+}
+
+// hashStable hashes at most max+1 bytes from an open file and reports
+// whether the file held still across the read (size and modification
+// time unchanged). n reports the bytes consumed so the caller classifies
+// an over-bound stream without reading it again.
+func hashStable(f *os.File, before fs.FileInfo, max int64) (digest string, n int64, stable bool, err error) {
+	sum, n, over, err := records.SumBounded(f, max)
 	if err != nil {
-		return "", false // unreadable or over-bound: digest unknown
+		return "", n, false, err
 	}
-	defer f.Close()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", false
+	after, err := f.Stat()
+	if err != nil {
+		return "", n, false, err
 	}
-	return "sha256:" + hex.EncodeToString(h.Sum(nil)), true
+	if !statsStable(before, after) {
+		return "", n, false, nil
+	}
+	if over {
+		return "", n, true, nil
+	}
+	return sum.String(), n, true, nil
+}
+
+// statsStable reports whether two stats of one file describe the same
+// bytes: identical size and modification time (ADR-0018 stability
+// check).
+func statsStable(before, after fs.FileInfo) bool {
+	return before.Size() == after.Size() && before.ModTime().Equal(after.ModTime())
 }
 
 func (s *FullService) routeRevision() string {

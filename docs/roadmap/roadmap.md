@@ -13,11 +13,11 @@
 | Shipped release | v0.1.4 |
 | Planned SOT baseline | 1.1.0 ([D-025](../specs/decision-log.md)) |
 | Release target | v0.1.5 |
-| Current epic | E10 (Planned) |
+| Current epic | E10 (In Progress) |
 | Current active task | None |
-| Next task | E10-T1 |
-| Completed tasks | 60 / 75 |
-| Planned tasks | 15 / 75 |
+| Next task | E10-T2 |
+| Completed tasks | 61 / 75 |
+| Planned tasks | 14 / 75 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -43,7 +43,7 @@
 | E7 | MVP Compliance Review Remediation | **Completed** | 12 | MUST closure + v0.1.1 |
 | E8 | v0.1.2 Compliance Remediation | **Completed** | 6 | MUST closure + v0.1.2 |
 | E9 | Deferred-Inventory Hardening | **Completed** | 9 | Deferred closure + review remediation + v0.1.4 |
-| E10 | Source and Reconciliation Integrity | **Planned** | 3 | G6 |
+| E10 | Source and Reconciliation Integrity | **In Progress** | 3 | G6 |
 | E11 | Hermes Preflight and Operator Setup | **Planned** | 4 | G7 |
 | E12 | Multi-Destination Lifecycle | **Planned** | 4 | G8 |
 | E13 | Notifications and v0.1.5 Release | **Planned** | 4 | G9 |
@@ -112,7 +112,7 @@
 | 58 | E9-T7 | Completed | RFC 9110 header grammar and pinned-toolchain enforcement |
 | 59 | E9-T8 | Completed | macOS-only support policy and Linux-surface removal |
 | 60 | E9-T9 | Completed | Documentation truth resynchronized and v0.1.4 released |
-| 61 | E10-T1 | Planned | Resource observation fence and bounded reconciliation reads |
+| 61 | E10-T1 | Completed | Resource observation fence and bounded reconciliation reads |
 | 62 | E10-T2 | Planned | Effective Watchman binding and route-relative exclusions |
 | 63 | E10-T3 | Planned | Source/reconciliation integrity gate G6 |
 | 64 | E11-T1 | Planned | Config v1 destination cutover and forward migration |
@@ -2532,13 +2532,13 @@ Delivered as the documentation truth resynchronization and the v0.1.4 release (F
 
 # E10: Source and Reconciliation Integrity
 
-**Epic status:** Planned
+**Epic status:** In Progress
 **Purpose:** Close the two current-state correctness defects before widening dispatch behavior.
 **Gate:** G6
 
 ## E10-T1: Resource Observation Fence and Bounded Reconciliation Reads
 
-**Status:** Planned
+**Status:** Completed
 **Design Gate impact:** Not required; ADR-0018 is the approved design.
 
 ### Objective
@@ -2571,7 +2571,7 @@ D-025 and ADR-0018 accepted; E9-T9 Completed.
 
 ### Evidence
 
-None — Planned.
+Delivered as the resource observation fence and bounded reconciliation reads: schema v8 gives every resource the monotonic path-fact observation revision (`resources.observation_revision`, `TestE10T1MigrationV8BackfillAndIntegrity` pins the zero backfill, the negative CHECK, and the interrupted-upgrade window healing on reopen), and all three durable path-fact writers advance it inside their own transaction — ingestion (`upsertPathFacts`), the fenced full-snapshot replacement, and, after the round-1 review remediation, the retention prune (`ExecutePrune` advances exactly the purged resources over the identical predicate; `TestE10T1RetentionPurgeAdvancesObservationRevision` pins the advance, the survivor facts, and the no-op negative arm). The replacement is a compare-and-swap on the pre-enumeration revision with the advancement in the same transaction: a stale expectation refuses with the typed `ErrObservationConflict`, the newer facts survive untouched, and the run records the typed `concurrent_change` outcome with exactly one due reconciliation generation (`TestE10T1ConcurrentFactUpdateSurvivesFullReconciliation` drives the interleaving deterministically through a second-connection trap; `TestE10T1ReplacePathFactsCAS` pins the store-level success, refusal, preservation, and missing-resource arms; `TestE10T1UncontestedRunStoresSnapshotAndAdvances` pins the uncontested single advance). Reconciliation hashing reads at most `max_hash_file_bytes + 1` bytes through the shared `records.SumBounded` (unified with ingestion in the round-1 remediation), checks size/mtime stability across the read, retries an unstable file once, and reports a stable over-bound file as `quarantined_over_bound` and a twice-unstable file as `unstable_after_retry` with both digests left unknown (`TestE10T1BoundedReadNeverExceedsMaxPlusOne` proves the bound by a counting reader — exactly max+1 bytes consumed against an endless stream; `TestE10T1StableOverBoundFileIsQuarantineEvidence` and `TestE10T1GrowingFileRaceStaysBoundedAndExplicit` pin the evidence arms and the interleaving-independent race postconditions; `TestE10T1HashStableRejectsChangedFile` pins the stability predicate; `TestE10T1ReconcileEnvelopeReportsBoundedHashEvidence` and `TestE10T1StatusRegressionAfterFencedSchema` pin the operator envelope and the status surface on the v8 schema). Verified by `make verify` on darwin/arm64 (all checks green) with the Gaori-routed manifest-check, schema-validation, and traceability evidence runs passed. Reviewed through two full-target Mulgae rounds (`r_01a03a09-4b31-7781-9199-141920064d5b`, remediation-eligible: ci pass, coverage complete, publication committed, zero findings — its reports' two verified in-scope observations, the retention-prune revision gap and the duplicated bounded-hashing implementations, were remediated in-tree; `r_01a03a14-7068-7735-b8bc-f4e5d1823e94`, hardening-deferral-eligible: ci pass, coverage complete, publication committed, zero findings, every role confirming both remediations closed — the residual advisory observations carry to the E10 epic validation audit: the intent-before-fence ordering trade-off the E5 F006 design already documents, the coarse-mtime stability limitation ADR-0018 sanctions, the deferred-forever-under-perpetual-concurrency liveness characteristic, ephemeral over-bound evidence outside the status/doctor surfaces, the three new envelope keys' operator documentation beyond the CHANGELOG, the architecture docs' twice-unstable wording and `max_file_bytes` naming reconciliation for the E10-T3 documentation-truth pass, and the recommended prune-interleaving store test). Structured extraction was reports_only in both rounds; the accepted reports remain authoritative. Changelog 1.1.2.
 
 ## E10-T2: Effective Watchman Binding and Route-Relative Exclusions
 

@@ -1,5 +1,30 @@
 # SOT Changelog
 
+## 1.1.2 - 2026-08-26
+
+E10-T1: the resource observation fence and bounded reconciliation reads
+close the first v0.1.5 correctness defect (ADR-0018, DUR-013 through
+DUR-015, OPS-012):
+
+- schema v8 gives every resource a monotonic path-fact observation
+  revision that each durable path-fact mutation advances inside its own
+  transaction;
+- the full-snapshot replacement becomes a compare-and-swap fenced on the
+  pre-enumeration revision, with replacement and advancement one
+  transaction: a concurrent ingestion fact inside the enumeration window
+  refuses as a typed concurrent-change outcome, the newer facts survive
+  untouched, and exactly one due reconciliation generation remains;
+- reconciliation hashing reads at most `max_hash_file_bytes + 1` bytes,
+  checks file stability (size and mtime) across the read, retries an
+  unstable file once, and reports a stable over-bound file as explicit
+  quarantine evidence and a twice-unstable file as explicit
+  reconciliation evidence, with both digests left unknown;
+- SQLite (revision advance, fenced replacement, v8 backfill and the
+  interrupted-upgrade window), race (deterministic fence trap and a
+  growing-file interleaving), and status regression tests pin the
+  behavior; the reconcile envelope gains `concurrent_change`,
+  `quarantined_over_bound`, and `unstable_after_retry`.
+
 ## 1.1.1 - 2026-08-25
 
 D-026 migrates the documentation package to explicit canonical role owners

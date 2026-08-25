@@ -8,11 +8,8 @@
 package ingest
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"math"
 	"sort"
@@ -375,32 +372,14 @@ func hashFile(resolver *localfs.Resolver, path string, maxBytes int64) (records.
 	defer f.Close()
 	// Bound the read, not just the stat: a file that grows past the
 	// limit mid-read stays structurally unknown.
-	digest, bounded, err := sumBounded(f, maxBytes)
+	digest, _, over, err := records.SumBounded(f, maxBytes)
 	if err != nil {
 		return "", false, fmt.Errorf("hashing %q: %w", path, err)
 	}
-	if !bounded {
+	if over {
 		return "", false, nil
 	}
 	return digest, true, nil
-}
-
-// sumBounded hashes at most maxBytes; the second result is false when
-// the stream carried more, leaving the digest structurally unknown.
-func sumBounded(r io.Reader, maxBytes int64) (records.Digest, bool, error) {
-	h := sha256.New()
-	n, err := io.Copy(h, io.LimitReader(r, maxBytes+1))
-	if err != nil {
-		return "", false, err
-	}
-	if n > maxBytes {
-		return "", false, nil
-	}
-	d, err := records.ParseDigest("sha256:" + hex.EncodeToString(h.Sum(nil)))
-	if err != nil {
-		return "", false, err
-	}
-	return d, true, nil
 }
 
 func containsPath(list []string, path string) bool {

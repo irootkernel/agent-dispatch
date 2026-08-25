@@ -22,8 +22,9 @@ const ConfigVersion = "1"
 // gate finding); v3 records the accepting target scope (E4 audit); v4
 // adds the work-receipt begin windows (E5 audit); v5 persists the
 // observation position (E7-T8); v6 adds the batch-sequence watermark
-// (E8-T1); v7 adds the record revision columns (E9-T1).
-const SchemaRange = "1-7"
+// (E8-T1); v7 adds the record revision columns (E9-T1); v8 adds the
+// resource observation revision (E10-T1).
+const SchemaRange = "1-8"
 
 // AdapterVersions returns the pinned adapter implementation versions the
 // build carries. Each entry names the delivered surface and its verified

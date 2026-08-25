@@ -406,14 +406,50 @@ func (s *Store) ClearPendingReconcile(ctx context.Context, routeID string, expec
 	return true, tx.Commit()
 }
 
-// ReplacePathFacts stores one full-scope snapshot (previous facts for
-// the resource are replaced atomically).
-func (s *Store) ReplacePathFacts(ctx context.Context, resourceID string, facts []ports.PathFact, observedAt string) error {
+// ObservationRevision returns the resource's current monotonic path-fact
+// observation revision (DUR-013). Full reconciliation reads it before
+// enumeration and fences the snapshot replacement on the same value.
+func (s *Store) ObservationRevision(ctx context.Context, resourceID string) (int64, error) {
+	var revision int64
+	err := s.QueryRowContext(ctx, `SELECT observation_revision FROM resources WHERE resource_id = ?`, resourceID).Scan(&revision)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, fmt.Errorf("%w: resource %s", ports.ErrResourceNotFound, resourceID)
+	}
+	if err != nil {
+		return 0, err
+	}
+	return revision, nil
+}
+
+// ReplacePathFacts stores one full-scope snapshot through the observation
+// fence (E10-T1, DUR-014/DUR-015): the revision advancement and the fact
+// replacement commit in one transaction, and the transaction runs only
+// while the resource's observation revision still equals the revision the
+// reconciliation observed before enumerating. A revision moved by a newer
+// durable path-fact mutation refuses with ports.ErrObservationConflict
+// and leaves the stored facts — the newer knowledge — untouched.
+func (s *Store) ReplacePathFacts(ctx context.Context, resourceID string, expectedRevision int64, facts []ports.PathFact, observedAt string) error {
 	tx, err := s.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	res, err := tx.Exec(`UPDATE resources SET observation_revision = observation_revision + 1 WHERE resource_id = ? AND observation_revision = ?`,
+		resourceID, expectedRevision)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		var current int64
+		switch err := tx.QueryRow(`SELECT observation_revision FROM resources WHERE resource_id = ?`, resourceID).Scan(&current); {
+		case errors.Is(err, sql.ErrNoRows):
+			return fmt.Errorf("%w: resource %s", ports.ErrResourceNotFound, resourceID)
+		case err != nil:
+			return err
+		}
+		return fmt.Errorf("%w: resource %s observation revision is %d, expected %d",
+			ports.ErrObservationConflict, resourceID, current, expectedRevision)
+	}
 	if _, err := tx.Exec(`DELETE FROM path_facts WHERE resource_id = ?`, resourceID); err != nil {
 		return err
 	}

@@ -312,6 +312,17 @@ func (s *Store) ExecutePrune(ctx context.Context, cutoffs PruneCutoffs, actor, r
 		`DELETE FROM source_observations WHERE observed_at < ? AND NOT EXISTS (SELECT 1 FROM batch_observations bo WHERE bo.observation_id = source_observations.observation_id)`, c.Observations); err != nil {
 		return counts, err
 	}
+	// The retention cut is a durable path-fact mutation: every resource
+	// whose facts this pass purges advances its observation revision in
+	// the same transaction (E10-T1, DUR-013), so a reconciliation that
+	// enumerated before the cut cannot restore its pre-cut snapshot
+	// afterwards without a fence refusal. The advance runs before the
+	// delete over the identical predicate so exactly the affected
+	// resources advance whether or not other rows survive.
+	if _, err := tx.ExecContext(ctx, `UPDATE resources SET observation_revision = observation_revision + 1
+		WHERE EXISTS (SELECT 1 FROM path_facts f WHERE f.resource_id = resources.resource_id AND f.observed_at < ?)`, c.Observations); err != nil {
+		return counts, fmt.Errorf("advancing purged resources' observation revisions: %w", err)
+	}
 	if counts.PathFacts, err = exec("path facts",
 		`DELETE FROM path_facts WHERE observed_at < ?`, c.Observations); err != nil {
 		return counts, err

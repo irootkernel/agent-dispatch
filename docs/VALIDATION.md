@@ -17,9 +17,9 @@
 - Internal Markdown links resolve within the package, excluding intentionally unresolved wiki links retained in the historical source draft.
 - Markdown code fences are balanced.
 - The documentation package has one delivery scope, exactly one owner for each of the seven semantic roles, and `docs/roadmap/roadmap.md` as its sole lifecycle authority.
-- The roadmap contains exactly 14 epics and 75 task headings (the 60 completed tasks through E9 plus 15 planned v0.1.5 tasks in E10 through E13).
+- The roadmap contains exactly 14 epics and 75 task headings (the 63 completed tasks through E10 plus 12 planned v0.1.5 tasks in E11 through E13).
 - Every task uses one allowed status value.
-- The v0.1, E7, and E8 sequences and all nine E9 tasks are fully Completed; E10 through E13 are Planned, no task is active, and E10-T1 is next.
+- The v0.1, E7, E8, E9, and E10 sequences are fully Completed; E11 through E13 are Planned, no task is active, and E11-T1 is next.
 - Required-spec IDs are unique.
 - Acceptance-scenario IDs are unique.
 - The D-025 functional baseline remains unchanged; D-026 moves paths and adds ownership indexes without changing roadmap identity, lifecycle, or executable-evidence claims.

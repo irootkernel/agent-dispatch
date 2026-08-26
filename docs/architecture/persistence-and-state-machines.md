@@ -22,6 +22,7 @@ The implementation must verify the resulting journal mode and fail `doctor` if t
 | `schema_migrations` | Applied migration ledger | unique version |
 | `resources` | Materialized trusted resource revisions | unique resource ID and revision |
 | `routes` | Materialized route revisions | unique route ID and revision |
+| `watch_bindings` | Effective Watchman binding per route (configured root, actual root, relative root, trigger name) | unique route ID |
 | `source_observations` | Immutable source delivery evidence | unique observation ID; optional unique source event key per source |
 | `observation_changes` | Normalized path evidence | primary key observation ID + ordinal |
 | `change_batches` | Canonical policy unit | unique batch ID |

@@ -254,8 +254,8 @@ func routeEnableGate(command string, cfg *config.Config, routeID, revision strin
 		return "", planErr(stderr, command, "sqlite_query_failed", "storage", qerr.Error(), 20)
 	} else if count > 0 {
 		return "", planErr(stderr, command, "transition_invalid", "conflict",
-			fmt.Sprintf("route %q carries unresolved legacy work created under a different route revision (%s); resolve it before enabling under the destinations contract — release or discard quarantine items, retry or resolve dead-lettered and unknown dispatches, then re-run enable (DAT-013)",
-				routeID, detail), 14)
+			fmt.Sprintf("route %q carries unresolved legacy work created under a different route revision (%s); resolve it before enabling under the destinations contract — 'agent-dispatch dispatches drain --route %s' recovers crashed submits and reconciles unknowns, 'agent-dispatch dispatches retry/discard' resolves dead letters, 'agent-dispatch quarantine release/discard' resolves held items, then re-run enable (DAT-013)",
+				routeID, detail, routeID), 14)
 	}
 	if resolved.Hermes == nil {
 		// A webhook destination has no live version surface; its static
@@ -302,11 +302,30 @@ func routeEnableGate(command string, cfg *config.Config, routeID, revision strin
 		// Target liveness (an absent or unprobeable executable) is a
 		// warning, not an enable refusal: re-acknowledging a paused
 		// production route must not be hostage to the target being up
-		// (the submit path gates again at run time). Eligibility and the
-		// capability fingerprint ride the probe and stay deferred to
-		// the submit path's run-time gate.
-		fmt.Fprintf(stderr, "warning: hermes_targets.%s probes %s: %s; the submit path re-gates at run time\n", resolved.ID, summary.State, summary.Detail)
-		return "", 0
+		// (the submit path gates again at run time). The capability
+		// fingerprint still binds whenever the cached evidence is fresh
+		// for this executable — a liveness dip must not silently strip
+		// the submit-path shape re-proof; only a genuinely unprobed
+		// target enables without a binding, and the warning says so.
+		fingerprint := ""
+		dest, _ := cfg.Routes[routeID].CertifiedDestination(routeID)
+		profile := ""
+		if dest.ID != "" {
+			profile = dest.Profile
+		}
+		if cached, cerr := hermeskanban.LoadCapabilityRecord(capabilityCachePath(resolved.ID)); cerr == nil {
+			if digest, derr := hermeskanban.ExecutableDigest(resolved.Hermes.Executable); derr == nil {
+				if stale := cached.StaleReasonForProfile(resolved.Hermes.Executable, digest, "", profile); stale == "" && cached.AllRequiredPassed() {
+					fingerprint = cached.Fingerprint
+				}
+			}
+		}
+		if fingerprint == "" {
+			fmt.Fprintf(stderr, "warning: hermes_targets.%s probes %s: %s; enabled without a capability-evidence binding — run 'agent-dispatch hermes probe --target %s' and re-acknowledge to bind the fingerprint\n", resolved.ID, summary.State, summary.Detail, resolved.ID)
+		} else {
+			fmt.Fprintf(stderr, "warning: hermes_targets.%s probes %s: %s; the cached capability fingerprint stays bound and the submit path re-proves it at run time\n", resolved.ID, summary.State, summary.Detail)
+		}
+		return fingerprint, 0
 	}
 }
 

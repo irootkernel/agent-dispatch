@@ -945,9 +945,9 @@ func (s *Store) UnresolvedLegacyWork(ctx context.Context, routeID, currentRevisi
 		}
 		return nil
 	}
-	if err := count("unresolved intents (unknown, retry-wait, reconciling, or dead-lettered)",
+	if err := count("unresolved intents (unknown, retry-wait, reconciling, submitting, ready, or dead-lettered)",
 		`SELECT COUNT(*) FROM dispatch_intents
-		WHERE route_id = ? AND route_revision != ? AND state IN ('unknown','retry_wait','reconciling','dead_lettered')`,
+		WHERE route_id = ? AND route_revision != ? AND state IN ('unknown','retry_wait','reconciling','submitting','ready','dead_lettered')`,
 		routeID, currentRevision); err != nil {
 		return 0, "", err
 	}

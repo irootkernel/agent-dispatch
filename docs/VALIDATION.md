@@ -1,7 +1,7 @@
 # SOT Package Validation
 
-> **Validated:** 2026-08-26 (E10 delivers gate G6; implementation gates G7-G9 remain Planned)
-> **Package target:** Agent Dispatch SOT 1.1.4 / implementation v0.1.5 (planned); v0.1.4 is shipped
+> **Validated:** 2026-08-28 (E11 delivers gate G7; implementation gates G8-G9 remain Planned)
+> **Package target:** Agent Dispatch SOT 1.1.8 / implementation v0.1.5 (planned); v0.1.4 is shipped
 
 ## Completed Checks
 
@@ -50,7 +50,7 @@ All package checks are reachable from the repository root through the Makefile, 
 
 These checks cannot be completed by a design-only SOT package:
 
-- gates G7 through G9 and AC-701 through AC-906; their task owners are E11 through E13 and no executable evidence is claimed for them yet (gate G6 and AC-601 through AC-605 are delivered by E10 and evidenced below);
+- gates G8 and G9 and AC-801 through AC-906; their task owners are E12 and E13 and no executable evidence is claimed for them yet (gates G6 and G7 with AC-601 through AC-605 and AC-701 through AC-706 are delivered by E10 and E11 and evidenced below);
 - the v0.1.5 executable config/record schemas, examples, packaged skills, database migrations, code, release notes, artifacts, and tag;
 
 - automated cross-reference/filename integrity and roadmap-prose consistency assertions for the docs package (currently covered by the manual checks above), deferred to a future internal task;
@@ -202,6 +202,27 @@ named configuration; (3) review the printed revision; (4) `agent-dispatch
 hermes profiles` and `route preflight --route <id>`; (5) the exact
 printed `route enable` command. No step uses direct SQLite or Watchman
 commands, and no step modifies Hermes.
+
+### E11 whole-epic audit trail
+
+The epic audit ran three operationally complete full-target root
+reviews over the committed epic state plus the audit-scoped
+remediation: ordinal 1 (run `r_01a0488a-1e36-7ab9-a694-d2bca89aab8b`,
+ci pass, coverage complete, publication committed, one medium and five
+low findings — all six remediated: the DAT-013 refusal now names the
+concrete resolution exits for every blocking state including the
+in-flight ready/submitting coverage added with the audit, the
+VALIDATION lifecycle header and deferral bullet state the E11/G7
+delivery, the section 12 capability bullet names webhook destinations
+as the declaring side, the roadmap evidence names the sqlite-side
+in-flight test with its correct file, an enable deferred for target
+liveness binds the cached capability fingerprint whenever the evidence
+is fresh, and the two pre-cutover comments describe the shipped gates)
+and ordinal 2 (run `r_01a048a3-371b-7f25-b399-c5aedc89e3de`, ci pass,
+coverage complete, publication committed, zero findings at low or
+above). The audit therefore closed after the second round under the
+zero-unresolved-findings stop rule; no confirmation-only round was
+required.
 
 ## MUST-Closure Matrix (E8-T6, D-020) — supersedes the E7-T12 matrix
 

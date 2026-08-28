@@ -174,11 +174,12 @@ func runConfigValidate(args []string, stdout, stderr io.Writer) int {
 }
 
 // validateTargetsOffline runs the probe-free section 12 checks for every
-// configured target (E8-T3): the hermes-kanban capability report file and
-// the static webhook declaration. An unreadable report or a required
-// capability the report does not carry is a configuration defect at exit
-// 3 — the old probe-only gating let `config validate` pass
-// configurations the targets could never honor.
+// configured target (E8-T3 posture under the E11 cutover): the hermes
+// targets' execution bounds must parse, and the static webhook
+// declaration must carry every capability a webhook destination names.
+// A configuration defect here is exit 3 — the old probe-only gating
+// let `config validate` pass configurations the targets could never
+// honor.
 // validatePatterns compiles every route's pattern sets with the same
 // engine the dispatch path uses (§12 pattern safety, E8 correction of
 // review M-18: the patterns previously compiled only at route

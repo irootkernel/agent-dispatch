@@ -10,6 +10,7 @@ import (
 
 	"context"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
@@ -136,9 +137,19 @@ func TestRouteEnableListShowDisable(t *testing.T) {
 		t.Fatalf("enable without gate flags must be usage: %d", code)
 	}
 	out.Reset()
-	code := enableRouteAck(t, cfgPath, "wiki")
-	if code != 0 {
-		t.Fatalf("enable: %d %s", code, errb.String())
+	errb.Reset()
+	cfgLoaded, lerr := config.Load(cfgPath)
+	if lerr != nil {
+		t.Fatal(lerr)
+	}
+	rev, ok := config.RouteRevision(cfgLoaded, "wiki")
+	if !ok {
+		t.Fatal("revision unavailable")
+	}
+	var code int
+	code = Run([]string{"route", "enable", "--config", cfgPath, "--route", "wiki", "--acknowledge-production-gate", rev, "--yes"}, &out, &errb)
+	if code != 14 || !strings.Contains(errb.String(), "unresolved legacy work") {
+		t.Fatalf("the seeded foreign-revision intent must block the enable (DAT-013): %d %s", code, errb.String())
 	}
 	out.Reset()
 	code = Run([]string{"route", "list", "--config", cfgPath}, &out, &errb)
@@ -154,8 +165,10 @@ func TestRouteEnableListShowDisable(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("show: %d %s", code, errb.String())
 	}
-	if !bytes.Contains(out.Bytes(), []byte(`"activation_state":"enabled"`)) {
-		t.Fatalf("enabled route must show: %s", out.String())
+	// The enable was blocked by the DAT-013 rule, so the route shows
+	// disabled until the seeded foreign-revision work is resolved.
+	if !bytes.Contains(out.Bytes(), []byte(`"activation_state":"disabled"`)) {
+		t.Fatalf("the blocked route must show disabled: %s", out.String())
 	}
 	out.Reset()
 	code = Run([]string{"route", "disable", "--config", cfgPath, "--route", "wiki", "--reason", "maintenance window"}, &out, &errb)

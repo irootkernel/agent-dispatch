@@ -13,7 +13,7 @@
 | Shipped release | v0.1.4 |
 | Planned SOT baseline | 1.1.0 ([D-025](../specs/decision-log.md)) |
 | Release target | v0.1.5 |
-| Current epic | E11 (all tasks Completed; epic audit pending) |
+| Current epic | E11 Completed (G7 evidenced); next E12 |
 | Current active task | None |
 | Next task | E12-T1 |
 | Completed tasks | 67 / 75 |
@@ -2648,7 +2648,7 @@ Delivered as the source and reconciliation integrity gate: the executable G6 sui
 
 # E11: Hermes Preflight and Operator Setup
 
-**Epic status:** Planned
+**Epic status:** Completed
 **Purpose:** Replace hand-authored/exact-version assumptions with a safe public-interface preflight and guided disabled setup.
 **Gate:** G7
 
@@ -2704,8 +2704,11 @@ E10-T3 Completed.
   backup opens as a restorable v9 database with the same history
   (OPS-015 rehearsal);
   `TestE11T1UnresolvedLegacyWorkCountsForeignRevisionRows` and
+  `TestE11T1UnresolvedLegacyWorkCoversInFlightStates`
+  (`internal/adapters/sqlite/e11t1_test.go`) and
   `TestE11T1EnableBlockedByUnresolvedLegacyWork`
-  (`internal/cli/e11t1_test.go`) prove the DAT-013 enable refusal and
+  (`internal/cli/e11t1_test.go`) prove the DAT-013 enable refusal,
+  its coverage of the in-place retry and crashed-submit states, and
   its resolution through the documented operator exits.
 - `TestE11T1FanoutOrderNeverSemantic`, `TestE11T1DestinationContractRejections`,
   `TestE11T1TargetMapClashRejected`, `TestE11T1HermesTargetFloorValidation`,

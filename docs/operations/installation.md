@@ -48,13 +48,15 @@ it, and `doctor` reports violations).
 ```sh
 agent-dispatch init                              # writes the disabled example config,
                                            # creates the owner-only state directory
-cp <your-hermes-capability-report.json> \
-    ~/.config/agent-dispatch/hermes-capability-report.json
-                                           # the probed report must exist at the
-                                           # exact filename the generated config
-                                           # references, BEFORE the target gates
-                                           # (E8-T3: enable probes it)
+hermes kanban boards create <board-slug>         # the operator-created board the
+                                           # generated config references
+agent-dispatch hermes probe                       # the machine-generated capability
+                                           # evidence cache (E11-T2); no
+                                           # operator-authored report exists
 agent-dispatch config validate --probe-targets   # configuration and target gates
+agent-dispatch route preflight --route wiki-maintenance
+                                           # destination preflight (E11-T3): the
+                                           # profile and skills must exist
 agent-dispatch watchman install --route wiki-maintenance
 agent-dispatch route enable --route wiki-maintenance \
     --acknowledge-production-gate <computed-route-revision> --yes

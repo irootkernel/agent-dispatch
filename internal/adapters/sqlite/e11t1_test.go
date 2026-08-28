@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -157,5 +158,30 @@ func TestE11T1CutoverMigrationPreservesHistoryAndRecordsContract(t *testing.T) {
 	// The upgraded database is kept aside (still open and intact).
 	if version, _ := s.SchemaVersion(); version < 10 {
 		t.Fatal("the upgraded database must remain in place after the rehearsal")
+	}
+}
+
+// TestE11T1UnresolvedLegacyWorkCoversInFlightStates proves the E11-T1
+// epic-audit remediation: a foreign-revision intent re-armed to ready
+// (the in-place dead-letter retry) or left submitting (a crashed
+// submit) counts as unresolved legacy work and still blocks the
+// enable.
+func TestE11T1UnresolvedLegacyWorkCoversInFlightStates(t *testing.T) {
+	s, _ := e11t1LegacySeededStore(t, false)
+	ctx := context.Background()
+	// The seeded intent starts dead_lettered; re-arm it in place to
+	// ready, exactly the operator retry path.
+	if _, err := s.Exec(`UPDATE dispatch_intents SET state = 'ready', lease_owner = NULL, lease_expires_at = NULL WHERE dispatch_id = 'disp-e11t1'`); err != nil {
+		t.Fatal(err)
+	}
+	if count, detail, err := s.UnresolvedLegacyWork(ctx, "wiki", "new-destinations-rev"); err != nil || count < 1 || !strings.Contains(detail, "ready") {
+		t.Fatalf("a re-armed foreign-revision intent must block: %d %s %v", count, detail, err)
+	}
+	// A crashed submit leaves submitting: also blocked.
+	if _, err := s.Exec(`UPDATE dispatch_intents SET state = 'submitting' WHERE dispatch_id = 'disp-e11t1'`); err != nil {
+		t.Fatal(err)
+	}
+	if count, _, err := s.UnresolvedLegacyWork(ctx, "wiki", "new-destinations-rev"); err != nil || count < 1 {
+		t.Fatalf("a crashed foreign-revision submit must block: %d %v", count, err)
 	}
 }

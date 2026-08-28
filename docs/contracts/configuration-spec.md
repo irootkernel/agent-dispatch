@@ -260,7 +260,7 @@ Beyond schema validation, the validator must check:
 - state directory is local and outside governed roots by default;
 - each hermes target declares a non-empty board, a canonical `minimum_version` at or above the 0.19.1 eligibility floor, and exactly the `capability_probe` compatibility mode (E11-T1, HER-011); the E11-T2 capability probe proves the shape evidence, `route enable` binds its fingerprint, and the submit path re-proves it live (the retired operator-authored report never returns);
 - every destination resolves to a declared hermes or webhook target, and a webhook destination carries no profile, skills, workspace, or mutex (E11-T1);
-- route-required capabilities are available;
+- webhook-target required capabilities are available (the static declaration must carry every capability a webhook destination names; hermes capability truth is probed, not declared);
 - profile, skills, mutex, workstream, and target are operator-owned fixed values;
 - all durations and sizes are bounded;
 - `enabled: true` only permits activation; SQLite must also contain an explicit operator acknowledgement for the computed route revision, and enablement under the destinations contract refuses while unresolved legacy work from a different route revision remains (an unreachable hermes executable warns and eligibility defers to the submit path's per-attempt gate);

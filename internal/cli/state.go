@@ -240,14 +240,15 @@ func submitTimeoutOf(resolved config.ResolvedTarget) string {
 }
 
 // resolveSink looks up and gates the sink adapter for one route target
-// (E4-T3, E6-T1). The hermes-kanban sink is constructed from the operator
-// configuration, its frozen capability report is validated against the
-// route's required capabilities, and the read-only Probe gates the
-// installed Hermes version — all before any submission (HER-002,
-// HER-005). The hermes-webhook sink applies the same fail-closed gates
-// against its static, evidence-tied capability declaration. No
-// automatic fallback to any other target exists (DUR-008). The log (with
-// the command's trace id) is attached so submission-time render
+// (E4-T3, E6-T1, E11). The hermes sink is constructed from the operator
+// configuration, the read-only Probe gates the installed Hermes against
+// the declared eligibility floor, the activation-bound capability
+// fingerprint is bound for the submit-path re-proof, and the webhook
+// sink applies the same fail-closed gates against its static,
+// evidence-tied capability declaration — all before any submission
+// (HER-002, HER-011, HER-018). No automatic fallback to any other
+// target exists (DUR-008). The log (with the command's trace id) is
+// attached so submission-time render
 // decisions such as mutex suppression are operator-visible (E9-T3,
 // T3-F007).
 func resolveSink(cfg *config.Config, routeID string, log *observability.Logger) (ports.Sink, error) {

@@ -318,7 +318,7 @@ routes:
           endpoint: https://notify.example.invalid/agent-dispatch
           auth:
             type: bearer
-            secret_ref: AGENT_DISPATCH_NOTIFICATION_TOKEN
+            secret_ref: env:AGENT_DISPATCH_NOTIFICATION_TOKEN
 
 hermes_targets:
   hermes-main:

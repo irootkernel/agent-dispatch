@@ -155,7 +155,7 @@ No target call is permitted before these conditions.
 
 ## 8. Compatibility Layers
 
-The domain-level `SinkPort` is stable. Physical Hermes command names are isolated in the `hermeskanban` adapter and must be derived from the `E0-T4` capability report. No domain or application package may parse human-oriented Hermes output.
+The domain-level `SinkPort` is stable. Physical Hermes command names are isolated in the `hermeskanban` adapter and are derived from the frozen E0-T4 public-interface baseline, verified per executable by the capability probe (ADR-0017). No domain or application package may parse human-oriented Hermes output.
 
 ## 9. Future Evolution
 

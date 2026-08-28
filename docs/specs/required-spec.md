@@ -198,7 +198,7 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | CLI-009 | The root command and every command group **MUST** support `-h` and `--help` with summaries, examples, defaults, side effects, exit codes, approval requirements, and the next safe command. |
 | CLI-010 | The product **MUST** expose `hermes probe`, `hermes capabilities`, `hermes profiles`, and `route preflight`. |
 | CLI-011 | The product **MUST** expose destination-qualified profile and skill updates and reject an ambiguous route-only update when multiple destinations exist. |
-| CLI-012 | `setup wiki` **MUST** create disabled configuration, probe dependencies, install/test the Watchman binding, run initial reconciliation, and stop before enablement without explicit production approval. |
+| CLI-012 | `setup wiki` **MUST** create disabled configuration, probe dependencies, test the Watchman binding state and print the explicit install and test commands (setup does not install the trigger), run initial reconciliation, and stop before enablement without explicit production approval. |
 | CLI-013 | The product **MUST** expose aggregate event inspection and notification test, list, retry, and drain commands. |
 | CLI-014 | Empty machine-readable collections **MUST** be `[]` or `{}`, never `null`. |
 | CLI-015 | Configuration-mutating helpers **MUST** validate a candidate and replace the file atomically without modifying unrelated routes or destinations. |

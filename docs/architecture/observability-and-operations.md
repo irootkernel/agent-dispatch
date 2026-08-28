@@ -121,7 +121,7 @@ Audit rows are append-only through application code. Retention may compact resol
 - SQLite open, journal mode, integrity, migration version, and local filesystem placement;
 - Watchman presence and trigger definition;
 - Hermes executable/endpoint presence;
-- the target construction gate: the frozen capability report validated against the route's required capabilities offline — no process execution, no endpoint I/O (the installed-version probe is the dispatch-time gate, E8-T4/H-4);
+- executable and endpoint presence plus the declared eligibility floor; compatibility truth is the per-executable capability probe (E11-T2, ADR-0017) whose fingerprint binds at enablement and is re-proved at dispatch-time;
 - secret reference resolvability without printing the value;
 - stale leases;
 - unknown or dead-lettered dispatches;

@@ -30,6 +30,8 @@ Rules:
 agent-dispatch version
 agent-dispatch init
 agent-dispatch config validate|show
+agent-dispatch setup wiki
+agent-dispatch hermes probe|capabilities|profiles
 agent-dispatch route list|show|plan|enable|disable|stale|preflight|set-profile|set-skills
 agent-dispatch watchman install|status|remove|test
 agent-dispatch dispatch
@@ -302,8 +304,7 @@ Errors use the error contract. Command-specific schemas may be added without cha
 
 ## 18. v0.1.5 Command Surface (shipped)
 
-The commands below are the shipped v0.1.5 surface; `events show`,
-`notifications test|list|retry|drain` remain E12/E13 work.
+The commands below are the shipped v0.1.5 surface.
 
 ```text
 agent-dispatch --help
@@ -314,12 +315,11 @@ agent-dispatch hermes profiles [--target <id>]
 agent-dispatch route preflight --route <id>
 agent-dispatch route set-profile <route>:<destination> <profile>
 agent-dispatch route set-skills <route>:<destination> <skill>...
-agent-dispatch events show <event-id>
-agent-dispatch notifications test
-agent-dispatch notifications list
-agent-dispatch notifications retry <notification-id>
-agent-dispatch notifications drain
 ```
+
+`events show <event-id>` and `notifications test|list|retry|drain` are
+E12/E13 work and are not part of the shipped surface; an invocation
+today is `command_unknown` at exit 2.
 
 Every root and group parser accepts `-h` and `--help`. Help states required
 flags, defaults, output modes, exit codes, side effects, production approval,

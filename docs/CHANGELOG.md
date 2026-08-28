@@ -1,5 +1,38 @@
 # SOT Changelog
 
+## 1.1.6 - 2026-08-28
+
+E11-T2: the capability probe and evidence cache land (HER-011 through
+HER-014, HER-018, SEC-004, SEC-014, TST-012):
+
+- `hermes probe` runs the five read-only shape probes — version and
+  eligibility, assignees JSON, list JSON, the create-surface flag
+  contract from the help text, and the profile-scoped skill table under
+  the fixed rendering environment — and writes the owner-only
+  capability-evidence cache; `hermes capabilities [--refresh]` prints
+  the inspectable record through the standard envelope, re-probing
+  stale evidence transparently;
+- the cached record is keyed by executable path and digest, reported
+  version, and probe contract; any change invalidates it, incomplete
+  evidence refuses with the missing capability named, and a create
+  surface that dropped `--mutex-key` (the observed 0.20.5 drift)
+  downgrades the resource_mutex capability instead of failing the
+  target;
+- route activation binds the capability-evidence fingerprint beside
+  the acknowledged revision (schema v11), and every submission
+  re-proves the live executable identity against it before any side
+  effect — an executable change blocks the submission with the probe
+  remediation, never an ambiguous outcome;
+- the skill-table probe records its profile scope in the evidence
+  record: a cache probed unscoped or under another profile is stale for
+  a profile-scoped read, activation probes with the destination's
+  profile, and a lone `--mutex-key` loss downgrades the resource_mutex
+  capability instead of failing the target;
+- the frozen 0.19.1 interface fixture and a compatible newer Hermes
+  traverse the same probe path with no source allowlist edit
+  (TST-012), the stub Hermes carries every probe surface, and the
+  schema/example pair for the v2 evidence record joins the SOT package.
+
 ## 1.1.5 - 2026-08-28
 
 E11-T1: the v0.1.5 configuration cutover to `destinations[]` lands

@@ -99,7 +99,7 @@ type storeOp interface {
 	SchemaVersion() (int, error)
 	LatestSchemaVersion() int
 	Backup(path string) error
-	SetRouteActivation(ctx context.Context, routeID, activation, acknowledgeRevision, now string) error
+	SetRouteActivation(ctx context.Context, routeID, activation, acknowledgeRevision, capabilityFingerprint, now string) error
 	LoadRouteState(ctx context.Context, routeID string) (state.RouteSnapshot, error)
 	CommitMergePending(ctx context.Context, lin ports.Lineage, actor, now string) (int, error)
 	CompleteActive(ctx context.Context, req ports.ActiveCompletion) (ports.FollowupCreated, error)
@@ -266,6 +266,26 @@ func resolveSink(cfg *config.Config, routeID string, log *observability.Logger) 
 			return nil, err
 		}
 		sink.Log, sink.TraceID = log, globalTraceID
+		// HER-018: bind the activation-accepted capability fingerprint
+		// when the route is enabled, so the submit path re-proves the
+		// live executable identity before any side effect. A store that
+		// cannot be opened here leaves the eligibility-only gate; the
+		// staleness machinery re-asserts the acknowledgement anyway.
+		stateDir := resolveStateDirOverride(cfg.Instance.StateDir)
+		if store, serr := sqlite.Open(filepath.Join(stateDir, StateDBName)); serr == nil {
+			if snap, lerr := store.LoadRouteState(context.Background(), routeID); lerr == nil && snap.CapabilityFingerprint != "" {
+				sink.BindCapabilityFingerprint(snap.CapabilityFingerprint)
+			} else if lerr != nil && log != nil {
+				log.Warn(observability.EventCapabilityBindingUnavailable, observability.Correlation{
+					TraceID: globalTraceID, RouteID: routeID, TargetID: dest.Target,
+				}, "the activation-bound capability fingerprint could not be loaded; the submit path degrades to the eligibility-only gate until the route state is readable", nil)
+			}
+			store.Close()
+		} else if log != nil {
+			log.Warn(observability.EventCapabilityBindingUnavailable, observability.Correlation{
+				TraceID: globalTraceID, RouteID: routeID, TargetID: dest.Target,
+			}, "the activation-bound capability fingerprint could not be loaded; the submit path degrades to the eligibility-only gate until the store is readable", nil)
+		}
 		if _, err := sink.Probe(context.Background()); err != nil {
 			return nil, fmt.Errorf("target %s: %w", dest.Target, err)
 		}

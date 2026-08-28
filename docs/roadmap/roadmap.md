@@ -13,11 +13,11 @@
 | Shipped release | v0.1.4 |
 | Planned SOT baseline | 1.1.0 ([D-025](../specs/decision-log.md)) |
 | Release target | v0.1.5 |
-| Current epic | E11 (In Progress; E11-T1 Completed) |
+| Current epic | E11 (In Progress; E11-T1, E11-T2 Completed) |
 | Current active task | None |
-| Next task | E11-T2 |
-| Completed tasks | 64 / 75 |
-| Planned tasks | 11 / 75 |
+| Next task | E11-T3 |
+| Completed tasks | 65 / 75 |
+| Planned tasks | 10 / 75 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -116,7 +116,7 @@
 | 62 | E10-T2 | Completed | Effective Watchman binding and route-relative exclusions |
 | 63 | E10-T3 | Completed | Source/reconciliation integrity gate G6 |
 | 64 | E11-T1 | Completed | Config v1 destination cutover and forward migration |
-| 65 | E11-T2 | Planned | Hermes 0.19.1+ capability probe and evidence cache |
+| 65 | E11-T2 | Completed | Hermes 0.19.1+ capability probe and evidence cache |
 | 66 | E11-T3 | Planned | Destination profile/skill validation and route preflight |
 | 67 | E11-T4 | Planned | Discoverable CLI, guided setup, operator skill, and G7 |
 | 68 | E12-T1 | Planned | Aggregate event and destination child persistence |
@@ -2737,7 +2737,7 @@ E10-T3 Completed.
 
 ## E11-T2: Hermes 0.19.1+ Capability Probe and Evidence Cache
 
-**Status:** Planned
+**Status:** Completed
 **Design Gate impact:** Not required; ADR-0017 is the approved design.
 
 ### Objective
@@ -2770,7 +2770,47 @@ E11-T1 Completed.
 
 ### Evidence
 
-None — Planned.
+- `TestE11T2ProbePassesFrozenInterface` and `TestE11T2SamePathFrozenAndNewer`
+  (`internal/adapters/hermeskanban/e11t2_test.go`): the frozen real
+  0.19.1 interface and a compatible newer Hermes traverse the same
+  probe path (TST-012, AC-701/702 posture) with a stable
+  fingerprinted record.
+- `TestE11T2CacheInvalidation` and `TestE11T2SubmitBlocksOnExecutableChange`:
+  the record invalidates on executable bytes, path, version, or
+  probe-contract change (HER-013), and a submission after an
+  executable change is definite_not_submitted with the probe
+  remediation — never a side effect (AC-703).
+- `TestE11T2CreateSurfaceDrift` and `TestE11T2SkillTableParser`: a
+  create surface that dropped required flags fails the probe naming
+  the exact missing capability (a lone `--mutex-key` loss downgrades
+  resource_mutex), and the skill-table parser accepts the documented
+  five-column table while refusing foreign headers, wrapped rows,
+  unknown statuses, and absent tables (SEC-014, HER-014).
+- `TestE11T2HermesProbeWritesCache`, `TestE11T2HermesCapabilitiesCacheAndRefresh`,
+  and `TestE11T2HermesCapabilitiesRefusesIncompleteEvidence`
+  (`internal/cli/e11t2_test.go`): the `hermes probe` and
+  `hermes capabilities [--refresh]` envelope surface, the owner-only
+  cache write, transparent staleness re-probe, and the
+  `config_capability_missing` refusal naming the missing capability.
+- `TestE11T2ActivationRecordsFingerprint`: the production enable binds
+  the probe record's fingerprint beside the acknowledged revision
+  (schema v11), equal to the cached evidence (HER-018).
+- Mulgae member-task review: ordinal 1 (run
+  `r_01a04800-6157-7086-9483-180e5d6c775a`, ci pass, coverage
+  complete, publication committed, zero findings) with its seven
+  report-level defects remediated (refresh and profile threading,
+  profile-scope invalidation, fingerprint preservation on
+  outage re-acknowledgement, binding-degradation warning, one
+  DeriveFingerprint, end-to-end swap and scope tests); ordinal 2 (run
+  `r_01a0481e-88e1-7db8-9a3c-f20c101781a4`, ci pass, coverage
+  complete, publication committed, zero findings) confirmed the
+  remediations; its three report-level low/info advisories
+  (load-failure warning branch, unverifiable-digest staleness,
+  probe --refresh usage error) were remediated after capture and are
+  covered by the whole-epic audit.
+- `make verify` green on darwin/arm64; Gaori manifest-check,
+  schema-validation, and traceability passed; the real installed
+  Hermes exercises the probe through the G5 clean-host walkthrough.
 
 ## E11-T3: Destination Profile and Skill Preflight
 

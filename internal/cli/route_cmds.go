@@ -197,20 +197,21 @@ func runRouteEnable(command string, args []string, stdout, stderr io.Writer) int
 		return exit
 	}
 	defer closer.Close()
-	if code := routeEnableGate(command, cfg, routeID, revision, closer, stderr); code != 0 {
+	capabilityFingerprint, code := routeEnableGate(command, cfg, routeID, revision, closer, stderr)
+	if code != 0 {
 		return code
 	}
-	if err := store.SetRouteActivation(requestCtx(), routeID, "enabled", revision, dispatch.Timestamp(time.Now())); err != nil {
+	if err := store.SetRouteActivation(requestCtx(), routeID, "enabled", revision, capabilityFingerprint, dispatch.Timestamp(time.Now())); err != nil {
 		if errors.Is(err, sqlite.ErrOptimisticConcurrency) {
 			// First use: materialize the registration from the
 			// configuration and retry the activation once.
 			if regErr := registerRouteState(requestCtx(), closer, cfg, routeID); regErr != nil {
 				return planErr(stderr, command, "route_not_registered", "conflict", regErr.Error(), 14)
 			}
-			if code := routeEnableGate(command, cfg, routeID, revision, closer, stderr); code != 0 {
+			if capabilityFingerprint, code = routeEnableGate(command, cfg, routeID, revision, closer, stderr); code != 0 {
 				return code
 			}
-			if err := store.SetRouteActivation(requestCtx(), routeID, "enabled", revision, dispatch.Timestamp(time.Now())); err != nil {
+			if err := store.SetRouteActivation(requestCtx(), routeID, "enabled", revision, capabilityFingerprint, dispatch.Timestamp(time.Now())); err != nil {
 				return planErr(stderr, command, "transition_invalid", "conflict", err.Error(), 14)
 			}
 		} else {
@@ -231,61 +232,110 @@ func runRouteEnable(command string, args []string, stdout, stderr io.Writer) int
 // legacy work created under a different route revision (DAT-013: the
 // operator resolves it through the documented exits first; nothing is
 // silently submitted under the new destination contract).
-func routeEnableGate(command string, cfg *config.Config, routeID, revision string, store *sqlite.Store, stderr io.Writer) int {
+func routeEnableGate(command string, cfg *config.Config, routeID, revision string, store *sqlite.Store, stderr io.Writer) (string, int) {
 	if _, ok := cfg.Routes[routeID]; !ok {
-		return 0
+		return "", 0
 	}
 	_, resolved, rerr := resolveRouteTarget(cfg, routeID)
 	if rerr != nil {
 		var multi *config.ErrMultiDestination
 		if errors.As(rerr, &multi) {
-			return planErr(stderr, command, "config_invalid", "configuration", multi.Error(), 3)
+			return "", planErr(stderr, command, "config_invalid", "configuration", multi.Error(), 3)
 		}
-		return planErr(stderr, command, "config_invalid", "configuration", rerr.Error(), 3)
+		return "", planErr(stderr, command, "config_invalid", "configuration", rerr.Error(), 3)
 	}
 	if count, detail, qerr := store.UnresolvedLegacyWork(requestCtx(), routeID, revision); qerr != nil {
-		return planErr(stderr, command, "sqlite_query_failed", "storage", qerr.Error(), 20)
+		return "", planErr(stderr, command, "sqlite_query_failed", "storage", qerr.Error(), 20)
 	} else if count > 0 {
-		return planErr(stderr, command, "transition_invalid", "conflict",
+		return "", planErr(stderr, command, "transition_invalid", "conflict",
 			fmt.Sprintf("route %q carries unresolved legacy work created under a different route revision (%s); resolve it before enabling under the destinations contract — release or discard quarantine items, retry or resolve dead-lettered and unknown dispatches, then re-run enable (DAT-013)",
 				routeID, detail), 14)
 	}
 	if resolved.Hermes == nil {
 		// A webhook destination has no live version surface; its static
 		// capability declaration was validated at configuration load.
-		return 0
+		return "", 0
 	}
 	limits, err := hermesTargetProcessLimits(cfg, *resolved.Hermes)
 	if err != nil {
-		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
+		return "", planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
 	}
 	adapter, err := hermeskanban.New(resolved.ID, resolved.Hermes.Executable, resolved.Hermes.MinimumVersion, limits)
 	if err != nil {
-		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
+		return "", planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
 	}
 	summary, _, perr := adapter.ProbeVerbose(requestCtx())
 	if perr != nil {
 		// A persistent configuration defect fails the enable: the old
 		// deferral to the submit gate let routes enable against targets
 		// they could never honor (H-7).
-		return planErr(stderr, command, "config_invalid", "configuration", perr.Error(), 3)
+		return "", planErr(stderr, command, "config_invalid", "configuration", perr.Error(), 3)
 	}
 	switch summary.State {
 	case "available":
-		return 0
+		// HER-018: activation binds the capability-evidence
+		// fingerprint on top of the eligibility gate. A usable cached
+		// record binds its fingerprint; an unavailable cache is probed
+		// now; an unprobeable executable keeps the liveness deferral
+		// with an empty fingerprint (the submit path re-proves it
+		// before any side effect).
+		dest, _ := cfg.Routes[routeID].CertifiedDestination(routeID)
+		profile := ""
+		if dest.ID != "" {
+			profile = dest.Profile
+		}
+		fingerprint, ferr := currentCapabilityFingerprint(cfg, resolved, profile, limits)
+		if ferr != nil {
+			return "", planErr(stderr, command, "config_capability_missing", "configuration", ferr.Error(), 3)
+		}
+		return fingerprint, 0
 	case "version_unsupported":
-		return planErr(stderr, command, "config_invalid", "configuration",
+		return "", planErr(stderr, command, "config_invalid", "configuration",
 			fmt.Sprintf("hermes_targets.%s probes version_unsupported: %s; a production route cannot be enabled against it", resolved.ID, summary.Detail), 3)
 	default:
 		// Target liveness (an absent or unprobeable executable) is a
 		// warning, not an enable refusal: re-acknowledging a paused
 		// production route must not be hostage to the target being up
-		// (the submit path gates again at run time). Eligibility itself
-		// rides the probe and stays deferred to the submit path's
-		// run-time gate.
+		// (the submit path gates again at run time). Eligibility and the
+		// capability fingerprint ride the probe and stay deferred to
+		// the submit path's run-time gate.
 		fmt.Fprintf(stderr, "warning: hermes_targets.%s probes %s: %s; the submit path re-gates at run time\n", resolved.ID, summary.State, summary.Detail)
-		return 0
+		return "", 0
 	}
+}
+
+// currentCapabilityFingerprint resolves the capability-evidence
+// fingerprint a hermes activation binds (HER-018): a fresh, non-stale
+// cached record is bound as-is; anything else is probed now and the
+// cache refreshed, so activation always names evidence this build can
+// re-verify at submission time.
+func currentCapabilityFingerprint(cfg *config.Config, resolved config.ResolvedTarget, profile string, limits hermeskanban.ProcessLimits) (string, error) {
+	t := resolved.Hermes
+	cachePath := capabilityCachePath(resolved.ID)
+	if record, err := hermeskanban.LoadCapabilityRecord(cachePath); err == nil {
+		if digest, derr := hermeskanban.ExecutableDigest(t.Executable); derr == nil {
+			if stale := record.StaleReasonForProfile(t.Executable, digest, "", profile); stale == "" && record.AllRequiredPassed() {
+				return record.Fingerprint, nil
+			}
+		}
+	}
+	prober, err := hermeskanban.NewProber(resolved.ID, t.Executable, t.MinimumVersion, t.Board, profile, limits)
+	if err != nil {
+		return "", err
+	}
+	record, err := prober.Probe(requestCtx())
+	if err != nil {
+		return "", err
+	}
+	if !record.AllRequiredPassed() {
+		if _, cerr := record.Capabilities(); cerr != nil {
+			return "", cerr
+		}
+	}
+	if werr := hermeskanban.WriteCapabilityRecord(record, cachePath); werr != nil {
+		return "", fmt.Errorf("write capability evidence: %w", werr)
+	}
+	return record.Fingerprint, nil
 }
 
 func runRouteDisable(command string, args []string, stdout, stderr io.Writer) int {
@@ -302,7 +352,7 @@ func runRouteDisable(command string, args []string, stdout, stderr io.Writer) in
 		return exit
 	}
 	defer closer.Close()
-	if err := store.SetRouteActivation(requestCtx(), routeID, "disabled", "", dispatch.Timestamp(time.Now())); err != nil {
+	if err := store.SetRouteActivation(requestCtx(), routeID, "disabled", "", "", dispatch.Timestamp(time.Now())); err != nil {
 		if errors.Is(err, sqlite.ErrOptimisticConcurrency) {
 			return planErr(stderr, command, "transition_invalid", "conflict", err.Error(), 14)
 		}

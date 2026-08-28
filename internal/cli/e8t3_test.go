@@ -3,11 +3,11 @@ package cli
 import (
 	"bytes"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/testsupport/stubhermes"
 )
 
 // E8-T3 regression evidence (H-2, H-7): the acknowledged-revision pause
@@ -65,7 +65,6 @@ func TestE8T3BehaviorChangePausesUntilReacknowledged(t *testing.T) {
 func TestE8T3EnableGateRefusesBelowFloorAndEnablesCleanly(t *testing.T) {
 	configPath, vault := e4t3Fixture(t)
 	_ = vault
-	cfgDir := filepath.Dir(configPath)
 	revisionOf := func() string {
 		cfg, err := config.Load(configPath)
 		if err != nil {
@@ -83,11 +82,11 @@ func TestE8T3EnableGateRefusesBelowFloorAndEnablesCleanly(t *testing.T) {
 		return code, errb.String()
 	}
 	pointExecutableAt := func(versionLine string) string {
-		bin := filepath.Join(cfgDir, "hermes-gate")
-		script := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf '%s\\n' '" + versionLine + "'; exit 0; fi\nexit 3\n"
-		if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
-			t.Fatal(err)
-		}
+		// The full frozen-interface stub: enablement binds capability
+		// evidence (HER-018), so the gate's stub must carry every probe
+		// surface, not just --version. The stub binary lives in this
+		// test's own temp tree and the config points straight at it.
+		bin := stubhermes.WriteVersioned(t, versionLine)
 		raw, err := os.ReadFile(configPath)
 		if err != nil {
 			t.Fatal(err)
@@ -98,9 +97,7 @@ func TestE8T3EnableGateRefusesBelowFloorAndEnablesCleanly(t *testing.T) {
 		}
 		rest := string(raw)[idx:]
 		lineEnd := strings.IndexByte(rest, '\n')
-		if line := rest[:lineEnd]; line != "executable: "+bin {
-			e5t4Rewrite(t, configPath, line, "executable: "+bin)
-		}
+		e5t4Rewrite(t, configPath, rest[:lineEnd], "executable: "+bin)
 		return bin
 	}
 

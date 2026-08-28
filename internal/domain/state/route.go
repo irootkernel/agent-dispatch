@@ -138,6 +138,10 @@ type RouteSnapshot struct {
 	// intent's planned revision so a behavior-sensitive change pauses the
 	// route until re-acknowledged (E8-T3, H-2).
 	AcknowledgedRevision string
+	// CapabilityFingerprint is the capability-evidence fingerprint the
+	// activation accepted (E11-T2, HER-018); the submit path re-proves
+	// the live executable identity against it before any side effect.
+	CapabilityFingerprint string
 	// FailureBudget is the route's remaining consecutive-failure budget.
 	FailureBudget int
 }

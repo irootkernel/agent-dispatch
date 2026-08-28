@@ -438,7 +438,7 @@ func TestE10T2DispatchValidatesAncestorBinding(t *testing.T) {
 	if !ok {
 		t.Fatal("route wiki revision could not be computed")
 	}
-	if err := store.SetRouteActivation(context.Background(), "wiki", "enabled", rev, "2026-08-26T00:00:00Z"); err != nil {
+	if err := store.SetRouteActivation(context.Background(), "wiki", "enabled", rev, "", "2026-08-26T00:00:00Z"); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.SaveWatchBinding(context.Background(), watchman.Binding{

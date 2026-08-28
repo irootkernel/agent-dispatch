@@ -39,7 +39,7 @@ func openE3T3Store(t *testing.T) *sqlite.Store {
 	}
 	// Rerun is a new submission: the route must be enabled for its
 	// takeover activation to be legal.
-	if err := s.SetRouteActivation(context.Background(), "wiki-maintenance", "enabled", "route-rev-1", "2026-08-20T00:00:00Z"); err != nil {
+	if err := s.SetRouteActivation(context.Background(), "wiki-maintenance", "enabled", "route-rev-1", "", "2026-08-20T00:00:00Z"); err != nil {
 		t.Fatal(err)
 	}
 	return s

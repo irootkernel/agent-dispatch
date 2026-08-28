@@ -32,7 +32,7 @@ func openStore(t *testing.T) *sqlite.Store {
 	if err := s.InitializeRouteState(nil, "wiki-maintenance"); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetRouteActivation(context.Background(), "wiki-maintenance", "enabled", "route-rev-1", "2026-08-20T00:00:00Z"); err != nil {
+	if err := s.SetRouteActivation(context.Background(), "wiki-maintenance", "enabled", "route-rev-1", "", "2026-08-20T00:00:00Z"); err != nil {
 		t.Fatal(err)
 	}
 	return s

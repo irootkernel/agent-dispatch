@@ -25,8 +25,9 @@ const ConfigVersion = "1"
 // (E8-T1); v7 adds the record revision columns (E9-T1); v8 adds the
 // resource observation revision (E10-T1); v9 persists the managed
 // Watch bindings (E10-T2); v10 records the destinations-contract
-// cutover marker (E11-T1).
-const SchemaRange = "1-10"
+// cutover marker (E11-T1); v11 binds the capability fingerprint to
+// route activation (E11-T2).
+const SchemaRange = "1-11"
 
 // AdapterVersions returns the pinned adapter implementation versions the
 // build carries. Each entry names the delivered surface and its verified

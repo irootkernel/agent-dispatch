@@ -192,7 +192,7 @@ func e6t1RegisterRoute(t *testing.T, configPath, endpoint string) {
 	if !ok {
 		t.Fatal("route wiki revision could not be computed")
 	}
-	if err := store.SetRouteActivation(context.Background(), "wiki", "enabled", rev, "2026-08-22T00:00:00Z"); err != nil {
+	if err := store.SetRouteActivation(context.Background(), "wiki", "enabled", rev, "", "2026-08-22T00:00:00Z"); err != nil {
 		t.Fatal(err)
 	}
 }

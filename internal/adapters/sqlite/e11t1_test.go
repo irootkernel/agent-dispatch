@@ -115,8 +115,8 @@ func TestE11T1CutoverMigrationPreservesHistoryAndRecordsContract(t *testing.T) {
 		t.Fatalf("the cutover marker must exist: %q %v", contract, err)
 	}
 	version, err := s.SchemaVersion()
-	if err != nil || version != 10 {
-		t.Fatalf("the ledger must record v10, got %d %v", version, err)
+	if err != nil || version < 10 {
+		t.Fatalf("the ledger must reach the cutover migration, got %d %v", version, err)
 	}
 	// Historic task and receipt references stay queryable (DAT-012).
 	intent, err := s.LoadIntent(ctx, "disp-e11t1")
@@ -134,7 +134,7 @@ func TestE11T1CutoverMigrationPreservesHistoryAndRecordsContract(t *testing.T) {
 	// the same historic rows, while the upgraded database stays in
 	// place. The backup lands in the backup directory passed to the
 	// first Migrate call of the seeded store.
-	matches, gerr := filepath.Glob(filepath.Join(filepath.Dir(path), "*v9-to-v10*.backup"))
+	matches, gerr := filepath.Glob(filepath.Join(filepath.Dir(path), "*v9-to-v*.backup"))
 	if gerr != nil || len(matches) == 0 {
 		t.Fatalf("the pre-migration backup must exist beside the database: %v %v", matches, gerr)
 	}
@@ -155,7 +155,7 @@ func TestE11T1CutoverMigrationPreservesHistoryAndRecordsContract(t *testing.T) {
 		t.Fatalf("the restored backup must pass the integrity check: %v", err)
 	}
 	// The upgraded database is kept aside (still open and intact).
-	if version, _ := s.SchemaVersion(); version != 10 {
+	if version, _ := s.SchemaVersion(); version < 10 {
 		t.Fatal("the upgraded database must remain in place after the rehearsal")
 	}
 }

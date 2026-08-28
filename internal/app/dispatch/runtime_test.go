@@ -51,7 +51,7 @@ func openRuntimeStore(t *testing.T) *sqlite.Store {
 	}
 	// The runtime submits only enabled routes (the automatic-write gate,
 	// E7-T6/M-1).
-	if err := s.SetRouteActivation(context.Background(), "wiki-maintenance", "enabled", "route-rev-1", "2026-08-20T00:00:00Z"); err != nil {
+	if err := s.SetRouteActivation(context.Background(), "wiki-maintenance", "enabled", "route-rev-1", "", "2026-08-20T00:00:00Z"); err != nil {
 		t.Fatal(err)
 	}
 	return s
@@ -273,7 +273,7 @@ func TestCrashAfterCommitLeavesRecoverableEvidence(t *testing.T) {
 	if err := seed.InitializeRouteState(nil, "wiki-maintenance"); err != nil {
 		t.Fatal(err)
 	}
-	if err := seed.SetRouteActivation(context.Background(), "wiki-maintenance", "enabled", "route-rev-1", "2026-08-20T00:00:00Z"); err != nil {
+	if err := seed.SetRouteActivation(context.Background(), "wiki-maintenance", "enabled", "route-rev-1", "", "2026-08-20T00:00:00Z"); err != nil {
 		t.Fatal(err)
 	}
 	requestJSON, _ := MarshalRequest(testRequest("dispatch-1"))

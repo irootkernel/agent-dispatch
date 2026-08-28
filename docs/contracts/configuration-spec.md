@@ -258,7 +258,7 @@ Beyond schema validation, the validator must check:
 - the map keys for resources, hermes_targets, targets, and routes follow the identifier grammar (E8-T5);
 - `limits.max_hash_file_bytes` is positive when set (E8-T5);
 - state directory is local and outside governed roots by default;
-- each hermes target declares a non-empty board, a canonical `minimum_version` at or above the 0.19.1 eligibility floor, and exactly the `capability_probe` compatibility mode (E11-T1, HER-011); its live version gate stays on `config validate --probe-targets`, `route enable`, and the submit path (the E11-T2 capability probe replaces the retired report checks);
+- each hermes target declares a non-empty board, a canonical `minimum_version` at or above the 0.19.1 eligibility floor, and exactly the `capability_probe` compatibility mode (E11-T1, HER-011); the E11-T2 capability probe proves the shape evidence, `route enable` binds its fingerprint, and the submit path re-proves it live (the retired operator-authored report never returns);
 - every destination resolves to a declared hermes or webhook target, and a webhook destination carries no profile, skills, workspace, or mutex (E11-T1);
 - route-required capabilities are available;
 - profile, skills, mutex, workstream, and target are operator-owned fixed values;

@@ -305,8 +305,8 @@ Errors use the error contract. Command-specific schemas may be added without cha
 ```text
 agent-dispatch --help
 agent-dispatch setup wiki
-agent-dispatch hermes probe
-agent-dispatch hermes capabilities [--refresh]
+agent-dispatch hermes probe [--target <id>] [--profile <profile>]
+agent-dispatch hermes capabilities [--refresh] [--target <id>] [--profile <profile>]
 agent-dispatch hermes profiles
 agent-dispatch route preflight --route <id>
 agent-dispatch route set-profile <route>:<destination> <profile>
@@ -323,6 +323,22 @@ flags, defaults, output modes, exit codes, side effects, production approval,
 examples, shell completion, and the next safe command. A destination qualifier
 may be omitted by `set-profile` or `set-skills` only when the route has exactly
 one destination; otherwise the command is a usage error.
+
+`hermes probe` (E11-T2) runs the bounded public-interface probe set for
+one hermes target — version and eligibility, the assignees and list
+JSON shapes, the create-surface flag contract from the help text, and
+the profile-scoped skill table under the fixed rendering environment —
+and writes the owner-only capability-evidence cache
+(`~/.config/agent-dispatch/hermes-capability-<target>.json`); every
+probe is read-only and no Hermes state is touched. `hermes capabilities`
+prints the cached evidence (fingerprint, version, per-shape outcomes,
+and the derived capability set) through the standard envelope,
+re-probing transparently when the cache is missing or stale and with
+`--refresh` on request; incomplete evidence refuses with
+`config_capability_missing` at exit 3 naming the missing capability.
+Route activation binds the record's fingerprint beside the acknowledged
+revision, and the submit path re-proves it against the live executable
+before any side effect (HER-018, AC-703).
 
 `setup wiki` is an interactive TTY workflow. It selects root and patterns,
 probes Hermes, selects the board/profile/skills/workstreams and notification

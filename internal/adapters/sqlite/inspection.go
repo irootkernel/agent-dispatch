@@ -623,20 +623,28 @@ func (s *Store) transitionWithin(ctx context.Context, tx *sql.Tx, dispatchID str
 }
 
 // SetRouteActivation updates one route's activation state (E3-T3 route
-// enable/disable). Enable records the acknowledged route revision, so a
-// later behavior-sensitive revision change requires a fresh
-// acknowledgement; disable preserves observations, active work, and dirty
-// state.
-func (s *Store) SetRouteActivation(ctx context.Context, routeID, activation, acknowledgeRevision, now string) error {
+// enable/disable). Enable records the acknowledged route revision and
+// the accepted capability-evidence fingerprint (E11-T2, HER-018), so a
+// later behavior-sensitive revision change or an executable identity
+// change requires a fresh acknowledgement; disable preserves
+// observations, active work, and dirty state.
+func (s *Store) SetRouteActivation(ctx context.Context, routeID, activation, acknowledgeRevision, capabilityFingerprint, now string) error {
 	if activation != "enabled" && activation != "disabled" && activation != "paused" {
 		return fmt.Errorf("unknown activation state %q", activation)
 	}
 	var res sql.Result
 	var err error
 	if activation == "enabled" {
+		// An empty fingerprint means the gate deferred the live probe
+		// (target unavailable): the previously accepted binding stays
+		// put instead of being erased — a re-acknowledgement during an
+		// outage must not silently disable the submit-time
+		// executable-change block (E11-T2 round-1 review).
 		res, err = s.ExecContext(ctx, `UPDATE route_runtime_state
-			SET activation_state = 'enabled', acknowledged_revision = ?, last_reconciled_at = ?, version = version + 1
-			WHERE route_id = ?`, acknowledgeRevision, now, routeID)
+			SET activation_state = 'enabled', acknowledged_revision = ?,
+			capability_fingerprint = CASE WHEN ? = '' THEN capability_fingerprint ELSE ? END,
+			last_reconciled_at = ?, version = version + 1
+			WHERE route_id = ?`, acknowledgeRevision, capabilityFingerprint, capabilityFingerprint, now, routeID)
 	} else {
 		res, err = s.ExecContext(ctx, `UPDATE route_runtime_state
 			SET activation_state = ?, version = version + 1

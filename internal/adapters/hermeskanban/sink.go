@@ -29,12 +29,24 @@ type Sink struct {
 	board      string
 	renderOpts RenderOptions
 	targetID   string
+	// capabilityFingerprint, when non-empty, is the activation-bound
+	// capability-evidence fingerprint (HER-018): Submit re-proves the
+	// live fingerprint against it before any side effect, so an
+	// executable or probe-contract change blocks submission (AC-703).
+	capabilityFingerprint string
 	// Log and TraceID make mutex suppression operator-visible: when
 	// rendering drops a configured mutex key the target cannot honor,
 	// Submit emits one dispatch.mutex_suppressed warning instead of
 	// failing silently (E9-T3, T3-F007). A nil Log keeps the sink quiet.
 	Log     *observability.Logger
 	TraceID string
+}
+
+// BindCapabilityFingerprint records the activation-bound capability
+// evidence fingerprint the submit path re-proves (HER-018). An empty
+// fingerprint keeps the eligibility-only gate.
+func (s *Sink) BindCapabilityFingerprint(fingerprint string) {
+	s.capabilityFingerprint = fingerprint
 }
 
 // Compile-time contract check.
@@ -74,6 +86,22 @@ func NewSink(targetID, executable, minimumVersion string, board string, limits P
 	}, nil
 }
 
+// liveFingerprint recomputes the capability-evidence fingerprint for
+// the executable as it stands now: the digest and version halves of the
+// record identity, which is exactly what an executable swap changes.
+func (s *Sink) liveFingerprint(ctx context.Context) (string, error) {
+	digest, err := ExecutableDigest(s.adapter.client.runner.executable)
+	if err != nil {
+		return "", err
+	}
+	version, err := s.adapter.client.DiscoverVersion(ctx)
+	if err != nil {
+		return "", err
+	}
+	return DeriveFingerprint(CapabilityRecordSchema, ProbeContractVersion,
+		s.adapter.client.runner.executable, digest, version.String()), nil
+}
+
 // ID implements ports.Sink.
 func (s *Sink) ID() string { return s.adapter.ID() }
 
@@ -100,11 +128,24 @@ func (s *Sink) Submit(ctx context.Context, req ports.TaskRequest) (ports.SubmitR
 	// Eligibility is re-proven per submission so an executable swapped
 	// since construction cannot carry an earlier eligibility into a side
 	// effect; a below-floor version is provably pre-invocation, so it is
-	// a definite failure, never an ambiguous outcome (HER-011 posture;
-	// the full capability fingerprint binding arrives with E11-T2's
-	// HER-018).
+	// a definite failure, never an ambiguous outcome (HER-011).
 	if _, err := s.adapter.Probe(ctx); err != nil {
 		return definiteNotSubmitted(err.Error()), nil
+	}
+	// The activation-bound capability fingerprint is re-proved against
+	// the live executable identity (HER-018, AC-703): an executable,
+	// version, or probe-contract change since the acknowledgement is
+	// provably pre-invocation and blocks the submission with the
+	// remediation named.
+	if s.capabilityFingerprint != "" {
+		live, err := s.liveFingerprint(ctx)
+		if err != nil || live != s.capabilityFingerprint {
+			detail := "the capability evidence changed since activation; re-run 'agent-dispatch hermes probe' and re-acknowledge the route"
+			if err != nil {
+				detail = fmt.Sprintf("re-proving the capability evidence failed: %v; %s", err, detail)
+			}
+			return definiteNotSubmitted(detail), nil
+		}
 	}
 	rendered, err := Render(req, s.renderOpts)
 	if err != nil {

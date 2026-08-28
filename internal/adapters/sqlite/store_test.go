@@ -43,7 +43,7 @@ func openTestStore(t *testing.T) *Store {
 	}
 	// The lease transaction requires an enabled route (the epic audit's
 	// transactional activation gate, E7 round 1).
-	if err := s.SetRouteActivation(context.Background(), "wiki-maintenance", "enabled", "route-rev-1", now()); err != nil {
+	if err := s.SetRouteActivation(context.Background(), "wiki-maintenance", "enabled", "route-rev-1", "", now()); err != nil {
 		t.Fatal(err)
 	}
 	return s
@@ -909,7 +909,7 @@ func seedRouteForAttempts(t *testing.T, s *Store) {
 	if err := s.InitializeRouteState(nil, "wiki"); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetRouteActivation(context.Background(), "wiki", "enabled", "rev-1", "2026-08-21T00:00:00Z"); err != nil {
+	if err := s.SetRouteActivation(context.Background(), "wiki", "enabled", "rev-1", "", "2026-08-21T00:00:00Z"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.CommitLineage(context.Background(), attemptLineage("dispatch-samesecond", "decision-ss", "obs-ss", "batch-ss", "2026-08-21T00:00:00Z")); err != nil {

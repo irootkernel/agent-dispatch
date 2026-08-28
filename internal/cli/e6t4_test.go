@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/hermeskanban"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
@@ -180,6 +181,23 @@ func TestG5AC503PrunePreservesLineageAndAudit(t *testing.T) {
 // migrating, one dispatch dry-run plan, the doctor surface, and the
 // documented uninstall ordering (trigger removal requires Watchman and
 // is exercised by the E2-T5/E4-T3 suites).
+// g5Board is the disposable real-Hermes board the AC-504 walkthrough
+// enables against.
+var g5Board = fmt.Sprintf("agent-dispatch-g5-%d", time.Now().UnixNano())
+
+// runHermesBin runs the real installed Hermes CLI (skipped when absent
+// by the caller's environment gate).
+func runHermesBin(t *testing.T, argv ...string) (string, error) {
+	t.Helper()
+	bin, err := exec.LookPath("hermes")
+	if err != nil {
+		t.Skip("hermes binary not available (environment-dependent evidence gap)")
+	}
+	cmd := exec.Command(bin, argv...)
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
 func TestG5AC504CleanHostInstallDispatchScheduleUninstall(t *testing.T) {
 	// The clean-host flow enables against the live target through the
 	// version-gated production gate (E8-T3): an installed Hermes outside
@@ -243,26 +261,31 @@ func TestG5AC504CleanHostInstallDispatchScheduleUninstall(t *testing.T) {
 		t.Fatal(err)
 	}
 	regStore.Close()
-	revision, ok := config.RouteRevision(cfgLoaded, "wiki-maintenance")
-	if !ok {
-		t.Fatal("route revision unavailable")
-	}
 	out.Reset()
 	errb.Reset()
+	// The production enable gate binds capability evidence probed
+	// against the configured board (E11-T2): the clean-host flow creates
+	// the disposable board through the public command first — the
+	// corrected installation order (configuration-spec §5) — and removes
+	// it after the walkthrough.
+	e5t4Rewrite(t, cfgPath, "board: agent-dispatch", "board: "+g5Board)
+	if outb, berr := runHermesBin(t, "kanban", "boards", "create", g5Board); berr != nil {
+		t.Fatalf("AC-504 board create failed: %v: %s", berr, outb)
+	}
+	t.Cleanup(func() {
+		_, _ = runHermesBin(t, "kanban", "boards", "rm", g5Board, "--delete")
+	})
 	// The two-key gate (E7-T6/M-2): the operator flips the YAML key as
-	// part of the reviewed enable, then acknowledges the computed
-	// revision.
+	// part of the reviewed enable, then acknowledges the revision the
+	// final configuration computes (board edits are behavior-affecting).
 	e5t4Rewrite(t, cfgPath, "enabled: false", "enabled: true")
-	// The production enable gate probes the live target against its
-	// capability report (E8-T3): the clean-host flow places the report
-	// before enabling — the corrected installation order.
-	if err := os.MkdirAll(filepath.Join(home, ".config", "agent-dispatch"), 0o755); err != nil {
+	cfgFinal, err := config.Load(resolveConfigPath(cfgPath))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if reportRaw, rerr := os.ReadFile(filepath.Join("..", "..", "docs", "integrations", "hermes-capability-report.json")); rerr != nil {
-		t.Fatal(rerr)
-	} else if werr := os.WriteFile(filepath.Join(home, ".config", "agent-dispatch", "hermes-capabilities.json"), reportRaw, 0o644); werr != nil {
-		t.Fatal(werr)
+	revision, ok := config.RouteRevision(cfgFinal, "wiki-maintenance")
+	if !ok {
+		t.Fatal("route revision unavailable")
 	}
 	if code := Run([]string{"route", "enable", "--route", "wiki-maintenance", "--config", cfgPath, "--acknowledge-production-gate", revision, "--yes"}, &out, &errb); code != 0 {
 		t.Fatalf("AC-504 gate-acknowledged route enable failed: %s", errb.String())

@@ -93,6 +93,9 @@ var errDeadline = fmt.Errorf("hermes invocation deadline exceeded")
 type runner struct {
 	executable string
 	limits     ProcessLimits
+	// fixedEnv selects the SEC-014 fixed rendering environment for
+	// human-table probes.
+	fixedEnv bool
 }
 
 // run executes one argv array under the given timeout. It never uses a
@@ -109,7 +112,11 @@ func (r *runner) run(ctx context.Context, timeout time.Duration, argv []string) 
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, r.executable, argv...)
-	cmd.Env = r.environment()
+	if r.fixedEnv {
+		cmd.Env = fixedRenderingEnvironment(r.environment())
+	} else {
+		cmd.Env = r.environment()
+	}
 	cmd.Dir = r.workingDirectory()
 	// Stdin nil means /dev/null: the child inherits no open descriptor
 	// and can never block reading agent-dispatch state (SEC-004).
@@ -165,6 +172,15 @@ func (r *runner) environment() []string {
 		}
 	}
 	return out
+}
+
+// fixedRenderingEnvironment appends the SEC-014 fixed rendering
+// variables for the human-table probes: no color, a dumb terminal, and
+// a deterministic width, so the parsed table cannot vary with the
+// operator's terminal.
+func fixedRenderingEnvironment(base []string) []string {
+	out := append([]string(nil), base...)
+	return append(out, "NO_COLOR=1", "TERM=dumb", "COLUMNS=200")
 }
 
 // redactSecrets removes the values of allowlisted environment variables

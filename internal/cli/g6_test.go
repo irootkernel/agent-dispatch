@@ -189,7 +189,7 @@ func g6RegisterEnabled(t *testing.T, configPath string) {
 	if !ok {
 		t.Fatal("route revision unavailable")
 	}
-	if err := store.SetRouteActivation(context.Background(), "wiki", "enabled", rev, "2026-08-26T00:00:00Z"); err != nil {
+	if err := store.SetRouteActivation(context.Background(), "wiki", "enabled", rev, "", "2026-08-26T00:00:00Z"); err != nil {
 		t.Fatal(err)
 	}
 	store.Close()

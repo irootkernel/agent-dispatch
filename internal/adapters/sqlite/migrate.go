@@ -42,6 +42,7 @@ var Migrations = []Migration{
 	{Version: 8, Name: "resource-observation-revision", SQL: schemaV8ResourceObservationRevision},
 	{Version: 9, Name: "watch-bindings", SQL: schemaV9WatchBindings},
 	{Version: 10, Name: "destinations-contract-cutover", SQL: schemaV10DestinationsContractCutover},
+	{Version: 11, Name: "capability-fingerprint", SQL: schemaV11CapabilityFingerprint},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
@@ -536,4 +537,14 @@ CREATE TABLE contract_state (
 	applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 INSERT INTO contract_state (contract) VALUES ('destinations-v1');
+`
+
+// schemaV11CapabilityFingerprint binds route activation to the accepted
+// capability-evidence fingerprint in addition to the acknowledged route
+// revision (E11-T2, HER-018): enable records the fingerprint the probe
+// produced, and the submit path re-proves the executable identity
+// before any side effect, so an executable or probe-contract change
+// invalidates the activation exactly like a behavior change.
+const schemaV11CapabilityFingerprint = `
+ALTER TABLE route_runtime_state ADD COLUMN capability_fingerprint TEXT NOT NULL DEFAULT '';
 `

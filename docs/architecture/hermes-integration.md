@@ -28,6 +28,21 @@ flowchart LR
 
 The logical port is stable. Physical commands and response parsing are adapter details established by verified public-interface evidence: the frozen E0-T4 report for the baseline, and — since the v0.1.5 destinations cutover (E11-T1, ADR-0017) — minimum-version eligibility with the capability probe that supersedes it (E11-T2 records per-executable shape evidence and binds activation to its fingerprint).
 
+### E11-T2 Probe Contract
+
+The shipped probe (`agent-dispatch hermes probe`, contract
+`agent-dispatch.hermes-probe/v2`) proves five read-only shapes per
+target: the `--version` first line and eligibility floor, the
+`assignees --json` entry shape, the `list --json` entry shape, the
+create-surface flag contract parsed from `create -h` (a missing
+`--mutex-key` downgrades the resource_mutex capability; any other
+missing flag refuses), and the profile-scoped skill table under the
+fixed rendering environment (NO_COLOR, TERM=dumb, COLUMNS pinned). The
+generated cache is keyed by executable path and digest, version, and
+contract; any change invalidates it and blocks submission before side
+effects (HER-013, AC-703). The E0-T4 frozen report below remains the
+baseline evidence for the unconditional delivery set.
+
 ## 3. E0-T4 Capability Baseline
 
 Before implementation, inspect the actual Hermes installation and record:

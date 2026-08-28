@@ -75,7 +75,7 @@ var knownCommands = map[string]bool{
 	"watchman": true, "dispatch": true, "dispatches": true,
 	"receipts": true, "work": true, "quarantine": true,
 	"reconcile": true, "status": true, "doctor": true,
-	"maintenance": true, "completion": true,
+	"maintenance": true, "completion": true, "hermes": true,
 }
 
 // Run executes the CLI with the given arguments and writes output to the
@@ -133,6 +133,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runDoctor(args[1:], stdout, stderr)
 	case "maintenance":
 		return runMaintenance(args[1:], stdout, stderr)
+	case "hermes":
+		return runHermes(args[1:], stdout, stderr)
 	case "completion":
 		return runCompletion(args[1:], stdout, stderr)
 	default:

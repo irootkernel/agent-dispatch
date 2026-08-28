@@ -27,13 +27,14 @@ func (s *Store) LoadRouteState(ctx context.Context, routeID string) (state.Route
 		return state.RouteSnapshot{}, err
 	}
 	return state.RouteSnapshot{
-		RouteID:              rec.RouteID,
-		ActivationState:      rec.ActivationState,
-		State:                parsed,
-		ActiveDispatchID:     rec.ActiveDispatchID,
-		DirtyGeneration:      rec.DirtyGeneration,
-		PendingReconcile:     rec.PendingReconcile,
-		AcknowledgedRevision: rec.AcknowledgedRevision,
+		RouteID:               rec.RouteID,
+		ActivationState:       rec.ActivationState,
+		State:                 parsed,
+		ActiveDispatchID:      rec.ActiveDispatchID,
+		DirtyGeneration:       rec.DirtyGeneration,
+		PendingReconcile:      rec.PendingReconcile,
+		AcknowledgedRevision:  rec.AcknowledgedRevision,
+		CapabilityFingerprint: rec.CapabilityFingerprint,
 	}, nil
 }
 

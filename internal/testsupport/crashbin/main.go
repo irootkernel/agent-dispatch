@@ -162,7 +162,7 @@ func seed(db string) error {
 	if err := s.InitializeRouteState(nil, "wiki"); err != nil {
 		return err
 	}
-	if err := s.SetRouteActivation(context.Background(), "wiki", "enabled", "route-rev-1", "2026-08-20T00:00:00Z"); err != nil {
+	if err := s.SetRouteActivation(context.Background(), "wiki", "enabled", "route-rev-1", "", "2026-08-20T00:00:00Z"); err != nil {
 		return err
 	}
 	return nil

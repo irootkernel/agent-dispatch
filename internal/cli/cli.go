@@ -79,6 +79,7 @@ var knownCommands = map[string]bool{
 	"receipts": true, "work": true, "quarantine": true,
 	"reconcile": true, "status": true, "doctor": true,
 	"maintenance": true, "completion": true, "hermes": true,
+	"setup": true,
 }
 
 // Run executes the CLI with the given arguments and writes output to the
@@ -107,6 +108,21 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	args = rest
+	// The CLI-009 help contract (E11-T4): the root and every group
+	// parser accepts -h/--help and renders the discovery text at exit
+	// 0, before any subcommand validation runs.
+	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
+		group := ""
+		if len(args) > 1 {
+			group = helpGroupRequest(args[1:])
+		}
+		return runHelp(group, stdout)
+	}
+	for _, a := range args[1:] {
+		if a == "-h" || a == "--help" {
+			return runHelp(args[0], stdout)
+		}
+	}
 	switch args[0] {
 	case "version":
 		return runVersion(args[1:], stdout, stderr)
@@ -138,6 +154,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runMaintenance(args[1:], stdout, stderr)
 	case "hermes":
 		return runHermes(args[1:], stdout, stderr)
+	case "setup":
+		return runSetup(args[1:], stdout, stderr)
 	case "completion":
 		return runCompletion(args[1:], stdout, stderr)
 	default:
@@ -300,6 +318,9 @@ func WriteInternalError(w io.Writer, cause any) {
 
 // writeEnvelopeWithWarnings emits a success envelope carrying warnings.
 func writeEnvelopeWithWarnings(w io.Writer, command string, result interface{}, warnings []string) int {
+	if warnings == nil {
+		warnings = []string{}
+	}
 	if warnings == nil {
 		warnings = []string{}
 	}

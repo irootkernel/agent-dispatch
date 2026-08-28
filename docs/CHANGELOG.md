@@ -1,5 +1,41 @@
 # SOT Changelog
 
+## 1.1.8 - 2026-08-28
+
+E11-T4: the discoverable operator surface and gate G7 land (BND-003,
+BND-004, CLI-009 through CLI-012, CLI-014, HER-011 through HER-018
+re-verification, TST-012):
+
+- every root and group parser accepts -h and --help at exit 0 with the
+  full discovery contract — subcommands, flags, defaults, output
+  modes, exit codes, side effects, approvals, an example, and the next
+  safe command;
+- the interactive `setup wiki` walkthrough drives a new operator from
+  the vault root through disabled configuration, validation, the
+  Hermes probes, the destination preflight, the Watchman guidance, and
+  the initial dry reconciliation, then stops before enablement
+  printing the exact production-gate command — it never accepts
+  production approval implicitly, uses an explicitly named disabled
+  configuration in place, and drafts a disabled copy when the named
+  base carries an enabled route;
+- the versioned agent-dispatch-operator skill ships with installation
+  and compatibility documentation and changes neither Hermes core nor
+  production state;
+- the executable AC-701 through AC-706 gate suite passes with the
+  synchronized Gate G7 evidence table in VALIDATION.md (the AC-702
+  compatible-newer arm asserts in its own body; AC-703's behavioral
+  submit-time block is cross-referenced to the E11-T2 suite), empty
+  JSON collections serialize as [] or {} across the new surfaces, the
+  root exit-code list covers the full registry, and the help
+  completeness guard derives from the CLI registry so a future group
+  cannot ship without its contract (round-one review remediations:
+  setup forwards the operator's global options to every nested step,
+  the enabled-base draft is re-runnable, the vault-root prompt is
+  skipped when a base configuration exists, the Watchman step shows
+  the real status output and prints the explicit install and test
+  commands, and the setup wording in cli-spec and help matches the
+  implemented walkthrough).
+
 ## 1.1.7 - 2026-08-28
 
 E11-T3: the destination preflight surface lands (HER-015 through

@@ -1,7 +1,7 @@
 # Agent Dispatch Documentation
 
 > **Documentation profile:** Single delivery scope with an adopted legacy roadmap identity contract
-> **SOT version:** 1.1.7
+> **SOT version:** 1.1.8
 > **Implementation target:** Agent Dispatch v0.1.5 (approved plan); v0.1.4 remains the latest shipped release
 > **Document status:** Approved planned baseline
 > **Language:** English

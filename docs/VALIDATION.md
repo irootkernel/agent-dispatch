@@ -181,6 +181,28 @@ Ordinal 2 (run `r_01a03adf-380e-7570-a085-a735009225bd`, remediation-eligible, c
 
 Residuals carried from the member-task reviews to the epic audit: the watch-binding row has no removal path at `watchman remove`; the install-self-heal and two status-drift arms lack dedicated tests; remove deletes a same-named trigger from every watched root on a shared server; the configured-root drift comparison is textual; the never-removed synthesized fallback binding and the install-persist-failure envelope; the three-site stored-to-effective mapping; and the end-to-end real-trigger firing limitation (the managed command pins this binary's dispatch argv, which a test binary cannot serve — the frozen corpus and the subtree-constrained definition cover that seam).
 
+## Gate G7: Hermes Preflight and Operator Setup (E11)
+
+Every criterion drives the real CLI surface against the frozen 0.19.1
+interface fixture (the same probe path serves the installed surface;
+TST-012 determinism is proven in the E11-T2 suite).
+
+| Criterion | Evidence |
+|---|---|
+| AC-701 the frozen 0.19.1 interface and an installed newer Hermes each accepted only through every required public capability shape via the same product command | `TestG7AC701SameProbePathBothInterfaces`: both version legs traverse `hermes capabilities` and pass with complete evidence |
+| AC-702 a compatible above-minimum Hermes works with no source allowlist edit; an incompatible shape fails naming the exact missing capability | `TestG7AC702CompatibleNewerPassesIncompatibleNamesCapability`: the drifted create surface refuses naming `--idempotency-key`, `--mutex-key`, and `--workspace` |
+| AC-703 executable content, path, version, or probe-contract change invalidates cached evidence before submission | `TestG7AC703ExecutableChangeBlocksBeforeSideEffects` (the stale read re-proves the live executable); the behavioral submit-time block is proven by `TestE11T2SubmitBlocksOnExecutableChange` and `TestE11T2DispatchBlockedAfterExecutableSwap` in the E11-T2 suite |
+| AC-704 a missing on-disk profile fails preflight before task creation listing available profiles | `TestG7AC704MissingProfileBlocksBeforeTaskCreation`: exit 3 with both stub on-disk profiles listed |
+| AC-705 a required skill absent or disabled fails closed with bounded available alternatives | `TestG7AC705DisabledSkillFailsClosedWithAlternatives`: exit 3 naming the skill with the enabled inventory |
+| AC-706 a new operator using only root/group help and `setup wiki` reaches disabled config, Watchman test, initial reconciliation, and the gate summary without internal commands | `TestG7AC706HelpAndSetupReachDisabledGate`: the help contract (root and every group, exit 0, next safe command) and the full walkthrough stopping at the printed `route enable --acknowledge-production-gate` command with the route left disabled |
+
+Operator demo (gate procedure, runbook-grade): (1) `agent-dispatch
+--help` and each group's `-h`; (2) `agent-dispatch setup wiki` with the
+named configuration; (3) review the printed revision; (4) `agent-dispatch
+hermes profiles` and `route preflight --route <id>`; (5) the exact
+printed `route enable` command. No step uses direct SQLite or Watchman
+commands, and no step modifies Hermes.
+
 ## MUST-Closure Matrix (E8-T6, D-020) — supersedes the E7-T12 matrix
 
 Every MUST requirement the 2026-08-23 review judged FAIL or PARTIAL on

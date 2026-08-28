@@ -300,7 +300,10 @@ Successful commands use:
 
 Errors use the error contract. Command-specific schemas may be added without changing this outer envelope within v1.
 
-## 18. Planned v0.1.5 Command Surface
+## 18. v0.1.5 Command Surface (shipped)
+
+The commands below are the shipped v0.1.5 surface; `events show`,
+`notifications test|list|retry|drain` remain E12/E13 work.
 
 ```text
 agent-dispatch --help
@@ -340,11 +343,18 @@ Route activation binds the record's fingerprint beside the acknowledged
 revision, and the submit path re-proves it against the live executable
 before any side effect (HER-018, AC-703).
 
-`setup wiki` is an interactive TTY workflow. It selects root and patterns,
-probes Hermes, selects the board/profile/skills/workstreams and notification
-sinks, writes disabled config, installs/tests Watchman, performs initial
-reconciliation, and prints the exact production-gate command. It never accepts
-production approval implicitly. JSON commands use the existing envelope and
+`setup wiki` is an interactive walkthrough (shipped with E11-T4): with
+an explicitly named configuration it uses a disabled base in place (an
+enabled base becomes a disabled draft beside it, re-runnable across
+setup attempts); without one it generates a fresh disabled example
+after prompting for the vault root. The six steps are: validate the
+configuration, run the Hermes probes, preflight the destination, check
+the Watchman binding state (printing the explicit install and test
+commands — setup does not install the trigger), run the initial dry
+reconciliation, and print the exact production-gate command. It stops
+there: it never enables the route, never accepts production approval
+implicitly, and selects nothing on the operator's behalf beyond the
+documented defaults. JSON commands use the existing envelope and
 represent empty collections as `[]` or `{}`.
 
 Stable v0.1.5 usage/refusal codes join the error registry before implementation;

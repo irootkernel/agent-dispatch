@@ -13,11 +13,11 @@
 | Shipped release | v0.1.4 |
 | Planned SOT baseline | 1.1.0 ([D-025](../specs/decision-log.md)) |
 | Release target | v0.1.5 |
-| Current epic | E11 (In Progress; E11-T1 through E11-T3 Completed) |
+| Current epic | E11 (all tasks Completed; epic audit pending) |
 | Current active task | None |
-| Next task | E11-T4 |
-| Completed tasks | 66 / 75 |
-| Planned tasks | 9 / 75 |
+| Next task | E12-T1 |
+| Completed tasks | 67 / 75 |
+| Planned tasks | 8 / 75 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -44,7 +44,7 @@
 | E8 | v0.1.2 Compliance Remediation | **Completed** | 6 | MUST closure + v0.1.2 |
 | E9 | Deferred-Inventory Hardening | **Completed** | 9 | Deferred closure + review remediation + v0.1.4 |
 | E10 | Source and Reconciliation Integrity | **Completed** | 3 | G6 |
-| E11 | Hermes Preflight and Operator Setup | **Planned** | 4 | G7 |
+| E11 | Hermes Preflight and Operator Setup | **Completed** | 4 | G7 |
 | E12 | Multi-Destination Lifecycle | **Planned** | 4 | G8 |
 | E13 | Notifications and v0.1.5 Release | **Planned** | 4 | G9 |
 
@@ -118,7 +118,7 @@
 | 64 | E11-T1 | Completed | Config v1 destination cutover and forward migration |
 | 65 | E11-T2 | Completed | Hermes 0.19.1+ capability probe and evidence cache |
 | 66 | E11-T3 | Completed | Destination profile/skill validation and route preflight |
-| 67 | E11-T4 | Planned | Discoverable CLI, guided setup, operator skill, and G7 |
+| 67 | E11-T4 | Completed | Discoverable CLI, guided setup, operator skill, and G7 |
 | 68 | E12-T1 | Planned | Aggregate event and destination child persistence |
 | 69 | E12-T2 | Planned | Per-destination lanes, conditions, fan-out, and retry isolation |
 | 70 | E12-T3 | Planned | Work-receipt/v2, aggregate status, and completion evidence |
@@ -2882,7 +2882,7 @@ E11-T2 Completed.
 
 ## E11-T4: Discoverable CLI, Guided Setup, Operator Skill, and G7
 
-**Status:** Planned
+**Status:** Completed
 **Design Gate impact:** Not required; this task delivers the operator contract.
 
 ### Objective
@@ -2914,7 +2914,39 @@ E11-T3 Completed.
 
 ### Evidence
 
-None — Planned.
+- `TestG7AC706HelpAndSetupReachDisabledGate` (`internal/cli/g7_test.go`):
+  the root and every group parser answers -h/--help at exit 0 with the
+  CLI-009 discovery contract (flags, defaults, output modes, exit
+  codes, side effects, approvals, an example, and the next safe
+  command), and `setup wiki` walks the six steps to the printed
+  production-gate command, leaving the route disabled — no direct
+  SQLite or Watchman commands anywhere in the flow.
+- `TestG7AC701SameProbePathBothInterfaces` through
+  `TestG7AC705DisabledSkillFailsClosedWithAlternatives`: the frozen
+  0.19.1 and a newer Hermes traverse the same probe path (AC-701), the
+  drifted create surface names its missing flags (AC-702), the stale
+  read re-proves the live executable (AC-703), and the missing-profile
+  and disabled-skill refusals list their sorted alternatives (AC-704,
+  AC-705); `TestG7NonEmptyJSONCollections` pins CLI-014.
+- The packaged `agent-dispatch-operator` skill
+  (`docs/skills/agent-dispatch-operator/`) carries its versioned
+  SKILL.md and INSTALL documentation and changes neither Hermes core
+  nor production state; the Gate G7 evidence table lands in
+  VALIDATION.md.
+- Mulgae member-task review: ordinal 1 (run
+  `r_01a04868-3f05-755b-a118-8bd055f0c042`, ci pass, coverage
+  complete, publication committed, zero findings) with its report-level
+  defects remediated after capture — setup's dropped global options
+  for nested steps, the enabled-base draft failing every re-run, the
+  discarded vault-root prompt on an existing base, the dead
+  Watchman-status branch, the unactionable CLI-014 alternatives
+  assertion, the cli-spec/help setup wording claiming selection and
+  install steps the implementation does not perform, the root
+  exit-code list missing registry codes 12 and 13, and the four-group
+  help pin — replaced by the registry-derived completeness guard and
+  the AC-702 own-body arm; covered by the whole-epic audit.
+- `make verify` green on darwin/arm64; Gaori manifest-check,
+  schema-validation, and traceability passed.
 
 ---
 

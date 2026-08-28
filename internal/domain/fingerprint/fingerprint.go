@@ -85,24 +85,34 @@ func validateContentInput(in records.ContentFingerprintInput) error {
 	return nil
 }
 
-// Idempotency computes the idempotency key in the contract form
-// agent-dispatch:v1:sha256:<hex>. The projection excludes attempt number and
-// submission time; callers change the key intentionally by advancing the
-// generation (a rerun) while retries keep it.
-func Idempotency(in records.IdempotencyKeyInput) (string, error) {
+// ChildIdempotency computes the child idempotency key in the contract form
+// agent-dispatch:v2:sha256:<hex> from the DAT-014 child projection. The
+// projection excludes attempt number and submission time; callers change
+// the key intentionally by advancing the generation (a rerun) or editing a
+// destination (a new destination revision) while retries keep it. The
+// version prefix separates the v2 destination-scoped projection from the
+// pre-cutover route-scoped v1 keys stored by historical records.
+func ChildIdempotency(in records.ChildIdempotencyKeyInput) (string, error) {
 	if in.Generation < 1 {
 		return "", fmt.Errorf("generation must be >= 1")
 	}
 	if in.Generation >= 1<<53 {
 		return "", fmt.Errorf("generation exceeds the IEEE-754 safe integer range")
 	}
-	for _, s := range []string{in.RouteID, in.RouteRevision, in.TargetID, in.RequestVersion} {
+	for _, s := range []string{in.RouteID, in.RouteRevision, in.DestinationID, in.DestinationRevision, in.Workstream, in.RequestVersion} {
 		if s == "" {
 			return "", fmt.Errorf("idempotency projection fields must be non-empty")
 		}
 		if !utf8.ValidString(s) {
 			return "", fmt.Errorf("idempotency projection strings must be valid UTF-8")
 		}
+	}
+	// TargetScope is the only optional member (DAT-014 keeps it in the
+	// projection, but a webhook-class target resolves no scope): an empty
+	// value is a distinct binding, not a missing one, and must still be
+	// valid UTF-8 like every other member.
+	if !utf8.ValidString(in.TargetScope) {
+		return "", fmt.Errorf("idempotency projection strings must be valid UTF-8")
 	}
 	if _, err := records.ParseDigest(in.ContentFingerprint); err != nil {
 		return "", fmt.Errorf("content fingerprint: %w", err)
@@ -112,7 +122,7 @@ func Idempotency(in records.IdempotencyKeyInput) (string, error) {
 		return "", fmt.Errorf("idempotency projection: %w", err)
 	}
 	sum := sha256.Sum256(enc)
-	return "agent-dispatch:v1:sha256:" + hex.EncodeToString(sum[:]), nil
+	return "agent-dispatch:v2:sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
 // canonicalJSON encodes a dedicated projection struct deterministically.

@@ -258,6 +258,20 @@ func DestinationRevision(cfg *Config, route Route, dest Destination) string {
 	return "dst-" + hex.EncodeToString(sum[:])
 }
 
+// DestinationProjectionJSON renders the exact deterministic projection
+// bytes one destination revision digests (E12-T1): the durable
+// destination-revision record persists these bytes beside the revision,
+// so an inspection of any stored child can recover the canonical behavior
+// projection its revision named. Map keys marshal sorted, so the bytes are
+// stable across runs and platforms.
+func DestinationProjectionJSON(cfg *Config, dest Destination) (string, error) {
+	enc, err := json.Marshal(destinationProjection(cfg, dest))
+	if err != nil {
+		return "", err
+	}
+	return string(enc), nil
+}
+
 func sortedCopy(in []string) []string {
 	if len(in) == 0 {
 		return []string{}

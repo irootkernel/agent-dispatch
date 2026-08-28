@@ -126,6 +126,14 @@ func (a *reconcileArtifacts) reconcileIntentBuilder() func(routeID, reason, deci
 	return func(routeID, reason, decisionID string, changes []records.ChangeItem) (ports.IntentInput, error) {
 		now := dispatch.Timestamp(time.Now())
 		dispatchID := fmt.Sprintf("disp-reconcile-%s-%s", routeID, reason) + "-" + ids.CompactTimestamp(now) + "-" + ids.RandomSuffix()
+		aggregateID, err := ids.NewUUIDv7(time.Now).NewID()
+		if err != nil {
+			return ports.IntentInput{}, err
+		}
+		lane, projection, err := certifiedLane(a.cfg, routeID)
+		if err != nil {
+			return ports.IntentInput{}, err
+		}
 		// The fingerprint derives from the reconciliation diff, so
 		// distinct generations produce distinct idempotency keys (a
 		// constant fingerprint would collide on the target's dedup).
@@ -151,6 +159,8 @@ func (a *reconcileArtifacts) reconcileIntentBuilder() func(routeID, reason, deci
 			Route:              ports.TaskRouteRef{ID: routeID, Revision: a.revision},
 			Resource:           ports.TaskResource{ID: a.resourceID, Workspace: workspaceOf(a.dest, a.resource.Root)},
 			TargetID:           a.targetID,
+			TargetScope:        resolvedTargetScope(a.resolved),
+			Destination:        lane,
 			Generation:         1,
 			Fingerprint:        contentDigest,
 			Changes:            changes, // the reconciliation diff: bounded evidence, never content
@@ -173,6 +183,15 @@ func (a *reconcileArtifacts) reconcileIntentBuilder() func(routeID, reason, deci
 			ContentFingerprint: string(contentDigest),
 			ManifestDigest:     dispatch.ManifestDigest(changes),
 			RequestVersion:     dispatch.RequestContractVersion, RequestJSON: requestJSON,
+			Fanout: &ports.FanoutInput{
+				AggregateID: string(aggregateID), Origin: string(records.OriginReconcile),
+				DestinationID: lane.ID, DestinationRevision: lane.Revision, Workstream: lane.Workstream,
+				Selections: []records.DestinationSelection{{
+					DestinationID: lane.ID, DestinationRevision: lane.Revision, Workstream: lane.Workstream,
+					Reason: "reconcile:" + reason,
+				}},
+				Revisions: []ports.DestinationRevisionInput{laneRevisionInput(lane, projection)},
+			},
 		}, nil
 	}
 }

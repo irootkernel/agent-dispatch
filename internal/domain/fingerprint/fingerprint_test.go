@@ -21,14 +21,17 @@ func sampleInput() records.ContentFingerprintInput {
 	}
 }
 
-func idemInput(fp string, generation int64) records.IdempotencyKeyInput {
-	return records.IdempotencyKeyInput{
-		RouteID:            "wiki-maintenance",
-		RouteRevision:      "rev-abc",
-		TargetID:           "hermes-kanban-main",
-		Generation:         generation,
-		ContentFingerprint: fp,
-		RequestVersion:     "agent-dispatch.dispatch-intent/v1",
+func idemInput(fp string, generation int64) records.ChildIdempotencyKeyInput {
+	return records.ChildIdempotencyKeyInput{
+		RouteID:             "wiki-maintenance",
+		RouteRevision:       "rev-abc",
+		DestinationID:       "wiki-primary",
+		DestinationRevision: "dst-abc",
+		Workstream:          "maintenance",
+		TargetScope:         "board-main",
+		Generation:          generation,
+		ContentFingerprint:  fp,
+		RequestVersion:      "agent-dispatch.hermes-task/v1",
 	}
 }
 
@@ -87,22 +90,22 @@ func TestIdempotencyKeyProperties(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	key1, err := Idempotency(idemInput(fp.String(), 3))
+	key1, err := ChildIdempotency(idemInput(fp.String(), 3))
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Retry attempt and submission time are not projection fields; the
 	// caller cannot vary them through the input type. Recomputing the
 	// identical decision yields the identical key.
-	key2, _ := Idempotency(idemInput(fp.String(), 3))
+	key2, _ := ChildIdempotency(idemInput(fp.String(), 3))
 	if key1 != key2 {
 		t.Fatalf("identical inputs must yield identical keys: %s vs %s", key1, key2)
 	}
-	if !regexp.MustCompile(`^agent-dispatch:v1:sha256:[0-9a-f]{64}$`).MatchString(key1) {
+	if !regexp.MustCompile(`^agent-dispatch:v2:sha256:[0-9a-f]{64}$`).MatchString(key1) {
 		t.Fatalf("key form invalid: %s", key1)
 	}
 	// A rerun advances the generation and must change the key.
-	key3, _ := Idempotency(idemInput(fp.String(), 4))
+	key3, _ := ChildIdempotency(idemInput(fp.String(), 4))
 	if key3 == key1 {
 		t.Fatal("rerun generation must change the idempotency key")
 	}
@@ -110,7 +113,7 @@ func TestIdempotencyKeyProperties(t *testing.T) {
 
 func TestIdempotencyKeyGolden(t *testing.T) {
 	fp, _ := Content(sampleInput())
-	key, err := Idempotency(idemInput(fp.String(), 1))
+	key, err := ChildIdempotency(idemInput(fp.String(), 1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,15 +130,15 @@ func TestIdempotencyKeyGolden(t *testing.T) {
 }
 
 func TestIdempotencyFailsClosed(t *testing.T) {
-	if _, err := Idempotency(records.IdempotencyKeyInput{Generation: 0}); err == nil {
+	if _, err := ChildIdempotency(records.ChildIdempotencyKeyInput{Generation: 0}); err == nil {
 		t.Error("generation < 1 must fail")
 	}
 	in := idemInput("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", 1)
-	if _, err := Idempotency(in); err != nil {
+	if _, err := ChildIdempotency(in); err != nil {
 		t.Errorf("valid input rejected: %v", err)
 	}
 	in.ContentFingerprint = "not-a-digest"
-	if _, err := Idempotency(in); err == nil {
+	if _, err := ChildIdempotency(in); err == nil {
 		t.Error("invalid fingerprint must fail")
 	}
 }
@@ -199,10 +202,10 @@ func TestLineSeparatorEscapingNoCollision(t *testing.T) {
 
 func TestGenerationSafeRange(t *testing.T) {
 	fp := "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-	if _, err := Idempotency(idemInput(fp, 1<<53)); err == nil {
+	if _, err := ChildIdempotency(idemInput(fp, 1<<53)); err == nil {
 		t.Fatal("2^53 exceeds the safe integer range and must fail")
 	}
-	if _, err := Idempotency(idemInput(fp, 1<<53-1)); err != nil {
+	if _, err := ChildIdempotency(idemInput(fp, 1<<53-1)); err != nil {
 		t.Fatalf("2^53-1 must be accepted: %v", err)
 	}
 }

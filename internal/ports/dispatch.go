@@ -139,6 +139,48 @@ type IntentInput struct {
 	RequestVersion     string
 	RequestJSON        string
 	CreatedAt          string
+	// Fanout carries the aggregate-event and destination-child creation
+	// context (E12-T1, DAT-010/FAN-003). Every intent created under the
+	// destinations[] contract sets it, and the store persists the
+	// aggregate event, the referenced destination revisions, and the
+	// child-dispatch record in the same transaction as the intent. A nil
+	// Fanout is the pre-cutover legacy shape: it exists only so historical
+	// harness paths keep working, never for new production work.
+	Fanout *FanoutInput
+}
+
+// FanoutInput is the aggregate/destination creation context of one
+// new-contract dispatch (E12-T1): the aggregate event identity, its
+// creation origin, the child's destination identity, the sorted
+// destination-selection summary recorded on the aggregate, and the durable
+// destination-revision records the selection references.
+type FanoutInput struct {
+	AggregateID string
+	Origin      string
+	// DestinationID, DestinationRevision, and Workstream are the child's
+	// destination identity (the lane this intent belongs to).
+	DestinationID       string
+	DestinationRevision string
+	Workstream          string
+	// Selections is the aggregate's destination-selection summary sorted
+	// by destination ID (FAN-012); for the single-destination certified
+	// path it contains exactly the child's destination.
+	Selections []records.DestinationSelection
+	// Revisions carries the destination-revision records to persist
+	// beside the aggregate (insert-if-absent): the arrival and reconcile
+	// paths know the live projection; derived paths (follow-up, rerun)
+	// reference revisions their parents already persisted and leave it
+	// empty.
+	Revisions []DestinationRevisionInput
+}
+
+// DestinationRevisionInput is one durable canonical destination-revision
+// record (E12-T1): the destination's computed revision and the exact
+// behavior-projection JSON bytes that revision digests.
+type DestinationRevisionInput struct {
+	DestinationID  string
+	Revision       string
+	ProjectionJSON string
 }
 
 // ErrStaleRouteRevision reports a stored intent whose planned route
@@ -167,6 +209,13 @@ type IntentSnapshot struct {
 	LeaseExpiresAt string
 	AttemptCount   int
 	NextAttemptAt  string
+	// Destination identity of the child record beneath one aggregate
+	// event (E12-T1): empty for a pre-cutover legacy intent, which has no
+	// child row and is only historically inspectable (DAT-012).
+	AggregateID         string
+	DestinationID       string
+	DestinationRevision string
+	Workstream          string
 }
 
 // AcquireAttempt is one conditional lease request.

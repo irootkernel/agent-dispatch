@@ -170,5 +170,9 @@ document bodies and resolved secrets and carry only safe identities, states,
 reason codes, timestamps, configured-safe paths, and digests.
 
 These record contracts become executable schemas and examples only in their
-owning E11-E13 tasks. Until then, the checked-in JSON schemas describe the
-shipped v0.1.4 wire surface and remain unchanged.
+owning E11-E13 tasks. The `aggregate-event/v1`, `destination-revision/v1`,
+and `child-dispatch/v1` families landed with E12-T1 (migration v12:
+`aggregate_events`, `destination_revisions`, `child_dispatches`; the child
+idempotency key is the DAT-014 projection above). The remaining families
+are still planned and the checked-in JSON schemas for them describe the
+shipped v0.1.4 wire surface until their owning tasks implement them.

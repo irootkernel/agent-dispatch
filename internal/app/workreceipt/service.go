@@ -111,6 +111,13 @@ type Service struct {
 	// (config.PolicyRevision): the follow-up decision the store may
 	// create records it instead of a route revision echo (E9-T3, L-18).
 	PolicyRevision string
+	// DestinationResolver supplies the live destination lane of a route
+	// (E12-T1): completing pre-cutover legacy work that still owes a
+	// follow-up resolves the current certified lane so the follow-up
+	// child-links under the destinations[] contract instead of failing
+	// the whole receipt. Nil disables the resolution and legacy
+	// completions fail closed with guidance.
+	DestinationResolver dispatch.DestinationLaneResolver
 }
 
 // InvalidError reports a receipt rejected by validation; Reasons are the
@@ -414,6 +421,11 @@ func (s *Service) buildFollowup(original ports.IntentSnapshot, decision *Attribu
 	if err := json.Unmarshal([]byte(original.RequestJSON), &req); err != nil {
 		return ports.IntentInput{}, fmt.Errorf("stored request is not the task contract shape: %w", err)
 	}
+	// The destination lane resolves through the shared DAT-013 precedence
+	// inside BuildFollowupRequest: a legacy completion's follow-up
+	// child-links under the live certified lane (persisting the referenced
+	// destination-revision record) instead of wedging the receipt behind a
+	// contract the parent predates.
 	items := make([]records.ChangeItem, 0, len(req.Activation.Manifest))
 	for _, m := range req.Activation.Manifest {
 		op, err := records.ParseOperation(m.Operation)
@@ -425,7 +437,7 @@ func (s *Service) buildFollowup(original ports.IntentSnapshot, decision *Attribu
 	if unresolved := unresolvedManifest(decision, dirty); len(unresolved) > 0 {
 		items = unresolved
 	}
-	return dispatch.BuildFollowupRequest(original, items, req.Activation.Flags)
+	return dispatch.BuildFollowupRequest(original, items, req.Activation.Flags, s.DestinationResolver)
 }
 
 // unresolvedManifest projects the dirty generation's unresolved paths

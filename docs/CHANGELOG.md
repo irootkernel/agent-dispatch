@@ -1,5 +1,40 @@
 # SOT Changelog
 
+## 1.1.9 - 2026-08-29
+
+E12-T1: the aggregate-event, destination-revision, and child-dispatch
+record families land (DAT-010 through DAT-014, FAN-001 through FAN-003,
+FAN-010, FAN-012):
+
+- SQLite migration v12 adds `aggregate_events`,
+  `destination_revisions`, and `child_dispatches` beside the untouched
+  historic tables: no pre-cutover row is rewritten, a legacy intent
+  keeps its exact lineage and reads with empty child linkage
+  (DAT-012), and `UNIQUE(aggregate_id, destination_id)` enforces one
+  child per selected destination per occurrence (FAN-003);
+- the aggregate-to-child creation is one transaction with the intent
+  across every creation path — arrival, follow-up, rerun, rebuild,
+  quarantine-release replacement, and reconciliation — each recording
+  its origin, the canonically ordered selection summary, and one
+  append-only audit row;
+- the child idempotency key is the DAT-014 destination-scoped
+  projection (`agent-dispatch:v2:` over route ID and revision, source
+  generation and fingerprint, destination ID and revision, workstream,
+  target scope, and contract version): sibling destinations and
+  destination revisions can never collide, retries keep the key
+  (CON-009), and declaration order changes neither the revision, the
+  selection order, nor the key (FAN-012, pinned by the
+  content-addressed projection test);
+- the destination revision persists with the exact projection bytes it
+  digests, so a stored record verifies itself;
+- `dispatches list`, `dispatches show`, and the intent snapshot surface
+  the child linkage; the stored request carries an optional destination
+  block that reruns, rebuilds, and follow-ups derive their lane from
+  through one shared DAT-013 precedence (stored block, snapshot linkage,
+  live certified lane), with legacy requests resolving the live lane —
+  persisting the referenced destination-revision record — or failing
+  closed.
+
 ## 1.1.8 - 2026-08-28
 
 E11-T4: the discoverable operator surface and gate G7 land (BND-003,

@@ -52,6 +52,7 @@ func seedReadyIntent(t *testing.T, s *sqlite.Store, dispatchID string) {
 		Route:      ports.TaskRouteRef{ID: "wiki-maintenance", Revision: "route-rev-1"},
 		Resource:   ports.TaskResource{ID: "vault-main", Workspace: "dir:/srv/vault"},
 		TargetID:   "hermes-kanban-main", Generation: 1,
+		Destination: ports.TaskDestinationRef{ID: "wiki-primary", Revision: "dst-rev-1", Workstream: "maintenance"},
 		Fingerprint: records.Digest("sha256:" + hex64('c')),
 		Changes: []records.ChangeItem{{
 			Path: "Inbox/n.md", Operation: records.OpModify, FileType: records.FileRegular,

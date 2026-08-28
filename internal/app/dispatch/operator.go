@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/irootkernel/agent-dispatch/internal/domain/ids"
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 	"github.com/irootkernel/agent-dispatch/internal/domain/state"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
@@ -23,6 +25,14 @@ type OperatorService struct {
 	// the scope it will actually be submitted against rather than the
 	// predecessor's; nil disables the resolution.
 	TargetScopeResolver func(routeID string) string
+	// DestinationResolver supplies the currently configured destination
+	// lane of a route (id, revision, workstream, plus the canonical
+	// projection bytes the revision digests; E12-T1): a rerun or rebuild
+	// whose stored request predates the destinations[] contract derives
+	// its child identity from the live configuration instead of failing,
+	// while new-contract requests keep their stored lane. Nil disables
+	// the resolution and legacy requests fail closed.
+	DestinationResolver DestinationLaneResolver
 	// RevisionResolver supplies the currently active route revision
 	// (E7-T3/H-1); rerun and stale rebuilds carry it instead of the
 	// stored plan's superseded revision. Nil keeps the stored revision.
@@ -104,14 +114,28 @@ func (o *OperatorService) Rerun(ctx context.Context, dispatchID, actor, reason s
 	if err := json.Unmarshal([]byte(snap.RequestJSON), &req); err != nil {
 		return zero, fmt.Errorf("stored request is not the task contract shape: %w", err)
 	}
+	destination, projection, err := o.laneOf(snap, req)
+	if err != nil {
+		return zero, err
+	}
+	var revisions []ports.DestinationRevisionInput
+	if projection != "" {
+		revisions = []ports.DestinationRevisionInput{{DestinationID: destination.ID, Revision: destination.Revision, ProjectionJSON: projection}}
+	}
 	now := o.Now()
 	newDispatchID := fmt.Sprintf("%s-rerun-%s", dispatchID, strings.ReplaceAll(strings.ReplaceAll(now, ":", ""), "-", ""))
+	aggregateID, err := ids.NewUUIDv7(time.Now).NewID()
+	if err != nil {
+		return zero, fmt.Errorf("rerun aggregate identity: %w", err)
+	}
 	revision := o.activeRevision(snap.RouteID, req.Route.Revision)
 	next, _, err := BuildRequest(RequestInput{
 		DispatchID:         newDispatchID,
 		Route:              ports.TaskRouteRef{ID: snap.RouteID, Revision: revision},
 		Resource:           req.Resource,
 		TargetID:           snap.TargetID,
+		TargetScope:        snap.TargetScope,
+		Destination:        destination,
 		Generation:         snap.Generation + 1,
 		Fingerprint:        records.Digest(req.Activation.ContentFingerprint),
 		Changes:            manifestToChanges(req.Activation.Manifest),
@@ -138,8 +162,34 @@ func (o *OperatorService) Rerun(ctx context.Context, dispatchID, actor, reason s
 			ContentFingerprint: next.Activation.ContentFingerprint,
 			ManifestDigest:     snap.ManifestDigest,
 			RequestVersion:     RequestContractVersion, RequestJSON: requestJSON, CreatedAt: now,
+			Fanout: &ports.FanoutInput{
+				AggregateID: string(aggregateID), Origin: string(records.OriginRerun),
+				DestinationID: destination.ID, DestinationRevision: destination.Revision, Workstream: destination.Workstream,
+				Selections: []records.DestinationSelection{{
+					DestinationID: destination.ID, DestinationRevision: destination.Revision,
+					Workstream: destination.Workstream, Reason: "rerun:" + dispatchID,
+				}},
+				Revisions: revisions,
+			},
 		},
 	})
+}
+
+// laneOf resolves the destination lane a new operator request belongs
+// to through the shared DAT-013 precedence (E12-T1): a stored
+// destinations[] request keeps its own lane; a legacy request resolves
+// the live configuration's certified lane so the rerun or rebuild
+// becomes properly child-linked work instead of silently submitting
+// route-scoped legacy identity under the new contract. The projection
+// bytes are non-empty exactly when the lane resolved live, so the caller
+// persists the destination-revision record the derived child references.
+func (o *OperatorService) laneOf(snap ports.IntentSnapshot, req ports.TaskRequest) (ports.TaskDestinationRef, string, error) {
+	snapshotLane := ports.TaskDestinationRef{ID: snap.DestinationID, Revision: snap.DestinationRevision, Workstream: snap.Workstream}
+	lane, projection, err := ResolveDestinationLane(snap.RouteID, req.Destination, snapshotLane, o.DestinationResolver)
+	if err != nil {
+		return ports.TaskDestinationRef{}, "", fmt.Errorf("dispatch %s: %w", snap.DispatchID, err)
+	}
+	return lane, projection, nil
 }
 
 // RebuildStale replaces one stale ready intent under the active route
@@ -173,8 +223,20 @@ func (o *OperatorService) RebuildStale(ctx context.Context, dispatchID, actor st
 	if err := json.Unmarshal([]byte(snap.RequestJSON), &req); err != nil {
 		return "", fmt.Errorf("stored request is not the task contract shape: %w", err)
 	}
+	destination, projection, err := o.laneOf(snap, req)
+	if err != nil {
+		return "", err
+	}
+	var revisions []ports.DestinationRevisionInput
+	if projection != "" {
+		revisions = []ports.DestinationRevisionInput{{DestinationID: destination.ID, Revision: destination.Revision, ProjectionJSON: projection}}
+	}
 	now := o.Now()
 	newDispatchID := fmt.Sprintf("%s-rebuilt-%s", dispatchID, strings.ReplaceAll(strings.ReplaceAll(now, ":", ""), "-", ""))
+	aggregateID, err := ids.NewUUIDv7(time.Now).NewID()
+	if err != nil {
+		return "", fmt.Errorf("rebuild aggregate identity: %w", err)
+	}
 	revision := o.activeRevision(snap.RouteID, req.Route.Revision)
 	targetID, targetType, scope := snap.TargetID, snap.TargetType, snap.TargetScope
 	if o.TargetResolver != nil {
@@ -187,6 +249,8 @@ func (o *OperatorService) RebuildStale(ctx context.Context, dispatchID, actor st
 		Route:              ports.TaskRouteRef{ID: snap.RouteID, Revision: revision},
 		Resource:           req.Resource,
 		TargetID:           targetID,
+		TargetScope:        scope,
+		Destination:        destination,
 		Generation:         snap.Generation + 1,
 		Fingerprint:        records.Digest(req.Activation.ContentFingerprint),
 		Changes:            manifestToChanges(req.Activation.Manifest),
@@ -214,6 +278,15 @@ func (o *OperatorService) RebuildStale(ctx context.Context, dispatchID, actor st
 			ContentFingerprint: next.Activation.ContentFingerprint,
 			ManifestDigest:     snap.ManifestDigest,
 			RequestVersion:     RequestContractVersion, RequestJSON: requestJSON, CreatedAt: now,
+			Fanout: &ports.FanoutInput{
+				AggregateID: string(aggregateID), Origin: string(records.OriginRebuild),
+				DestinationID: destination.ID, DestinationRevision: destination.Revision, Workstream: destination.Workstream,
+				Selections: []records.DestinationSelection{{
+					DestinationID: destination.ID, DestinationRevision: destination.Revision,
+					Workstream: destination.Workstream, Reason: "rebuild:" + dispatchID,
+				}},
+				Revisions: revisions,
+			},
 		},
 	})
 	if err != nil {

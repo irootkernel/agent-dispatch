@@ -43,6 +43,7 @@ var Migrations = []Migration{
 	{Version: 9, Name: "watch-bindings", SQL: schemaV9WatchBindings},
 	{Version: 10, Name: "destinations-contract-cutover", SQL: schemaV10DestinationsContractCutover},
 	{Version: 11, Name: "capability-fingerprint", SQL: schemaV11CapabilityFingerprint},
+	{Version: 12, Name: "aggregate-fanout-records", SQL: schemaV12AggregateFanoutRecords},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
@@ -547,4 +548,59 @@ INSERT INTO contract_state (contract) VALUES ('destinations-v1');
 // invalidates the activation exactly like a behavior change.
 const schemaV11CapabilityFingerprint = `
 ALTER TABLE route_runtime_state ADD COLUMN capability_fingerprint TEXT NOT NULL DEFAULT '';
+`
+
+// schemaV12AggregateFanoutRecords introduces the multi-destination record
+// families (E12-T1, ADR-0016, DAT-010): one aggregate event per normalized
+// source/policy occurrence, one durable destination-revision row per
+// canonical behavior projection, and one child dispatch per selected
+// destination beneath its aggregate. No historic row is rewritten: intents
+// created before the destinations[] contract keep their exact lineage and
+// remain queryable (DAT-012) — they simply have no child row, which is the
+// legacy marker UnresolvedLegacyWork and the request's absent destination
+// block already key on. The child's idempotency key is the DAT-014
+// destination-scoped projection, so the historical UNIQUE(target_id,
+// idempotency_key) on dispatch_intents keeps guarding duplicates while
+// UNIQUE(aggregate_id, destination_id) enforces one child per selected
+// destination per occurrence (FAN-003) and UNIQUE(dispatch_id) keeps the
+// child-to-intent mapping total where a child exists.
+const schemaV12AggregateFanoutRecords = `
+CREATE TABLE aggregate_events (
+	aggregate_id        TEXT PRIMARY KEY,
+	decision_id         TEXT NOT NULL REFERENCES policy_decisions(decision_id),
+	route_id            TEXT NOT NULL REFERENCES routes(route_id),
+	route_revision      TEXT NOT NULL,
+	resource_id         TEXT NOT NULL REFERENCES resources(resource_id),
+	origin              TEXT NOT NULL CHECK (origin IN ('arrival','followup','rerun','rebuild','reconcile')),
+	generation          INTEGER NOT NULL CHECK (generation >= 1),
+	content_fingerprint TEXT NOT NULL,
+	schema_version      TEXT NOT NULL,
+	selection_json      TEXT NOT NULL,
+	created_at          TEXT NOT NULL
+);
+CREATE INDEX idx_aggregate_events_route ON aggregate_events(route_id, created_at);
+
+CREATE TABLE destination_revisions (
+	route_id        TEXT NOT NULL REFERENCES routes(route_id),
+	destination_id  TEXT NOT NULL,
+	revision        TEXT NOT NULL,
+	projection_json TEXT NOT NULL,
+	created_at      TEXT NOT NULL,
+	PRIMARY KEY (route_id, destination_id, revision)
+);
+
+CREATE TABLE child_dispatches (
+	child_id             TEXT PRIMARY KEY,
+	aggregate_id         TEXT NOT NULL REFERENCES aggregate_events(aggregate_id),
+	dispatch_id          TEXT NOT NULL UNIQUE REFERENCES dispatch_intents(dispatch_id),
+	route_id             TEXT NOT NULL REFERENCES routes(route_id),
+	destination_id       TEXT NOT NULL,
+	destination_revision TEXT NOT NULL,
+	workstream           TEXT NOT NULL,
+	idempotency_key      TEXT NOT NULL,
+	schema_version       TEXT NOT NULL,
+	created_at           TEXT NOT NULL,
+	UNIQUE (aggregate_id, destination_id)
+);
+CREATE INDEX idx_child_dispatches_lane ON child_dispatches(route_id, destination_id, created_at);
 `

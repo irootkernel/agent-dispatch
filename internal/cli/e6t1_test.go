@@ -317,7 +317,7 @@ func TestDispatchSubmitsThroughWebhookSink(t *testing.T) {
 		t.Fatalf("endpoint invocations = %d, want 1", capture.count())
 	}
 	key, auth, body := capture.at(0)
-	if !strings.HasPrefix(key, "agent-dispatch:v1:sha256:") {
+	if !strings.HasPrefix(key, "agent-dispatch:v2:sha256:") {
 		t.Fatalf("idempotency header = %q, want the core key", key)
 	}
 	if auth != "Bearer cli-secret-1" {

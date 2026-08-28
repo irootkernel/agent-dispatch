@@ -12,7 +12,7 @@ This document is the single source of truth for the logical request shape. Other
 {
   "contract_version": "agent-dispatch.hermes-task/v1",
   "dispatch_id": "019c...",
-  "idempotency_key": "agent-dispatch:v1:sha256:...",
+  "idempotency_key": "agent-dispatch:v2:sha256:...",
   "route": {
     "id": "wiki-maintenance",
     "revision": "sha256:..."
@@ -20,6 +20,11 @@ This document is the single source of truth for the logical request shape. Other
   "resource": {
     "id": "vault-main",
     "workspace": "dir:/resolved/approved/vault"
+  },
+  "destination": {
+    "id": "wiki-primary",
+    "revision": "dst-...",
+    "workstream": "maintenance"
   },
   "assignment": {
     "profile": "wiki-maintainer",
@@ -53,7 +58,9 @@ This document is the single source of truth for the logical request shape. Other
 }
 ```
 
-The dispatch intent stores this object verbatim in its immutable `request` field (`schemas/dispatch-intent.schema.json`). The adapter renders the title (§3), trusted instruction (§4), and receipt instructions (§6) from this object; they are not separate payload fields. Field names in this object follow `snake_case` with nested `route`, `resource`, and `assignment` groups.
+The dispatch intent stores this object verbatim in its immutable `request` field (`schemas/dispatch-intent.schema.json`). The adapter renders the title (§3), trusted instruction (§4), and receipt instructions (§6) from this object; they are not separate payload fields. Field names in this object follow `snake_case` with nested `route`, `resource`, `destination`, and `assignment` groups.
+
+Since the destinations[] cutover (E12-T1) every new request is one destination's child dispatch: the `destination` block names the lane the work belongs to, and the `idempotency_key` is the DAT-014 destination-scoped projection (`agent-dispatch:v2:sha256:` over the route identity, source generation and fingerprint, destination identity and revision, workstream, target scope, and contract version). The block is optional in the stored v1 request contract only so pre-cutover historical requests — which carry route-scoped `agent-dispatch:v1:` keys — remain valid unchanged; a new request without it fails closed at build time, and derived work (follow-up, rerun, rebuild) keeps the parent lane or resolves the live certified lane before creating anything.
 
 ## 3. Task Title
 

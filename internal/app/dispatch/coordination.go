@@ -96,6 +96,36 @@ func (c *Coordinator) Activate(ctx context.Context, dispatchID string) error {
 	return c.Store.ActivateFollowup(ctx, dispatchID, c.Actor, c.Now())
 }
 
+// DestinationLaneResolver resolves the live destination lane of one route
+// (E12-T1): the lane identity plus the canonical projection bytes its
+// revision digests, so a derived child that references the lane can also
+// persist the destination-revision record it names (DAT-010: every
+// referenced revision has its projection row). ok is false when the route
+// or its certified destination cannot be resolved.
+type DestinationLaneResolver func(routeID string) (lane ports.TaskDestinationRef, projectionJSON string, ok bool)
+
+// ResolveDestinationLane resolves the destination lane for derived work
+// (E12-T1, DAT-013 precedence): the stored request's destination block
+// first, then the parent snapshot's child linkage, then the live
+// configured lane — never silently submitting route-scoped legacy
+// identity under the destinations contract. The returned projection bytes
+// are non-empty exactly when the lane was resolved live, because only
+// then can no earlier arrival have persisted the revision record.
+func ResolveDestinationLane(routeID string, stored *ports.TaskDestinationRef, snapshotLane ports.TaskDestinationRef, resolver DestinationLaneResolver) (ports.TaskDestinationRef, string, error) {
+	if stored != nil {
+		return *stored, "", nil
+	}
+	if snapshotLane.ID != "" && snapshotLane.Revision != "" && snapshotLane.Workstream != "" {
+		return snapshotLane, "", nil
+	}
+	if resolver != nil {
+		if lane, projection, ok := resolver(routeID); ok {
+			return lane, projection, nil
+		}
+	}
+	return ports.TaskDestinationRef{}, "", fmt.Errorf("%w: the work predates the destinations contract and no live destination lane resolves for route %s; regenerate the configuration before rerunning legacy work", ports.ErrStateNotEligible, routeID)
+}
+
 // BuildFollowupRequest constructs the latest-state follow-up intent
 // input for one completed dispatch: a fresh UUIDv7 dispatch ID (the
 // follow-up chain never grows derived-ID suffixes, E8-T1/H-1.2), the
@@ -105,16 +135,30 @@ func (c *Coordinator) Activate(ctx context.Context, dispatchID string) error {
 // manifest so the follow-up key reflects the work it covers, not the
 // parent's generation (M-10). Parent lineage stays recorded with the
 // decision (generation_lineage_json) and the creation audit row
-// (supersedes_dispatch).
-func BuildFollowupRequest(original ports.IntentSnapshot, manifest []records.ChangeItem, flags []string) (ports.IntentInput, error) {
+// (supersedes_dispatch). The follow-up keeps the parent's destination
+// lane (E12-T1): its child idempotency key derives from the same
+// destination identity at the new generation, and it lands beneath its
+// own follow-up aggregate event. A parent whose lane resolves only
+// through laneResolver also persists the referenced destination-revision
+// record (DAT-010).
+func BuildFollowupRequest(original ports.IntentSnapshot, manifest []records.ChangeItem, flags []string, laneResolver DestinationLaneResolver) (ports.IntentInput, error) {
 	var req ports.TaskRequest
 	if err := json.Unmarshal([]byte(original.RequestJSON), &req); err != nil {
 		return ports.IntentInput{}, fmt.Errorf("stored request is not the task contract shape: %w", err)
+	}
+	snapshotLane := ports.TaskDestinationRef{ID: original.DestinationID, Revision: original.DestinationRevision, Workstream: original.Workstream}
+	destination, projection, err := ResolveDestinationLane(original.RouteID, req.Destination, snapshotLane, laneResolver)
+	if err != nil {
+		return ports.IntentInput{}, fmt.Errorf("follow-up of dispatch %s: %w", original.DispatchID, err)
 	}
 	gen := ids.NewUUIDv7(time.Now)
 	followupID, err := gen.NewID()
 	if err != nil {
 		return ports.IntentInput{}, fmt.Errorf("follow-up identity: %w", err)
+	}
+	aggregateID, err := gen.NewID()
+	if err != nil {
+		return ports.IntentInput{}, fmt.Errorf("follow-up aggregate identity: %w", err)
 	}
 	id := string(followupID)
 	fp, err := fingerprint.Content(records.ContentFingerprintInput{
@@ -129,6 +173,8 @@ func BuildFollowupRequest(original ports.IntentSnapshot, manifest []records.Chan
 		Route:              req.Route,
 		Resource:           req.Resource,
 		TargetID:           original.TargetID,
+		TargetScope:        original.TargetScope,
+		Destination:        destination,
 		Generation:         original.Generation + 1,
 		Fingerprint:        fp,
 		Changes:            manifest,
@@ -144,6 +190,10 @@ func BuildFollowupRequest(original ports.IntentSnapshot, manifest []records.Chan
 	if err != nil {
 		return ports.IntentInput{}, err
 	}
+	var revisions []ports.DestinationRevisionInput
+	if projection != "" {
+		revisions = []ports.DestinationRevisionInput{{DestinationID: destination.ID, Revision: destination.Revision, ProjectionJSON: projection}}
+	}
 	return ports.IntentInput{
 		DispatchID: id, RouteID: original.RouteID, RouteRevision: req.Route.Revision,
 		TargetID: original.TargetID, TargetType: original.TargetType, TargetScope: original.TargetScope, ResourceID: req.Resource.ID,
@@ -151,6 +201,15 @@ func BuildFollowupRequest(original ports.IntentSnapshot, manifest []records.Chan
 		ContentFingerprint: next.Activation.ContentFingerprint,
 		ManifestDigest:     ManifestDigest(manifest),
 		RequestVersion:     RequestContractVersion, RequestJSON: requestJSON,
+		Fanout: &ports.FanoutInput{
+			AggregateID: string(aggregateID), Origin: string(records.OriginFollowup),
+			DestinationID: destination.ID, DestinationRevision: destination.Revision, Workstream: destination.Workstream,
+			Selections: []records.DestinationSelection{{
+				DestinationID: destination.ID, DestinationRevision: destination.Revision,
+				Workstream: destination.Workstream, Reason: "followup:" + original.DispatchID,
+			}},
+			Revisions: revisions,
+		},
 	}, nil
 }
 

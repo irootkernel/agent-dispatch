@@ -29,6 +29,9 @@ The implementation must verify the resulting journal mode and fail `doctor` if t
 | `batch_observations` | Many-to-many lineage | unique pair |
 | `policy_decisions` | Immutable decisions | unique decision ID |
 | `dispatch_intents` | Durable external intent | unique dispatch ID; unique target ID + idempotency key |
+| `aggregate_events` | One normalized occurrence and its destination-selection summary (E12-T1) | unique aggregate ID; decision lineage |
+| `destination_revisions` | Canonical behavior projection per destination revision (E12-T1) | unique route + destination + revision |
+| `child_dispatches` | Aggregate/destination lineage of one intent (E12-T1) | unique child ID; unique dispatch ID; unique aggregate + destination |
 | `dispatch_attempts` | Submission attempts and leases | unique attempt ID |
 | `dispatch_receipts` | Acceptance/execution evidence | unique receipt ID |
 | `route_runtime_state` | One active task and dirty generation | primary key route ID |

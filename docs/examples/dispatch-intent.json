@@ -9,13 +9,15 @@
   "target_id": "hermes-kanban-main",
   "resource_id": "vault-main",
   "generation": 1,
-  "idempotency_key": "agent-dispatch:v1:sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "idempotency_key": "agent-dispatch:v2:sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "aggregate_id": "019c2234-9abc-7def-8901-234567890abc",
+  "destination_id": "wiki-primary",
   "content_fingerprint": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
   "state": "ready",
   "request": {
     "contract_version": "agent-dispatch.hermes-task/v1",
     "dispatch_id": "019c2234-5678-7abc-9def-0123456789ab",
-    "idempotency_key": "agent-dispatch:v1:sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "idempotency_key": "agent-dispatch:v2:sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
     "route": {
       "id": "wiki-maintenance",
       "revision": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
@@ -24,9 +26,16 @@
       "id": "vault-main",
       "workspace": "dir:/Users/example/Documents/Obsidian/MainVault"
     },
+    "destination": {
+      "id": "wiki-primary",
+      "revision": "dst-5394fe54daf4b820811b90644e147bd8b0221f3836e0cb853a321d6368658b60",
+      "workstream": "maintenance"
+    },
     "assignment": {
       "profile": "wiki-maintainer",
-      "skills": ["llm-wiki"],
+      "skills": [
+        "llm-wiki"
+      ],
       "mutex_key": "wiki-publish"
     },
     "execution_hints": {

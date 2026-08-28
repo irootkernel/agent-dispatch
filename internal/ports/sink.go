@@ -163,6 +163,7 @@ type TaskRequest struct {
 	IdempotencyKey     string              `json:"idempotency_key"`
 	Route              TaskRouteRef        `json:"route"`
 	Resource           TaskResource        `json:"resource"`
+	Destination        *TaskDestinationRef `json:"destination,omitempty"`
 	Assignment         *TaskAssignment     `json:"assignment,omitempty"`
 	ExecutionHints     *TaskExecutionHints `json:"execution_hints,omitempty"`
 	Activation         TaskActivation      `json:"activation"`
@@ -173,6 +174,19 @@ type TaskRequest struct {
 type TaskRouteRef struct {
 	ID       string `json:"id"`
 	Revision string `json:"revision"`
+}
+
+// TaskDestinationRef identifies the destination lane a request belongs to
+// (E12-T1, DAT-010/DAT-014): the destination ID, the destination revision
+// whose behavior projection planned the work, and the workstream it feeds.
+// The block is optional in the stored v1 request contract so pre-cutover
+// (route-scoped) historical requests remain valid; every request created
+// under the destinations[] contract carries it and reruns, rebuilds, and
+// follow-ups derive their child identity from it.
+type TaskDestinationRef struct {
+	ID         string `json:"id"`
+	Revision   string `json:"revision"`
+	Workstream string `json:"workstream"`
 }
 
 // TaskResource identifies the resource and its workspace root.

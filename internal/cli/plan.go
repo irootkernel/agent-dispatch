@@ -618,7 +618,10 @@ func buildHeldLineage(a *planArtifacts) (ports.Lineage, ports.QuarantineInput, e
 
 // buildLineage assembles the durable persistence unit from the planned
 // artifacts: the shared observation, batch, and decision from
-// buildHeldLineage plus the intent with its self-contained request.
+// buildHeldLineage plus the intent with its self-contained request. The
+// intent is child-linked (E12-T1): one aggregate event records the
+// occurrence and its destination selection, and the intent's request and
+// idempotency key derive from the selected destination's lane.
 func buildLineage(a *planArtifacts) (ports.Lineage, error) {
 	lin, _, err := buildHeldLineage(a)
 	if err != nil {
@@ -626,6 +629,14 @@ func buildLineage(a *planArtifacts) (ports.Lineage, error) {
 	}
 	gen := ids.NewUUIDv7(time.Now)
 	dispatchID, err := gen.NewID()
+	if err != nil {
+		return ports.Lineage{}, err
+	}
+	aggregateID, err := gen.NewID()
+	if err != nil {
+		return ports.Lineage{}, err
+	}
+	lane, projection, err := certifiedLane(a.cfg, a.opts.routeID)
 	if err != nil {
 		return ports.Lineage{}, err
 	}
@@ -637,6 +648,8 @@ func buildLineage(a *planArtifacts) (ports.Lineage, error) {
 		// dir:<resolved root> for the v0.1 markdown vault resource.
 		Resource:           ports.TaskResource{ID: a.route.Source.Resource, Workspace: workspaceOf(a.dest, a.resource.Root)},
 		TargetID:           a.dest.Target,
+		TargetScope:        resolvedTargetScope(a.resolved),
+		Destination:        lane,
 		Generation:         1,
 		Fingerprint:        records.Digest(a.plan.ContentFingerprint),
 		Changes:            a.batch.Changes,
@@ -659,6 +672,19 @@ func buildLineage(a *planArtifacts) (ports.Lineage, error) {
 		ResourceID:  a.route.Source.Resource, Generation: 1, IdempotencyKey: key,
 		ContentFingerprint: a.plan.ContentFingerprint, ManifestDigest: dispatch.ManifestDigest(a.batch.Changes),
 		RequestVersion: dispatch.RequestContractVersion, RequestJSON: requestJSON, CreatedAt: lin.Decision.CreatedAt,
+		Fanout: &ports.FanoutInput{
+			AggregateID: string(aggregateID), Origin: string(records.OriginArrival),
+			DestinationID: lane.ID, DestinationRevision: lane.Revision, Workstream: lane.Workstream,
+			Selections: []records.DestinationSelection{{
+				DestinationID: lane.ID, DestinationRevision: lane.Revision, Workstream: lane.Workstream,
+				// The certified v0.1.5 selection is the closed fanout_mode
+				// "all" over the one certified lane: the reason records the
+				// mode, never an evaluated predicate (the E12-T2 evaluator
+				// adds per-destination structural reasons).
+				Reason: "fanout_mode:all",
+			}},
+			Revisions: []ports.DestinationRevisionInput{laneRevisionInput(lane, projection)},
+		},
 	}
 	return lin, nil
 }

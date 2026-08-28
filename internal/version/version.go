@@ -27,7 +27,7 @@ const ConfigVersion = "1"
 // Watch bindings (E10-T2); v10 records the destinations-contract
 // cutover marker (E11-T1); v11 binds the capability fingerprint to
 // route activation (E11-T2).
-const SchemaRange = "1-11"
+const SchemaRange = "1-12"
 
 // AdapterVersions returns the pinned adapter implementation versions the
 // build carries. Each entry names the delivered surface and its verified

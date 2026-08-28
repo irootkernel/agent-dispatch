@@ -136,7 +136,10 @@ type DecisionRecord struct {
 }
 
 // SaveIntent stores the immutable dispatch request and reserves the route
-// slot in the same transaction (intent transaction, ADR-0005).
+// slot in the same transaction (intent transaction, ADR-0005). A non-nil
+// fanout record persists the aggregate event, the referenced destination
+// revisions, and the child-dispatch record in the same transaction
+// (E12-T1: the aggregate-to-child creation is atomic with the intent).
 func (s *Store) SaveIntent(tx *sql.Tx, i IntentRecord) error {
 	// base_batch_seq is the generation-window watermark: the intent's own
 	// arrival batch when its decision carries one, otherwise the current
@@ -151,6 +154,11 @@ func (s *Store) SaveIntent(tx *sql.Tx, i IntentRecord) error {
 		i.IdempotencyKey, i.ContentFingerprint, i.ManifestDigest, i.RequestVersion, i.RequestJSON, i.CreatedAt, i.CreatedAt,
 		nullString(i.DecisionID)); err != nil {
 		return err
+	}
+	if i.Fanout != nil {
+		if err := s.saveFanoutTx(tx, i); err != nil {
+			return err
+		}
 	}
 	// Reserve the route's active slot in the same transaction.
 	res, err := execOn(tx, s.DB, `UPDATE route_runtime_state
@@ -187,6 +195,7 @@ type IntentRecord struct {
 	RequestVersion     string
 	RequestJSON        string
 	CreatedAt          string
+	Fanout             *ports.FanoutInput
 }
 
 // AppendTransition appends one audit record; the table triggers make any

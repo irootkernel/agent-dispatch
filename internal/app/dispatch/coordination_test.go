@@ -76,6 +76,7 @@ func intentForN(t *testing.T, n int) ports.IntentInput {
 		Route:      ports.TaskRouteRef{ID: "wiki", Revision: "route-rev-1"},
 		Resource:   ports.TaskResource{ID: "vault-main", Workspace: "dir:/srv/vault"},
 		TargetID:   "hermes-kanban-main", Generation: 1,
+		Destination: ports.TaskDestinationRef{ID: "wiki-primary", Revision: "dst-rev-1", Workstream: "maintenance"},
 		Fingerprint: records.Digest(fmt.Sprintf("sha256:%064d", n)),
 		Changes: []records.ChangeItem{{
 			Path: fmt.Sprintf("Inbox/n%d.md", n), Operation: records.OpCreate, FileType: records.FileRegular,
@@ -97,6 +98,13 @@ func intentForN(t *testing.T, n int) ports.IntentInput {
 			AfterDigest: records.Digest(fmt.Sprintf("sha256:%064d", n)), DigestStatus: records.DigestKnown,
 		}}), RequestVersion: RequestContractVersion,
 		RequestJSON: requestJSON, CreatedAt: "2026-08-20T01:00:00Z",
+		Fanout: &ports.FanoutInput{
+			AggregateID: fmt.Sprintf("agg-%d", n), Origin: string(records.OriginArrival),
+			DestinationID: "wiki-primary", DestinationRevision: "dst-rev-1", Workstream: "maintenance",
+			Selections: []records.DestinationSelection{{
+				DestinationID: "wiki-primary", DestinationRevision: "dst-rev-1", Workstream: "maintenance", Reason: "fanout_mode:all",
+			}},
+		},
 	}
 }
 
@@ -191,7 +199,7 @@ func TestCompletionCreatesAtMostOneFollowup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	followup, err := BuildFollowupRequest(active, latestManifest(t), nil)
+	followup, err := BuildFollowupRequest(active, latestManifest(t), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +277,7 @@ func TestFailedCompletionRespectsBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	active, _ := s.LoadIntent(ctx, "dispatch-1")
-	followup, err := BuildFollowupRequest(active, latestManifest(t), nil)
+	followup, err := BuildFollowupRequest(active, latestManifest(t), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

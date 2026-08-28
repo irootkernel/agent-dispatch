@@ -160,6 +160,39 @@ func resolveRouteTarget(cfg *config.Config, routeID string) (config.Destination,
 	return dest, resolved, nil
 }
 
+// certifiedLane resolves the route's certified destination lane for
+// child-linked request creation (E12-T1, DAT-010/DAT-014): the
+// destination identity with its current destination revision and the
+// canonical projection bytes that revision digests. The v0.1.5 certified
+// path fans exactly this one lane out per occurrence; widening selection
+// to every eligible destination arrives with the E12-T2 evaluator.
+func certifiedLane(cfg *config.Config, routeID string) (ports.TaskDestinationRef, string, error) {
+	route, ok := cfg.Routes[routeID]
+	if !ok {
+		return ports.TaskDestinationRef{}, "", fmt.Errorf("route %q is not defined", routeID)
+	}
+	dest, err := route.CertifiedDestination(routeID)
+	if err != nil {
+		return ports.TaskDestinationRef{}, "", err
+	}
+	projection, err := config.DestinationProjectionJSON(cfg, dest)
+	if err != nil {
+		return ports.TaskDestinationRef{}, "", fmt.Errorf("destination %q projection: %v", dest.ID, err)
+	}
+	revision := config.DestinationRevision(cfg, route, dest)
+	if revision == "" {
+		return ports.TaskDestinationRef{}, "", fmt.Errorf("destination %q revision could not be computed", dest.ID)
+	}
+	return ports.TaskDestinationRef{ID: dest.ID, Revision: revision, Workstream: dest.Workstream}, projection, nil
+}
+
+// laneRevisionInput maps one certified lane and its projection bytes
+// onto the durable destination-revision input persisted with a fanout
+// (E12-T1).
+func laneRevisionInput(lane ports.TaskDestinationRef, projection string) ports.DestinationRevisionInput {
+	return ports.DestinationRevisionInput{DestinationID: lane.ID, Revision: lane.Revision, ProjectionJSON: projection}
+}
+
 // resolvedTargetScope returns the durable target scope an intent
 // records: the kanban board slug for hermes targets and the endpoint URL
 // for webhook targets — in both cases the identity of the interface

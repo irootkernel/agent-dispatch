@@ -272,6 +272,9 @@ func workService(command, configPath string, store storeOp, routeID string, stde
 		// independent policy digest, not a route revision echo
 		// (E9-T3, L-18).
 		PolicyRevision: config.PolicyRevision(route),
+		// A legacy completion owing a follow-up resolves the live
+		// certified lane so the follow-up child-links (E12-T1).
+		DestinationResolver: routeDestinationResolver(cfg),
 	}, 0
 }
 

@@ -62,6 +62,12 @@ type IntentSummary struct {
 	// object the published schema requires — never a JSON string (E9-T1
 	// audit F001, reconciled by the E9 validation).
 	Request json.RawMessage `json:"request"`
+	// AggregateID and DestinationID surface the child linkage (E12-T1,
+	// FAN-010 posture): the aggregate event the intent hangs beneath and
+	// the destination lane it belongs to. Empty marks the pre-cutover
+	// legacy shape (DAT-012's historical intents carry no child row).
+	AggregateID   string `json:"aggregate_id"`
+	DestinationID string `json:"destination_id"`
 	// Operator convenience members the published schema's
 	// additionalProperties: false excludes; internal-only (E9-T1 audit
 	// F002).

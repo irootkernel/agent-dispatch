@@ -236,6 +236,21 @@ func routeTargetResolver(cfg *config.Config) func(routeID string) (string, strin
 	}
 }
 
+// routeDestinationResolver builds the destination-lane resolver for the
+// rerun, rebuild, and legacy-completion paths (E12-T1): a legacy stored
+// request without a destination block resolves the certified lane — with
+// the canonical projection bytes its revision digests — so the derived
+// child also persists the destination-revision record it references.
+func routeDestinationResolver(cfg *config.Config) dispatch.DestinationLaneResolver {
+	return func(routeID string) (ports.TaskDestinationRef, string, bool) {
+		lane, projection, err := certifiedLane(cfg, routeID)
+		if err != nil {
+			return ports.TaskDestinationRef{}, "", false
+		}
+		return lane, projection, true
+	}
+}
+
 // runDispatchesRetry applies the explicit operator retry (DUR-009).
 func runDispatchesRetry(command string, args []string, stdout, stderr io.Writer) int {
 	flags, code := parseDispatchesFlags(command, args, stderr, nil)
@@ -433,6 +448,7 @@ func runDispatchesRerun(command string, args []string, stdout, stderr io.Writer)
 	var scopeResolver func(routeID string) string
 	var revisionResolver func(routeID string) (string, bool)
 	var targetResolver func(routeID string) (string, string, string, bool)
+	var destinationResolver dispatch.DestinationLaneResolver
 	if cfgErr == nil {
 		rerunCfg := cfgRerun
 		scopeResolver = routeScopeResolver(rerunCfg)
@@ -443,10 +459,12 @@ func runDispatchesRerun(command string, args []string, stdout, stderr io.Writer)
 			return config.RouteRevision(rerunCfg, routeID)
 		}
 		targetResolver = routeTargetResolver(rerunCfg)
+		destinationResolver = routeDestinationResolver(rerunCfg)
 	}
 	op := &dispatch.OperatorService{
 		Store: store, Now: func() string { return dispatch.Timestamp(time.Now()) },
 		TargetScopeResolver: scopeResolver, RevisionResolver: revisionResolver, TargetResolver: targetResolver,
+		DestinationResolver: destinationResolver,
 	}
 	summary, err := op.Rerun(requestCtx(), flags.positional, "operator", flags.val("--reason"))
 	if err != nil {

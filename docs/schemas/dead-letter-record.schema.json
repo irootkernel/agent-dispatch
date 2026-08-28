@@ -32,7 +32,7 @@
     },
     "idempotency_key": {
       "type": "string",
-      "pattern": "^agent-dispatch:v1:sha256:[0-9a-f]{64}$"
+      "pattern": "^agent-dispatch:v[12]:sha256:[0-9a-f]{64}$"
     },
     "state": {
       "const": "dead_lettered"

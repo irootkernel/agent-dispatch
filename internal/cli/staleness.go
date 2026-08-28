@@ -78,7 +78,9 @@ func durableFacts(configPath, resourceID string) (ingest.PathFacts, error) {
 
 // staleRebuilderOf builds the stale-intent rebuilder over the operator
 // service: the original is superseded through its declared edge and the
-// replacement carries the active revision and target identity.
+// replacement carries the active revision and target identity. The
+// replacement also child-links under the live destination lane so a
+// rebuilt legacy intent becomes new-contract work (E12-T1).
 func staleRebuilderOf(store storeOp, cfg *config.Config) func(context.Context, string) (string, error) {
 	op := &dispatch.OperatorService{
 		Store: store,
@@ -86,7 +88,8 @@ func staleRebuilderOf(store storeOp, cfg *config.Config) func(context.Context, s
 		RevisionResolver: func(routeID string) (string, bool) {
 			return config.RouteRevision(cfg, routeID)
 		},
-		TargetResolver: routeTargetResolver(cfg),
+		TargetResolver:      routeTargetResolver(cfg),
+		DestinationResolver: routeDestinationResolver(cfg),
 	}
 	return func(ctx context.Context, dispatchID string) (string, error) {
 		return op.RebuildStale(ctx, dispatchID, "agent-dispatch")

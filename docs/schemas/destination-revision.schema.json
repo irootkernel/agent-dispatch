@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agent-dispatch:schema:destination-revision:v1",
+  "title": "Agent Dispatch Destination Revision v1",
+  "description": "The canonical behavior projection for one destination ID (E12-T1, DAT-010, CON-010). The revision digest is the destination's behavior-affecting shape; a behavior-affecting edit produces a new revision and pauses incompatible reuse until production acknowledgement.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "route_id",
+    "destination_id",
+    "revision",
+    "projection",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "agent-dispatch.destination-revision/v1"
+    },
+    "route_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "destination_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,63}$"
+    },
+    "revision": {
+      "type": "string",
+      "pattern": "^dst-[0-9a-f]{16,}$"
+    },
+    "projection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "target",
+        "profile",
+        "skills",
+        "workstream",
+        "workspace",
+        "mutex_key",
+        "execution_hints",
+        "conditions"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "profile": {
+          "type": "string"
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "workstream": {
+          "type": "string"
+        },
+        "workspace": {
+          "type": "string"
+        },
+        "mutex_key": {
+          "type": "string"
+        },
+        "execution_hints": {
+          "type": "object"
+        },
+        "conditions": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

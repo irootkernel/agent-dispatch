@@ -9,7 +9,10 @@ erDiagram
     SOURCE_OBSERVATION ||--|{ CHANGE_ITEM : contains
     SOURCE_OBSERVATION }o--o{ CHANGE_BATCH : grouped_into
     CHANGE_BATCH ||--|| POLICY_DECISION : evaluated_as
-    POLICY_DECISION ||--o| DISPATCH_INTENT : may_create
+    POLICY_DECISION ||--o| AGGREGATE_EVENT : may_open
+    AGGREGATE_EVENT ||--o{ CHILD_DISPATCH : selects
+    ROUTE ||--o{ DESTINATION_REVISION : versioned_as
+    CHILD_DISPATCH ||--|| DISPATCH_INTENT : drives
     DISPATCH_INTENT ||--o{ DISPATCH_ATTEMPT : attempted_by
     DISPATCH_INTENT ||--o{ DISPATCH_RECEIPT : evidenced_by
     DISPATCH_INTENT ||--o{ WORK_RECEIPT : executed_with
@@ -305,20 +308,35 @@ Timestamps, observation IDs, and source delivery attempt fields are excluded.
 
 ### Idempotency key
 
+Every intent created under the destinations[] contract is one
+destination's child dispatch, and its key is the DAT-014 child
+projection (E12-T1): route identity, source generation and fingerprint,
+destination identity and revision, workstream, target scope, and the
+request contract version.
+
 ```text
-idempotency_key = "agent-dispatch:v1:sha256:" + SHA-256(
+idempotency_key = "agent-dispatch:v2:sha256:" + SHA-256(
   canonical_json({
+    content_fingerprint,
+    destination_id,
+    destination_revision,
+    generation,
+    request_contract_version,
     route_id,
     route_revision,
-    target_id,
-    generation,
-    content_fingerprint,
-    request_contract_version
+    target_scope,
+    workstream
   })
 )
 ```
 
-A manual `rerun` intentionally increments or replaces generation lineage so it receives a new key. A submission `retry` retains the key.
+Two destinations beneath one aggregate event (including the same profile
+under different workstreams), or one destination across two behavior
+revisions, can therefore never collide; a behavior-affecting destination
+edit always changes the key. A manual `rerun` intentionally increments or
+replaces generation lineage so it receives a new key. A submission
+`retry` retains the key (CON-009). Pre-cutover historical rows keep their
+route-scoped `agent-dispatch:v1:` keys unchanged (DAT-012).
 
 ## 15. Invariants
 

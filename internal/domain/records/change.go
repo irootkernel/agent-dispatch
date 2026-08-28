@@ -165,18 +165,10 @@ type FingerprintChange struct {
 	Path         string `json:"path"`
 }
 
-// IdempotencyKeyInput is the dedicated idempotency-key projection
-// (domain-model §14) with keys in RFC 8785 lexicographic order. Attempt
-// numbers, submission times, and other retry-varying fields are
-// deliberately absent (DAT-006).
-type IdempotencyKeyInput struct {
-	ContentFingerprint string `json:"content_fingerprint"`
-	Generation         int64  `json:"generation"`
-	RequestVersion     string `json:"request_contract_version"`
-	RouteID            string `json:"route_id"`
-	RouteRevision      string `json:"route_revision"`
-	TargetID           string `json:"target_id"`
-}
+// The idempotency-key projection lives in fanout.go as
+// ChildIdempotencyKeyInput (DAT-014, E12-T1): every dispatch intent created
+// under the destinations[] contract is a child of one aggregate event, and
+// its key derives from the destination-scoped projection.
 
 func errf(msg string) error { return &ValidationError{msg} }
 

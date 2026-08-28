@@ -1,0 +1,23 @@
+{
+  "schema_version": "agent-dispatch.destination-revision/v1",
+  "route_id": "wiki-maintenance",
+  "destination_id": "wiki-primary",
+  "revision": "dst-5394fe54daf4b820811b90644e147bd8b0221f3836e0cb853a321d6368658b60",
+  "projection": {
+    "id": "wiki-primary",
+    "target": "hermes-kanban-main",
+    "profile": "wiki-maintainer",
+    "skills": [
+      "llm-wiki"
+    ],
+    "workstream": "maintenance",
+    "workspace": "",
+    "mutex_key": "wiki-publish",
+    "execution_hints": {
+      "max_runtime": "30m",
+      "max_attempts": 2
+    },
+    "conditions": null
+  },
+  "created_at": "2026-08-29T09:30:12.482Z"
+}

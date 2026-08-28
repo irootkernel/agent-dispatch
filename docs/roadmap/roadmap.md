@@ -13,11 +13,11 @@
 | Shipped release | v0.1.4 |
 | Planned SOT baseline | 1.1.0 ([D-025](../specs/decision-log.md)) |
 | Release target | v0.1.5 |
-| Current epic | E11 Completed (G7 evidenced); next E12 |
-| Current active task | None |
-| Next task | E12-T1 |
-| Completed tasks | 67 / 75 |
-| Planned tasks | 8 / 75 |
+| Current epic | E12 In Progress |
+| Current active task | E12-T1 |
+| Next task | E12-T2 |
+| Completed tasks | 68 / 75 |
+| Planned tasks | 7 / 75 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -45,7 +45,7 @@
 | E9 | Deferred-Inventory Hardening | **Completed** | 9 | Deferred closure + review remediation + v0.1.4 |
 | E10 | Source and Reconciliation Integrity | **Completed** | 3 | G6 |
 | E11 | Hermes Preflight and Operator Setup | **Completed** | 4 | G7 |
-| E12 | Multi-Destination Lifecycle | **Planned** | 4 | G8 |
+| E12 | Multi-Destination Lifecycle | **In Progress** | 4 | G8 |
 | E13 | Notifications and v0.1.5 Release | **Planned** | 4 | G9 |
 
 ## 3. Task Status Index
@@ -119,7 +119,7 @@
 | 65 | E11-T2 | Completed | Hermes 0.19.1+ capability probe and evidence cache |
 | 66 | E11-T3 | Completed | Destination profile/skill validation and route preflight |
 | 67 | E11-T4 | Completed | Discoverable CLI, guided setup, operator skill, and G7 |
-| 68 | E12-T1 | Planned | Aggregate event and destination child persistence |
+| 68 | E12-T1 | Completed | Aggregate event and destination child persistence |
 | 69 | E12-T2 | Planned | Per-destination lanes, conditions, fan-out, and retry isolation |
 | 70 | E12-T3 | Planned | Work-receipt/v2, aggregate status, and completion evidence |
 | 71 | E12-T4 | Planned | Multi-destination and completion gate G8 |
@@ -2961,7 +2961,7 @@ E11-T3 Completed.
 
 ## E12-T1: Aggregate Event and Destination Child Persistence
 
-**Status:** Planned
+**Status:** Completed
 **Design Gate impact:** Not required; ADR-0016 and the record contracts own the design.
 
 ### Objective
@@ -2992,7 +2992,14 @@ E11-T4 Completed.
 
 ### Evidence
 
-None — Planned.
+Migration v12 (`aggregate_events`, `destination_revisions`,
+`child_dispatches`) with the atomic aggregate-to-child creation across
+arrival, follow-up, rerun, rebuild, and reconcile paths, the DAT-014
+child idempotency projection (`agent-dispatch:v2:`), and the
+content-addressed destination-revision records are pinned by
+`internal/adapters/sqlite/e12t1_test.go`,
+`internal/config/e12t1_test.go`, and the schema/example contracts under
+`docs/schemas/`; `make verify` green at the task commit.
 
 ## E12-T2: Per-Destination Lanes, Conditions, Fan-Out, and Retry Isolation
 

@@ -24,7 +24,15 @@ type RequestInput struct {
 	Route      ports.TaskRouteRef
 	Resource   ports.TaskResource
 	TargetID   string
-	Generation int64
+	// TargetScope is the resolved target scope (the hermes-kanban board)
+	// the idempotency projection binds (DAT-014): empty encodes a
+	// scope-less target class, never an unresolved one.
+	TargetScope string
+	// Destination is the destination lane the request belongs to
+	// (E12-T1): every new-contract request is one destination's child and
+	// derives its idempotency key from the destination-scoped projection.
+	Destination ports.TaskDestinationRef
+	Generation  int64
 	// Fingerprint is the batch content fingerprint (DAT-005).
 	Fingerprint records.Digest
 	// Changes are the canonical sorted manifest changes.
@@ -41,10 +49,12 @@ type RequestInput struct {
 var workspaceBindingForm = regexp.MustCompile(`^(scratch|worktree|worktree:.+|dir:.+)$`)
 
 // BuildRequest constructs the immutable logical task request and its
-// idempotency key. The key is derived from the target, route revision,
-// generation, contract version, and content fingerprint, so the same
-// planned work submitted twice maps to one durable intent
-// (DUR-012 uniqueness).
+// child idempotency key. The key is derived from the route revision, the
+// source generation and content fingerprint, the destination identity and
+// revision, the workstream, the target scope, and the contract version
+// (DAT-014), so the same planned work submitted twice maps to one durable
+// intent (DUR-012 uniqueness) while two destinations under one event, or
+// one destination across two behavior revisions, can never collide.
 func BuildRequest(in RequestInput) (ports.TaskRequest, string, error) {
 	if in.DispatchID == "" || in.Route.ID == "" || in.Route.Revision == "" {
 		return ports.TaskRequest{}, "", fmt.Errorf("request needs dispatch and route identity")
@@ -61,6 +71,9 @@ func BuildRequest(in RequestInput) (ports.TaskRequest, string, error) {
 	if in.TargetID == "" {
 		return ports.TaskRequest{}, "", fmt.Errorf("request needs the target ID")
 	}
+	if in.Destination.ID == "" || in.Destination.Revision == "" || in.Destination.Workstream == "" {
+		return ports.TaskRequest{}, "", fmt.Errorf("request needs the destination identity (id, revision, and workstream; E12-T1 child contract)")
+	}
 	if in.Generation < 1 {
 		return ports.TaskRequest{}, "", fmt.Errorf("generation must be >= 1")
 	}
@@ -74,23 +87,28 @@ func BuildRequest(in RequestInput) (ports.TaskRequest, string, error) {
 	if flags == nil {
 		flags = []string{} // the contract requires an array, never null
 	}
-	key, err := fingerprint.Idempotency(records.IdempotencyKeyInput{
-		ContentFingerprint: string(in.Fingerprint),
-		Generation:         in.Generation,
-		RequestVersion:     RequestContractVersion,
-		RouteID:            in.Route.ID,
-		RouteRevision:      in.Route.Revision,
-		TargetID:           in.TargetID,
+	key, err := fingerprint.ChildIdempotency(records.ChildIdempotencyKeyInput{
+		ContentFingerprint:  string(in.Fingerprint),
+		DestinationID:       in.Destination.ID,
+		DestinationRevision: in.Destination.Revision,
+		Generation:          in.Generation,
+		RequestVersion:      RequestContractVersion,
+		RouteID:             in.Route.ID,
+		RouteRevision:       in.Route.Revision,
+		TargetScope:         in.TargetScope,
+		Workstream:          in.Destination.Workstream,
 	})
 	if err != nil {
 		return ports.TaskRequest{}, "", fmt.Errorf("idempotency key: %v", err)
 	}
+	destination := in.Destination
 	req := ports.TaskRequest{
 		ContractVersion: RequestContractVersion,
 		DispatchID:      in.DispatchID,
 		IdempotencyKey:  key,
 		Route:           in.Route,
 		Resource:        in.Resource,
+		Destination:     &destination,
 		Assignment:      in.Assignment,
 		ExecutionHints:  in.ExecutionHints,
 		Activation: ports.TaskActivation{

@@ -22,7 +22,7 @@
     },
     "idempotency_key": {
       "type": "string",
-      "pattern": "^agent-dispatch:v1:sha256:[0-9a-f]{64}$"
+      "pattern": "^agent-dispatch:v[12]:sha256:[0-9a-f]{64}$"
     },
     "route": {
       "type": "object",
@@ -53,6 +53,29 @@
         },
         "workspace": {
           "type": "string"
+        }
+      }
+    },
+    "destination": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "revision",
+        "workstream"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "workstream": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },

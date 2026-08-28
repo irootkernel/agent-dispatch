@@ -22,31 +22,31 @@ func (s *Store) ListIntents(ctx context.Context, f ports.IntentFilter) ([]ports.
 	where := []string{"1=1"}
 	args := []any{}
 	if f.RouteID != "" {
-		where = append(where, "route_id = ?")
+		where = append(where, "dispatch_intents.route_id = ?")
 		args = append(args, f.RouteID)
 	}
 	if f.State != "" {
-		where = append(where, "state = ?")
+		where = append(where, "dispatch_intents.state = ?")
 		args = append(args, string(f.State))
 	}
 	if f.TargetID != "" {
-		where = append(where, "target_id = ?")
+		where = append(where, "dispatch_intents.target_id = ?")
 		args = append(args, f.TargetID)
 	}
 	if f.DispatchID != "" {
-		where = append(where, "dispatch_id = ?")
+		where = append(where, "dispatch_intents.dispatch_id = ?")
 		args = append(args, f.DispatchID)
 	}
 	if f.OlderThan != "" {
-		where = append(where, "created_at < ?")
+		where = append(where, "dispatch_intents.created_at < ?")
 		args = append(args, f.OlderThan)
 	}
 	if f.ExternalRef != "" {
-		where = append(where, "external_ref = ?")
+		where = append(where, "dispatch_intents.external_ref = ?")
 		args = append(args, f.ExternalRef)
 	}
 	if f.CausalPrefix != "" {
-		where = append(where, "(dispatch_id LIKE ? ESCAPE '\\' OR decision_id LIKE ? ESCAPE '\\')")
+		where = append(where, "(dispatch_intents.dispatch_id LIKE ? ESCAPE '\\' OR dispatch_intents.decision_id LIKE ? ESCAPE '\\')")
 		// The caller's prefix is matched literally: LIKE wildcards in it
 		// are escaped so % and _ cannot widen the filter.
 		escaped := strings.ReplaceAll(f.CausalPrefix, "\\", "\\\\")
@@ -65,9 +65,10 @@ func (s *Store) ListIntents(ctx context.Context, f ports.IntentFilter) ([]ports.
 	// rides along as the object the schema requires — the list is
 	// bounded, so the payload stays bounded with it (reconciled by the
 	// E9 validation).
-	query := `SELECT dispatch_id, route_id, target_id, generation, idempotency_key, state, attempt_count, next_attempt_at, created_at, updated_at,
-		decision_id, route_revision, resource_id, content_fingerprint, request_json
-		FROM dispatch_intents WHERE ` + strings.Join(where, " AND ") + ` ORDER BY created_at DESC, dispatch_id DESC LIMIT ?`
+	query := `SELECT dispatch_intents.dispatch_id, dispatch_intents.route_id, dispatch_intents.target_id, dispatch_intents.generation, dispatch_intents.idempotency_key, dispatch_intents.state, dispatch_intents.attempt_count, dispatch_intents.next_attempt_at, dispatch_intents.created_at, dispatch_intents.updated_at,
+		dispatch_intents.decision_id, dispatch_intents.route_revision, dispatch_intents.resource_id, dispatch_intents.content_fingerprint, dispatch_intents.request_json,
+		` + childJoinColumns + `
+		FROM dispatch_intents ` + childJoin + ` WHERE ` + strings.Join(where, " AND ") + ` ORDER BY dispatch_intents.created_at DESC, dispatch_intents.dispatch_id DESC LIMIT ?`
 	args = append(args, limit)
 	if f.Offset > 0 {
 		query += ` OFFSET ?`
@@ -82,10 +83,11 @@ func (s *Store) ListIntents(ctx context.Context, f ports.IntentFilter) ([]ports.
 	for rows.Next() {
 		var sum ports.IntentSummary
 		var next sql.NullString
-		var reqJSON string
+		var reqJSON, childDestRevision, childWorkstream string
 		if err := rows.Scan(&sum.DispatchID, &sum.RouteID, &sum.TargetID, &sum.Generation, &sum.IdempotencyKey,
 			&sum.State, &sum.AttemptCount, &next, &sum.CreatedAt, &sum.UpdatedAt,
-			&sum.DecisionID, &sum.RouteRevision, &sum.ResourceID, &sum.ContentFingerprint, &reqJSON); err != nil {
+			&sum.DecisionID, &sum.RouteRevision, &sum.ResourceID, &sum.ContentFingerprint, &reqJSON,
+			&sum.AggregateID, &sum.DestinationID, &childDestRevision, &childWorkstream); err != nil {
 			return nil, err
 		}
 		sum.NextAttemptAt = nullText(next)
@@ -102,16 +104,18 @@ func (s *Store) ListIntents(ctx context.Context, f ports.IntentFilter) ([]ports.
 func (s *Store) LoadIntentLineage(ctx context.Context, dispatchID string) (ports.IntentLineage, error) {
 	var lin ports.IntentLineage
 	var next sql.NullString
-	var storedVersion, reqJSON string
+	var storedVersion, reqJSON, childDestRevision, childWorkstream string
 	// The summary selects every schema-required member of the intent
 	// record: the decision linkage, the route revision, the resource, the
 	// content fingerprint, and the request document (E9-T1/M-16).
-	err := s.QueryRowContext(ctx, `SELECT dispatch_id, route_id, target_id, generation, idempotency_key, state, request_version, attempt_count, next_attempt_at, created_at, updated_at,
-		decision_id, route_revision, resource_id, content_fingerprint, request_json
-		FROM dispatch_intents WHERE dispatch_id = ?`, dispatchID).Scan(
+	err := s.QueryRowContext(ctx, `SELECT dispatch_intents.dispatch_id, dispatch_intents.route_id, dispatch_intents.target_id, dispatch_intents.generation, dispatch_intents.idempotency_key, dispatch_intents.state, dispatch_intents.request_version, dispatch_intents.attempt_count, dispatch_intents.next_attempt_at, dispatch_intents.created_at, dispatch_intents.updated_at,
+		decision_id, route_revision, resource_id, content_fingerprint, request_json,
+		`+childJoinColumns+`
+		FROM dispatch_intents `+childJoin+` WHERE dispatch_intents.dispatch_id = ?`, dispatchID).Scan(
 		&lin.Intent.DispatchID, &lin.Intent.RouteID, &lin.Intent.TargetID, &lin.Intent.Generation, &lin.Intent.IdempotencyKey,
 		&lin.Intent.State, &storedVersion, &lin.Intent.AttemptCount, &next, &lin.Intent.CreatedAt, &lin.Intent.UpdatedAt,
-		&lin.Intent.DecisionID, &lin.Intent.RouteRevision, &lin.Intent.ResourceID, &lin.Intent.ContentFingerprint, &reqJSON)
+		&lin.Intent.DecisionID, &lin.Intent.RouteRevision, &lin.Intent.ResourceID, &lin.Intent.ContentFingerprint, &reqJSON,
+		&lin.Intent.AggregateID, &lin.Intent.DestinationID, &childDestRevision, &childWorkstream)
 	if errors.Is(err, sql.ErrNoRows) {
 		return lin, fmt.Errorf("%w: %s", ports.ErrIntentNotFound, dispatchID)
 	}
@@ -514,10 +518,13 @@ func (s *Store) RerunIntent(ctx context.Context, in ports.RerunInput) (ports.Int
 func (s *Store) intentSummaryByID(ctx context.Context, dispatchID string) (ports.IntentSummary, error) {
 	var sum ports.IntentSummary
 	var next sql.NullString
-	err := s.QueryRowContext(ctx, `SELECT dispatch_id, route_id, target_id, generation, idempotency_key, state, attempt_count, next_attempt_at, created_at, updated_at
-		FROM dispatch_intents WHERE dispatch_id = ?`, dispatchID).Scan(
+	var childDestRevision, childWorkstream string
+	err := s.QueryRowContext(ctx, `SELECT dispatch_intents.dispatch_id, dispatch_intents.route_id, dispatch_intents.target_id, dispatch_intents.generation, dispatch_intents.idempotency_key, dispatch_intents.state, dispatch_intents.attempt_count, dispatch_intents.next_attempt_at, dispatch_intents.created_at, dispatch_intents.updated_at,
+		`+childJoinColumns+`
+		FROM dispatch_intents `+childJoin+` WHERE dispatch_intents.dispatch_id = ?`, dispatchID).Scan(
 		&sum.DispatchID, &sum.RouteID, &sum.TargetID, &sum.Generation, &sum.IdempotencyKey,
-		&sum.State, &sum.AttemptCount, &next, &sum.CreatedAt, &sum.UpdatedAt)
+		&sum.State, &sum.AttemptCount, &next, &sum.CreatedAt, &sum.UpdatedAt,
+		&sum.AggregateID, &sum.DestinationID, &childDestRevision, &childWorkstream)
 	sum.NextAttemptAt = nullText(next)
 	return sum, err
 }
@@ -709,6 +716,14 @@ func (s *Store) saveIntentTakeOverOriginal(tx *sql.Tx, i IntentRecord, originalD
 		i.DispatchID, i.DecisionID, i.RouteID, i.RouteRevision, i.TargetID, i.TargetType, i.TargetScope, i.ResourceID, int(i.Generation),
 		i.IdempotencyKey, i.ContentFingerprint, i.ManifestDigest, i.RequestVersion, i.RequestJSON, i.CreatedAt, i.CreatedAt); err != nil {
 		return err
+	}
+	// A new-contract rerun carries its aggregate and child lineage into
+	// the same takeover transaction (E12-T1: operator-created work is a
+	// child beneath its own aggregate occurrence like any other).
+	if i.Fanout != nil {
+		if err := s.saveFanoutTx(tx, i); err != nil {
+			return err
+		}
 	}
 	res, err := execOn(tx, s.DB, `UPDATE route_runtime_state
 		SET active_dispatch_id = ?, active_generation = ?, version = version + 1

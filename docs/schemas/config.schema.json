@@ -79,7 +79,10 @@
     },
     "hermes_targets": {
       "type": "object",
-      "description": "Hermes Kanban delivery targets probed for compatibility against the public interface (ADR-0017).",
+      "description": "Hermes Kanban delivery targets probed for compatibility against the public interface (ADR-0017). Keys name the capability-cache file and must match the destination-ID pattern.",
+      "propertyNames": {
+        "$ref": "#/$defs/destinationId"
+      },
       "additionalProperties": {
         "$ref": "#/$defs/hermesTarget"
       }

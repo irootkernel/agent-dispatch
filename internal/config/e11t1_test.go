@@ -89,6 +89,7 @@ func TestE11T1LegacyDispatchRefusedWithRegenerationPath(t *testing.T) {
 	msg := err.Error()
 	for _, want := range []string{
 		"regenerate the configuration",
+		"`agent-dispatch setup wiki`",
 		"`agent-dispatch init`",
 		"destinations[]",
 		"hermes_targets",
@@ -238,6 +239,74 @@ func TestE11T1DestinationContractRejections(t *testing.T) {
 	}
 }
 
+// TestE11T1HermesDestinationRequiresProfile proves the destination
+// envelope rejections (HER-015): a hermes destination requires a
+// non-empty profile, and a webhook destination carries none of the
+// hermes-only execution fields.
+func TestE11T1HermesDestinationRequiresProfile(t *testing.T) {
+	base := string(minimalYAML(t))
+	// A hermes destination without a profile is refused by the semantic
+	// layer (the schema leaves the key optional; HER-015 owns the rule).
+	noProfile := strings.Replace(base, "        profile: wiki-maintainer\n", "", 1)
+	_, err := Parse([]byte(noProfile))
+	if err == nil || !strings.Contains(err.Error(), "profile must be non-empty for a hermes destination (HER-015)") {
+		t.Fatalf("a hermes destination without a profile must be refused with the HER-015 rejection, got %v", err)
+	}
+	// A webhook destination carrying hermes-only fields is refused.
+	webhookWithProfile := strings.Replace(base, "        target: hermes-kanban-main\n", "        target: hermes-webhook-immediate\n", 1)
+	_, err = Parse([]byte(webhookWithProfile))
+	if err == nil || !strings.Contains(err.Error(), "apply only to a hermes destination") {
+		t.Fatalf("a webhook destination carrying profile/skills/mutex_key must be refused, got %v", err)
+	}
+}
+
+// TestE11T1WebhookEndpointQueryIsRevisionSensitive proves the endpoint
+// commitment in the revision digest (configuration-spec §13): the digest
+// commits to the FULL endpoint through a one-way commitment, so a
+// query-string change — where webhook tokens ride — pauses the
+// acknowledged route while the redacted display form stays cosmetic.
+func TestE11T1WebhookEndpointQueryIsRevisionSensitive(t *testing.T) {
+	mutate := func(endpoint string) string {
+		raw := string(minimalYAML(t))
+		cfg, err := Parse([]byte(raw))
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Deliver r1 through the webhook target so its transport
+		// projection joins the route revision, and strip the
+		// hermes-only fields a webhook destination must not carry.
+		dest := &cfg.Routes["r1"].Destinations[0]
+		dest.Target = "hermes-webhook-immediate"
+		dest.Profile = ""
+		dest.Skills = nil
+		dest.MutexKey = ""
+		hook := cfg.Targets["hermes-webhook-immediate"]
+		hook.Endpoint = endpoint
+		cfg.Targets["hermes-webhook-immediate"] = hook
+		out, merr := MarshalYAML(cfg)
+		if merr != nil {
+			t.Fatal(merr)
+		}
+		return string(out)
+	}
+	a, err := Parse([]byte(mutate("https://example.invalid/hook?token=alpha")))
+	if err != nil {
+		t.Fatalf("webhook delivery must validate: %v", err)
+	}
+	b, err := Parse([]byte(mutate("https://example.invalid/hook?token=beta")))
+	if err != nil {
+		t.Fatalf("rotated query must validate: %v", err)
+	}
+	revA, okA := RouteRevision(a, "r1")
+	revB, okB := RouteRevision(b, "r1")
+	if !okA || !okB || revA == "" || revB == "" {
+		t.Fatalf("both revisions must compute: %q %q %v %v", revA, revB, okA, okB)
+	}
+	if revA == revB {
+		t.Fatal("a webhook endpoint query-string change must change the route revision (the digest commits to the full endpoint)")
+	}
+}
+
 // TestE11T1HermesTargetFloorValidation proves the hermes_targets
 // contract: a missing board, a floor below 0.19.1, a non-capability_probe
 // mode, and an unparseable floor all fail validation; a higher declared
@@ -272,6 +341,15 @@ func TestE11T1HermesTargetFloorValidation(t *testing.T) {
 	}
 	if _, err := Parse([]byte(mutate(func(tg *HermesTarget) { tg.MinimumVersion = "0.19" }))); err == nil || !strings.Contains(err.Error(), "minimum_version") {
 		t.Fatalf("an unparseable floor must fail naming the field: %v", err)
+	}
+	// A hermes_targets key outside the destination-ID pattern is refused:
+	// the key names the capability-cache file, so a traversal segment
+	// must never reach a file-path join. The schema rejects the key
+	// shape and the semantic layer doubles the rule for direct
+	// SemanticValidate callers.
+	traversal := strings.Replace(string(minimalYAML(t)), "  hermes-kanban-main:", "  ../../escape:", 1)
+	if _, terr := Parse([]byte(traversal)); terr == nil || !strings.Contains(terr.Error(), "../../escape") {
+		t.Fatalf("a hermes_targets key with path separators must be refused naming the key, got %v", terr)
 	}
 }
 

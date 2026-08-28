@@ -47,7 +47,9 @@ const MinimumEligibleHermesVersion = "0.19.1"
 // validateHermesTargets enforces the hermes_targets contract (§14): a
 // non-empty board, a parseable minimum_version at or above the 0.19.1
 // eligibility floor (HER-011), and exactly the capability_probe
-// compatibility mode (ADR-0017).
+// compatibility mode (ADR-0017). Map keys must match the destination-ID
+// pattern: the key names the capability-cache file, so a path separator
+// or traversal segment in a key must never reach a file-path join.
 func validateHermesTargets(cfg *Config) []error {
 	ids := make([]string, 0, len(cfg.HermesTargets))
 	for id := range cfg.HermesTargets {
@@ -57,6 +59,9 @@ func validateHermesTargets(cfg *Config) []error {
 	var errs []error
 	for _, id := range ids {
 		t := cfg.HermesTargets[id]
+		if !destinationIDPattern.MatchString(id) {
+			errs = append(errs, fmt.Errorf("hermes_targets key %q must match ^[a-z][a-z0-9-]{0,63}$ (the key names the capability-cache file)", id))
+		}
 		if strings.TrimSpace(t.Board) == "" {
 			errs = append(errs, fmt.Errorf("hermes_targets.%s.board must be non-empty", id))
 		}

@@ -36,11 +36,13 @@ func (e *LegacyShapeError) Error() string {
 // no load-time conversion exists.
 func (e *LegacyShapeError) RegenerationPath() string {
 	return "regenerate the configuration for the v0.1.5 destinations contract: " +
-		"either run `agent-dispatch init` (writes a disabled v0.1.5 example you can adapt; " +
-		"the interactive `setup wiki` flow arrives with E11-T4) " +
+		"either run `agent-dispatch setup wiki` (the interactive walkthrough writes a " +
+		"disabled v0.1.5 configuration and validates, probes, and preflights it) " +
+		"or `agent-dispatch init` (writes a disabled example you adapt without interaction) " +
 		"or edit the file by hand — declare each route's delivery under `destinations[]` " +
-		"(unique id, non-empty workstream, target, profile, skills, workspace, mutex_key, " +
-		"execution_hints, and optional closed conditions), move the Hermes Kanban target to " +
+		"(unique id, non-empty workstream, and target are required; a hermes destination " +
+		"also requires profile and a non-empty skills list, while workspace, mutex_key, " +
+		"and execution_hints are optional, as are closed conditions), move the Hermes Kanban target to " +
 		"`hermes_targets` with board, executable, minimum_version (default 0.19.1), and " +
 		"compatibility: capability_probe, keep webhook targets under `targets`, and move " +
 		"submission_retry, latest_state, failure_budget, and active_stale_after to the route. " +

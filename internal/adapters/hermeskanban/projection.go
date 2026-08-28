@@ -68,14 +68,12 @@ func MapExecution(task TaskRecord) (ports.ExecutionProjection, error) {
 // mapped onto the portable execution axis. An accepted task whose
 // execution cannot be derived reports unavailable — acceptance and
 // execution stay separate (HER-008). The execution_status capability is
-// required and never emulated.
+// required and never emulated; interim truth source is the frozen 0.19.1
+// runtime-verified interface plus the eligibility probe (E11-T2's
+// capability probe restores per-executable shape proof).
 func (s *Sink) GetExecution(ctx context.Context, ref string) (ports.ExecutionProjection, error) {
-	caps, err := loadValidatedCaps(s.targetID, s.reportPath, s.required)
-	if err != nil {
+	if _, err := s.adapter.Probe(ctx); err != nil {
 		return ports.ExecutionProjection{}, err
-	}
-	if !caps.ExecutionStatus || !caps.LookupByExternalRef {
-		return ports.ExecutionProjection{}, fmt.Errorf("%w: execution status projection", ports.ErrCapabilityUnsupported)
 	}
 	task, err := s.adapter.client.Show(ctx, s.board, ref)
 	if err != nil {

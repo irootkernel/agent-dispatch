@@ -25,11 +25,19 @@ func Load(path string) (*Config, error) {
 	return cfg, nil
 }
 
-// Parse decodes configuration bytes. It applies, in order: strict YAML
-// decoding with duplicate-key rejection and fail-closed unknown fields,
-// JSON Schema validation against the SOT config schema, and semantic
-// validation.
+// Parse decodes configuration bytes. It applies, in order: a raw-node
+// scan that refuses retired v0.1.4 shapes with the exact regeneration
+// path (OPS-014), strict YAML decoding with duplicate-key rejection and
+// fail-closed unknown fields, JSON Schema validation against the SOT
+// config schema, and semantic validation.
 func Parse(data []byte) (*Config, error) {
+	var probe yaml.Node
+	if err := yaml.Unmarshal(data, &probe); err != nil {
+		return nil, fmt.Errorf("yaml: %w", err)
+	}
+	if legacy := detectLegacyShape(&probe); legacy != nil {
+		return nil, legacy
+	}
 	var cfg Config
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
@@ -95,8 +103,22 @@ func SchemaValidate(cfg *Config) error {
 
 // toRaw converts the typed config into generic JSON-compatible values so
 // the JSON Schema validator sees the same document a YAML-to-JSON
-// conversion would produce.
+// conversion would produce. Absent target maps normalize to empty
+// objects: the maps are optional since the destinations cutover, and an
+// uninitialized Go map would otherwise marshal as JSON null.
 func toRaw(cfg *Config) (any, error) {
+	if cfg.Targets == nil {
+		cfg.Targets = map[string]Target{}
+	}
+	if cfg.HermesTargets == nil {
+		cfg.HermesTargets = map[string]HermesTarget{}
+	}
+	if cfg.Resources == nil {
+		cfg.Resources = map[string]Resource{}
+	}
+	if cfg.Routes == nil {
+		cfg.Routes = map[string]Route{}
+	}
 	data, err := json.Marshal(cfg)
 	if err != nil {
 		return nil, err

@@ -13,11 +13,11 @@
 | Shipped release | v0.1.4 |
 | Planned SOT baseline | 1.1.0 ([D-025](../specs/decision-log.md)) |
 | Release target | v0.1.5 |
-| Current epic | E11 (Planned by D-025) |
+| Current epic | E11 (In Progress; E11-T1 Completed) |
 | Current active task | None |
-| Next task | E11-T1 |
-| Completed tasks | 63 / 75 |
-| Planned tasks | 12 / 75 |
+| Next task | E11-T2 |
+| Completed tasks | 64 / 75 |
+| Planned tasks | 11 / 75 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -115,7 +115,7 @@
 | 61 | E10-T1 | Completed | Resource observation fence and bounded reconciliation reads |
 | 62 | E10-T2 | Completed | Effective Watchman binding and route-relative exclusions |
 | 63 | E10-T3 | Completed | Source/reconciliation integrity gate G6 |
-| 64 | E11-T1 | Planned | Config v1 destination cutover and forward migration |
+| 64 | E11-T1 | Completed | Config v1 destination cutover and forward migration |
 | 65 | E11-T2 | Planned | Hermes 0.19.1+ capability probe and evidence cache |
 | 66 | E11-T3 | Planned | Destination profile/skill validation and route preflight |
 | 67 | E11-T4 | Planned | Discoverable CLI, guided setup, operator skill, and G7 |
@@ -2654,7 +2654,7 @@ Delivered as the source and reconciliation integrity gate: the executable G6 sui
 
 ## E11-T1: Config v1 Destination Cutover and Forward Migration
 
-**Status:** Planned
+**Status:** Completed
 **Design Gate impact:** Not required; D-025 owns the clean cutover.
 
 ### Objective
@@ -2686,7 +2686,54 @@ E10-T3 Completed.
 
 ### Evidence
 
-None — Planned.
+- `TestE11T1LegacyDispatchRefusedWithRegenerationPath` and
+  `TestE11T1LegacyKanbanTargetUnderTargetsRefused`
+  (`internal/config/e11t1_test.go`): both retired v0.1.4 shapes refuse
+  loading with the exact regeneration path naming `agent-dispatch init`,
+  the `destinations[]` shape, and `hermes_targets`; no conversion exists.
+- `TestParseGoldenExample` (`internal/config/config_test.go`): the
+  v0.1.5 example validates against the shipped schema with one hermes
+  target, one webhook target, and a disabled route;
+  `TestE11T1MutateDestinationAtomic` proves the CLI-015 atomic
+  destination-qualified write (validated candidate, preserved mode,
+  rejected candidate leaves the file untouched).
+- `TestE11T1CutoverMigrationPreservesHistoryAndRecordsContract`
+  (`internal/adapters/sqlite/e11t1_test.go`): after the v10 cutover the
+  historic intent and quarantine rows stay queryable (DAT-012), the
+  `contract_state` marker records the generation, and the pre-migration
+  backup opens as a restorable v9 database with the same history
+  (OPS-015 rehearsal);
+  `TestE11T1UnresolvedLegacyWorkCountsForeignRevisionRows` and
+  `TestE11T1EnableBlockedByUnresolvedLegacyWork`
+  (`internal/cli/e11t1_test.go`) prove the DAT-013 enable refusal and
+  its resolution through the documented operator exits.
+- `TestE11T1FanoutOrderNeverSemantic`, `TestE11T1DestinationContractRejections`,
+  `TestE11T1TargetMapClashRejected`, `TestE11T1HermesTargetFloorValidation`,
+  `TestE11T1WebhookEndpointQueryIsRevisionSensitive`, and
+  `TestE11T1HermesDestinationRequiresProfile` pin FAN-001/005/006/012,
+  the eligibility floor, the target-map ambiguity rejection, and the
+  endpoint commitment in the revision digest.
+- `make verify` green on darwin/arm64 (all checks, including test-race,
+  manifest, schema/example validation, and traceability); Gaori-routed
+  manifest-check, schema-validation, and traceability passed.
+- Mulgae member-task review: ordinal 1 (run
+  `r_01a046c9-e6b1-7fd2-8855-d5814e530949`, ci pass, coverage complete,
+  publication committed, zero findings) with its report-level advisory
+  defects remediated; ordinal 2 (run
+  `r_01a046e4-76f0-7008-8177-aba5c4a26330`, ci pass, coverage complete,
+  publication committed, zero findings) with its report-level advisory
+  defects remediated; ordinal 3 (run
+  `r_01a04701-8ac9-7265-a0ea-aeec9fc1a918`, ci pass, coverage complete,
+  publication committed, zero findings) — one explicitly disclosed
+  extra round validating the final target after the round-two
+  remediation. Round-three report-level observations are recorded for
+  the epic audit: the `UnresolvedLegacyWork` query does not count
+  foreign-revision `ready`/`submitting` intents (the in-place
+  dead-letter retry and a crashed legacy submit bypass the enable
+  refusal; the submit-path staleness gate still prevents silent
+  submission), the installation guide's clean-host section still names
+  the retired capability report, and the configuration-spec §12
+  capability bullet needs webhook scoping.
 
 ## E11-T2: Hermes 0.19.1+ Capability Probe and Evidence Cache
 

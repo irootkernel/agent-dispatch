@@ -34,17 +34,17 @@ func stalenessCheckOf(cfg *config.Config) func(context.Context, ports.IntentSnap
 		if _, ok := cfg.Resources[route.Source.Resource]; !ok {
 			return true, fmt.Sprintf("resource %s removed from the configuration", route.Source.Resource), nil
 		}
-		target, ok := cfg.Targets[route.Dispatch.Target]
-		if !ok {
-			return true, fmt.Sprintf("target %s removed from the configuration", route.Dispatch.Target), nil
+		dest, resolved, terr := resolveRouteTarget(cfg, snap.RouteID)
+		if terr != nil {
+			return true, fmt.Sprintf("route %s destination target cannot be resolved: %v", snap.RouteID, terr), nil
 		}
-		if snap.TargetID != route.Dispatch.Target {
-			return true, fmt.Sprintf("target re-pointed to %s (stored %s)", route.Dispatch.Target, snap.TargetID), nil
+		if snap.TargetID != dest.Target {
+			return true, fmt.Sprintf("target re-pointed to %s (stored %s)", dest.Target, snap.TargetID), nil
 		}
-		if snap.TargetType != target.Type {
-			return true, fmt.Sprintf("target type %s (stored %s)", target.Type, snap.TargetType), nil
+		if snap.TargetType != resolved.Type() {
+			return true, fmt.Sprintf("target type %s (stored %s)", resolved.Type(), snap.TargetType), nil
 		}
-		if scope := targetScope(target); snap.TargetScope != scope {
+		if scope := resolvedTargetScope(resolved); snap.TargetScope != scope {
 			return true, fmt.Sprintf("target scope %s (stored %s)", scope, snap.TargetScope), nil
 		}
 		return false, "", nil
@@ -86,17 +86,7 @@ func staleRebuilderOf(store storeOp, cfg *config.Config) func(context.Context, s
 		RevisionResolver: func(routeID string) (string, bool) {
 			return config.RouteRevision(cfg, routeID)
 		},
-		TargetResolver: func(routeID string) (string, string, string, bool) {
-			route, ok := cfg.Routes[routeID]
-			if !ok {
-				return "", "", "", false
-			}
-			target, ok := cfg.Targets[route.Dispatch.Target]
-			if !ok {
-				return "", "", "", false
-			}
-			return route.Dispatch.Target, target.Type, targetScope(target), true
-		},
+		TargetResolver: routeTargetResolver(cfg),
 	}
 	return func(ctx context.Context, dispatchID string) (string, error) {
 		return op.RebuildStale(ctx, dispatchID, "agent-dispatch")

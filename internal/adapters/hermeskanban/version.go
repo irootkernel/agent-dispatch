@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 )
 
 // Version is a parsed Hermes semantic version from the documented
@@ -15,37 +17,34 @@ type Version struct {
 	BuildDate           string
 }
 
-// String renders the dotted triple used in capability-report comparison.
+// String renders the dotted triple used in eligibility comparison.
 func (v Version) String() string {
 	return fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch)
 }
 
-// SupportedVersions is the exact runtime-verified set (E0-T4 §10: version
-// range 0.19.1 exactly; widening requires re-running the probe against
-// each additional version and recording it here and in the report).
-var SupportedVersions = []Version{
-	{Major: 0, Minor: 19, Patch: 1, BuildDate: "2026.7.30"},
+// MinimumEligibleVersion is the v0.1.5 eligibility floor (ADR-0017,
+// HER-011): Hermes 0.19.1 and every later version are probe-eligible;
+// there is no fixed maximum and no per-version source allowlist. The
+// frozen 0.19.1 interface remains the verified fixture (TST-012); a
+// newer Hermes is accepted only through the same probe path.
+var MinimumEligibleVersion = Version{Major: 0, Minor: 19, Patch: 1, BuildDate: "2026.7.30"}
+
+// Eligible reports whether v meets the given minimum. The build date is
+// recorded evidence, not the gate: the dotted triple is the identity.
+func (v Version) Eligible(minimum Version) bool {
+	if v.Major != minimum.Major {
+		return v.Major > minimum.Major
+	}
+	if v.Minor != minimum.Minor {
+		return v.Minor > minimum.Minor
+	}
+	return v.Patch >= minimum.Patch
 }
 
-// Supported reports whether the version is one of the runtime-verified
-// Hermes versions. The build date is recorded evidence, not the gate: the
-// dotted triple is the identity.
-func (v Version) Supported() bool {
-	for _, s := range SupportedVersions {
-		if v.Major == s.Major && v.Minor == s.Minor && v.Patch == s.Patch {
-			return true
-		}
-	}
-	return false
-}
-
-// SupportedRangeText renders the supported set for operator messages.
-func SupportedRangeText() string {
-	parts := make([]string, 0, len(SupportedVersions))
-	for _, v := range SupportedVersions {
-		parts = append(parts, v.String())
-	}
-	return strings.Join(parts, ", ")
+// EligibilityFloorText renders the eligibility rule for operator
+// messages.
+func EligibilityFloorText(minimum Version) string {
+	return fmt.Sprintf(">= %s (no maximum; ADR-0017)", minimum)
 }
 
 // versionLine matches the documented first line. Version discovery is
@@ -88,27 +87,44 @@ func ParseVersionOutput(output string) (Version, error) {
 	return Version{Major: major, Minor: minor, Patch: patch, BuildDate: m[4]}, nil
 }
 
-// CheckVersionSupported gates one discovered version against the verified
-// set (HER-002/HER-005: an unsupported version must fail before any task
-// submission).
-func CheckVersionSupported(v Version) error {
-	if v.Supported() {
+// ParseMinimumVersion parses a configured minimum-version floor
+// (configuration-spec §14) through the one shared domain parser, so
+// load-time validation and the run-time gate accept exactly the same
+// grammar; the empty value means the 0.19.1 default.
+func ParseMinimumVersion(text string) (Version, error) {
+	if text == "" {
+		return MinimumEligibleVersion, nil
+	}
+	triple, err := records.ParseVersionTriple(text)
+	if err != nil {
+		return Version{}, fmt.Errorf("minimum_version %w", err)
+	}
+	return Version{Major: triple.Major, Minor: triple.Minor, Patch: triple.Patch}, nil
+}
+
+// CheckVersionEligible gates one discovered version against the
+// configured floor (HER-011: below 0.19.1 is rejected; every later
+// version is probe-eligible with no maximum). An eligibility failure
+// must fail before any task submission.
+func CheckVersionEligible(v, minimum Version) error {
+	if v.Eligible(minimum) {
 		return nil
 	}
-	return &VersionUnsupportedError{Found: v.String()}
+	return &VersionUnsupportedError{Found: v.String(), Minimum: minimum.String()}
 }
 
 // VersionUnsupportedError is the fail-closed gate result for a Hermes
-// version outside the runtime-verified set.
+// version below the configured eligibility floor.
 type VersionUnsupportedError struct {
-	Found string
+	Found   string
+	Minimum string
 }
 
 func (e *VersionUnsupportedError) Error() string {
-	return fmt.Sprintf("hermes %s is outside the verified support set (%s); route validation fails before any task submission (HER-002/HER-005)", e.Found, SupportedRangeText())
+	return fmt.Sprintf("hermes %s is below the eligibility floor %s; route validation fails before any task submission (HER-011)", e.Found, e.Minimum)
 }
 
 // Remediation is the actionable operator guidance.
 func (e *VersionUnsupportedError) Remediation() string {
-	return fmt.Sprintf("install a verified Hermes version (%s), re-run the E0-T4 public-interface probe, and refresh the capability report; see docs/integrations/hermes-public-interface-report.md §10", SupportedRangeText())
+	return fmt.Sprintf("install Hermes %s or newer (there is no maximum; compatibility is proven by the public-interface probe) and see docs/architecture-decision-records/0017-capability-probed-hermes-compatibility.md", e.Minimum)
 }

@@ -29,8 +29,17 @@ func TestRealHermesDisposableBoardSubmitDedupLookup(t *testing.T) {
 	if err != nil {
 		t.Skipf("hermes not usable: %v", err)
 	}
-	if err := CheckVersionSupported(version); err != nil {
-		t.Skipf("installed hermes %s outside the verified set: %v", version, err)
+	if err := CheckVersionEligible(version, MinimumEligibleVersion); err != nil {
+		t.Skipf("installed hermes %s below the eligibility floor: %v", version, err)
+	}
+	// The client still implements the frozen 0.19.1 create surface; a
+	// newer Hermes that dropped one of its flags (0.20.5 removed
+	// --mutex-key) is exactly the capability drift the E11-T2 probe
+	// detects. Until it lands, this end-to-end test runs only against
+	// interfaces whose create surface matches what the client submits
+	// (TST-007 environment-dependent evidence gap otherwise).
+	if help, herr := runHermes(t, bin, "kanban", "create", "-h"); herr != nil || !strings.Contains(help, "--mutex-key") {
+		t.Skipf("installed hermes %s create surface drifted from the frozen 0.19.1 flags (no --mutex-key); the E11-T2 capability probe owns shape detection: %s", version, strings.Join(strings.Split(strings.TrimSpace(help), "\n")[:1], ""))
 	}
 
 	board := fmt.Sprintf("agent-dispatch-e4t3-test-%d", time.Now().UnixNano())
@@ -45,11 +54,9 @@ func TestRealHermesDisposableBoardSubmitDedupLookup(t *testing.T) {
 		}
 	}()
 
-	sink, err := NewSink("hermes-real", bin, machineReport, []string{
-		"durable_acceptance", "submit_idempotency_key", "lookup_by_external_ref",
-	}, board, ProcessLimits{LookupTimeout: 15 * time.Second, SubmitTimeout: 30 * time.Second}, 262144)
+	sink, err := NewSink("hermes-real", bin, "", board, ProcessLimits{LookupTimeout: 15 * time.Second, SubmitTimeout: 30 * time.Second}, 262144)
 	if err != nil {
-		t.Fatalf("sink construction against the frozen report: %v", err)
+		t.Fatalf("sink construction against the eligibility floor: %v", err)
 	}
 	if _, err := sink.Probe(context.Background()); err != nil {
 		t.Fatalf("probe: %v", err)

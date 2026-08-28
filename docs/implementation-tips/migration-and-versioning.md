@@ -60,13 +60,16 @@ Editorial clarification that changes no behavior may update the SOT patch versio
 
 The configuration schema identifier remains v1, but D-025 authorizes a clean
 behavioral cutover: `destinations[]` is required and legacy `dispatch` fails
-with an exact `setup wiki` regeneration path. No compatibility loader or down
-migration is implemented.
+with an exact regeneration path (`agent-dispatch init` for a fresh disabled
+example now; the interactive `setup wiki` flow arrives with E11-T4). No
+compatibility loader or down migration is implemented.
 
-SQLite remains forward-only. The migration creates aggregate/destination,
-resource-fence, capability-evidence, and notification tables or columns and
-backfills historical dispatches beneath a synthetic legacy destination. It
-must be restart-safe, preserve accepted task references and receipts, and block
-automatic submission of unresolved legacy work. The mandatory pre-migration
-verified backup is the v0.1.4 rollback boundary; rollback preserves the
-upgraded database separately and restores the backup plus old configuration.
+SQLite remains forward-only. E11-T1 shipped the cutover's v10 marker
+migration: it records the destinations-contract generation in
+`contract_state`, keeps every historic task and receipt row exactly as
+queryable as before, and refuses route enablement while unresolved legacy
+work from a different route revision remains. The aggregate/destination,
+capability-evidence, and notification record tables arrive with E12 and
+E13 on top of that boundary. The mandatory pre-migration verified backup
+is the v0.1.4 rollback boundary; rollback preserves the upgraded
+database separately and restores the backup plus old configuration.

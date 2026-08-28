@@ -21,9 +21,11 @@ import (
 type reconcileArtifacts struct {
 	cfg        *config.Config
 	stderr     io.Writer
+	routeID    string
 	route      config.Route
 	resource   config.Resource
-	target     config.Target
+	dest       config.Destination
+	resolved   config.ResolvedTarget
 	targetID   string
 	revision   string
 	resolver   *localfs.Resolver
@@ -55,9 +57,9 @@ func planConfigOnly(command, configPath, routeID string, stderr io.Writer) (*rec
 		writeError(stderr, command, "config_invalid", "configuration", fmt.Sprintf("resource %q is not defined", route.Source.Resource))
 		return nil, 3
 	}
-	target, ok := cfg.Targets[route.Dispatch.Target]
-	if !ok {
-		writeError(stderr, command, "config_invalid", "configuration", fmt.Sprintf("target %q is not defined", route.Dispatch.Target))
+	dest, resolved, rerr := resolveRouteTarget(cfg, routeID)
+	if rerr != nil {
+		writeError(stderr, command, "config_invalid", "configuration", rerr.Error())
 		return nil, 3
 	}
 	revision, ok := config.RouteRevision(cfg, routeID)
@@ -70,14 +72,14 @@ func planConfigOnly(command, configPath, routeID string, stderr io.Writer) (*rec
 		writeError(stderr, command, "config_invalid", "configuration", err.Error())
 		return nil, 3
 	}
-	hints, err := hintsOf(route)
+	hints, err := hintsOf(dest)
 	if err != nil {
 		writeError(stderr, command, "config_invalid", "configuration", err.Error())
 		return nil, 3
 	}
 	return &reconcileArtifacts{stderr: stderr,
-		cfg: cfg, route: route, resource: resource, target: target,
-		targetID: route.Dispatch.Target, revision: revision,
+		cfg: cfg, routeID: routeID, route: route, resource: resource, dest: dest, resolved: resolved,
+		targetID: dest.Target, revision: revision,
 		resolver: runtime.resolver, engine: runtime.engine,
 		resourceID: route.Source.Resource, fileScope: resource.FileScope,
 		maxHash: runtime.maxHash, hints: hints,
@@ -147,14 +149,14 @@ func (a *reconcileArtifacts) reconcileIntentBuilder() func(routeID, reason, deci
 		req, key, err := dispatch.BuildRequest(dispatch.RequestInput{
 			DispatchID:         dispatchID,
 			Route:              ports.TaskRouteRef{ID: routeID, Revision: a.revision},
-			Resource:           ports.TaskResource{ID: a.resourceID, Workspace: "dir:" + a.resource.Root},
+			Resource:           ports.TaskResource{ID: a.resourceID, Workspace: workspaceOf(a.dest, a.resource.Root)},
 			TargetID:           a.targetID,
 			Generation:         1,
 			Fingerprint:        contentDigest,
 			Changes:            changes, // the reconciliation diff: bounded evidence, never content
 			Flags:              []string{"latest_state", "reconcile:" + reason},
 			AcceptanceCriteria: dispatch.WikiAcceptanceCriteria,
-			Assignment:         assignmentOf(a.route),
+			Assignment:         assignmentOf(a.dest),
 			ExecutionHints:     a.hints,
 		})
 		if err != nil {
@@ -166,7 +168,7 @@ func (a *reconcileArtifacts) reconcileIntentBuilder() func(routeID, reason, deci
 		}
 		return ports.IntentInput{
 			DispatchID: dispatchID, DecisionID: decisionID, RouteID: routeID, RouteRevision: a.revision,
-			TargetID: a.targetID, TargetType: a.target.Type, TargetScope: targetScope(a.target),
+			TargetID: a.targetID, TargetType: a.resolved.Type(), TargetScope: resolvedTargetScope(a.resolved),
 			ResourceID: a.resourceID, Generation: 1, IdempotencyKey: key,
 			ContentFingerprint: string(contentDigest),
 			ManifestDigest:     dispatch.ManifestDigest(changes),
@@ -179,13 +181,13 @@ func (a *reconcileArtifacts) reconcileIntentBuilder() func(routeID, reason, deci
 // resolved sink and backoff are returned for the head-of-submit recovery
 // wiring (E8-T2/H-6).
 func (a *reconcileArtifacts) submitRuntime(store storeOp) (*dispatch.Runtime, ports.Sink, dispatch.Backoff, error) {
-	sink, err := resolveSink(a.cfg, a.target, a.route, opsLogger(a.stderr, a.cfg))
+	sink, err := resolveSink(a.cfg, a.routeID, opsLogger(a.stderr, a.cfg))
 	if err != nil {
 		return nil, nil, dispatch.Backoff{}, err
 	}
-	backoff, err := backoffFromConfig(a.route.Dispatch.SubmissionRetry)
+	backoff, err := backoffFromConfig(a.route.SubmissionRetry)
 	if err != nil {
 		return nil, nil, dispatch.Backoff{}, err
 	}
-	return newSubmitRuntime(store, sink, a.cfg, a.target, backoff, "reconcile", a.stderr), sink, backoff, nil
+	return newSubmitRuntime(store, sink, a.cfg, submitTimeoutOf(a.resolved), backoff, "reconcile", a.stderr), sink, backoff, nil
 }

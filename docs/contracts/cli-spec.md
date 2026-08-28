@@ -62,7 +62,7 @@ Creates a disabled example configuration and state directory after checking for 
 agent-dispatch config validate [--probe-targets] [--output json]
 ```
 
-Performs schema and semantic validation. `--probe-targets` invokes read-only public capability probes; hermes-webhook targets report their static, evidence-tied capability declaration with no endpoint network I/O, because the receiving platform cannot be assumed running (E0-T4 §9).
+Performs schema and semantic validation. `--probe-targets` invokes read-only public probes: hermes targets report minimum-version eligibility against the declared floor (a below-floor or unreachable target warns; the E11-T2 capability probe replaces this with per-executable shape evidence), and hermes-webhook targets report their static, evidence-tied capability declaration with no endpoint network I/O, because the receiving platform cannot be assumed running (E0-T4 §9).
 
 ### `config show`
 
@@ -83,7 +83,7 @@ agent-dispatch route enable --route <id> --acknowledge-production-gate <computed
 agent-dispatch route disable --route <id> [--reason <text>]
 ```
 
-The config field `enabled: true` permits activation but does not by itself activate a production route. `route enable` stores an acknowledged route revision in SQLite. A behavior-sensitive revision change pauses the route until explicitly acknowledged again. `route disable` immediately prevents new submissions while preserving observations, active work, and dirty state. `route enable` probes the live target first (E8-T3): a missing, unreadable, or stale capability report, an unsupported Hermes version, or a missing required capability refuses at exit 3, and the report must itself carry `durable_acceptance` and `submit_idempotency_key`. The report is mandatory evidence in every target-liveness state (E9-T6): while the target is unreachable the refusal still covers a missing or unreadable report and a report recording a Hermes version outside the runtime-verified set (build-time evidence that needs no live target); only freshness against the installed binary rides the probe, so an unreachable target warns and that comparison defers to the submit path's run-time gate.
+The config field `enabled: true` permits activation but does not by itself activate a production route. `route enable` stores an acknowledged route revision in SQLite. A behavior-sensitive revision change pauses the route until explicitly acknowledged again. `route disable` immediately prevents new submissions while preserving observations, active work, and dirty state. `route enable` gates on the destinations contract (E11-T1): the route must execute exactly one destination (more than one names the E12 bound and refuses at exit 3), unresolved legacy work from a different route revision refuses at exit 14 with the resolution exits named (DAT-013), and a hermes destination's installed Hermes must meet the declared `minimum_version` eligibility floor — a below-floor version refuses at exit 3 (HER-011) while an unreachable executable warns and eligibility defers to the submit path's run-time gate, so re-acknowledging a paused route is never hostage to target liveness. The retired operator-authored capability report is gone from every surface; per-executable capability shape evidence and its activation fingerprint arrive with E11-T2.
 
 ### `route plan`
 
@@ -264,7 +264,7 @@ Default behavior persists the current-state reconciliation decision. `--submit` 
 
 ### `status`
 
-Returns route active/dirty state, queue counts, unresolved delivery, quarantine, last reconciliation, and target capability summary.
+Returns route active/dirty state, queue counts, unresolved delivery, quarantine, last reconciliation, and the per-target summary (the static webhook capability declaration; the hermes probed-compatibility contract with its frozen-interface capability set).
 
 ### `doctor`
 

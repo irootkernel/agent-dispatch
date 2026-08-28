@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irootkernel/agent-dispatch/internal/adapters/hermeskanban"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
 	"github.com/irootkernel/agent-dispatch/internal/app/ingest"
@@ -210,6 +211,31 @@ func runDispatchesShow(command string, args []string, stdout, stderr io.Writer) 
 	return writeEnvelope(stdout, command, lin)
 }
 
+// routeScopeResolver builds the active-configuration target-scope
+// resolver shared by the rerun paths: the certified destination's target
+// scope, or "" when the route or target cannot be resolved (E11-T1).
+func routeScopeResolver(cfg *config.Config) func(routeID string) string {
+	return func(routeID string) string {
+		if _, resolved, err := resolveRouteTarget(cfg, routeID); err == nil {
+			return resolvedTargetScope(resolved)
+		}
+		return ""
+	}
+}
+
+// routeTargetResolver builds the (target ID, type, scope) resolver for
+// the rerun paths: the certified destination's target identity from the
+// active configuration.
+func routeTargetResolver(cfg *config.Config) func(routeID string) (string, string, string, bool) {
+	return func(routeID string) (string, string, string, bool) {
+		dest, resolved, err := resolveRouteTarget(cfg, routeID)
+		if err != nil {
+			return "", "", "", false
+		}
+		return dest.Target, resolved.Type(), resolvedTargetScope(resolved), true
+	}
+}
+
 // runDispatchesRetry applies the explicit operator retry (DUR-009).
 func runDispatchesRetry(command string, args []string, stdout, stderr io.Writer) int {
 	flags, code := parseDispatchesFlags(command, args, stderr, nil)
@@ -226,38 +252,18 @@ func runDispatchesRetry(command string, args []string, stdout, stderr io.Writer)
 	defer closer.Close()
 	cfgRerun, cfgErr := config.Load(resolveConfigPath(flags.val("--config")))
 	var scopeResolver func(routeID string) string
-	if cfgErr == nil {
-		rerunCfg := cfgRerun
-		scopeResolver = func(routeID string) string {
-			if route, ok := rerunCfg.Routes[routeID]; ok {
-				if target, ok := rerunCfg.Targets[route.Dispatch.Target]; ok {
-					return targetScope(target)
-				}
-			}
-			return ""
-		}
-	}
-	// The rerun carries the active configuration's revision and target
-	// identity, never the stored plan's superseded values (E7-T3/H-1
-	// round-1 remediation).
 	var revisionResolver func(routeID string) (string, bool)
 	var targetResolver func(routeID string) (string, string, string, bool)
 	if cfgErr == nil {
 		rerunCfg := cfgRerun
+		scopeResolver = routeScopeResolver(rerunCfg)
+		// The rerun carries the active configuration's revision and target
+		// identity, never the stored plan's superseded values (E7-T3/H-1
+		// round-1 remediation).
 		revisionResolver = func(routeID string) (string, bool) {
 			return config.RouteRevision(rerunCfg, routeID)
 		}
-		targetResolver = func(routeID string) (string, string, string, bool) {
-			route, ok := rerunCfg.Routes[routeID]
-			if !ok {
-				return "", "", "", false
-			}
-			target, ok := rerunCfg.Targets[route.Dispatch.Target]
-			if !ok {
-				return "", "", "", false
-			}
-			return route.Dispatch.Target, target.Type, targetScope(target), true
-		}
+		targetResolver = routeTargetResolver(rerunCfg)
 	}
 	op := &dispatch.OperatorService{
 		Store: store, Now: func() string { return dispatch.Timestamp(time.Now()) },
@@ -325,7 +331,14 @@ func runDispatchesReprocess(command string, args []string, stdout, stderr io.Wri
 	if rtErr != nil {
 		return planErr(stderr, command, "config_invalid", "configuration", rtErr.Error(), 3)
 	}
-	target := cfg.Targets[route.Dispatch.Target]
+	_, resolved, rerr := resolveRouteTarget(cfg, batch.RouteID)
+	if rerr != nil {
+		return planErr(stderr, command, "config_invalid", "configuration", rerr.Error(), 3)
+	}
+	required := hermeskanban.UnconditionalCapabilities
+	if resolved.Webhook != nil {
+		required = resolved.Webhook.RequiredCapabilities
+	}
 	changes := make([]records.ChangeItem, 0, len(batch.Changes))
 	var protected, immutable []string
 	for _, c := range batch.Changes {
@@ -359,7 +372,7 @@ func runDispatchesReprocess(command string, args []string, stdout, stderr io.Wri
 		BulkAction:           route.Policy.BulkAction,
 		OverflowAction:       route.Policy.OverflowAction,
 		FreshInstanceAction:  route.Policy.FreshInstanceAction,
-		RequiredCapabilities: target.RequiredCapabilities,
+		RequiredCapabilities: required,
 	}, dispatch.Input{Batch: &ingest.Result{Changes: changes, Protected: protected, Immutable: immutable}})
 	if perr != nil {
 		return planErr(stderr, command, "internal_unclassified", "internal", perr.Error(), 40)
@@ -418,38 +431,18 @@ func runDispatchesRerun(command string, args []string, stdout, stderr io.Writer)
 	defer closer.Close()
 	cfgRerun, cfgErr := config.Load(resolveConfigPath(flags.val("--config")))
 	var scopeResolver func(routeID string) string
-	if cfgErr == nil {
-		rerunCfg := cfgRerun
-		scopeResolver = func(routeID string) string {
-			if route, ok := rerunCfg.Routes[routeID]; ok {
-				if target, ok := rerunCfg.Targets[route.Dispatch.Target]; ok {
-					return targetScope(target)
-				}
-			}
-			return ""
-		}
-	}
-	// The rerun carries the active configuration's revision and target
-	// identity, never the stored plan's superseded values (E7-T3/H-1
-	// round-1 remediation).
 	var revisionResolver func(routeID string) (string, bool)
 	var targetResolver func(routeID string) (string, string, string, bool)
 	if cfgErr == nil {
 		rerunCfg := cfgRerun
+		scopeResolver = routeScopeResolver(rerunCfg)
+		// The rerun carries the active configuration's revision and target
+		// identity, never the stored plan's superseded values (E7-T3/H-1
+		// round-1 remediation).
 		revisionResolver = func(routeID string) (string, bool) {
 			return config.RouteRevision(rerunCfg, routeID)
 		}
-		targetResolver = func(routeID string) (string, string, string, bool) {
-			route, ok := rerunCfg.Routes[routeID]
-			if !ok {
-				return "", "", "", false
-			}
-			target, ok := rerunCfg.Targets[route.Dispatch.Target]
-			if !ok {
-				return "", "", "", false
-			}
-			return route.Dispatch.Target, target.Type, targetScope(target), true
-		}
+		targetResolver = routeTargetResolver(rerunCfg)
 	}
 	op := &dispatch.OperatorService{
 		Store: store, Now: func() string { return dispatch.Timestamp(time.Now()) },
@@ -489,11 +482,11 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 	if !ok {
 		return planErr(stderr, command, "config_route_not_found", "configuration", fmt.Sprintf("route %q is not defined", routeID), 3)
 	}
-	target, ok := cfg.Targets[route.Dispatch.Target]
-	if !ok {
-		return planErr(stderr, command, "config_invalid", "configuration", fmt.Sprintf("target %q is not defined", route.Dispatch.Target), 3)
+	_, resolved, rerr := resolveRouteTarget(cfg, routeID)
+	if rerr != nil {
+		return planErr(stderr, command, "config_invalid", "configuration", rerr.Error(), 3)
 	}
-	backoff, err := backoffFromConfig(route.Dispatch.SubmissionRetry)
+	backoff, err := backoffFromConfig(route.SubmissionRetry)
 	if err != nil {
 		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
 	}
@@ -502,11 +495,11 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 		return exit
 	}
 	defer closer.Close()
-	sink, err := resolveSink(cfg, target, route, opsLogger(stderr, cfg))
+	sink, err := resolveSink(cfg, routeID, opsLogger(stderr, cfg))
 	if err != nil {
 		return writeSinkError(stderr, command, err)
 	}
-	rt := newSubmitRuntime(store, sink, cfg, target, backoff, "drain", stderr)
+	rt := newSubmitRuntime(store, sink, cfg, submitTimeoutOf(resolved), backoff, "drain", stderr)
 	// Expired submitting leases are recovered before unknown
 	// reconciliation so the DUR-006 lookup ordering covers them (DUR-010,
 	// E7-T2/B-1): a process that died mid-submit leaves submitting work
@@ -576,10 +569,8 @@ func reconcileUnknownDispatches(cfg *config.Config, store storeOp, sink ports.Si
 	var out []map[string]any
 	var failures []string
 	scope := ""
-	if route, ok := cfg.Routes[routeID]; ok {
-		if target, ok := cfg.Targets[route.Dispatch.Target]; ok {
-			scope = targetScope(target)
-		}
+	if _, resolved, rerr := resolveRouteTarget(cfg, routeID); rerr == nil {
+		scope = resolvedTargetScope(resolved)
 	}
 	for _, sum := range intents {
 		// The reconciliation must read the same target identity and

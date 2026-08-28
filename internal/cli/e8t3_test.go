@@ -62,21 +62,10 @@ func TestE8T3BehaviorChangePausesUntilReacknowledged(t *testing.T) {
 // production enable refuses a report recorded against a different
 // Hermes version and a report without the unconditional
 // durable_acceptance and submit_idempotency_key guarantees.
-func TestE8T3EnableGateRefusesStaleReportAndWeakGuarantees(t *testing.T) {
+func TestE8T3EnableGateRefusesBelowFloorAndEnablesCleanly(t *testing.T) {
 	configPath, vault := e4t3Fixture(t)
 	_ = vault
 	cfgDir := filepath.Dir(configPath)
-	reportPath := filepath.Join(cfgDir, "cap-gate.json")
-	writeReport := func(version string, durable bool) {
-		d := "true"
-		if !durable {
-			d = "false"
-		}
-		body := `{"schema_version":"agent-dispatch.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"` + version + `","interface":"public_cli","capabilities":{"durable_acceptance":` + d + `,"submit_idempotency_key":true,"lookup_by_idempotency_key":false,"lookup_by_external_ref":true,"resource_mutex":true,"execution_status":true,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
-		if err := os.WriteFile(reportPath, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
 	revisionOf := func() string {
 		cfg, err := config.Load(configPath)
 		if err != nil {
@@ -93,37 +82,40 @@ func TestE8T3EnableGateRefusesStaleReportAndWeakGuarantees(t *testing.T) {
 		code := Run([]string{"route", "enable", "--config", configPath, "--route", "wiki", "--acknowledge-production-gate", revisionOf(), "--yes"}, &out, &errb)
 		return code, errb.String()
 	}
-	pointAtReport := func() {
-		// Point the fixture's target at the gate's report copy.
+	pointExecutableAt := func(versionLine string) string {
+		bin := filepath.Join(cfgDir, "hermes-gate")
+		script := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf '%s\\n' '" + versionLine + "'; exit 0; fi\nexit 3\n"
+		if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
 		raw, err := os.ReadFile(configPath)
 		if err != nil {
 			t.Fatal(err)
 		}
-		idx := strings.Index(string(raw), "capability_report:")
+		idx := strings.Index(string(raw), "executable:")
 		if idx < 0 {
-			t.Fatal("fixture config carries no capability_report")
+			t.Fatal("fixture config carries no executable")
 		}
 		rest := string(raw)[idx:]
 		lineEnd := strings.IndexByte(rest, '\n')
-		e5t4Rewrite(t, configPath, rest[:lineEnd], "capability_report: "+reportPath)
+		if line := rest[:lineEnd]; line != "executable: "+bin {
+			e5t4Rewrite(t, configPath, line, "executable: "+bin)
+		}
+		return bin
 	}
 
-	// A report recorded against a different version: the enable must
-	// refuse (the pre-E8-T3 defect let it pass).
-	pointAtReport()
-	writeReport("0.19.0 (2026.7.30)", true)
-	if code, stderr := enable(); code != 3 || !strings.Contains(stderr, "config_capability_missing") {
-		t.Fatalf("a stale report must refuse the enable at exit 3, got %d: %s", code, stderr)
+	// A Hermes below the eligibility floor: the enable must refuse (the
+	// pre-cutover defect let a stale report pass; the E11-T1 contract
+	// refuses on eligibility, and the E11-T2 probe tightens this to the
+	// capability fingerprint).
+	pointExecutableAt("Hermes Agent v0.18.5 (2026.6.01)")
+	if code, stderr := enable(); code != 3 || !strings.Contains(stderr, "config_invalid") {
+		t.Fatalf("a below-floor target must refuse the enable at exit 3, got %d: %s", code, stderr)
 	}
-	// A report without the durable guarantee: refused even though the
-	// operator's required list never named it.
-	writeReport("0.19.1 (2026.7.30)", false)
-	if code, stderr := enable(); code != 3 || !strings.Contains(stderr, "durable_acceptance") {
-		t.Fatalf("a non-durable report must refuse the production enable, got %d: %s", code, stderr)
-	}
-	// The honest report enables cleanly.
-	writeReport("0.19.1 (2026.7.30)", true)
+	// The frozen floor version enables cleanly (the stub is rewritten in
+	// place; the configuration already points at it).
+	pointExecutableAt("Hermes Agent v0.19.1 (2026.7.30)")
 	if code, stderr := enable(); code != 0 {
-		t.Fatalf("the honest report must enable: %d %s", code, stderr)
+		t.Fatalf("the eligible target must enable: %d %s", code, stderr)
 	}
 }

@@ -21,7 +21,7 @@ import (
 // site can drift from the E8-T2/M-1 derivation.
 func TestE9T4LeaseTTLWiredAtEverySubmitSite(t *testing.T) {
 	for _, actor := range []string{"dispatch", "drain", "reconcile"} {
-		rt := newSubmitRuntime(nil, nil, &config.Config{}, config.Target{SubmitTimeout: "45s"}, dispatch.Backoff{}, actor, io.Discard)
+		rt := newSubmitRuntime(nil, nil, &config.Config{}, "45s", dispatch.Backoff{}, actor, io.Discard)
 		if rt.LeaseTTL != 75*time.Second {
 			t.Fatalf("%s: a 45s submit timeout must lease for 75s, got %v", actor, rt.LeaseTTL)
 		}

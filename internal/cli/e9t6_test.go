@@ -20,43 +20,9 @@ import (
 // let the route reach production-enabled with neither executable nor
 // report — while an honest report still enables with the liveness
 // warning preserved.
-func TestE9T6EnableGateRequiresReportWithoutExecutable(t *testing.T) {
+func TestE9T6EnableGateLivenessWarningKeepsEligibilityDeferred(t *testing.T) {
 	configPath, _ := e4t3Fixture(t)
 	cfgDir := filepath.Dir(configPath)
-	reportPath := filepath.Join(cfgDir, "cap-e9t6.json")
-
-	// Point the fixture's target at an executable that does not exist
-	// and at this test's report copy.
-	raw, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	idx := strings.Index(string(raw), "executable:")
-	if idx < 0 {
-		t.Fatal("fixture config carries no executable")
-	}
-	rest := string(raw)[idx:]
-	lineEnd := strings.IndexByte(rest, '\n')
-	e5t4Rewrite(t, configPath, rest[:lineEnd], "executable: "+filepath.Join(cfgDir, "hermes-absent"))
-	pointAtReport := func() {
-		raw, err := os.ReadFile(configPath)
-		if err != nil {
-			t.Fatal(err)
-		}
-		idx := strings.Index(string(raw), "capability_report:")
-		if idx < 0 {
-			t.Fatal("fixture config carries no capability_report")
-		}
-		rest := string(raw)[idx:]
-		lineEnd := strings.IndexByte(rest, '\n')
-		e5t4Rewrite(t, configPath, rest[:lineEnd], "capability_report: "+reportPath)
-	}
-	writeReport := func(version string) {
-		body := `{"schema_version":"agent-dispatch.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"` + version + `","interface":"public_cli","capabilities":{"durable_acceptance":true,"submit_idempotency_key":true,"lookup_by_idempotency_key":false,"lookup_by_external_ref":true,"resource_mutex":true,"execution_status":true,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
-		if err := os.WriteFile(reportPath, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
 	enable := func() (int, string, string) {
 		cfg, err := config.Load(configPath)
 		if err != nil {
@@ -71,46 +37,46 @@ func TestE9T6EnableGateRequiresReportWithoutExecutable(t *testing.T) {
 		return code, errb.String(), out.String()
 	}
 
-	// Neither executable nor report: the enable must refuse at exit 3.
-	pointAtReport()
-	if code, stderr, _ := enable(); code != 3 || !strings.Contains(stderr, "config_invalid") {
-		t.Fatalf("a missing report with an absent executable must refuse at exit 3, got %d: %s", code, stderr)
-	}
-	// An unreadable report: refused the same way.
-	if err := os.WriteFile(reportPath, []byte("not json"), 0o644); err != nil {
+	// An absent executable keeps the enable a warning, never a refusal:
+	// re-acknowledging a paused production route is not hostage to the
+	// target being up, and eligibility re-rides the probe at submit time.
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if code, stderr, _ := enable(); code != 3 {
-		t.Fatalf("an unreadable report with an absent executable must refuse at exit 3, got %d: %s", code, stderr)
+	idx := strings.Index(string(raw), "executable:")
+	if idx < 0 {
+		t.Fatal("fixture config carries no executable")
 	}
-	// A structurally valid report recording an unsupported Hermes
-	// version: refused without a live target, because the supported set
-	// is build-time evidence (the round-1 review observation).
-	writeReport("0.18.3 (2026.6.1)")
-	if code, stderr, _ := enable(); code != 3 || !strings.Contains(stderr, "outside the runtime-verified set") {
-		t.Fatalf("an unsupported-version report with an absent executable must refuse at exit 3, got %d: %s", code, stderr)
-	}
-	// A weak-guarantee report in the same liveness state: refused through
-	// the shared closure, not only on the probed path (the round-2
-	// residual observation).
-	writeWeakGuaranteeReport := func() {
-		body := `{"schema_version":"agent-dispatch.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":false,"submit_idempotency_key":true,"lookup_by_idempotency_key":false,"lookup_by_external_ref":true,"resource_mutex":true,"execution_status":true,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
-		if err := os.WriteFile(reportPath, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	writeWeakGuaranteeReport()
-	if code, stderr, _ := enable(); code != 3 || !strings.Contains(stderr, "config_capability_missing") || !strings.Contains(stderr, "durable_acceptance") {
-		t.Fatalf("a weak-guarantee report with an absent executable must refuse at exit 3 through the shared closure, got %d: %s", code, stderr)
-	}
-	// The honest report enables with the liveness warning preserved.
-	writeReport("0.19.1 (2026.7.30)")
+	rest := string(raw)[idx:]
+	lineEnd := strings.IndexByte(rest, '\n')
+	e5t4Rewrite(t, configPath, rest[:lineEnd], "executable: "+filepath.Join(cfgDir, "hermes-absent"))
 	code, stderr, stdout := enable()
 	if code != 0 {
-		t.Fatalf("the honest report with an absent executable must enable: %d %s", code, stderr)
+		t.Fatalf("an unavailable target must enable with a warning, got %d: %s", code, stderr)
 	}
-	if !strings.Contains(stderr, "warning: target hermes-main probes") || !strings.Contains(stdout, `"enabled"`) {
+	if !strings.Contains(stderr, "warning: hermes_targets.hermes-main probes") || !strings.Contains(stdout, `"enabled"`) {
 		t.Fatalf("the unavailable-target warning and the enabled envelope must both appear: stderr=%q stdout=%q", stderr, stdout)
+	}
+
+	// A live below-floor executable: refused at exit 3 even though the
+	// route was previously acknowledged (the eligibility gate owns the
+	// refusal; the E11-T2 capability probe tightens it further).
+	bin := filepath.Join(cfgDir, "hermes-below")
+	script := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf 'Hermes Agent v0.18.3 (2026.6.1)\\n'; exit 0; fi\nexit 3\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	raw, err = os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx = strings.Index(string(raw), "executable:")
+	rest = string(raw)[idx:]
+	lineEnd = strings.IndexByte(rest, '\n')
+	e5t4Rewrite(t, configPath, rest[:lineEnd], "executable: "+bin)
+	if code, stderr, _ := enable(); code != 3 || !strings.Contains(stderr, "version_unsupported") {
+		t.Fatalf("a below-floor executable must refuse at exit 3, got %d: %s", code, stderr)
 	}
 }
 

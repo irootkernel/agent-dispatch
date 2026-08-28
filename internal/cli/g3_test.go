@@ -27,9 +27,7 @@ func newGateSink(h *g3) (ports.Sink, error) {
 	if err != nil {
 		return nil, err
 	}
-	route := cfg.Routes["wiki"]
-	target := cfg.Targets[route.Dispatch.Target]
-	return resolveSink(cfg, target, route, nil)
+	return resolveSink(cfg, "wiki", nil)
 }
 
 // Gate G3 (E4-T5): real end-to-end evidence for the Hermes Kanban
@@ -126,7 +124,7 @@ func g3RouteRevision(t *testing.T, configPath string) string {
 
 // g3 is the gate harness state.
 type g3 struct {
-	bin, configPath, vault, board, stateDir, report string
+	bin, configPath, vault, board, stateDir string
 }
 
 // g3Setup guards on the real Watchman and a verified Hermes, then
@@ -157,14 +155,6 @@ func g3Setup(t *testing.T) *g3 {
 	if err := os.MkdirAll(h.stateDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	abs := func(rel string) string {
-		p, err := filepath.Abs(rel)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return p
-	}
-	h.report = abs("../../docs/integrations/hermes-capability-report.json")
 	hermes, err := exec.LookPath("hermes")
 	if err != nil {
 		t.Fatal(err)
@@ -189,13 +179,12 @@ resources:
     file_scope: markdown
     git:
       mode: disabled
-targets:
+hermes_targets:
   hermes-main:
-    type: hermes-kanban
     board: %s
+    minimum_version: 0.19.1
+    compatibility: capability_probe
     executable: %s
-    capability_report: %s
-    required_capabilities: [durable_acceptance, submit_idempotency_key, lookup_by_external_ref]
     submit_timeout: 30s
     lookup_timeout: 15s
     environment_allowlist: [PATH, HOME]
@@ -220,27 +209,30 @@ routes:
       overflow_action: reconcile
       fresh_instance_action: reconcile
       unsafe_path_action: quarantine
-    dispatch:
-      target: hermes-main
-      profile: wiki-maintainer
-      skills: [llm-wiki]
-      mutex_key: wiki-publish
-      latest_state: true
-      submission_retry:
-        max_attempts: 3
-        initial_backoff: 1s
-        max_backoff: 4s
-        multiplier: 2.0
-        jitter_fraction: 0.0
-      execution_hints:
-        max_runtime: 30m
-        max_attempts: 2
-      failure_budget: 2
-      active_stale_after: 2h
+    fanout_mode: all
+    destinations:
+      - id: main
+        target: hermes-main
+        profile: wiki-maintainer
+        skills: [llm-wiki]
+        mutex_key: wiki-publish
+        workstream: main
+        execution_hints:
+          max_runtime: 30m
+          max_attempts: 2
+    submission_retry:
+      max_attempts: 3
+      initial_backoff: 1s
+      max_backoff: 4s
+      multiplier: 2.0
+      jitter_fraction: 0.0
+    latest_state: true
+    failure_budget: 2
+    active_stale_after: 2h
     reconciliation:
       initial: true
       daily_expected: true
-`, h.stateDir, h.vault, h.board, hermes, h.report)
+`, h.stateDir, h.vault, h.board, hermes)
 	if err := os.WriteFile(h.configPath, []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -648,21 +640,16 @@ func TestG3AC306CapabilityGateBlocks(t *testing.T) {
 	h := g3Setup(t)
 	h.g3Register(t)
 
-	// A report that honestly records no durable acceptance, and a
-	// route that requires it (the SOT-named AC-306 capability).
-	limited := filepath.Join(h.stateDir, "limited-report.json")
-	body := `{"schema_version":"agent-dispatch.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":false,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":true,"execution_status":true,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
-	if err := os.WriteFile(limited, []byte(body), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	// A Hermes below the eligibility floor, re-pointed through the
+	// configuration (the SOT-named AC-306 gate posture under the E11-T1
+	// contract: the capability-shape probe that restores
+	// per-capability refusal lands with E11-T2).
+	belowFloor := e4t1StubHermes(t, h.stateDir, "Hermes Agent v0.18.0 (2026.5.1)")
 	raw, err := os.ReadFile(h.configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	updated := strings.Replace(string(raw), h.report, limited, 1)
-	updated = strings.Replace(updated,
-		"required_capabilities: [durable_acceptance, submit_idempotency_key, lookup_by_external_ref]",
-		"required_capabilities: [durable_acceptance, submit_idempotency_key]", 1)
+	updated := strings.Replace(string(raw), "hermes", belowFloor, 1)
 	if err := os.WriteFile(h.configPath, []byte(updated), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -671,8 +658,8 @@ func TestG3AC306CapabilityGateBlocks(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, _, errOut := h.g3DispatchPayload(t, `[{"name":"Inbox/gate.md","exists":true,"new":true,"size":1,"type":"f"}]`)
-	if !strings.Contains(errOut, "|exit=3") || !strings.Contains(errOut, "config_capability_missing") {
-		t.Fatalf("missing capability must block validation with exit 3: %s", errOut)
+	if !strings.Contains(errOut, "|exit=3") {
+		t.Fatalf("the below-floor target must block validation with exit 3: %s", errOut)
 	}
 	// Nothing was submitted; the listing must succeed so the
 	// emptiness assertion cannot pass vacuously.

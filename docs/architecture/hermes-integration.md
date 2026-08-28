@@ -26,7 +26,7 @@ flowchart LR
     HTTP --> Hermes
 ```
 
-The logical port is stable. Physical commands and response parsing are adapter details established by a checked-in capability report.
+The logical port is stable. Physical commands and response parsing are adapter details established by verified public-interface evidence: the frozen E0-T4 report for the baseline, and — since the v0.1.5 destinations cutover (E11-T1, ADR-0017) — minimum-version eligibility with the capability probe that supersedes it (E11-T2 records per-executable shape evidence and binds activation to its fingerprint).
 
 ## 3. E0-T4 Capability Baseline
 
@@ -71,7 +71,7 @@ SinkLimits {
 }
 ```
 
-Route validation compares `required_capabilities` with actual capabilities. A missing capability is an error unless an accepted reduced-guarantee configuration names the missing behavior and its operational consequence.
+Since the v0.1.5 destinations cutover (E11-T1), hermes compatibility is gated by the `minimum_version` eligibility floor with the capability probe pending (E11-T2 restores per-executable shape evidence and binds activation to its fingerprint); the frozen 0.19.1 interface is the interim truth source for the unconditional delivery-evidence set. The `required_capabilities` comparison applies to webhook targets only: a required capability the static webhook declaration does not provide is a configuration error.
 
 ## 5. Logical Kanban Request
 

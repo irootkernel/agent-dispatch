@@ -2,34 +2,48 @@ package hermeskanban
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
-// Adapter is the E4-T1 Hermes Kanban target facade: it owns the
-// exact-version gate, the read-only capability probe, and the typed CLI
-// transport. Durable submission and reconciliation wiring arrive with
-// E4-T3 on top of this transport; until then no submit path may use this
-// package to claim acceptance.
+// UnconditionalCapabilities is the delivery-evidence set every Hermes
+// Kanban destination depends on (durable acceptance, idempotent
+// submission, external-reference reconciliation). Since the v0.1.5
+// cutover it is a contract constant rather than a per-route
+// configuration list: the frozen 0.19.1 runtime-verified interface is
+// its interim truth source until the E11-T2 probe proves the shapes per
+// executable.
+var UnconditionalCapabilities = []string{"durable_acceptance", "submit_idempotency_key", "lookup_by_external_ref"}
+
+// Adapter is the Hermes Kanban target facade: it owns the
+// minimum-version eligibility gate (HER-011, ADR-0017) and the typed CLI
+// transport. Since the v0.1.5 destinations cutover there is no
+// operator-authored capability report: eligibility is followed by the
+// public-interface capability probe (E11-T2), which binds activation to
+// the capability-evidence fingerprint; until it lands, this gate proves
+// version eligibility only and the submit path keeps its typed
+// fail-closed response classification.
 type Adapter struct {
-	id         string
-	client     *Client
-	reportPath string
-	required   []string
+	id      string
+	client  *Client
+	minimum Version
 }
 
-// New builds the adapter for one configured target. executable is the
-// verified public CLI, reportPath the frozen E0-T4 capability report, and
-// required the route-facing required capability names (HER-005).
-func New(targetID, executable, reportPath string, required []string, limits ProcessLimits) *Adapter {
-	return &Adapter{
-		id:         targetID,
-		client:     NewClient(executable, limits),
-		reportPath: reportPath,
-		required:   append([]string(nil), required...),
+// New builds the adapter for one configured hermes target. executable is
+// the verified public CLI and minimumVersion the declared eligibility
+// floor ("" means the 0.19.1 default; the loader already rejects a floor
+// below it).
+func New(targetID, executable, minimumVersion string, limits ProcessLimits) (*Adapter, error) {
+	minimum, err := ParseMinimumVersion(minimumVersion)
+	if err != nil {
+		return nil, fmt.Errorf("target %s: %w", targetID, err)
 	}
+	return &Adapter{
+		id:      targetID,
+		client:  NewClient(executable, limits),
+		minimum: minimum,
+	}, nil
 }
 
 // ID is the configured target ID.
@@ -42,64 +56,43 @@ func (a *Adapter) Type() ports.SinkType { return ports.SinkHermesKanban }
 // Client exposes the typed transport for the submit orchestration.
 func (a *Adapter) Client() *Client { return a.client }
 
-// Required lists the configured required capabilities.
-func (a *Adapter) Required() []string { return append([]string(nil), a.required...) }
+// Minimum is the parsed eligibility floor.
+func (a *Adapter) Minimum() Version { return a.minimum }
 
-// Probe is the read-only capability probe. It discovers the installed
-// version through the public CLI only, gates it against the
-// runtime-verified set, loads the frozen capability report, requires the
-// report to have been probed against this exact version, and validates
-// the required capabilities (HER-002/HER-004/HER-005). It never mutates
-// any Hermes state and never touches an internal database (HER-010).
+// Probe is the read-only eligibility probe. It discovers the installed
+// version through the public CLI only and gates it against the declared
+// floor (HER-011). It never mutates any Hermes state and never touches
+// an internal database (HER-010). Capability-shape probing against the
+// required Kanban JSON operations and the profile-scoped skill table
+// arrives with E11-T2 (HER-012); until then the submit path's typed
+// response classification remains the fail-closed shape check.
 func (a *Adapter) Probe(ctx context.Context) (ports.Capabilities, error) {
 	version, err := a.client.DiscoverVersion(ctx)
 	if err != nil {
 		return ports.Capabilities{}, fmt.Errorf("target %s: %w", a.id, err)
 	}
-	return a.probeWithVersion(ctx, version)
-}
-
-// probeWithVersion performs every post-discovery probe step against one
-// already-discovered version, so Probe and ProbeVerbose gate exactly the
-// version they report.
-func (a *Adapter) probeWithVersion(ctx context.Context, version Version) (ports.Capabilities, error) {
-	if err := CheckVersionSupported(version); err != nil {
+	if err := CheckVersionEligible(version, a.minimum); err != nil {
 		return ports.Capabilities{}, fmt.Errorf("target %s: %w", a.id, err)
 	}
-	report, err := LoadReport(a.reportPath)
-	if err != nil {
-		return ports.Capabilities{}, fmt.Errorf("target %s: %w", a.id, err)
-	}
-	if !report.VersionMatchsWith(version) {
-		return ports.Capabilities{}, fmt.Errorf("target %s: %w", a.id, &ReportError{
-			Detail: fmt.Sprintf("report records hermes %s but %s is installed; re-run the E0-T4 probe for this version", report.HermesVersion, version),
-		})
-	}
-	caps := report.PortCapabilities()
-	if err := ValidateRequired(a.id, caps, a.required); err != nil {
-		return caps, fmt.Errorf("target %s: %w", a.id, err)
-	}
-	return caps, nil
+	return ports.Capabilities{}, nil
 }
 
 // ProbeSummary is the operator-facing result of one probe, used by
 // `config validate --probe-targets` (cli-spec §3).
 type ProbeSummary struct {
 	TargetID string
-	// State is one of available, version_unsupported, unavailable,
-	// capability_mismatch, or config_error.
+	// State is one of available, version_unsupported, or unavailable.
+	// The capability_mismatch and config_error classes return with the
+	// E11-T2 capability probe.
 	State   string
 	Version string
 	Detail  string // bounded, redacted operator detail
 }
 
 // ProbeVerbose discovers the version once and classifies every failure
-// mode for the validation surface: a missing required capability
-// (capability_mismatch) and a persistent configuration defect
-// (config_error: unreadable/stale report, unknown capability name) are
-// validation failures returned as errors so the caller fails closed
-// (HER-005); an unusable or version-unsupported target is a summary
-// state the caller reports without failing config validation.
+// mode for the validation surface: an unusable target is a summary state
+// the caller reports without failing configuration validation, while a
+// version below the eligibility floor fails the enable gate (HER-011).
 func (a *Adapter) ProbeVerbose(ctx context.Context) (ProbeSummary, ports.Capabilities, error) {
 	summary := ProbeSummary{TargetID: a.id, State: "available"}
 	version, err := a.client.DiscoverVersion(ctx)
@@ -109,30 +102,10 @@ func (a *Adapter) ProbeVerbose(ctx context.Context) (ProbeSummary, ports.Capabil
 		return summary, ports.Capabilities{}, nil
 	}
 	summary.Version = version.String()
-	if unsupported := CheckVersionSupported(version); unsupported != nil {
+	if unsupported := CheckVersionEligible(version, a.minimum); unsupported != nil {
 		summary.State = "version_unsupported"
 		summary.Detail = truncate(unsupported.Error(), diagnosticBound)
 		return summary, ports.Capabilities{}, nil
 	}
-	caps, perr := a.probeWithVersion(ctx, version)
-	if perr == nil {
-		return summary, caps, nil
-	}
-	summary.Detail = truncate(perr.Error(), diagnosticBound)
-	var capability *CapabilityError
-	var report *ReportError
-	var requirement *InvalidRequirementError
-	switch {
-	case errors.As(perr, &capability):
-		summary.State = "capability_mismatch"
-	case errors.As(perr, &report), errors.As(perr, &requirement):
-		// Persistent configuration defects (unreadable or stale report,
-		// unknown required-capability name) fail validation, distinct
-		// from a transiently unreachable target (HER-005).
-		summary.State = "config_error"
-	default:
-		summary.State = "unavailable"
-		return summary, caps, nil
-	}
-	return summary, caps, perr
+	return summary, ports.Capabilities{}, nil
 }

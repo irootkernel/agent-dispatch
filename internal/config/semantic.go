@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 )
 
 // SemanticValidate applies the checks beyond the JSON Schema
@@ -24,6 +26,9 @@ import (
 // validation with E8-T5/M-18.
 func SemanticValidate(cfg *Config) (errs []error, warnings []string) {
 	errs = append(errs, validateReferences(cfg)...)
+	errs = append(errs, validateDestinations(cfg)...)
+	errs = append(errs, validateHermesTargets(cfg)...)
+	errs = append(errs, validateNotifications(cfg)...)
 	errs = append(errs, validateRetryBudgets(cfg)...)
 	errs = append(errs, validateSecretRefs(cfg)...)
 	errs, warnings = validateStateDir(cfg, errs, warnings)
@@ -32,6 +37,220 @@ func SemanticValidate(cfg *Config) (errs []error, warnings []string) {
 	errs = append(errs, validateMapKeys(cfg)...)
 	errs = append(errs, validateMaxHashFloor(cfg)...)
 	return errs, warnings
+}
+
+// MinimumEligibleHermesVersion is the v0.1.5 eligibility floor (ADR-0017,
+// HER-011): Hermes below 0.19.1 is rejected, with no fixed maximum. A
+// hermes target may declare a higher floor, never a lower one.
+const MinimumEligibleHermesVersion = "0.19.1"
+
+// validateHermesTargets enforces the hermes_targets contract (§14): a
+// non-empty board, a parseable minimum_version at or above the 0.19.1
+// eligibility floor (HER-011), and exactly the capability_probe
+// compatibility mode (ADR-0017).
+func validateHermesTargets(cfg *Config) []error {
+	ids := make([]string, 0, len(cfg.HermesTargets))
+	for id := range cfg.HermesTargets {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	var errs []error
+	for _, id := range ids {
+		t := cfg.HermesTargets[id]
+		if strings.TrimSpace(t.Board) == "" {
+			errs = append(errs, fmt.Errorf("hermes_targets.%s.board must be non-empty", id))
+		}
+		minimum := t.MinimumVersion
+		if minimum == "" {
+			minimum = MinimumEligibleHermesVersion
+		}
+		parsed, err := records.ParseVersionTriple(minimum)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("hermes_targets.%s.minimum_version: %v", id, err))
+			continue
+		}
+		floor, _ := records.ParseVersionTriple(MinimumEligibleHermesVersion)
+		if parsed.Less(floor) {
+			errs = append(errs, fmt.Errorf("hermes_targets.%s.minimum_version %s is below the v0.1.5 eligibility floor %s (HER-011)", id, minimum, MinimumEligibleHermesVersion))
+		}
+		if t.Compatibility != "capability_probe" {
+			errs = append(errs, fmt.Errorf("hermes_targets.%s.compatibility must be capability_probe in v0.1.5 (got %q)", id, t.Compatibility))
+		}
+	}
+	return errs
+}
+
+// validateDestinations enforces the destinations[] contract (FAN-001,
+// FAN-005, FAN-006, FAN-011, FAN-012): one or more destinations with
+// unique stable IDs and non-empty workstreams, a unique non-empty skill
+// list, the closed condition vocabulary, the `all`-only fan-out mode,
+// and target resolution across hermes_targets and webhook targets.
+func validateDestinations(cfg *Config) []error {
+	var errs []error
+	re := destinationIDPattern
+	for routeID, route := range cfg.Routes {
+		if route.FanoutMode != "all" {
+			errs = append(errs, fmt.Errorf("route %q fanout_mode must be \"all\" in v0.1.5 (got %q)", routeID, route.FanoutMode))
+		}
+		if len(route.Destinations) == 0 {
+			errs = append(errs, fmt.Errorf("route %q must declare one or more destinations under destinations[] (FAN-001)", routeID))
+			continue
+		}
+		seen := make(map[string]bool, len(route.Destinations))
+		for i, dest := range route.Destinations {
+			where := fmt.Sprintf("route %q destinations[%d]", routeID, i)
+			if !re.MatchString(dest.ID) {
+				errs = append(errs, fmt.Errorf("%s id %q must match ^[a-z][a-z0-9-]{0,63}$", where, dest.ID))
+			}
+			if seen[dest.ID] {
+				errs = append(errs, fmt.Errorf("%s id %q is declared more than once in the route", where, dest.ID))
+			}
+			seen[dest.ID] = true
+			if strings.TrimSpace(dest.Workstream) == "" {
+				errs = append(errs, fmt.Errorf("%s workstream must be non-empty", where))
+			}
+			resolved, resolvedOK := cfg.ResolveTarget(dest.Target)
+			isWebhook := resolvedOK && resolved.IsWebhook()
+			// Skills are the Hermes execution envelope: a hermes
+			// destination requires a unique non-empty list; a webhook
+			// destination takes none.
+			if isWebhook {
+				if dest.Profile != "" || len(dest.Skills) != 0 || dest.Workspace != "" || dest.MutexKey != "" {
+					errs = append(errs, fmt.Errorf("%s (%s) targets webhook target %q; profile, skills, workspace, and mutex_key apply only to a hermes destination", where, dest.ID, dest.Target))
+				}
+			} else {
+				if dest.Profile == "" {
+					errs = append(errs, fmt.Errorf("%s (%s) profile must be non-empty for a hermes destination (HER-015)", where, dest.ID))
+				}
+				if len(dest.Skills) == 0 {
+					errs = append(errs, fmt.Errorf("%s (%s) skills must be a non-empty list", where, dest.ID))
+				}
+				dup := make(map[string]bool, len(dest.Skills))
+				for _, s := range dest.Skills {
+					if s == "" {
+						errs = append(errs, fmt.Errorf("%s (%s) skills contains an empty name", where, dest.ID))
+					}
+					if dup[s] {
+						errs = append(errs, fmt.Errorf("%s (%s) skills list %q more than once", where, dest.ID, s))
+					}
+					dup[s] = true
+				}
+			}
+			if err := validateConditions(where, dest.Conditions); err != nil {
+				errs = append(errs, err)
+			}
+		}
+	}
+	return errs
+}
+
+var destinationIDPattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
+
+// validateConditions enforces the closed selection vocabulary (FAN-004,
+// FAN-005): the five condition classes, structural values from the
+// domain enums, and non-empty value lists.
+func validateConditions(where string, c *Conditions) error {
+	if c == nil {
+		return nil
+	}
+	classes := []struct {
+		name  string
+		keys  *[]string
+		parse func(string) error
+	}{
+		{"path_include", &c.PathInclude, nil},
+		{"path_exclude", &c.PathExclude, nil},
+		{"operations", &c.Operations, func(s string) error { _, err := records.ParseOperation(s); return err }},
+		{"classifications", &c.Classifications, func(s string) error { _, err := records.ParseClassification(s); return err }},
+		{"policy_outcomes", &c.PolicyOutcomes, func(s string) error { _, err := records.ParseDisposition(s); return err }},
+	}
+	for _, class := range classes {
+		if *class.keys == nil {
+			continue
+		}
+		if len(*class.keys) == 0 {
+			return fmt.Errorf("%s conditions.%s must not be an empty list (omit the class to select unconditionally)", where, class.name)
+		}
+		seen := make(map[string]bool, len(*class.keys))
+		for _, v := range *class.keys {
+			if v == "" {
+				return fmt.Errorf("%s conditions.%s contains an empty value", where, class.name)
+			}
+			if seen[v] {
+				return fmt.Errorf("%s conditions.%s lists %q more than once", where, class.name, v)
+			}
+			seen[v] = true
+			if class.parse != nil {
+				if err := class.parse(v); err != nil {
+					return fmt.Errorf("%s conditions.%s: %v", where, class.name, err)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// notificationEventVocabulary is the closed v0.1.5 event set (NTF-002):
+// the names cover every class the defaults must reach. Delivery arrives
+// with E13; v0.1.5 validates the declared policy only.
+var notificationEventVocabulary = map[string]bool{
+	"work_completed":          true,
+	"work_failed":             true,
+	"work_exhausted":          true,
+	"delivery_unknown":        true,
+	"quarantined":             true,
+	"reconciliation_required": true,
+	"integration_drift":       true,
+	"watchman_drift":          true,
+}
+
+// validateNotifications enforces the declared per-route notification
+// policy (NTF-001, §14): a closed event vocabulary, unique sink IDs, and
+// the webhook sink's https endpoint with its authentication shape. A
+// notifications block without sinks is valid and disabled.
+func validateNotifications(cfg *Config) []error {
+	var errs []error
+	for routeID, route := range cfg.Routes {
+		if route.Notifications == nil {
+			continue
+		}
+		n := route.Notifications
+		if len(n.Events) == 0 {
+			errs = append(errs, fmt.Errorf("route %q notifications.events must declare at least one event (omit the notifications block when disabled)", routeID))
+		}
+		for _, e := range n.Events {
+			if !notificationEventVocabulary[e] {
+				errs = append(errs, fmt.Errorf("route %q notifications event %q is outside the closed v0.1.5 vocabulary", routeID, e))
+			}
+		}
+		seen := make(map[string]bool, len(n.Sinks))
+		for i, sink := range n.Sinks {
+			where := fmt.Sprintf("route %q notifications.sinks[%d]", routeID, i)
+			if !destinationIDPattern.MatchString(sink.ID) {
+				errs = append(errs, fmt.Errorf("%s id %q must match ^[a-z][a-z0-9-]{0,63}$", where, sink.ID))
+			}
+			if seen[sink.ID] {
+				errs = append(errs, fmt.Errorf("%s id %q is declared more than once", where, sink.ID))
+			}
+			seen[sink.ID] = true
+			switch sink.Type {
+			case "webhook":
+				if !strings.HasPrefix(sink.Endpoint, "https://") {
+					errs = append(errs, fmt.Errorf("%s (%s) endpoint must be an https URL", where, sink.ID))
+				}
+				if sink.Auth == nil {
+					errs = append(errs, fmt.Errorf("%s (%s) webhook sink requires an auth block with a secret_ref", where, sink.ID))
+				}
+			case "log":
+				if sink.Endpoint != "" || sink.Auth != nil {
+					errs = append(errs, fmt.Errorf("%s (%s) log sink takes no endpoint or auth", where, sink.ID))
+				}
+			default:
+				errs = append(errs, fmt.Errorf("%s (%s) type must be webhook or log (got %q)", where, sink.ID, sink.Type))
+			}
+		}
+	}
+	return errs
 }
 
 // validateResourceOverlap rejects resources whose canonicalized roots
@@ -112,6 +331,9 @@ func validateMapKeys(cfg *Config) []error {
 	for id := range cfg.Targets {
 		add("targets", id)
 	}
+	for id := range cfg.HermesTargets {
+		add("hermes_targets", id)
+	}
 	for id := range cfg.Routes {
 		add("routes", id)
 	}
@@ -129,15 +351,24 @@ func validateMaxHashFloor(cfg *Config) []error {
 }
 
 // validateReferences fails closed when a route names an unknown resource
-// or target (§12).
+// or a destination names an unknown target (§12, §14), and when one ID
+// is declared in both target maps: a hermes target and a webhook target
+// sharing an ID would make every destination binding on it ambiguous.
 func validateReferences(cfg *Config) []error {
 	var errs []error
+	for id := range cfg.Targets {
+		if _, clash := cfg.HermesTargets[id]; clash {
+			errs = append(errs, fmt.Errorf("target %q is declared under both targets and hermes_targets; destination bindings on a shared ID are ambiguous", id))
+		}
+	}
 	for routeID, route := range cfg.Routes {
 		if _, ok := cfg.Resources[route.Source.Resource]; !ok {
 			errs = append(errs, fmt.Errorf("route %q references unknown resource %q", routeID, route.Source.Resource))
 		}
-		if _, ok := cfg.Targets[route.Dispatch.Target]; !ok {
-			errs = append(errs, fmt.Errorf("route %q references unknown target %q", routeID, route.Dispatch.Target))
+		for i, dest := range route.Destinations {
+			if _, ok := cfg.ResolveTarget(dest.Target); !ok {
+				errs = append(errs, fmt.Errorf("route %q destinations[%d] (%s) references unknown target %q (declare it under hermes_targets or targets)", routeID, i, dest.ID, dest.Target))
+			}
 		}
 	}
 	return errs
@@ -148,7 +379,7 @@ func validateReferences(cfg *Config) []error {
 func validateRetryBudgets(cfg *Config) []error {
 	var errs []error
 	for routeID, route := range cfg.Routes {
-		r := route.Dispatch.SubmissionRetry
+		r := route.SubmissionRetry
 		initial, err := parseDuration(r.InitialBackoff)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("route %q: initial_backoff: %v", routeID, err))
@@ -199,10 +430,10 @@ func withinDir(path, dir string) bool {
 }
 
 // validateSecretRefs parses every secret reference without resolving it
-// (SEC-006): a malformed reference fails validation. Webhook
-// authentication additionally requires its declared shape — header
-// authentication names the header, bearer authentication carries no
-// header name (configuration-spec §5, §12).
+// (SEC-006): a malformed reference fails validation. Webhook target and
+// notification-sink authentication additionally requires its declared
+// shape — header authentication names the header, bearer authentication
+// carries no header name (configuration-spec §5, §12).
 func validateSecretRefs(cfg *Config) []error {
 	var errs []error
 	for targetID, target := range cfg.Targets {
@@ -213,16 +444,41 @@ func validateSecretRefs(cfg *Config) []error {
 			errs = append(errs, fmt.Errorf("target %q auth.secret_ref: %v", targetID, err))
 		}
 		if target.Type == "hermes-webhook" {
-			switch target.Auth.Type {
-			case "header":
-				if target.Auth.HeaderName == "" {
-					errs = append(errs, fmt.Errorf("target %q auth.header_name: required when auth.type is header", targetID))
-				}
-			case "bearer":
-				if target.Auth.HeaderName != "" {
-					errs = append(errs, fmt.Errorf("target %q auth.header_name: must be empty when auth.type is bearer", targetID))
-				}
+			errs = append(errs, validateAuthShape(fmt.Sprintf("target %q", targetID), target.Auth)...)
+		}
+	}
+	for routeID, route := range cfg.Routes {
+		if route.Notifications == nil {
+			continue
+		}
+		for i, sink := range route.Notifications.Sinks {
+			if sink.Auth == nil {
+				continue
 			}
+			where := fmt.Sprintf("route %q notifications.sinks[%d] (%s)", routeID, i, sink.ID)
+			if _, err := ParseSecretRef(sink.Auth.SecretRef); err != nil {
+				errs = append(errs, fmt.Errorf("%s auth.secret_ref: %v", where, err))
+			}
+			if sink.Type == "webhook" {
+				errs = append(errs, validateAuthShape(where, sink.Auth)...)
+			}
+		}
+	}
+	return errs
+}
+
+// validateAuthShape enforces the bearer/header shape rules on one
+// authentication block.
+func validateAuthShape(where string, auth *Auth) []error {
+	var errs []error
+	switch auth.Type {
+	case "header":
+		if auth.HeaderName == "" {
+			errs = append(errs, fmt.Errorf("%s auth.header_name: required when auth.type is header", where))
+		}
+	case "bearer":
+		if auth.HeaderName != "" {
+			errs = append(errs, fmt.Errorf("%s auth.header_name: must be empty when auth.type is bearer", where))
 		}
 	}
 	return errs

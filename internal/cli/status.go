@@ -105,20 +105,16 @@ func runStatus(args []string, stdout, stderr io.Writer) int {
 }
 
 // targetCapabilitySummary reports the offline capability declaration
-// per target: the static webhook declaration and the kanban target's
-// frozen report capabilities — no process execution, no endpoint I/O.
+// per target — no process execution, no endpoint I/O: the static webhook
+// declaration and, for hermes targets, the probed-compatibility contract
+// with its frozen-interface unconditional capability set (E11-T1; the
+// E11-T2 probe cache will replace the constant with recorded evidence).
 func targetCapabilitySummary(cfg *config.Config) []map[string]any {
-	ids := make([]string, 0, len(cfg.Targets))
-	for id := range cfg.Targets {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	out := make([]map[string]any, 0, len(ids))
-	for _, id := range ids {
+	out := make([]map[string]any, 0, len(cfg.Targets)+len(cfg.HermesTargets))
+	for _, id := range sortedTargetIDs(cfg) {
 		target := cfg.Targets[id]
 		entry := map[string]any{"target_id": id, "type": target.Type}
-		switch target.Type {
-		case "hermes-webhook":
+		if target.Type == "hermes-webhook" {
 			if opts, err := webhookSinkOptions(id, target); err == nil {
 				if sink, err := hermeswebhook.NewSink(opts); err == nil {
 					if caps, err := sink.Probe(context.Background()); err == nil {
@@ -126,13 +122,25 @@ func targetCapabilitySummary(cfg *config.Config) []map[string]any {
 					}
 				}
 			}
-		case "hermes-kanban":
-			if report, err := hermeskanban.LoadReport(target.CapabilityReport); err == nil {
-				entry["capabilities"] = report.PortCapabilities().BoolMap()
-				entry["hermes_version"] = report.HermesVersion
-			}
 		}
 		out = append(out, entry)
+	}
+	for _, id := range sortedHermesTargetIDs(cfg) {
+		target := cfg.HermesTargets[id]
+		minimum := target.MinimumVersion
+		if minimum == "" {
+			minimum = config.MinimumEligibleHermesVersion
+		}
+		caps := map[string]bool{}
+		for _, name := range hermeskanban.UnconditionalCapabilities {
+			caps[name] = true
+		}
+		out = append(out, map[string]any{
+			"target_id": id, "type": "hermes-kanban",
+			"minimum_version": minimum,
+			"compatibility":   target.Compatibility,
+			"capabilities":    caps,
+		})
 	}
 	return out
 }
@@ -317,13 +325,8 @@ func watchmanFact(ctx context.Context) doctor.WatchmanFact {
 // targetFacts applies each target's offline construction gates and
 // secret-reference resolvability without printing values (OPS-005).
 func targetFacts(cfg *config.Config) []doctor.TargetFact {
-	ids := make([]string, 0, len(cfg.Targets))
-	for id := range cfg.Targets {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	out := make([]doctor.TargetFact, 0, len(ids))
-	for _, id := range ids {
+	out := make([]doctor.TargetFact, 0, len(cfg.Targets)+len(cfg.HermesTargets))
+	for _, id := range sortedTargetIDs(cfg) {
 		target := cfg.Targets[id]
 		fact := doctor.TargetFact{TargetID: id, Type: target.Type}
 		switch target.Type {
@@ -343,19 +346,25 @@ func targetFacts(cfg *config.Config) []doctor.TargetFact {
 				}
 				fact.SecretResolved = &resolved
 			}
-		case "hermes-kanban":
-			if target.Executable == "" {
-				fact.GateError = "executable is not configured"
-			} else if !executablePresent(target.Executable) {
-				fact.GateError = fmt.Sprintf("executable %q is not present", target.Executable)
-			} else if report, lerr := hermeskanban.LoadReport(target.CapabilityReport); lerr != nil {
-				fact.GateError = lerr.Error()
-			} else if verr := hermeskanban.ValidateRequired(id, report.PortCapabilities(), target.RequiredCapabilities); verr != nil {
-				// The offline capability gate the doctor previously
-				// skipped: a report without a required capability is an
-				// actionable target failure (E8-T4, H-4).
-				fact.GateError = verr.Error()
-			}
+		}
+		out = append(out, fact)
+	}
+	// Hermes targets contribute their facts independently of the webhook
+	// map: a hermes-only configuration — the common post-cutover shape —
+	// still reports board and executable gate errors. The offline
+	// capability gate the doctor previously applied through the report
+	// (E8-T4, H-4) is subsumed by the cutover contract: hermes capability
+	// truth is the frozen-interface unconditional set until the E11-T2
+	// probe records per-executable evidence.
+	for _, id := range sortedHermesTargetIDs(cfg) {
+		target := cfg.HermesTargets[id]
+		fact := doctor.TargetFact{TargetID: id, Type: "hermes-kanban"}
+		if target.Board == "" {
+			fact.GateError = "board is not configured"
+		} else if target.Executable == "" {
+			fact.GateError = "executable is not configured"
+		} else if !executablePresent(target.Executable) {
+			fact.GateError = fmt.Sprintf("executable %q is not present", target.Executable)
 		}
 		out = append(out, fact)
 	}
@@ -386,20 +395,21 @@ func probeTargetWarnings(cfg *config.Config) []probeTargetWarning {
 	var out []probeTargetWarning
 	for _, id := range sortedTargetIDs(cfg) {
 		target := cfg.Targets[id]
-		switch target.Type {
-		case "hermes-webhook":
-			if opts, err := webhookSinkOptions(id, target); err != nil {
-				out = append(out, probeTargetWarning{id, target.Type, err.Error()})
-			} else if _, err := hermeswebhook.NewSink(opts); err != nil {
-				out = append(out, probeTargetWarning{id, target.Type, err.Error()})
-			}
-		case "hermes-kanban":
-			limits, err := hermesProcessLimits(cfg, target)
-			if err != nil {
-				out = append(out, probeTargetWarning{id, target.Type, err.Error()})
-			} else if _, err := hermeskanban.NewSink(id, target.Executable, target.CapabilityReport, target.RequiredCapabilities, target.Board, limits, DefaultMaxManifestBytes); err != nil {
-				out = append(out, probeTargetWarning{id, target.Type, err.Error()})
-			}
+		if target.Type != "hermes-webhook" {
+			continue
+		}
+		if opts, err := webhookSinkOptions(id, target); err != nil {
+			out = append(out, probeTargetWarning{id, target.Type, err.Error()})
+		} else if _, err := hermeswebhook.NewSink(opts); err != nil {
+			out = append(out, probeTargetWarning{id, target.Type, err.Error()})
+		}
+	}
+	for _, id := range sortedHermesTargetIDs(cfg) {
+		target := cfg.HermesTargets[id]
+		if limits, err := hermesTargetProcessLimits(cfg, target); err != nil {
+			out = append(out, probeTargetWarning{id, "hermes-kanban", err.Error()})
+		} else if _, err := hermeskanban.NewSink(id, target.Executable, target.MinimumVersion, target.Board, limits, DefaultMaxManifestBytes); err != nil {
+			out = append(out, probeTargetWarning{id, "hermes-kanban", err.Error()})
 		}
 	}
 	return out
@@ -456,7 +466,7 @@ func routeFacts(ctx context.Context, cfg *config.Config, store *sqlite.Store) []
 		}
 		if route, ok := cfg.Routes[r.RouteID]; ok {
 			fact.DailyExpected = route.Reconciliation.DailyExpected
-			if d, err := config.ParseDuration(route.Dispatch.ActiveStaleAfter); err == nil {
+			if d, err := config.ParseDuration(route.ActiveStaleAfter); err == nil {
 				fact.StaleActiveAfter = time.Duration(d.Nanos)
 			}
 		}

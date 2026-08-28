@@ -144,10 +144,10 @@ func routeActiveStaleAfter(configPath, routeID string) (time.Duration, error) {
 	if !ok {
 		return 0, fmt.Errorf("route %q is not defined", routeID)
 	}
-	if route.Dispatch.ActiveStaleAfter == "" {
+	if route.ActiveStaleAfter == "" {
 		return 0, nil
 	}
-	d, err := config.ParseDuration(route.Dispatch.ActiveStaleAfter)
+	d, err := config.ParseDuration(route.ActiveStaleAfter)
 	if err != nil {
 		return 0, fmt.Errorf("active_stale_after: %v", err)
 	}
@@ -197,7 +197,7 @@ func runRouteEnable(command string, args []string, stdout, stderr io.Writer) int
 		return exit
 	}
 	defer closer.Close()
-	if code := routeEnableGate(command, cfg, routeID, stderr); code != 0 {
+	if code := routeEnableGate(command, cfg, routeID, revision, closer, stderr); code != 0 {
 		return code
 	}
 	if err := store.SetRouteActivation(requestCtx(), routeID, "enabled", revision, dispatch.Timestamp(time.Now())); err != nil {
@@ -207,7 +207,7 @@ func runRouteEnable(command string, args []string, stdout, stderr io.Writer) int
 			if regErr := registerRouteState(requestCtx(), closer, cfg, routeID); regErr != nil {
 				return planErr(stderr, command, "route_not_registered", "conflict", regErr.Error(), 14)
 			}
-			if code := routeEnableGate(command, cfg, routeID, stderr); code != 0 {
+			if code := routeEnableGate(command, cfg, routeID, revision, closer, stderr); code != 0 {
 				return code
 			}
 			if err := store.SetRouteActivation(requestCtx(), routeID, "enabled", revision, dispatch.Timestamp(time.Now())); err != nil {
@@ -220,94 +220,72 @@ func runRouteEnable(command string, args []string, stdout, stderr io.Writer) int
 	return writeEnvelope(stdout, command, map[string]any{"route_id": routeID, "activation_state": "enabled", "acknowledged_revision": revision})
 }
 
-// routeEnableGate is the production enable precondition (E8-T3, H-7): a
-// hermes-kanban production route may only be enabled when the target's
-// evidence passes the version-gated report (a missing, unreadable, or
-// stale report, an unsupported version, or a missing required
-// capability fails closed at exit 3) and the report itself carries
-// durable_acceptance and submit_idempotency_key — the delivery
-// guarantees the durable core depends on, required unconditionally, not
-// at the operator's option. The capability report is mandatory evidence
-// regardless of target liveness (E9-T6, D-023 F2): an unreachable
-// executable warns and defers to the submit path's run-time gate, but it
-// never waives the report validation — and because the
-// runtime-verified version set is build-time evidence, a report
-// recording an unsupported Hermes refuses even while the executable is
-// down; only freshness against the installed binary rides the probe.
-func routeEnableGate(command string, cfg *config.Config, routeID string, stderr io.Writer) int {
-	route, ok := cfg.Routes[routeID]
-	if !ok {
+// routeEnableGate is the production enable precondition (E8-T3, E11-T1):
+// a route may only be enabled when (1) it executes exactly one
+// destination — the pre-E12 bound; per-destination lanes arrive with
+// E12-T2 — (2) a hermes destination's installed Hermes meets the
+// declared minimum-version eligibility floor (HER-011; the E11-T2
+// capability probe replaces this with the fingerprint-bound shape
+// proof), where an unreachable executable warns and defers to the
+// submit path's run-time gate, and (3) the route carries no unresolved
+// legacy work created under a different route revision (DAT-013: the
+// operator resolves it through the documented exits first; nothing is
+// silently submitted under the new destination contract).
+func routeEnableGate(command string, cfg *config.Config, routeID, revision string, store *sqlite.Store, stderr io.Writer) int {
+	if _, ok := cfg.Routes[routeID]; !ok {
 		return 0
 	}
-	target, ok := cfg.Targets[route.Dispatch.Target]
-	if !ok || target.Type != "hermes-kanban" {
+	_, resolved, rerr := resolveRouteTarget(cfg, routeID)
+	if rerr != nil {
+		var multi *config.ErrMultiDestination
+		if errors.As(rerr, &multi) {
+			return planErr(stderr, command, "config_invalid", "configuration", multi.Error(), 3)
+		}
+		return planErr(stderr, command, "config_invalid", "configuration", rerr.Error(), 3)
+	}
+	if count, detail, qerr := store.UnresolvedLegacyWork(requestCtx(), routeID, revision); qerr != nil {
+		return planErr(stderr, command, "sqlite_query_failed", "storage", qerr.Error(), 20)
+	} else if count > 0 {
+		return planErr(stderr, command, "transition_invalid", "conflict",
+			fmt.Sprintf("route %q carries unresolved legacy work created under a different route revision (%s); resolve it before enabling under the destinations contract — release or discard quarantine items, retry or resolve dead-lettered and unknown dispatches, then re-run enable (DAT-013)",
+				routeID, detail), 14)
+	}
+	if resolved.Hermes == nil {
+		// A webhook destination has no live version surface; its static
+		// capability declaration was validated at configuration load.
 		return 0
 	}
-	limits, err := hermesProcessLimits(cfg, target)
+	limits, err := hermesTargetProcessLimits(cfg, *resolved.Hermes)
 	if err != nil {
 		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
 	}
-	adapter := hermeskanban.New(route.Dispatch.Target, target.Executable, target.CapabilityReport, target.RequiredCapabilities, limits)
-	summary, caps, perr := adapter.ProbeVerbose(requestCtx())
-	// The unconditional delivery guarantees are shared by every liveness
-	// state: whichever branch proves the capabilities, the same refusal
-	// applies.
-	refuseUnlessUnconditional := func(caps ports.Capabilities) int {
-		if !caps.DurableAcceptance || !caps.SubmitIdempotencyKey {
-			return planErr(stderr, command, "config_capability_missing", "configuration",
-				fmt.Sprintf("target %s must report durable_acceptance and submit_idempotency_key for a production route (durable=%v, idempotent=%v)",
-					route.Dispatch.Target, caps.DurableAcceptance, caps.SubmitIdempotencyKey), 3)
-		}
-		return 0
+	adapter, err := hermeskanban.New(resolved.ID, resolved.Hermes.Executable, resolved.Hermes.MinimumVersion, limits)
+	if err != nil {
+		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
 	}
+	summary, _, perr := adapter.ProbeVerbose(requestCtx())
 	if perr != nil {
-		// A persistent configuration defect (unreadable or stale report,
-		// unknown capability name, missing required capability) fails the
-		// enable: the old deferral to the submit gate let routes enable
-		// against reports the target could never honor (H-7).
-		return planErr(stderr, command, "config_capability_missing", "configuration", perr.Error(), 3)
+		// A persistent configuration defect fails the enable: the old
+		// deferral to the submit gate let routes enable against targets
+		// they could never honor (H-7).
+		return planErr(stderr, command, "config_invalid", "configuration", perr.Error(), 3)
 	}
 	switch summary.State {
 	case "available":
-		if code := refuseUnlessUnconditional(caps); code != 0 {
-			return code
-		}
+		return 0
 	case "version_unsupported":
 		return planErr(stderr, command, "config_invalid", "configuration",
-			fmt.Sprintf("target %s probes version_unsupported: %s; a production route cannot be enabled against it", route.Dispatch.Target, summary.Detail), 3)
+			fmt.Sprintf("hermes_targets.%s probes version_unsupported: %s; a production route cannot be enabled against it", resolved.ID, summary.Detail), 3)
 	default:
 		// Target liveness (an absent or unprobeable executable) is a
 		// warning, not an enable refusal: re-acknowledging a paused
 		// production route must not be hostage to the target being up
-		// (the submit path gates again at run time). The capability
-		// report is mandatory evidence in every liveness state (E9-T6,
-		// D-023 F2): a missing or unreadable report refuses the enable —
-		// the recorded defect let a route reach production-enabled with
-		// neither executable nor report — and a report recording a
-		// Hermes version outside the runtime-verified set refuses the
-		// same way, because the supported set is build-time evidence
-		// that needs no live target. Only freshness against the
-		// installed binary rides the probe and stays deferred to the
-		// submit path's run-time gate.
-		fmt.Fprintf(stderr, "warning: target %s probes %s: %s; the submit path re-gates at run time\n", route.Dispatch.Target, summary.State, summary.Detail)
-		report, lerr := hermeskanban.LoadReport(target.CapabilityReport)
-		if lerr != nil {
-			return planErr(stderr, command, "config_invalid", "configuration", fmt.Sprintf("target %s: %v", route.Dispatch.Target, lerr), 3)
-		}
-		if !report.RecordedVersionSupported() {
-			return planErr(stderr, command, "config_invalid", "configuration",
-				fmt.Sprintf("target %s: the capability report records Hermes %q, outside the runtime-verified set %s; a production route cannot be enabled against it",
-					route.Dispatch.Target, report.HermesVersion, hermeskanban.SupportedRangeText()), 3)
-		}
-		reportCaps := report.PortCapabilities()
-		if verr := hermeskanban.ValidateRequired(route.Dispatch.Target, reportCaps, target.RequiredCapabilities); verr != nil {
-			return planErr(stderr, command, "config_capability_missing", "configuration", verr.Error(), 3)
-		}
-		if code := refuseUnlessUnconditional(reportCaps); code != 0 {
-			return code
-		}
+		// (the submit path gates again at run time). Eligibility itself
+		// rides the probe and stays deferred to the submit path's
+		// run-time gate.
+		fmt.Fprintf(stderr, "warning: hermes_targets.%s probes %s: %s; the submit path re-gates at run time\n", resolved.ID, summary.State, summary.Detail)
+		return 0
 	}
-	return 0
 }
 
 func runRouteDisable(command string, args []string, stdout, stderr io.Writer) int {
@@ -377,8 +355,8 @@ func runRouteStale(command string, args []string, stdout, stderr io.Writer) int 
 	// chain here.
 	if route, ok := cfg.Routes[routeID]; ok {
 		bound := time.Duration(0)
-		if route.Dispatch.ActiveStaleAfter != "" {
-			if d, derr := config.ParseDuration(route.Dispatch.ActiveStaleAfter); derr == nil {
+		if route.ActiveStaleAfter != "" {
+			if d, derr := config.ParseDuration(route.ActiveStaleAfter); derr == nil {
 				bound = time.Duration(d.Nanos)
 			}
 		}

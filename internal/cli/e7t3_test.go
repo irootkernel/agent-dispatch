@@ -118,7 +118,7 @@ func TestStaleTargetRepointNeverSubmitsFalseLineage(t *testing.T) {
 
 	// Re-point the route's target at a second stub board: the stored
 	// intent's target identity is now false.
-	e5t4Rewrite(t, configPath, "targets:\n  hermes-main:", "targets:\n  hermes-backup:\n    type: hermes-kanban\n    board: agent-dispatch-backup\n    executable: "+stubExeOf(t, configPath)+"\n    capability_report: ../../docs/integrations/hermes-capability-report.json\n    required_capabilities: [durable_acceptance, submit_idempotency_key, lookup_by_external_ref]\n    submit_timeout: 30s\n    lookup_timeout: 30s\n    environment_allowlist: [PATH, HOME]\n  hermes-main:")
+	e5t4Rewrite(t, configPath, "hermes_targets:\n  hermes-main:", "hermes_targets:\n  hermes-backup:\n    board: agent-dispatch-backup\n    minimum_version: 0.19.1\n    compatibility: capability_probe\n    executable: "+stubExeOf(t, configPath)+"\n    submit_timeout: 30s\n    lookup_timeout: 30s\n    environment_allowlist: [PATH, HOME]\n  hermes-main:")
 	e5t4Rewrite(t, configPath, "target: hermes-main", "target: hermes-backup")
 
 	out.Reset()

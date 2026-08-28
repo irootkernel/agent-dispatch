@@ -53,12 +53,15 @@ func TestE9T3MutexSuppressionReported(t *testing.T) {
 // (trace, dispatch, route, target) while the submission itself still
 // succeeds.
 func TestE9T3SinkWarnsOnMutexSuppression(t *testing.T) {
-	sink, err := NewSink("hermes-main", stubhermes.Write(t), limitedReport(t, false), []string{
-		"durable_acceptance", "submit_idempotency_key", "lookup_by_external_ref",
-	}, "agent-dispatch-test", ProcessLimits{SubmitTimeout: 30 * time.Second, LookupTimeout: 30 * time.Second}, 262144)
+	sink, err := NewSink("hermes-main", stubhermes.Write(t), "", "agent-dispatch-test", ProcessLimits{SubmitTimeout: 30 * time.Second, LookupTimeout: 30 * time.Second}, 262144)
 	if err != nil {
 		t.Fatalf("sink: %v", err)
 	}
+	// NewSink binds the frozen 0.19.1 interface's resource_mutex support
+	// (E11-T1 interim truth source); this test drives the suppression
+	// path itself, so it simulates the capability the E11-T2 probe will
+	// record per executable.
+	sink.renderOpts.ResourceMutexSupported = false
 	if _, err := sink.Probe(context.Background()); err != nil {
 		t.Fatalf("probe: %v", err)
 	}

@@ -119,7 +119,7 @@ agent-dispatch maintenance backup --output /secure/path/state-$(date -u +%Y%m%d)
 The command writes an owner-only snapshot through SQLite's `VACUUM
 INTO` with a post-write quick check — a copy of a live WAL database
 without its WAL/SHM or a checkpoint is not a valid backup (runbook
-§8). Keep the configuration and capability report beside the backup.
+§8). Keep the configuration beside the backup.
 Before upgrading or risky maintenance, stop drain/reconciliation
 commands and confirm no unexpired attempt lease (`agent-dispatch doctor`).
 

@@ -15,13 +15,11 @@ import (
 	"github.com/irootkernel/agent-dispatch/internal/testsupport/stubhermes"
 )
 
-// sinkFixture builds a gated sink over the stateful stub with the frozen
-// capability report and a rendered golden request.
+// sinkFixture builds a gated sink over the stateful stub with the
+// eligibility floor and a rendered golden request.
 func sinkFixture(t *testing.T, bin string) *Sink {
 	t.Helper()
-	sink, err := NewSink("hermes-main", bin, machineReport, []string{
-		"durable_acceptance", "submit_idempotency_key", "lookup_by_external_ref",
-	}, "agent-dispatch-test", ProcessLimits{SubmitTimeout: 30 * time.Second, LookupTimeout: 30 * time.Second}, 262144)
+	sink, err := NewSink("hermes-main", bin, "", "agent-dispatch-test", ProcessLimits{SubmitTimeout: 30 * time.Second, LookupTimeout: 30 * time.Second}, 262144)
 	if err != nil {
 		t.Fatalf("sink: %v", err)
 	}
@@ -136,7 +134,7 @@ func TestSinkOversizedManifestRejectedAtSubmit(t *testing.T) {
 	counter := filepath.Join(dir, "invoked")
 	bin := newStubHermes(t, `if [ "$1" = "--version" ]; then printf 'Hermes Agent v0.19.1 (2026.7.30)\n'; exit 0; fi
 printf x >> "`+counter+`"; exit 0`)
-	sink, err := NewSink("t", bin, machineReport, nil, "b", ProcessLimits{}, 64)
+	sink, err := NewSink("t", bin, "", "b", ProcessLimits{}, 64)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,19 +212,18 @@ func TestSinkGetExecution(t *testing.T) {
 		t.Fatalf("queued projection wrong: %+v", projection)
 	}
 
-	// A capability-less target reports unsupported and is not emulated.
-	withoutExecution := filepath.Join(t.TempDir(), "report.json")
-	body := `{"schema_version":"agent-dispatch.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":true,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":true,"execution_status":false,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
-	if err := os.WriteFile(withoutExecution, []byte(body), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	plain, err := NewSink("t", stubhermes.Write(t), withoutExecution, nil, "b", ProcessLimits{}, 262144)
+	// A below-floor target fails the eligibility gate before the lookup;
+	// the capability-absent boundary returns with the E11-T2 probe's
+	// per-executable shape evidence.
+	belowFloor := newStubHermes(t, `if [ "$1" = "--version" ]; then printf 'Hermes Agent v0.18.0 (2026.5.1)
+'; exit 0; fi; exit 3`)
+	plain, err := NewSink("t", belowFloor, "", "b", ProcessLimits{}, 262144)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = plain.GetExecution(context.Background(), "t_00000001")
-	if err == nil || !errors.Is(err, ports.ErrCapabilityUnsupported) {
-		t.Fatalf("execution capability absent must be capability_unsupported, got %v", err)
+	if err == nil {
+		t.Fatal("a below-floor target must fail the eligibility gate before any lookup")
 	}
 }
 
@@ -235,18 +232,14 @@ func TestSinkGetExecution(t *testing.T) {
 // before any process runs.
 func TestSinkConstructionValidation(t *testing.T) {
 	bin := stubhermes.Write(t)
-	if _, err := NewSink("t", bin, machineReport, nil, "", ProcessLimits{}, 1024); err == nil {
+	if _, err := NewSink("t", bin, "", "", ProcessLimits{}, 1024); err == nil {
 		t.Fatal("missing board must fail construction")
 	}
-	if _, err := NewSink("t", bin, machineReport, nil, "b", ProcessLimits{}, 0); err == nil {
+	if _, err := NewSink("t", bin, "", "b", ProcessLimits{}, 0); err == nil {
 		t.Fatal("missing manifest bound must fail construction")
 	}
-	if _, err := NewSink("t", bin, machineReport, []string{"resource_mutex"}, "b", ProcessLimits{}, 1024); err != nil {
-		t.Fatalf("the frozen report satisfies resource_mutex, construction must pass: %v", err)
-	}
-	limited := limitedReport(t, false)
-	if _, err := NewSink("t", bin, limited, []string{"resource_mutex"}, "b", ProcessLimits{}, 1024); err == nil {
-		t.Fatal("capability mismatch must fail construction")
+	if _, err := NewSink("t", bin, "not-a-version", "b", ProcessLimits{}, 1024); err == nil {
+		t.Fatal("an unparseable eligibility floor must fail construction")
 	}
 }
 
@@ -301,55 +294,56 @@ func TestSinkEvidenceAlwaysValidJSON(t *testing.T) {
 	}
 }
 
-// TestSinkSubmitCapabilityGuardDefinite proves a missing durability
-// capability is a provable pre-invocation failure (definite), never an
-// ambiguous unknown.
-func TestSinkSubmitCapabilityGuardDefinite(t *testing.T) {
-	bin := stubhermes.Write(t)
-	// A report without durable_acceptance.
-	withoutDurable := filepath.Join(t.TempDir(), "report.json")
-	body := `{"schema_version":"agent-dispatch.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":false,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":true,"execution_status":true,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
-	if err := os.WriteFile(withoutDurable, []byte(body), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	sink, err := NewSink("t", bin, withoutDurable, nil, "b", ProcessLimits{}, 262144)
+// TestSinkSubmitEligibilityGuardDefinite proves a below-floor Hermes is
+// a provable pre-invocation failure (definite), never an ambiguous
+// unknown (HER-011 posture at the submit boundary).
+func TestSinkSubmitEligibilityGuardDefinite(t *testing.T) {
+	bin := newStubHermes(t, `if [ "$1" = "--version" ]; then printf 'Hermes Agent v0.18.0 (2026.5.1)
+'; exit 0; fi; exit 3`)
+	sink, err := NewSink("t", bin, "", "b", ProcessLimits{}, 262144)
 	if err != nil {
-		t.Fatalf("construction without requirements must pass: %v", err)
+		t.Fatalf("construction against the floor must pass: %v", err)
 	}
 	res, err := sink.Submit(context.Background(), goldenRequestMut(t, nil))
 	if err != nil {
-		t.Fatalf("capability guard must classify, not error: %v", err)
+		t.Fatalf("eligibility guard must classify, not error: %v", err)
 	}
 	if res.Classification != ports.SubmitDefiniteNotSubmitted {
-		t.Fatalf("missing durability capability must be definite_not_submitted, got %q", res.Classification)
+		t.Fatalf("a below-floor version must be definite_not_submitted, got %q", res.Classification)
 	}
 }
 
-// TestSinkReportSwapDetectedAtSubmission proves the report is re-read
-// per invocation: a report that loses the durability capability between
-// construction and submission classifies definite_not_submitted (a
-// construction-time snapshot would have wrongly proceeded).
-func TestSinkReportSwapDetectedAtSubmission(t *testing.T) {
+// TestSinkExecutableSwapDetectedAtSubmission proves eligibility is
+// re-proven per invocation: an executable replaced by a below-floor one
+// between construction and submission classifies
+// definite_not_submitted (a construction-time snapshot would have
+// wrongly proceeded). The full capability-fingerprint binding arrives
+// with E11-T2 (HER-018).
+func TestSinkExecutableSwapDetectedAtSubmission(t *testing.T) {
 	dir := t.TempDir()
-	report := filepath.Join(dir, "report.json")
-	good := `{"schema_version":"agent-dispatch.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":true,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":true,"execution_status":true,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
-	bad := `{"schema_version":"agent-dispatch.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":false,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":true,"execution_status":true,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
-	if err := os.WriteFile(report, []byte(good), 0o600); err != nil {
+	exe := filepath.Join(dir, "hermes")
+	good := `#!/bin/sh
+if [ "$1" = "--version" ]; then printf 'Hermes Agent v0.19.1 (2026.7.30)
+'; exit 0; fi; exit 3`
+	bad := `#!/bin/sh
+if [ "$1" = "--version" ]; then printf 'Hermes Agent v0.18.0 (2026.5.1)
+'; exit 0; fi; exit 3`
+	if err := os.WriteFile(exe, []byte(good), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	sink, err := NewSink("t", stubhermes.Write(t), report, nil, "b", ProcessLimits{}, 262144)
+	sink, err := NewSink("t", exe, "", "b", ProcessLimits{}, 262144)
 	if err != nil {
-		t.Fatalf("construction against the good report must pass: %v", err)
+		t.Fatalf("construction against the eligible executable must pass: %v", err)
 	}
-	if err := os.WriteFile(report, []byte(bad), 0o600); err != nil {
+	if err := os.WriteFile(exe, []byte(bad), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	res, err := sink.Submit(context.Background(), goldenRequestMut(t, nil))
 	if err != nil {
-		t.Fatalf("swapped report must classify, not error: %v", err)
+		t.Fatalf("swapped executable must classify, not error: %v", err)
 	}
 	if res.Classification != ports.SubmitDefiniteNotSubmitted {
-		t.Fatalf("durability lost after construction must be definite_not_submitted, got %q", res.Classification)
+		t.Fatalf("eligibility lost after construction must be definite_not_submitted, got %q", res.Classification)
 	}
 }
 

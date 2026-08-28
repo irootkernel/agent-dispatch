@@ -13,7 +13,7 @@ func e9t6WebhookYAML(t *testing.T) []byte {
 	return []byte(strings.Replace(string(minimalYAML(t)),
 		"    reconciliation:\n      initial: true\n      daily_expected: true\n",
 		"    reconciliation:\n      initial: true\n      daily_expected: true\n"+
-			"  r2:\n    enabled: false\n    source:\n      type: watchman-trigger\n      source_id: vault-main-watchman\n      resource: vault-main\n      trigger_name: agent-dispatch.r2.def456\n      include:\n        - \"**/*.md\"\n      exclude:\n        - \".git/**\"\n    batching:\n      automatic_threshold: 25\n      hard_limit: 100\n      max_manifest_bytes: 262144\n    policy:\n      protected: []\n      immutable: []\n      bulk_action: quarantine\n      overflow_action: reconcile\n      fresh_instance_action: reconcile\n      unsafe_path_action: quarantine\n    dispatch:\n      target: hermes-webhook-immediate\n      profile: wiki-maintainer\n      skills:\n        - llm-wiki\n      mutex_key: wiki-publish\n      latest_state: true\n      submission_retry:\n        max_attempts: 3\n        initial_backoff: 2s\n        max_backoff: 2m\n        multiplier: 2.0\n        jitter_fraction: 0.2\n      execution_hints:\n        max_runtime: 30m\n        max_attempts: 2\n      failure_budget: 2\n      active_stale_after: 2h\n    reconciliation:\n      initial: false\n      daily_expected: false\n", 1))
+			"  r2:\n    enabled: false\n    source:\n      type: watchman-trigger\n      source_id: vault-main-watchman\n      resource: vault-main\n      trigger_name: agent-dispatch.r2.def456\n      include:\n        - \"**/*.md\"\n      exclude:\n        - \".git/**\"\n    batching:\n      automatic_threshold: 25\n      hard_limit: 100\n      max_manifest_bytes: 262144\n    policy:\n      protected: []\n      immutable: []\n      bulk_action: quarantine\n      overflow_action: reconcile\n      fresh_instance_action: reconcile\n      unsafe_path_action: quarantine\n    fanout_mode: all\n    destinations:\n      - id: main\n        target: hermes-webhook-immediate\n        workstream: main\n        execution_hints:\n          max_runtime: 30m\n          max_attempts: 2\n    submission_retry:\n      max_attempts: 3\n      initial_backoff: 2s\n      max_backoff: 2m\n      multiplier: 2.0\n      jitter_fraction: 0.2\n    latest_state: true\n    failure_budget: 2\n    active_stale_after: 2h\n    reconciliation:\n      initial: false\n      daily_expected: false\n", 1))
 }
 
 // TestE9T6RevisionCoversWebhookDeliveryEvidence proves D-023 F1: the
@@ -39,8 +39,8 @@ func TestE9T6RevisionCoversWebhookDeliveryEvidence(t *testing.T) {
 		"auth shape to header": strings.Replace(string(e9t6WebhookYAML(t)), "type: bearer\n      secret_ref: env:TEST_TOKEN", "type: header\n      secret_ref: env:TEST_TOKEN\n      header_name: X-Token", 1),
 		"secret reference":     strings.Replace(string(e9t6WebhookYAML(t)), "secret_ref: env:TEST_TOKEN", "secret_ref: env:OTHER_TOKEN", 1),
 		"idempotency header":   strings.Replace(string(e9t6WebhookYAML(t)), "endpoint: https://example.invalid/hook", "endpoint: https://example.invalid/hook\n    idempotency_header: X-Dedup-Key", 1),
-		"lookup timeout":       strings.Replace(string(minimalYAML(t)), "capability_report: /etc/agent-dispatch/caps.json", "capability_report: /etc/agent-dispatch/caps.json\n    lookup_timeout: 45s", 1),
-		"capability report":    strings.Replace(string(minimalYAML(t)), "capability_report: /etc/agent-dispatch/caps.json", "capability_report: /etc/agent-dispatch/other-caps.json", 1),
+		"lookup timeout":       strings.Replace(string(minimalYAML(t)), "compatibility: capability_probe", "compatibility: capability_probe\n    lookup_timeout: 45s", 1),
+		"eligibility floor":    strings.Replace(string(minimalYAML(t)), "minimum_version: 0.19.1", "minimum_version: 0.19.2", 1),
 	} {
 		cfgC, err := Parse([]byte(changed))
 		if err != nil {

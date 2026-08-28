@@ -28,9 +28,7 @@ type Sink struct {
 	adapter    *Adapter
 	board      string
 	renderOpts RenderOptions
-	reportPath string
 	targetID   string
-	required   []string
 	// Log and TraceID make mutex suppression operator-visible: when
 	// rendering drops a configured mutex key the target cannot honor,
 	// Submit emits one dispatch.mutex_suppressed warning instead of
@@ -44,31 +42,35 @@ var _ ports.Sink = (*Sink)(nil)
 
 // NewSink builds the sink for one target. The board slug is the operator
 // created public board; the manifest bound is the route's
-// batching.max_manifest_bytes enforced again at rendering.
-func NewSink(targetID, executable, reportPath string, required []string, board string, limits ProcessLimits, maxManifestBytes int64) (*Sink, error) {
+// batching.max_manifest_bytes enforced again at rendering. Since the
+// v0.1.5 cutover the construction gate is the declared minimum-version
+// eligibility (HER-011); the capability-shape probe that re-establishes
+// per-target capability truth — including resource_mutex — arrives with
+// E11-T2 (HER-012).
+func NewSink(targetID, executable, minimumVersion string, board string, limits ProcessLimits, maxManifestBytes int64) (*Sink, error) {
 	if board == "" {
 		return nil, fmt.Errorf("target %s: hermes-kanban requires the operator-created board slug", targetID)
 	}
 	if maxManifestBytes <= 0 {
 		return nil, fmt.Errorf("target %s: the sink requires a positive manifest byte bound", targetID)
 	}
-	caps, err := loadValidatedCaps(targetID, reportPath, required)
+	adapter, err := New(targetID, executable, minimumVersion, limits)
 	if err != nil {
 		return nil, err
 	}
 	return &Sink{
-		adapter: New(targetID, executable, reportPath, required, limits),
+		adapter: adapter,
 		board:   board,
 		renderOpts: RenderOptions{
 			MaxManifestBytes: maxManifestBytes,
 			// resource_mutex is consulted before --mutex-key is ever sent
 			// (E8-T3, M-6): a target that does not honor the flag never
-			// receives it.
-			ResourceMutexSupported: caps.ResourceMutex,
+			// receives it. Interim truth source: the frozen 0.19.1
+			// runtime-verified interface (docs/integrations/hermes-capability-report.json)
+			// until the E11-T2 probe records it per executable.
+			ResourceMutexSupported: true,
 		},
-		reportPath: reportPath,
-		targetID:   targetID,
-		required:   append([]string(nil), required...),
+		targetID: targetID,
 	}, nil
 }
 
@@ -95,16 +97,14 @@ func (s *Sink) Probe(ctx context.Context) (ports.Capabilities, error) {
 // failures after possible submission are unknown (DUR-005), and no other
 // target is ever invoked (DUR-008).
 func (s *Sink) Submit(ctx context.Context, req ports.TaskRequest) (ports.SubmitResult, error) {
-	// The durability capabilities are re-read per submission so a
-	// swapped report cannot diverge from the validated snapshot; a
-	// missing durability capability is provably pre-invocation, so it
-	// is a definite failure, never an ambiguous outcome (HER-005).
-	caps, err := loadValidatedCaps(s.targetID, s.reportPath, s.required)
-	if err != nil {
+	// Eligibility is re-proven per submission so an executable swapped
+	// since construction cannot carry an earlier eligibility into a side
+	// effect; a below-floor version is provably pre-invocation, so it is
+	// a definite failure, never an ambiguous outcome (HER-011 posture;
+	// the full capability fingerprint binding arrives with E11-T2's
+	// HER-018).
+	if _, err := s.adapter.Probe(ctx); err != nil {
 		return definiteNotSubmitted(err.Error()), nil
-	}
-	if !caps.DurableAcceptance || !caps.SubmitIdempotencyKey {
-		return definiteNotSubmitted(fmt.Sprintf("target %s: durable submission requires durable_acceptance and submit_idempotency_key; use a documented reduced-guarantee ADR instead of emulating them (HER-005)", s.targetID)), nil
 	}
 	rendered, err := Render(req, s.renderOpts)
 	if err != nil {
@@ -181,14 +181,13 @@ func (s *Sink) LookupByIdempotencyKey(ctx context.Context, key string) (ports.Lo
 // LookupByExternalRef implements ports.Sink through the read-only public
 // show: a typed record proves durable acceptance; the frozen exit-1
 // `no such task` behavior is the deterministic absence proof (DUR-006);
-// any transport failure proves nothing and reports ambiguous.
+// any transport failure proves nothing and reports ambiguous. The
+// lookup_by_external_ref capability's interim truth source is the frozen
+// 0.19.1 runtime-verified interface plus the eligibility probe (E11-T2's
+// capability probe restores per-executable shape proof).
 func (s *Sink) LookupByExternalRef(ctx context.Context, ref string) (ports.LookupResult, error) {
-	caps, err := loadValidatedCaps(s.targetID, s.reportPath, s.required)
-	if err != nil {
+	if _, err := s.adapter.Probe(ctx); err != nil {
 		return ports.LookupResult{}, err
-	}
-	if !caps.LookupByExternalRef {
-		return ports.LookupResult{}, fmt.Errorf("%w: lookup by external reference", ports.ErrCapabilityUnsupported)
 	}
 	task, err := s.adapter.client.Show(ctx, s.board, ref)
 	if err != nil {
@@ -205,21 +204,6 @@ func (s *Sink) LookupByExternalRef(ctx context.Context, ref string) (ports.Looku
 		FoundDurable:     true,
 		TargetObservedAt: epochToTimestamp(task.CreatedAt),
 	}, nil
-}
-
-// loadValidatedCaps reads the frozen report and validates it against
-// the configured requirements; construction and every invocation share
-// it so no cached snapshot can diverge from the report on disk.
-func loadValidatedCaps(targetID, reportPath string, required []string) (ports.Capabilities, error) {
-	report, err := LoadReport(reportPath)
-	if err != nil {
-		return ports.Capabilities{}, fmt.Errorf("target %s: %w", targetID, err)
-	}
-	caps := report.PortCapabilities()
-	if err := ValidateRequired(targetID, caps, required); err != nil {
-		return caps, fmt.Errorf("target %s: %w", targetID, err)
-	}
-	return caps, nil
 }
 
 // definiteNotSubmitted builds the provable pre-invocation failure.

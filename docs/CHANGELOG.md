@@ -1,5 +1,42 @@
 # SOT Changelog
 
+## 1.1.5 - 2026-08-28
+
+E11-T1: the v0.1.5 configuration cutover to `destinations[]` lands
+(OPS-014, OPS-015, DAT-012, DAT-013, FAN-001, FAN-005, FAN-006,
+FAN-011, FAN-012, CLI-015):
+
+- every route declares its delivery under `destinations[]` — unique
+  stable IDs, non-empty workstreams, per-destination execution hints,
+  and the closed structural condition vocabulary — with
+  `fanout_mode: all` the only v0.1.5 mode and declaration order
+  non-semantic in revision, selection, and display;
+- Hermes Kanban targets move to `hermes_targets` with the eligibility
+  contract (`minimum_version` at or above 0.19.1, no maximum,
+  `compatibility: capability_probe`); the operator-authored capability
+  report and per-route required-capability lists retire, the frozen
+  0.19.1 interface remains the interim truth source, submission gates on
+  live minimum-version eligibility on every attempt, and enablement
+  refuses a below-floor target while warning and deferring on an
+  unreachable one, until the E11-T2 capability probe restores
+  per-executable shape evidence;
+- the legacy `routes.<id>.dispatch` shape and a `hermes-kanban` entry
+  under `targets` are refused with the exact regeneration path
+  (`agent-dispatch init` now; the interactive `setup wiki` flow arrives
+  with E11-T4) — no load-time conversion exists, and an ID declared in
+  both target maps is rejected as ambiguous;
+- the route revision covers the sorted destination set, each
+  destination revision, the declared notification policy and sink
+  references, and the eligibility surface of every referenced target;
+- SQLite migration v10 records the cutover: historic task and receipt
+  evidence stays queryable, route enablement under the new contract
+  refuses while unresolved legacy work from a different route revision
+  remains, and the per-run pre-migration backup plus the documented
+  restore rehearsal cover the reverse direction;
+- the configuration mutation commands share one atomic
+  destination-qualified write path: validated candidate, private
+  temporary file, preserved mode, fsync, atomic rename.
+
 ## 1.1.4 - 2026-08-26
 
 E10-T3: the source and reconciliation integrity gate G6 closes (SRC-009

@@ -27,12 +27,13 @@ limits:
   max_hash_file_bytes: 16777216
   max_subprocess_output_bytes: 1048576
 
-# resources, targets, and routes each require at least one entry;
-# see sections 4-6 for entry fields.
+# resources and routes each require at least one entry; the two target
+# maps are optional and validated against the routes' references
+# (sections 4-6).
 resources:
   vault-main: {}
-targets:
-  hermes-kanban-main: {}
+hermes_targets:
+  hermes-main: {}
 routes:
   wiki-maintenance: {}
 retention: {}
@@ -72,19 +73,20 @@ A resource root is resolved to a canonical identity during validation. Symlinks 
 
 ## 5. Targets
 
-### Hermes Kanban
+Two target maps exist since the v0.1.5 destinations cutover (E11-T1,
+OPS-014): `hermes_targets` owns Hermes Kanban targets and `targets`
+owns webhook targets. A legacy `hermes-kanban` entry under `targets` is
+refused with the regeneration path; there is no load-time conversion.
+
+### Hermes Kanban (`hermes_targets`)
 
 ```yaml
-targets:
-  hermes-kanban-main:
-    type: hermes-kanban
+hermes_targets:
+  hermes-main:
     board: agent-dispatch
     executable: hermes
-    capability_report: /path/to/hermes-capabilities.json
-    required_capabilities:
-      - durable_acceptance
-      - submit_idempotency_key
-      - lookup_by_external_ref
+    minimum_version: 0.19.1
+    compatibility: capability_probe
     submit_timeout: 30s
     lookup_timeout: 15s
     environment_allowlist:
@@ -92,7 +94,7 @@ targets:
       - PATH
 ```
 
-`board` names the Hermes kanban board the route submits to. `submit_timeout` defaults to 30s; the core's attempt lease TTL is derived from it (the configured timeout plus a 30 s margin, E8-T2/M-1), so a live submitter inside the operator-approved window can never have its lease stolen by a recovery sweep. The operator creates it once with the public `hermes kanban boards create <slug>` command; Agent Dispatch never creates, renames, or deletes boards. `capability_report` is generated and verified by the E0-T4 compatibility task. It contains no secrets. Exact command mapping is compiled into or versioned with the adapter after verification; it is not supplied by untrusted route data. `required_capabilities` names the sink capabilities the route depends on; key-based reconciliation on Hermes runs through the idempotent dedup submission (`submit_idempotency_key`), and `lookup_by_idempotency_key` — the port-level read-only query — is honestly false (the public CLI has no such query, E8-T3), so routes that reconcile by reference require `lookup_by_external_ref`.
+`board` names the Hermes kanban board the destinations submit to. `submit_timeout` defaults to 30s; the core's attempt lease TTL is derived from it (the configured timeout plus a 30 s margin, E8-T2/M-1), so a live submitter inside the operator-approved window can never have its lease stolen by a recovery sweep. The operator creates it once with the public `hermes kanban boards create <slug>` command; Agent Dispatch never creates, renames, or deletes boards. `minimum_version` is the eligibility floor — at least 0.19.1, with no maximum (HER-011, ADR-0017); the empty value means the 0.19.1 default and a floor below 0.19.1 fails validation. `compatibility` is `capability_probe` in v0.1.5: compatibility is proven against the public interface, not an operator-authored file. The E0-T4 `capability_report` and `required_capabilities` fields are retired with the cutover: the frozen 0.19.1 runtime-verified interface (docs/integrations/hermes-capability-report.json) is the interim truth source for the unconditional delivery-evidence set — durable acceptance, idempotent submission, external-reference reconciliation — until the E11-T2 capability probe records it per executable and binds activation to the evidence fingerprint (HER-012, HER-018). Exact command mapping is compiled into or versioned with the adapter after verification; it is not supplied by untrusted route data.
 
 ### Hermes Webhook
 
@@ -148,24 +150,27 @@ routes:
       fresh_instance_action: reconcile
       unsafe_path_action: quarantine
 
-    dispatch:
-      target: hermes-kanban-main
-      profile: wiki-maintainer
-      skills:
-        - llm-wiki
-      mutex_key: wiki-publish
-      latest_state: true
-      submission_retry:
-        max_attempts: 3
-        initial_backoff: 2s
-        max_backoff: 2m
-        multiplier: 2.0
-        jitter_fraction: 0.2
-      execution_hints:
-        max_runtime: 30m
-        max_attempts: 2
-      failure_budget: 2
-      active_stale_after: 2h
+    fanout_mode: all
+    destinations:
+      - id: indexing
+        target: hermes-main
+        profile: wiki-maintainer
+        skills:
+          - llm-wiki
+        workstream: indexing
+        mutex_key: wiki-publish
+        execution_hints:
+          max_runtime: 30m
+          max_attempts: 2
+    submission_retry:
+      max_attempts: 3
+      initial_backoff: 2s
+      max_backoff: 2m
+      multiplier: 2.0
+      jitter_fraction: 0.2
+    latest_state: true
+    failure_budget: 2
+    active_stale_after: 2h
 
     reconciliation:
       initial: true
@@ -214,7 +219,7 @@ Validation rules:
 
 A remote ambiguity does not consume a normal retry until reconciliation proves non-acceptance.
 
-The route dispatch field `failure_budget` (integer, 1 through 10) bounds consecutive failed or canceled accepted tasks: while the count is within budget, each failure creates one bounded follow-up intent for latest state; a completed task resets the count; exhaustion moves the route to `UNCERTAIN` for operator resolution. The three budgets are distinct: `submission_retry.max_attempts` (delivery attempts for one intent), `execution_hints.max_attempts` (a Hermes execution hint), and `failure_budget` (consecutive accepted-work failures).
+The route-level `failure_budget` (integer, 1 through 10) bounds consecutive failed or canceled accepted tasks: while the count is within budget, each failure creates one bounded follow-up intent for latest state; a completed task resets the count; exhaustion moves the route to `UNCERTAIN` for operator resolution. The three budgets are distinct: `submission_retry.max_attempts` (delivery attempts for one intent), `execution_hints.max_attempts` (a Hermes execution hint), and `failure_budget` (consecutive accepted-work failures).
 
 ## 10. Retention Defaults
 
@@ -250,28 +255,34 @@ Beyond schema validation, the validator must check:
 
 - all route references exist;
 - resource roots do not overlap (the default validation, E8-T5) and are absolute together with `instance.state_dir`;
-- the map keys for resources, targets, and routes follow the identifier grammar (E8-T5);
+- the map keys for resources, hermes_targets, targets, and routes follow the identifier grammar (E8-T5);
 - `limits.max_hash_file_bytes` is positive when set (E8-T5);
 - state directory is local and outside governed roots by default;
-- the target capability report file is readable and carries every required capability (the default validation; a not-yet-placed report warns, E8-T3), while the report's match against the installed target version requires the live probe and stays on `config validate --probe-targets` and `route enable`;
+- each hermes target declares a non-empty board, a canonical `minimum_version` at or above the 0.19.1 eligibility floor, and exactly the `capability_probe` compatibility mode (E11-T1, HER-011); its live version gate stays on `config validate --probe-targets`, `route enable`, and the submit path (the E11-T2 capability probe replaces the retired report checks);
+- every destination resolves to a declared hermes or webhook target, and a webhook destination carries no profile, skills, workspace, or mutex (E11-T1);
 - route-required capabilities are available;
-- profile, skills, mutex, and target are operator-owned fixed values;
+- profile, skills, mutex, workstream, and target are operator-owned fixed values;
 - all durations and sizes are bounded;
-- `enabled: true` only permits activation; SQLite must also contain an explicit operator acknowledgement for the computed route revision;
+- `enabled: true` only permits activation; SQLite must also contain an explicit operator acknowledgement for the computed route revision, and enablement under the destinations contract refuses while unresolved legacy work from a different route revision remains (an unreachable hermes executable warns and eligibility defers to the submit path's per-attempt gate);
 - webhook target is not configured as an automatic fallback;
 - configuration revision changes when behavior-affecting fields change.
 
 ## 13. Computed Configuration Revision
 
-The operator does not manually enter a route revision. Agent Dispatch computes it from normalized behavior-affecting configuration. Canonical route revision input includes source binding, resource ID, normalized patterns, batch limits, policy actions, target ID, profile, skills, mutex, latest-state flag, submission retry, execution hints, failure budget, capability requirements, the referenced resource's root, file scope, and git mode, the global limits block, the target's type, board, and endpoint (E8-T3: repointing a vault or moving a board is behavior-affecting — it changes the idempotency key and pauses the acknowledged route), the transport bounds — the executable, submit timeout, environment allowlist, and manifest byte bound (E9-T3: swapping the target binary or its bounds pauses the acknowledged route) — and the delivery-evidence surface: the authentication type, secret reference, auth header name, idempotency header, lookup timeout, and capability-report path, plus the route's reconciliation flags (E9-T6: changing how a dispatch authenticates, deduplicates, reconciles, or proves capability must pause the acknowledged route like any other behavior change).
+The operator does not manually enter a route revision. Agent Dispatch computes it from normalized behavior-affecting configuration. Canonical route revision input includes source binding, resource ID, normalized patterns, batch limits, policy actions, the fan-out mode, the sorted destination set with each destination revision — target, profile, sorted skills, workstream, workspace, mutex, execution hints, and sorted selection conditions (E11-T1) — the declared notification policy and sink references, the route-level runtime envelope (submission retry, latest-state flag, failure budget, active-stale bound), the referenced resource's root, file scope, and git mode, the global limits block, and every referenced target's shape and transport bounds: the hermes board, executable, timeouts, environment allowlist, eligibility floor, and compatibility mode, or the webhook endpoint, authentication shape, and idempotency header (E8-T3: repointing a vault or moving a board is behavior-affecting — it changes the idempotency key and pauses the acknowledged route; E9-T3: swapping the target binary or its bounds pauses the acknowledged route; E9-T6: changing how a dispatch authenticates, deduplicates, reconciles, or proves compatibility must pause the acknowledged route like any other behavior change), plus the route's reconciliation flags. Destination declaration order is non-semantic (FAN-012): destinations and their lists are sorted before hashing.
 
 It excludes comments, display order, state directory, the command-line log level, and resolved secret values — a secret REFERENCE is behavior-affecting and joins the digest, the resolved secret never does — and, by explicit disposition, the retention block: pruning bounds (§10, OPS-003) never change what a dispatch submits or how a plan is classified, so a retention edit does not pause an acknowledged route.
 
-## 14. Planned v0.1.5 Configuration Contract
+## 14. Destinations Cutover Contract (E11-T1)
 
-This section is the approved target contract. The executable schema and example
-remain the shipped v0.1.4 contract until E11-T1 implements and validates the
-cutover.
+This section records the cutover E11-T1 delivered: the configuration
+contract below is the shipped surface, and the executable schema and
+example implement it. The legacy `routes.<id>.dispatch` shape is refused
+with the exact regeneration path below and never converted (OPS-014,
+D-025); historic database evidence stays queryable through the v10
+forward migration, and route enablement under the destinations contract
+refuses while unresolved legacy work from a different route revision
+remains (DAT-013).
 
 ```yaml
 version: 1
@@ -311,6 +322,7 @@ routes:
 
 hermes_targets:
   hermes-main:
+    board: agent-dispatch
     executable: hermes
     minimum_version: 0.19.1
     compatibility: capability_probe

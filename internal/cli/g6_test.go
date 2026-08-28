@@ -11,9 +11,11 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/version"
 )
 
 // Gate G6 (E10-T3): the source and reconciliation integrity gate. Every
@@ -493,15 +495,15 @@ func TestG6FreshDatabaseMigration(t *testing.T) {
 		t.Fatal("store open failed")
 	}
 	defer store.Close()
-	version, err := store.SchemaVersion()
-	if err != nil || version != 9 {
-		t.Fatalf("G6: the fresh database must sit at the v9 baseline: %d %v", version, err)
+	schemaVersion, err := store.SchemaVersion()
+	if err != nil || schemaVersion != sqlite.MaxSchemaVersion {
+		t.Fatalf("G6: the fresh database must sit at the current baseline: %d %v", schemaVersion, err)
 	}
 	var out, errb bytes.Buffer
 	if code := Run([]string{"version"}, &out, &errb); code != 0 {
 		t.Fatalf("version: %s", errb.String())
 	}
-	if !strings.Contains(out.String(), "1-9") {
+	if !strings.Contains(out.String(), version.SchemaRange) {
 		t.Fatalf("G6: the version surface must report the shipped schema range: %s", out.String())
 	}
 }

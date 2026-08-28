@@ -6,7 +6,7 @@
 2. Confirm `agent-dispatch version --output json`.
 3. Create a disabled config with `agent-dispatch init`.
 4. Set the Obsidian vault as a named resource.
-5. Generate or install the verified Hermes capability report from E0-T4 procedures.
+5. Declare each Hermes target under `hermes_targets` with its board, `minimum_version` (at least 0.19.1), and `compatibility: capability_probe` — the operator-authored capability report is retired (E11-T1; per-executable shape evidence arrives with the E11-T2 probe).
 6. Run `agent-dispatch config validate --probe-targets`.
 7. Run `agent-dispatch doctor --probe-targets`.
 8. Run fixture-based `route plan`.
@@ -109,7 +109,7 @@ Before upgrade or risky maintenance:
 3. verify no unexpired attempt lease, or record its state;
 4. use the built-in backup or SQLite online backup path;
 5. verify backup integrity;
-6. retain config and capability report alongside backup metadata.
+6. retain the configuration beside the backup metadata.
 
 Copying a live WAL database without its WAL/SHM or checkpoint procedure is not a valid backup.
 
@@ -184,7 +184,7 @@ Collect:
 - doctor output;
 - dispatch lineage JSON;
 - relevant structured logs;
-- Hermes capability report and public task reference;
+- the frozen Hermes interface evidence (`docs/integrations/hermes-capability-report.json`) and public task reference;
 - database integrity result.
 
 Do not collect note bodies or secrets unless the operator deliberately handles them outside the standard support bundle.

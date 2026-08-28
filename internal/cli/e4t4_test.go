@@ -311,27 +311,30 @@ func TestRefreshHistoryAndFilters(t *testing.T) {
 	}
 }
 
-// TestRefreshCapabilityLessTargetReportsUnsupported proves a target
-// without the execution capability reports lookup_unsupported (exit 3)
-// and persists nothing.
-func TestRefreshCapabilityLessTargetReportsUnsupported(t *testing.T) {
+// TestRefreshBelowFloorTargetRefuses proves a target below the
+// eligibility floor refuses the refresh before any lookup and persists
+// nothing (the capability-absent boundary returns with the E11-T2
+// probe).
+func TestRefreshBelowFloorTargetRefuses(t *testing.T) {
 	dir := t.TempDir()
-	report := filepath.Join(dir, "report.json")
-	body := `{"schema_version":"agent-dispatch.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":true,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":true,"execution_status":false,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
-	if err := os.WriteFile(report, []byte(body), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	bin := e4t1StubHermes(t, dir, "Hermes Agent v0.18.5 (2026.6.01)")
 	configPath, vault := e4t3Fixture(t)
 	dispatchID := e4t4Accepted(t, configPath, vault)
 	raw, _ := os.ReadFile(configPath)
-	updated := strings.Replace(string(raw), "../../docs/integrations/hermes-capability-report.json", report, 1)
-	if err := os.WriteFile(configPath, []byte(updated), 0o600); err != nil {
+	updated := string(raw)
+	lines := strings.Split(updated, "\n")
+	for i, l := range lines {
+		if strings.HasPrefix(l, "    executable: ") {
+			lines[i] = "    executable: " + bin
+		}
+	}
+	if err := os.WriteFile(configPath, []byte(strings.Join(lines, "\n")), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	var out, errb bytes.Buffer
 	code := Run([]string{"dispatches", "refresh", "--config", configPath, dispatchID}, &out, &errb)
-	if code != 3 || !strings.Contains(errb.String(), "lookup_unsupported") {
-		t.Fatalf("capability-less refresh must report lookup_unsupported exit 3, got %d: %s", code, errb.String())
+	if code != 11 {
+		t.Fatalf("below-floor refresh must report target unavailability exit 11, got %d: %s", code, errb.String())
 	}
 }
 

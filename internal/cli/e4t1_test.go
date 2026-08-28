@@ -22,8 +22,9 @@ func e4t1StubHermes(t *testing.T, dir, versionLine string) string {
 }
 
 // e4t1ProbeConfig writes a one-target configuration pointing at the
-// given executable and capability report.
-func e4t1ProbeConfig(t *testing.T, dir, executable, report, required string) string {
+// given executable with the given eligibility floor ("" keeps the
+// 0.19.1 default).
+func e4t1ProbeConfig(t *testing.T, dir, executable, floor string) string {
 	t.Helper()
 	cfg := `version: 1
 instance:
@@ -33,13 +34,12 @@ resources:
     type: directory
     root: ` + filepath.Join(dir, "vault") + `
     file_scope: markdown
-targets:
+hermes_targets:
   hermes-main:
-    type: hermes-kanban
     board: agent-dispatch
+    minimum_version: ` + floorValue(floor) + `
+    compatibility: capability_probe
     executable: ` + executable + `
-    capability_report: ` + report + `
-    required_capabilities: [` + required + `]
     submit_timeout: 5s
     lookup_timeout: 5s
     environment_allowlist: [PATH, HOME]
@@ -64,23 +64,26 @@ routes:
       overflow_action: reconcile
       fresh_instance_action: reconcile
       unsafe_path_action: quarantine
-    dispatch:
-      target: hermes-main
-      profile: wiki-maintainer
-      skills: [llm-wiki]
-      mutex_key: wiki-publish
-      latest_state: true
-      submission_retry:
-        max_attempts: 3
-        initial_backoff: 2s
-        max_backoff: 2m
-        multiplier: 2.0
-        jitter_fraction: 0.2
-      execution_hints:
-        max_runtime: 30m
-        max_attempts: 2
-      failure_budget: 2
-      active_stale_after: 2h
+    fanout_mode: all
+    destinations:
+      - id: main
+        target: hermes-main
+        profile: wiki-maintainer
+        skills: [llm-wiki]
+        mutex_key: wiki-publish
+        workstream: main
+        execution_hints:
+          max_runtime: 30m
+          max_attempts: 2
+    submission_retry:
+      max_attempts: 3
+      initial_backoff: 2s
+      max_backoff: 2m
+      multiplier: 2.0
+      jitter_fraction: 0.2
+    latest_state: true
+    failure_budget: 2
+    active_stale_after: 2h
     reconciliation:
       initial: true
       daily_expected: true
@@ -92,12 +95,20 @@ routes:
 	return path
 }
 
+// floorValue renders the configured floor for the fixture.
+func floorValue(floor string) string {
+	if floor == "" {
+		return "0.19.1"
+	}
+	return floor
+}
+
 // TestConfigValidateProbeTargetsAvailable: a matching stub target probes
 // available and reports the eight HER-004 declarations (cli-spec §3).
 func TestConfigValidateProbeTargetsAvailable(t *testing.T) {
 	dir := t.TempDir()
 	bin := e4t1StubHermes(t, dir, "Hermes Agent v0.19.1 (2026.7.30)")
-	configPath := e4t1ProbeConfig(t, dir, bin, "../../docs/integrations/hermes-capability-report.json", "durable_acceptance, submit_idempotency_key")
+	configPath := e4t1ProbeConfig(t, dir, bin, "")
 	t.Setenv("AGENT_DISPATCH_STATE_DIR", dir)
 	var out, errb bytes.Buffer
 	code := Run([]string{"config", "validate", "--probe-targets", "--config", configPath}, &out, &errb)
@@ -116,45 +127,37 @@ func TestConfigValidateProbeTargetsAvailable(t *testing.T) {
 	if entry["state"] != "available" || entry["hermes_version"] != "0.19.1" {
 		t.Fatalf("probe entry wrong: %v", entry)
 	}
-	caps, ok := entry["capabilities"].(map[string]any)
-	if !ok || caps["durable_acceptance"] != true || caps["submit_idempotency_key"] != true {
-		t.Fatalf("capabilities missing: %v", entry["capabilities"])
-	}
-	if len(caps) != 8 {
-		t.Fatalf("all eight HER-004 declarations must be reported, got %d", len(caps))
+	// The capability declarations return with the E11-T2 probe's cached
+	// shape evidence; the E11-T1 probe proves eligibility.
+	if _, has := entry["capabilities"]; has {
+		t.Fatalf("E11-T1 probe must not assert unproven capabilities: %v", entry)
 	}
 }
 
 // TestConfigValidateProbeTargetsCapabilityMismatch: a required
 // capability absent from a version-matching report fails validation with
 // the stable config_capability_missing code and exit 3 (HER-005).
-func TestConfigValidateProbeTargetsCapabilityMismatch(t *testing.T) {
+func TestConfigValidateProbeTargetsBelowDeclaredFloor(t *testing.T) {
 	dir := t.TempDir()
 	bin := e4t1StubHermes(t, dir, "Hermes Agent v0.19.1 (2026.7.30)")
-	// A report that honestly records no mutex.
-	limited := filepath.Join(dir, "limited.json")
-	body := `{"schema_version":"agent-dispatch.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":true,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":false,"execution_status":true,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
-	if err := os.WriteFile(limited, []byte(body), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	configPath := e4t1ProbeConfig(t, dir, bin, limited, "durable_acceptance, resource_mutex")
+	// A declared floor above the installed version: the configuration
+	// document is valid (the mismatch rides the probe as a warning,
+	// state version_unsupported) and the enable/submit gates refuse.
+	configPath := e4t1ProbeConfig(t, dir, bin, "0.19.2")
 	t.Setenv("AGENT_DISPATCH_STATE_DIR", dir)
 	var out, errb bytes.Buffer
 	code := Run([]string{"config", "validate", "--probe-targets", "--config", configPath}, &out, &errb)
-	if code != 3 {
-		t.Fatalf("capability mismatch must exit 3, got %d", code)
+	if code != 0 {
+		t.Fatalf("below-declared-floor is a warning, got exit %d: %s", code, errb.String())
 	}
-	var env struct {
-		Error struct {
-			Code     string `json:"code"`
-			Category string `json:"category"`
-		} `json:"error"`
+	res := decodeEnvelope(t, &out)
+	probes, _ := res["probe_targets"].([]any)
+	if len(probes) != 1 {
+		t.Fatalf("probe_targets: %v", res["probe_targets"])
 	}
-	if err := json.Unmarshal(errb.Bytes(), &env); err != nil {
-		t.Fatalf("stderr not an error envelope: %s", errb.String())
-	}
-	if env.Error.Code != "config_capability_missing" || env.Error.Category != "configuration" {
-		t.Fatalf("error code/category wrong: %+v", env.Error)
+	entry, _ := probes[0].(map[string]any)
+	if entry["state"] != "version_unsupported" {
+		t.Fatalf("state=%v", entry["state"])
 	}
 }
 
@@ -164,8 +167,8 @@ func TestConfigValidateProbeTargetsCapabilityMismatch(t *testing.T) {
 // submissions again at run time.
 func TestConfigValidateProbeTargetsVersionUnsupported(t *testing.T) {
 	dir := t.TempDir()
-	bin := e4t1StubHermes(t, dir, "Hermes Agent v0.20.0 (2026.8.10)")
-	configPath := e4t1ProbeConfig(t, dir, bin, "../../docs/integrations/hermes-capability-report.json", "durable_acceptance")
+	bin := e4t1StubHermes(t, dir, "Hermes Agent v0.18.5 (2026.6.01)")
+	configPath := e4t1ProbeConfig(t, dir, bin, "")
 	t.Setenv("AGENT_DISPATCH_STATE_DIR", dir)
 	var out, errb bytes.Buffer
 	code := Run([]string{"config", "validate", "--probe-targets", "--config", configPath}, &out, &errb)
@@ -187,7 +190,7 @@ func TestConfigValidateProbeTargetsVersionUnsupported(t *testing.T) {
 // warning (config validates without a Hermes installation).
 func TestConfigValidateProbeTargetsUnavailable(t *testing.T) {
 	dir := t.TempDir()
-	configPath := e4t1ProbeConfig(t, dir, filepath.Join(dir, "absent-hermes"), "../../docs/integrations/hermes-capability-report.json", "durable_acceptance")
+	configPath := e4t1ProbeConfig(t, dir, filepath.Join(dir, "absent-hermes"), "")
 	t.Setenv("AGENT_DISPATCH_STATE_DIR", dir)
 	var out, errb bytes.Buffer
 	code := Run([]string{"config", "validate", "--probe-targets", "--config", configPath}, &out, &errb)
@@ -209,18 +212,16 @@ func TestConfigValidateProbeTargetsUnavailable(t *testing.T) {
 func TestConfigValidateProbeTargetsConfigErrors(t *testing.T) {
 	dir := t.TempDir()
 	bin := e4t1StubHermes(t, dir, "Hermes Agent v0.19.1 (2026.7.30)")
-	frozen := "../../docs/integrations/hermes-capability-report.json"
 	cases := []struct {
-		name     string
-		report   string
-		required string
+		name  string
+		floor string
 	}{
-		{"unknown capability name", frozen, "durable_acceptance, teleportaion"},
-		{"missing report file", filepath.Join(dir, "absent-report.json"), "durable_acceptance"},
+		{"unparseable eligibility floor", "0.19.x"},
+		{"floor below the v0.1.5 minimum", "0.18.0"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			configPath := e4t1ProbeConfig(t, dir, bin, c.report, c.required)
+			configPath := e4t1ProbeConfig(t, dir, bin, c.floor)
 			t.Setenv("AGENT_DISPATCH_STATE_DIR", dir)
 			var out, errb bytes.Buffer
 			code := Run([]string{"config", "validate", "--probe-targets", "--config", configPath}, &out, &errb)
@@ -250,7 +251,7 @@ func TestConfigValidateProbeTargetsInvalidTimeouts(t *testing.T) {
 	bin := e4t1StubHermes(t, dir, "Hermes Agent v0.19.1 (2026.7.30)")
 	for _, bad := range []string{"banana", "0s", "-5s", "5"} {
 		t.Run(bad, func(t *testing.T) {
-			configPath := e4t1ProbeConfig(t, dir, bin, "../../docs/integrations/hermes-capability-report.json", "durable_acceptance")
+			configPath := e4t1ProbeConfig(t, dir, bin, "")
 			raw, err := os.ReadFile(configPath)
 			if err != nil {
 				t.Fatal(err)
@@ -268,7 +269,7 @@ func TestConfigValidateProbeTargetsInvalidTimeouts(t *testing.T) {
 		})
 	}
 	t.Run("day unit accepted", func(t *testing.T) {
-		configPath := e4t1ProbeConfig(t, dir, bin, "../../docs/integrations/hermes-capability-report.json", "durable_acceptance")
+		configPath := e4t1ProbeConfig(t, dir, bin, "")
 		raw, err := os.ReadFile(configPath)
 		if err != nil {
 			t.Fatal(err)
@@ -293,7 +294,7 @@ func TestConfigValidateProbeTargetsMultipleTargets(t *testing.T) {
 	dir := t.TempDir()
 	good := e4t1StubHermes(t, dir, "Hermes Agent v0.19.1 (2026.7.30)")
 	bad := filepath.Join(dir, "absent-hermes")
-	frozen := "../../docs/integrations/hermes-capability-report.json"
+	_ = good
 	cfg := `version: 1
 instance:
   id: probe-multi
@@ -302,19 +303,17 @@ resources:
     type: directory
     root: ` + filepath.Join(dir, "vault") + `
     file_scope: markdown
-targets:
+hermes_targets:
   a-target:
-    type: hermes-kanban
     board: agent-dispatch
+    minimum_version: 0.19.1
+    compatibility: capability_probe
     executable: ` + bad + `
-    capability_report: ` + frozen + `
-    required_capabilities: [durable_acceptance]
   b-target:
-    type: hermes-kanban
     board: agent-dispatch
+    minimum_version: 0.19.1
+    compatibility: capability_probe
     executable: ` + good + `
-    capability_report: ` + frozen + `
-    required_capabilities: [durable_acceptance]
 routes:
   wiki:
     enabled: false
@@ -336,23 +335,26 @@ routes:
       overflow_action: reconcile
       fresh_instance_action: reconcile
       unsafe_path_action: quarantine
-    dispatch:
-      target: b-target
-      profile: wiki-maintainer
-      skills: [llm-wiki]
-      mutex_key: wiki-publish
-      latest_state: true
-      submission_retry:
-        max_attempts: 3
-        initial_backoff: 2s
-        max_backoff: 2m
-        multiplier: 2.0
-        jitter_fraction: 0.2
-      execution_hints:
-        max_runtime: 30m
-        max_attempts: 2
-      failure_budget: 2
-      active_stale_after: 2h
+    fanout_mode: all
+    destinations:
+      - id: main
+        target: b-target
+        profile: wiki-maintainer
+        skills: [llm-wiki]
+        mutex_key: wiki-publish
+        workstream: main
+        execution_hints:
+          max_runtime: 30m
+          max_attempts: 2
+    submission_retry:
+      max_attempts: 3
+      initial_backoff: 2s
+      max_backoff: 2m
+      multiplier: 2.0
+      jitter_fraction: 0.2
+    latest_state: true
+    failure_budget: 2
+    active_stale_after: 2h
     reconciliation:
       initial: true
       daily_expected: true

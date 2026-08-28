@@ -9,6 +9,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/irootkernel/agent-dispatch/internal/adapters/hermeskanban"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
 	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
@@ -103,8 +104,8 @@ type planArtifacts struct {
 	cfg      *config.Config
 	route    config.Route
 	resource config.Resource
-	targetID string
-	target   config.Target
+	dest     config.Destination
+	resolved config.ResolvedTarget
 	revision string
 	env      watchman.Env
 	input    watchman.Input
@@ -145,9 +146,13 @@ func planPipeline(command string, args []string, stderr io.Writer, facts factsSo
 	if !ok {
 		return nil, planErr(stderr, command, "config_invalid", "configuration", fmt.Sprintf("resource %q is not defined", route.Source.Resource), 3)
 	}
-	target, ok := cfg.Targets[route.Dispatch.Target]
-	if !ok {
-		return nil, planErr(stderr, command, "config_invalid", "configuration", fmt.Sprintf("target %q is not defined", route.Dispatch.Target), 3)
+	dest, resolved, rerr := resolveRouteTarget(cfg, opts.routeID)
+	if rerr != nil {
+		return nil, planErr(stderr, command, "config_invalid", "configuration", rerr.Error(), 3)
+	}
+	required := hermeskanban.UnconditionalCapabilities
+	if resolved.Webhook != nil {
+		required = resolved.Webhook.RequiredCapabilities
 	}
 	revision, ok := config.RouteRevision(cfg, opts.routeID)
 	if !ok {
@@ -218,7 +223,7 @@ func planPipeline(command string, args []string, stderr io.Writer, facts factsSo
 		BulkAction:           route.Policy.BulkAction,
 		OverflowAction:       route.Policy.OverflowAction,
 		FreshInstanceAction:  route.Policy.FreshInstanceAction,
-		RequiredCapabilities: target.RequiredCapabilities,
+		RequiredCapabilities: required,
 	}, dispatch.Input{Batch: batch, Flags: env.Flags()})
 	if err != nil {
 		return nil, planErr(stderr, command, "internal_unclassified", "internal", err.Error(), 40)
@@ -228,13 +233,13 @@ func planPipeline(command string, args []string, stderr io.Writer, facts factsSo
 	// submit path revalidates the stored plan against the active
 	// configuration and supersedes-and-rebuilds stale work, so this
 	// plan-time self-comparison carried no authority and was removed.
-	hints, err := hintsOf(route)
+	hints, err := hintsOf(dest)
 	if err != nil {
 		return nil, planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
 	}
 	return &planArtifacts{
 		opts: opts, cfg: cfg, route: route, resource: resource,
-		targetID: route.Dispatch.Target, target: target, revision: revision,
+		dest: dest, resolved: resolved, revision: revision,
 		env: env, input: input, batch: batch, plan: plan, hints: hints,
 	}, 0
 }
@@ -340,16 +345,16 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	}
 	// The submit phase needs the E4 sink adapter; the intent is durable
 	// and ready, and no automatic target fallback exists (DUR-008).
-	sink, err := resolveSink(artifacts.cfg, artifacts.target, artifacts.route, opsLogger(stderr, artifacts.cfg))
+	sink, err := resolveSink(artifacts.cfg, artifacts.opts.routeID, opsLogger(stderr, artifacts.cfg))
 	if err != nil {
 		outcome.Close()
 		return writeSinkError(stderr, command, err)
 	}
-	backoff, err := backoffFromConfig(artifacts.route.Dispatch.SubmissionRetry)
+	backoff, err := backoffFromConfig(artifacts.route.SubmissionRetry)
 	if err != nil {
 		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
 	}
-	rt := newSubmitRuntime(outcome.store, sink, artifacts.cfg, artifacts.target, backoff, "dispatch", stderr)
+	rt := newSubmitRuntime(outcome.store, sink, artifacts.cfg, submitTimeoutOf(artifacts.resolved), backoff, "dispatch", stderr)
 	// The head-of-entry sweep already ran before the arrival was
 	// evaluated; this second pass covers only the race where the lease
 	// expired between that sweep and this submit (E8-T2/H-6).
@@ -409,8 +414,8 @@ func persistThroughCoordinator(command string, artifacts *planArtifacts, stderr 
 		writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
 		return persistOutcome{}, 20
 	} else if len(recovered) > 0 {
-		if sink, sinkErr := resolveSink(artifacts.cfg, artifacts.target, artifacts.route, opsLogger(stderr, artifacts.cfg)); sinkErr == nil {
-			if backoff, bErr := backoffFromConfig(artifacts.route.Dispatch.SubmissionRetry); bErr == nil {
+		if sink, sinkErr := resolveSink(artifacts.cfg, artifacts.opts.routeID, opsLogger(stderr, artifacts.cfg)); sinkErr == nil {
+			if backoff, bErr := backoffFromConfig(artifacts.route.SubmissionRetry); bErr == nil {
 				// The healed unknowns resolve now; a failure here never
 				// blocks the arrival, but it is never silent either — the
 				// operator sees it on stderr (E8-T2 round-1 review).
@@ -628,15 +633,16 @@ func buildLineage(a *planArtifacts) (ports.Lineage, error) {
 		DispatchID: string(dispatchID),
 		Route:      ports.TaskRouteRef{ID: a.opts.routeID, Revision: a.plan.Route.Revision},
 		// The contract workspace binding form (hermes-task-contract §2):
+		// the destination's declared workspace, defaulting to
 		// dir:<resolved root> for the v0.1 markdown vault resource.
-		Resource:           ports.TaskResource{ID: a.route.Source.Resource, Workspace: "dir:" + a.resource.Root},
-		TargetID:           a.targetID,
+		Resource:           ports.TaskResource{ID: a.route.Source.Resource, Workspace: workspaceOf(a.dest, a.resource.Root)},
+		TargetID:           a.dest.Target,
 		Generation:         1,
 		Fingerprint:        records.Digest(a.plan.ContentFingerprint),
 		Changes:            a.batch.Changes,
 		Flags:              flagsOf(a.env),
 		AcceptanceCriteria: dispatch.WikiAcceptanceCriteria,
-		Assignment:         assignmentOf(a.route),
+		Assignment:         assignmentOf(a.dest),
 		ExecutionHints:     a.hints,
 	})
 	if err != nil {
@@ -648,13 +654,23 @@ func buildLineage(a *planArtifacts) (ports.Lineage, error) {
 	}
 	lin.Intent = ports.IntentInput{
 		DispatchID: string(dispatchID), DecisionID: lin.Decision.DecisionID, RouteID: a.opts.routeID,
-		RouteRevision: a.plan.Route.Revision, TargetID: a.targetID, TargetType: a.target.Type,
-		TargetScope: targetScope(a.target),
+		RouteRevision: a.plan.Route.Revision, TargetID: a.dest.Target, TargetType: a.resolved.Type(),
+		TargetScope: resolvedTargetScope(a.resolved),
 		ResourceID:  a.route.Source.Resource, Generation: 1, IdempotencyKey: key,
 		ContentFingerprint: a.plan.ContentFingerprint, ManifestDigest: dispatch.ManifestDigest(a.batch.Changes),
 		RequestVersion: dispatch.RequestContractVersion, RequestJSON: requestJSON, CreatedAt: lin.Decision.CreatedAt,
 	}
 	return lin, nil
+}
+
+// workspaceOf resolves the destination's Hermes workspace form,
+// defaulting to the vault resource root (E11-T1: the destination may
+// bind a different scratch/worktree/dir workspace).
+func workspaceOf(dest config.Destination, resourceRoot string) string {
+	if dest.Workspace != "" {
+		return dest.Workspace
+	}
+	return "dir:" + resourceRoot
 }
 
 // flagsOf projects the trusted source flags onto the request flag list.
@@ -672,17 +688,17 @@ func flagsOf(env watchman.Env) []string {
 	return flags
 }
 
-// assignmentOf maps the route's dispatch block onto the request
+// assignmentOf maps the certified destination onto the request
 // assignment (sink-adapter-contract §8: the mutex is a capability
 // request, never prompt text).
-func assignmentOf(route config.Route) *ports.TaskAssignment {
-	if route.Dispatch.Profile == "" && len(route.Dispatch.Skills) == 0 {
+func assignmentOf(dest config.Destination) *ports.TaskAssignment {
+	if dest.Profile == "" && len(dest.Skills) == 0 {
 		return nil
 	}
 	return &ports.TaskAssignment{
-		Profile:  route.Dispatch.Profile,
-		Skills:   route.Dispatch.Skills,
-		MutexKey: route.Dispatch.MutexKey,
+		Profile:  dest.Profile,
+		Skills:   dest.Skills,
+		MutexKey: dest.MutexKey,
 	}
 }
 
@@ -691,19 +707,19 @@ func assignmentOf(route config.Route) *ports.TaskAssignment {
 // included), and a configured but unparsable runtime fails closed
 // instead of silently dropping the hint (HER-006: missing mappings are
 // reported, never discarded).
-func hintsOf(route config.Route) (*ports.TaskExecutionHints, error) {
-	if route.Dispatch.ExecutionHints.MaxRuntime == "" && route.Dispatch.ExecutionHints.MaxAttempts == 0 {
+func hintsOf(dest config.Destination) (*ports.TaskExecutionHints, error) {
+	if dest.ExecutionHints.MaxRuntime == "" && dest.ExecutionHints.MaxAttempts == 0 {
 		return nil, nil
 	}
 	hints := &ports.TaskExecutionHints{}
-	if route.Dispatch.ExecutionHints.MaxRuntime != "" {
-		parsed, err := config.ParseDuration(route.Dispatch.ExecutionHints.MaxRuntime)
+	if dest.ExecutionHints.MaxRuntime != "" {
+		parsed, err := config.ParseDuration(dest.ExecutionHints.MaxRuntime)
 		if err != nil {
 			return nil, fmt.Errorf("execution_hints.max_runtime: %v", err)
 		}
 		hints.MaxRuntimeSeconds = parsed.Nanos / int64(time.Second)
 	}
-	hints.MaxAttempts = int64(route.Dispatch.ExecutionHints.MaxAttempts)
+	hints.MaxAttempts = int64(dest.ExecutionHints.MaxAttempts)
 	return hints, nil
 }
 

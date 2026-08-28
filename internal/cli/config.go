@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"sort"
 	"time"
 
@@ -209,23 +208,6 @@ func validateTargetsOffline(command string, cfg *config.Config, stderr io.Writer
 	for _, id := range sortedTargetIDs(cfg) {
 		target := cfg.Targets[id]
 		switch target.Type {
-		case "hermes-kanban":
-			// A not-yet-placed report is a warning (the configuration
-			// document is still valid and the report arrives at
-			// deployment, installation section 3); a present-but-invalid
-			// report, or a required capability it does not carry, fails
-			// the default validation (E8-T3).
-			if _, statErr := os.Stat(target.CapabilityReport); statErr != nil {
-				warnings = append(warnings, fmt.Sprintf("target %s: capability report %s is not placed yet; validation defers the report checks to deployment (installation section 3)", id, target.CapabilityReport))
-				continue
-			}
-			report, err := hermeskanban.LoadReport(target.CapabilityReport)
-			if err != nil {
-				return warnings, planErr(stderr, command, "config_invalid", "configuration", fmt.Sprintf("target %s: %v", id, err), 3)
-			}
-			if err := hermeskanban.ValidateRequired(id, report.PortCapabilities(), target.RequiredCapabilities); err != nil {
-				return warnings, planErr(stderr, command, "config_capability_missing", "configuration", err.Error(), 3)
-			}
 		case "hermes-webhook":
 			opts, err := webhookSinkOptions(id, target)
 			if err != nil {
@@ -239,6 +221,19 @@ func validateTargetsOffline(command string, cfg *config.Config, stderr io.Writer
 				}
 				return warnings, planErr(stderr, command, "config_capability_missing", "configuration", fmt.Sprintf("target %s: %v", id, detail), 3)
 			}
+		default:
+			continue
+		}
+	}
+	// Hermes targets have no offline evidence file since the cutover
+	// (ADR-0017); the offline check proves their execution bounds parse
+	// through the same gate the probe path uses, and the live eligibility
+	// probe runs under --probe-targets (the E11-T2 capability probe
+	// restores shape proof).
+	for _, id := range sortedHermesTargetIDs(cfg) {
+		target := cfg.HermesTargets[id]
+		if _, err := hermesTargetProcessLimits(cfg, target); err != nil {
+			return warnings, planErr(stderr, command, "config_invalid", "configuration", fmt.Sprintf("hermes_targets.%s: %v", id, err), 3)
 		}
 	}
 	return warnings, 0
@@ -251,108 +246,49 @@ type probeResult struct {
 	warnings  []string
 }
 
-// probeHermesTargets runs the read-only public capability probe for every
-// configured hermes-kanban target (cli-spec §3: --probe-targets invokes
-// read-only public capability probes). Every target is probed so the
-// summary stays complete; a required capability the verified target does
-// not provide (HER-005, config_capability_missing) and a persistent
-// configuration defect (config_error, config_invalid) then fail
-// validation with exit 3, while an unavailable or version-unsupported
-// target is a warning because the configuration document itself is
-// still valid and the adapter gates submissions again at run time.
+// probeHermesTargets runs the read-only public eligibility probe for
+// every configured hermes target (cli-spec §3: --probe-targets invokes
+// read-only public probes; E11-T1). Every target is probed so the
+// summary stays complete; a persistent configuration defect
+// (config_error, config_invalid) fails validation with exit 3, while an
+// unavailable or below-floor target is a warning because the
+// configuration document itself is still valid and the adapter gates
+// submissions again at run time.
 func probeHermesTargets(command string, cfg *config.Config, stdout, stderr io.Writer) (probeResult, int) {
 	var out probeResult
 	var firstFailure error
-	for _, id := range sortedTargetIDs(cfg) {
-		target := cfg.Targets[id]
-		switch target.Type {
-		case "hermes-kanban":
-		case "hermes-webhook":
-			// The webhook adapter's capability declaration is static and
-			// offline (E0-T4 §9: the receiving platform cannot be assumed
-			// running), so the probe validates the target configuration
-			// and the required-capability gate without network I/O.
-			opts, err := webhookSinkOptions(id, target)
-			if err != nil {
-				entry := map[string]any{
-					"target_id": id,
-					"type":      "hermes-webhook",
-					"state":     "config_error",
-					"detail":    err.Error(),
-				}
-				out.summaries = append(out.summaries, entry)
-				if firstFailure == nil {
-					firstFailure = fmt.Errorf("target %s: %w", id, err)
-				}
-				continue
-			}
-			sink, err := hermeswebhook.NewSink(opts)
-			if err != nil {
-				var missing *hermeswebhook.CapabilityError
-				detail := err.Error()
-				state := "config_error"
-				if errors.As(err, &missing) {
-					state = "capability_mismatch"
-					detail = missing.Error() + "; " + missing.Remediation()
-				}
-				entry := map[string]any{
-					"target_id": id,
-					"type":      "hermes-webhook",
-					"state":     state,
-					"detail":    detail,
-				}
-				out.summaries = append(out.summaries, entry)
-				if firstFailure == nil {
-					firstFailure = err
-				}
-				continue
-			}
-			caps, err := sink.Probe(context.Background())
-			if err != nil {
-				// The declaration is static today, but a future failure
-				// mode must not report an empty capability set as
-				// available.
-				out.summaries = append(out.summaries, map[string]any{
-					"target_id": id,
-					"type":      "hermes-webhook",
-					"state":     "config_error",
-					"detail":    err.Error(),
-				})
-				if firstFailure == nil {
-					firstFailure = err
-				}
-				continue
-			}
-			out.summaries = append(out.summaries, map[string]any{
-				"target_id":    id,
-				"type":         "hermes-webhook",
-				"state":        "available",
-				"detail":       "static capability declaration; endpoint reachability is proven only by submission (E0-T4 §9)",
-				"capabilities": caps.BoolMap(),
-			})
-			continue
-		default:
-			continue
-		}
-		limits, err := hermesProcessLimits(cfg, target)
+	for _, id := range sortedHermesTargetIDs(cfg) {
+		target := cfg.HermesTargets[id]
+		limits, err := hermesTargetProcessLimits(cfg, target)
 		if err != nil {
 			// A target whose configured limits are themselves invalid is
 			// a configuration defect: it is recorded and fails at the
 			// end, and probing continues so the summary stays complete.
-			entry := map[string]any{
+			out.summaries = append(out.summaries, map[string]any{
 				"target_id": id,
 				"type":      "hermes-kanban",
 				"state":     "config_error",
 				"detail":    err.Error(),
-			}
-			out.summaries = append(out.summaries, entry)
+			})
 			if firstFailure == nil {
-				firstFailure = fmt.Errorf("target %s: %w", id, err)
+				firstFailure = fmt.Errorf("hermes_targets.%s: %w", id, err)
 			}
 			continue
 		}
-		adapter := hermeskanban.New(id, target.Executable, target.CapabilityReport, target.RequiredCapabilities, limits)
-		summary, caps, err := adapter.ProbeVerbose(context.Background())
+		adapter, err := hermeskanban.New(id, target.Executable, target.MinimumVersion, limits)
+		if err != nil {
+			out.summaries = append(out.summaries, map[string]any{
+				"target_id": id,
+				"type":      "hermes-kanban",
+				"state":     "config_error",
+				"detail":    err.Error(),
+			})
+			if firstFailure == nil {
+				firstFailure = err
+			}
+			continue
+		}
+		summary, _, err := adapter.ProbeVerbose(context.Background())
 		entry := map[string]any{
 			"target_id": id,
 			"type":      "hermes-kanban",
@@ -362,33 +298,74 @@ func probeHermesTargets(command string, cfg *config.Config, stdout, stderr io.Wr
 		if summary.Version != "" {
 			entry["hermes_version"] = summary.Version
 		}
-		if summary.State == "available" {
-			entry["capabilities"] = caps.BoolMap()
-		}
 		out.summaries = append(out.summaries, entry)
-		var missing *hermeskanban.CapabilityError
 		switch {
-		case errors.As(err, &missing):
-			if firstFailure == nil {
-				firstFailure = missing
-			}
 		case summary.State == "config_error":
 			if firstFailure == nil {
 				firstFailure = err
 			}
 		case summary.State != "available":
-			out.warnings = append(out.warnings, fmt.Sprintf("target %s: hermes probe state %s: %s", id, summary.State, summary.Detail))
+			out.warnings = append(out.warnings, fmt.Sprintf("hermes_targets.%s: probe state %s: %s", id, summary.State, summary.Detail))
 		}
 	}
+	// The webhook adapter's capability declaration is static and offline
+	// (E0-T4 §9: the receiving platform cannot be assumed running), so
+	// the probe validates the target configuration and the
+	// required-capability gate without network I/O.
+	for _, id := range sortedTargetIDs(cfg) {
+		target := cfg.Targets[id]
+		opts, err := webhookSinkOptions(id, target)
+		if err != nil {
+			out.summaries = append(out.summaries, map[string]any{
+				"target_id": id, "type": "hermes-webhook", "state": "config_error", "detail": err.Error(),
+			})
+			if firstFailure == nil {
+				firstFailure = fmt.Errorf("target %s: %w", id, err)
+			}
+			continue
+		}
+		sink, err := hermeswebhook.NewSink(opts)
+		if err != nil {
+			var missing *hermeswebhook.CapabilityError
+			detail := err.Error()
+			state := "config_error"
+			if errors.As(err, &missing) {
+				state = "capability_mismatch"
+				detail = missing.Error() + "; " + missing.Remediation()
+			}
+			out.summaries = append(out.summaries, map[string]any{
+				"target_id": id, "type": "hermes-webhook", "state": state, "detail": detail,
+			})
+			if firstFailure == nil {
+				firstFailure = err
+			}
+			continue
+		}
+		caps, err := sink.Probe(context.Background())
+		if err != nil {
+			// The declaration is static today, but a future failure mode
+			// must not report an empty capability set as available.
+			out.summaries = append(out.summaries, map[string]any{
+				"target_id": id, "type": "hermes-webhook", "state": "config_error", "detail": err.Error(),
+			})
+			if firstFailure == nil {
+				firstFailure = err
+			}
+			continue
+		}
+		out.summaries = append(out.summaries, map[string]any{
+			"target_id":    id,
+			"type":         "hermes-webhook",
+			"state":        "available",
+			"detail":       "static capability declaration; endpoint reachability is proven only by submission (E0-T4 §9)",
+			"capabilities": caps.BoolMap(),
+		})
+	}
 	if firstFailure != nil {
-		var missing *hermeskanban.CapabilityError
 		var webhookMissing *hermeswebhook.CapabilityError
-		switch {
-		case errors.As(firstFailure, &missing):
-			writeError(stderr, command, "config_capability_missing", "configuration", missing.Error()+"; "+missing.Remediation())
-		case errors.As(firstFailure, &webhookMissing):
+		if errors.As(firstFailure, &webhookMissing) {
 			writeError(stderr, command, "config_capability_missing", "configuration", webhookMissing.Error()+"; "+webhookMissing.Remediation())
-		default:
+		} else {
 			writeError(stderr, command, "config_invalid", "configuration", firstFailure.Error())
 		}
 		return out, 3
@@ -396,12 +373,12 @@ func probeHermesTargets(command string, cfg *config.Config, stdout, stderr io.Wr
 	return out, 0
 }
 
-// hermesProcessLimits maps the configured limits and target timeouts onto
-// the adapter's controlled-execution bounds (SEC-004); an invalid
-// duration fails closed and an unset output bound keeps the adapter
-// default. Durations parse through config.ParseDuration, the one
+// hermesTargetProcessLimits maps the configured limits and hermes target
+// timeouts onto the adapter's controlled-execution bounds (SEC-004); an
+// invalid duration fails closed and an unset output bound keeps the
+// adapter default. Durations parse through config.ParseDuration, the one
 // schema-exact parser (whole-day units included).
-func hermesProcessLimits(cfg *config.Config, target config.Target) (hermeskanban.ProcessLimits, error) {
+func hermesTargetProcessLimits(cfg *config.Config, target config.HermesTarget) (hermeskanban.ProcessLimits, error) {
 	limits := hermeskanban.ProcessLimits{
 		EnvironmentAllowlist: target.EnvironmentAllowlist,
 	}
@@ -429,6 +406,17 @@ func hermesProcessLimits(cfg *config.Config, target config.Target) (hermeskanban
 func sortedTargetIDs(cfg *config.Config) []string {
 	ids := make([]string, 0, len(cfg.Targets))
 	for id := range cfg.Targets {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+// sortedHermesTargetIDs renders the deterministic hermes target probe
+// order.
+func sortedHermesTargetIDs(cfg *config.Config) []string {
+	ids := make([]string, 0, len(cfg.HermesTargets))
+	for id := range cfg.HermesTargets {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)

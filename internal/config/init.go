@@ -8,10 +8,12 @@ import (
 )
 
 // Example returns a disabled example configuration bound to the given
-// instance, resource root, and capability report path. It is the template
-// written by `agent-dispatch init`: dispatch stays disabled until an explicit
-// `route enable` (cli-spec §3), and no Watchman trigger is installed.
-func Example(instanceID, resourceRoot, capabilityReport string) *Config {
+// instance and resource root (E11-T1 destinations contract). It is the
+// template written by `agent-dispatch init`: dispatch stays disabled
+// until an explicit `route enable` (cli-spec §3), no Watchman trigger is
+// installed, and notifications stay disabled because no sink is
+// configured (NTF-001).
+func Example(instanceID, resourceRoot string) *Config {
 	return &Config{
 		Version: 1,
 		Instance: Instance{
@@ -27,13 +29,12 @@ func Example(instanceID, resourceRoot, capabilityReport string) *Config {
 				Git:       &Git{Mode: "disabled"},
 			},
 		},
-		Targets: map[string]Target{
-			"hermes-kanban-main": {
-				Type:                 "hermes-kanban",
+		HermesTargets: map[string]HermesTarget{
+			"hermes-main": {
 				Board:                "agent-dispatch",
 				Executable:           "hermes",
-				CapabilityReport:     capabilityReport,
-				RequiredCapabilities: []string{"durable_acceptance", "submit_idempotency_key", "lookup_by_external_ref"},
+				MinimumVersion:       MinimumEligibleHermesVersion,
+				Compatibility:        "capability_probe",
 				SubmitTimeout:        "30s",
 				LookupTimeout:        "15s",
 				EnvironmentAllowlist: []string{"HOME", "PATH"},
@@ -50,7 +51,27 @@ func Example(instanceID, resourceRoot, capabilityReport string) *Config {
 					Include:     []string{"**/*.md"},
 					Exclude:     []string{".git/**", ".obsidian/workspace*.json", ".obsidian/cache/**", ".trash/**"},
 				},
-				Batching: Batching{AutomaticThreshold: 25, HardLimit: 100, MaxManifestBytes: 262144},
+				Batching:   Batching{AutomaticThreshold: 25, HardLimit: 100, MaxManifestBytes: 262144},
+				FanoutMode: "all",
+				Destinations: []Destination{
+					{
+						ID:             "indexing",
+						Target:         "hermes-main",
+						Profile:        "wiki-maintainer",
+						Skills:         []string{"llm-wiki"},
+						Workstream:     "indexing",
+						MutexKey:       "wiki-publish",
+						ExecutionHints: ExecutionHints{MaxRuntime: "30m", MaxAttempts: 2},
+					},
+				},
+				Notifications: &Notifications{
+					Events: []string{"work_completed", "work_failed", "delivery_unknown"},
+					Sinks:  []NotificationSink{},
+				},
+				SubmissionRetry:  Retry{MaxAttempts: 3, InitialBackoff: "2s", MaxBackoff: "2m", Multiplier: 2.0, JitterFraction: 0.2},
+				LatestState:      true,
+				FailureBudget:    2,
+				ActiveStaleAfter: "2h",
 				Policy: Policy{
 					Protected:           []string{"raw/**", "canon/**"},
 					Immutable:           []string{},
@@ -58,17 +79,6 @@ func Example(instanceID, resourceRoot, capabilityReport string) *Config {
 					OverflowAction:      "reconcile",
 					FreshInstanceAction: "reconcile",
 					UnsafePathAction:    "quarantine",
-				},
-				Dispatch: Dispatch{
-					Target:           "hermes-kanban-main",
-					Profile:          "wiki-maintainer",
-					Skills:           []string{"llm-wiki"},
-					MutexKey:         "wiki-publish",
-					LatestState:      true,
-					SubmissionRetry:  Retry{MaxAttempts: 3, InitialBackoff: "2s", MaxBackoff: "2m", Multiplier: 2.0, JitterFraction: 0.2},
-					ExecutionHints:   ExecutionHints{MaxRuntime: "30m", MaxAttempts: 2},
-					FailureBudget:    2,
-					ActiveStaleAfter: "2h",
 				},
 				Reconciliation: Reconciliation{Initial: true, DailyExpected: true},
 				Retention:      &Retention{},

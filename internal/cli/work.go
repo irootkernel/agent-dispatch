@@ -264,7 +264,7 @@ func workService(command, configPath string, store storeOp, routeID string, stde
 		Store:         store,
 		Now:           time.Now,
 		Resolver:      runtime.resolver,
-		FailureBudget: route.Dispatch.FailureBudget,
+		FailureBudget: route.FailureBudget,
 		OutsideScope:  outsideScope,
 		Log:           opsLogger(stderr, cfg),
 		TraceID:       globalTraceID,

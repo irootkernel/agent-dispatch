@@ -92,13 +92,12 @@ resources:
     file_scope: markdown
     git:
       mode: disabled
-targets:
+hermes_targets:
   hermes-main:
-    type: hermes-kanban
     board: agent-dispatch-test
+    minimum_version: 0.19.1
+    compatibility: capability_probe
     executable: ` + stubhermes.Write(t) + `
-    capability_report: ../../docs/integrations/hermes-capability-report.json
-    required_capabilities: [durable_acceptance, submit_idempotency_key, lookup_by_external_ref]
     submit_timeout: 30s
     lookup_timeout: 30s
     environment_allowlist: [PATH, HOME]
@@ -123,23 +122,26 @@ routes:
       overflow_action: reconcile
       fresh_instance_action: reconcile
       unsafe_path_action: quarantine
-    dispatch:
-      target: hermes-main
-      profile: wiki-maintainer
-      skills: [llm-wiki]
-      mutex_key: wiki-publish
-      latest_state: true
-      submission_retry:
-        max_attempts: 3
-        initial_backoff: 1s
-        max_backoff: 2s
-        multiplier: 2.0
-        jitter_fraction: 0.0
-      execution_hints:
-        max_runtime: 30m
-        max_attempts: 2
-      failure_budget: 2
-      active_stale_after: 2h
+    fanout_mode: all
+    destinations:
+      - id: main
+        target: hermes-main
+        profile: wiki-maintainer
+        skills: [llm-wiki]
+        mutex_key: wiki-publish
+        workstream: main
+        execution_hints:
+          max_runtime: 30m
+          max_attempts: 2
+    submission_retry:
+      max_attempts: 3
+      initial_backoff: 1s
+      max_backoff: 2s
+      multiplier: 2.0
+      jitter_fraction: 0.0
+    latest_state: true
+    failure_budget: 2
+    active_stale_after: 2h
     reconciliation:
       initial: true
       daily_expected: true
@@ -205,20 +207,20 @@ func TestDispatchSubmitsThroughHermesSink(t *testing.T) {
 }
 
 // TestDispatchUnusableTargetFailsClosed proves a target that fails the
-// construction gate (bad capability report) fails with the stable
-// configuration error instead of submitting.
+// construction gate (an unparseable eligibility floor) fails with the
+// stable configuration error instead of submitting.
 func TestDispatchUnusableTargetFailsClosed(t *testing.T) {
 	configPath, vault := e4t3Fixture(t)
+	setPlanEnv(t, vault, false)
+	e4t3RegisterRoute(t, configPath)
 	raw, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	updated := bytes.Replace(raw, []byte("hermes-capability-report.json"), []byte("absent-report.json"), 1)
+	updated := bytes.Replace(raw, []byte("minimum_version: 0.19.1"), []byte("minimum_version: 0.19.0.9"), 1)
 	if err := os.WriteFile(configPath, updated, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	setPlanEnv(t, vault, false)
-	e4t3RegisterRoute(t, configPath)
 	var out, errb bytes.Buffer
 	var code int
 	withStdin(t, `[{"name":"Inbox/new.md","exists":true,"new":true,"size":5,"type":"f"}]`, func() {
@@ -356,20 +358,14 @@ func TestDispatchSinkErrorCodes(t *testing.T) {
 	cases := []struct {
 		name     string
 		bin      func(t *testing.T, dir string) string
-		report   func(t *testing.T, dir string) string
-		required string
 		wantCode string
 		wantExit int
 	}{
 		{
 			name: "version unsupported",
 			bin: func(t *testing.T, dir string) string {
-				return e4t1StubHermes(t, dir, "Hermes Agent v0.21.0 (2026.9.01)")
+				return e4t1StubHermes(t, dir, "Hermes Agent v0.18.5 (2026.6.01)")
 			},
-			report: func(t *testing.T, dir string) string {
-				return "../../docs/integrations/hermes-capability-report.json"
-			},
-			required: "durable_acceptance",
 			wantCode: "hermes_version_unsupported",
 			wantExit: 11,
 		},
@@ -378,22 +374,8 @@ func TestDispatchSinkErrorCodes(t *testing.T) {
 			bin: func(t *testing.T, dir string) string {
 				return filepath.Join(dir, "absent-hermes")
 			},
-			report: func(t *testing.T, dir string) string {
-				return "../../docs/integrations/hermes-capability-report.json"
-			},
-			required: "durable_acceptance",
 			wantCode: "hermes_executable_missing",
 			wantExit: 11,
-		},
-		{
-			name: "capability mismatch",
-			bin: func(t *testing.T, dir string) string {
-				return e4t1StubHermes(t, dir, "Hermes Agent v0.19.1 (2026.7.30)")
-			},
-			report:   limitedReportPath,
-			required: "durable_acceptance, resource_mutex",
-			wantCode: "config_capability_missing",
-			wantExit: 3,
 		},
 	}
 	for _, c := range cases {
@@ -405,8 +387,6 @@ func TestDispatchSinkErrorCodes(t *testing.T) {
 				t.Fatal(err)
 			}
 			updated := string(raw)
-			updated = strings.Replace(updated, "required_capabilities: [durable_acceptance, submit_idempotency_key, lookup_by_external_ref]", "required_capabilities: ["+c.required+"]", 1)
-			updated = strings.Replace(updated, "capability_report: ../../docs/integrations/hermes-capability-report.json", "capability_report: "+c.report(t, dir), 1)
 			lines := strings.Split(updated, "\n")
 			for i, l := range lines {
 				if strings.HasPrefix(l, "    executable: ") {
@@ -431,18 +411,6 @@ func TestDispatchSinkErrorCodes(t *testing.T) {
 			}
 		})
 	}
-}
-
-// limitedReportPath writes a report without resource_mutex for the
-// capability-mismatch case.
-func limitedReportPath(t *testing.T, dir string) string {
-	t.Helper()
-	body := `{"schema_version":"agent-dispatch.hermes-capabilities/v1","probed_at":"2026-08-19T21:25:24+09:00","hermes_version":"0.19.1 (2026.7.30)","interface":"public_cli","capabilities":{"durable_acceptance":true,"submit_idempotency_key":true,"lookup_by_idempotency_key":true,"lookup_by_external_ref":true,"resource_mutex":false,"execution_status":true,"cancellation":true,"result_receipt":true},"limits":{"maximum_request_bytes":null},"evidence":[]}`
-	path := filepath.Join(dir, "limited-report.json")
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return path
 }
 
 // TestSchemaLegalDayUnitDurations verifies the E3-T3 audit remediation:

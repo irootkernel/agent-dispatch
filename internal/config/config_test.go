@@ -27,8 +27,8 @@ func TestParseGoldenExample(t *testing.T) {
 	if cfg.Version != 1 || cfg.Instance.ID != "workstation-main" {
 		t.Errorf("unexpected header fields: %+v", cfg.Instance)
 	}
-	if len(cfg.Resources) != 1 || len(cfg.Targets) != 2 || len(cfg.Routes) != 1 {
-		t.Errorf("unexpected collection sizes: %d/%d/%d", len(cfg.Resources), len(cfg.Targets), len(cfg.Routes))
+	if len(cfg.Resources) != 1 || len(cfg.Targets) != 1 || len(cfg.HermesTargets) != 1 || len(cfg.Routes) != 1 {
+		t.Errorf("unexpected collection sizes: %d/%d/%d/%d", len(cfg.Resources), len(cfg.Targets), len(cfg.HermesTargets), len(cfg.Routes))
 	}
 	if cfg.Routes["wiki-maintenance"].Enabled {
 		t.Error("example route must stay disabled")
@@ -184,7 +184,7 @@ func TestSchemaDrift(t *testing.T) {
 
 func TestWriteExampleRefusesOverwrite(t *testing.T) {
 	dir := t.TempDir()
-	cfg := Example("test-instance", dir, filepath.Join(dir, "caps.json"))
+	cfg := Example("test-instance", dir)
 	path := filepath.Join(dir, "config.yaml")
 	if err := WriteExample(cfg, path); err != nil {
 		t.Fatalf("first write: %v", err)
@@ -238,20 +238,18 @@ resources:
     git:
       mode: disabled
 targets:
-  hermes-kanban-main:
-    type: hermes-kanban
-    board: agent-dispatch
-    executable: hermes
-    capability_report: /etc/agent-dispatch/caps.json
-    required_capabilities:
-      - durable_acceptance
-      - submit_idempotency_key
   hermes-webhook-immediate:
     type: hermes-webhook
     endpoint: https://example.invalid/hook
     auth:
       type: bearer
       secret_ref: env:TEST_TOKEN
+hermes_targets:
+  hermes-kanban-main:
+    board: agent-dispatch
+    minimum_version: 0.19.1
+    compatibility: capability_probe
+    executable: hermes
 routes:
   r1:
     enabled: false
@@ -277,24 +275,27 @@ routes:
       overflow_action: reconcile
       fresh_instance_action: reconcile
       unsafe_path_action: quarantine
-    dispatch:
-      target: hermes-kanban-main
-      profile: wiki-maintainer
-      skills:
-        - llm-wiki
-      mutex_key: wiki-publish
-      latest_state: true
-      submission_retry:
-        max_attempts: 3
-        initial_backoff: 2s
-        max_backoff: 2m
-        multiplier: 2.0
-        jitter_fraction: 0.2
-      execution_hints:
-        max_runtime: 30m
-        max_attempts: 2
-      failure_budget: 2
-      active_stale_after: 2h
+    fanout_mode: all
+    destinations:
+      - id: main
+        target: hermes-kanban-main
+        profile: wiki-maintainer
+        skills:
+          - llm-wiki
+        mutex_key: wiki-publish
+        workstream: main
+        execution_hints:
+          max_runtime: 30m
+          max_attempts: 2
+    submission_retry:
+      max_attempts: 3
+      initial_backoff: 2s
+      max_backoff: 2m
+      multiplier: 2.0
+      jitter_fraction: 0.2
+    latest_state: true
+    failure_budget: 2
+    active_stale_after: 2h
     reconciliation:
       initial: true
       daily_expected: true
@@ -479,16 +480,13 @@ func TestE8T3RevisionCoversResourceAndTargetShape(t *testing.T) {
 			c.Limits.MaxStdinBytes = &v
 		},
 		"board": func(c *Config) {
-			tg := c.Targets["hermes-kanban-main"]
+			tg := c.HermesTargets["hermes-main"]
 			tg.Board = "other-board"
-			c.Targets["hermes-kanban-main"] = tg
+			c.HermesTargets["hermes-main"] = tg
 		},
-		"endpoint": func(c *Config) {
-			tg := c.Targets["hermes-webhook-main"]
-			tg.Endpoint = "https://other.example/hook"
-			c.Targets["hermes-webhook-main"] = tg
+		"destination profile": func(c *Config) {
 			rt := c.Routes["wiki-maintenance"]
-			rt.Dispatch.Target = "hermes-webhook-main"
+			rt.Destinations[0].Profile = "other-maintainer"
 			c.Routes["wiki-maintenance"] = rt
 		},
 	}

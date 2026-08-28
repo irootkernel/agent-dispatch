@@ -42,12 +42,9 @@ resources:
     type: directory
     root: /srv/vault
     file_scope: markdown
-targets:
+hermes_targets:
   kanban:
-    type: hermes-kanban
     executable: hermes
-    capability_report: /etc/caps.json
-    required_capabilities: [durable_acceptance]
 routes:
   r1:
     enabled: false
@@ -65,16 +62,19 @@ routes:
       overflow_action: reconcile
       fresh_instance_action: reconcile
       unsafe_path_action: quarantine
-    dispatch:
-      target: kanban
-      profile: p
-      skills: [s]
-      mutex_key: m
-      latest_state: true
-      submission_retry: {max_attempts: 3, initial_backoff: 2s, max_backoff: 2m, multiplier: 2.0, jitter_fraction: 0.2}
-      execution_hints: {max_runtime: 30m, max_attempts: 2}
-      failure_budget: 2
-      active_stale_after: 2h
+    fanout_mode: all
+    destinations:
+      - id: main
+        target: kanban
+        profile: p
+        skills: [s]
+        mutex_key: m
+        workstream: main
+        execution_hints: {max_runtime: 30m, max_attempts: 2}
+    submission_retry: {max_attempts: 3, initial_backoff: 2s, max_backoff: 2m, multiplier: 2.0, jitter_fraction: 0.2}
+    latest_state: true
+    failure_budget: 2
+    active_stale_after: 2h
     reconciliation: {initial: true, daily_expected: true}
 `
 	if err := os.WriteFile(filepath.Join(root, "examples", "config.yaml"), []byte(minimalConfig), 0o644); err != nil {

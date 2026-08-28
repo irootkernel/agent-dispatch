@@ -911,3 +911,45 @@ func (s *Store) LoadReceipt(ctx context.Context, receiptID string) (ports.Receip
 	detail.BoundedPayload = payload.String
 	return detail, nil
 }
+
+// UnresolvedLegacyWork counts the route's unresolved durable work that a
+// different — pre-cutover or otherwise superseded — route revision
+// created (E11-T1, DAT-013): intents still in an unresolved terminal or
+// waiting state and unresolved quarantine items. Enablement under the
+// destinations contract refuses while any exists so legacy work is never
+// silently submitted under the new contract; the operator resolves it
+// through the documented exits first. The bounded detail names each
+// class and count for the refusal message.
+func (s *Store) UnresolvedLegacyWork(ctx context.Context, routeID, currentRevision string) (int, string, error) {
+	const maxDetail = 8
+	var total int
+	var parts []string
+	count := func(label, query string, args ...any) error {
+		var n int
+		if err := s.QueryRowContext(ctx, query, args...).Scan(&n); err != nil {
+			return err
+		}
+		if n > 0 {
+			total += n
+			if len(parts) < maxDetail {
+				parts = append(parts, fmt.Sprintf("%d %s", n, label))
+			}
+		}
+		return nil
+	}
+	if err := count("unresolved intents (unknown, retry-wait, reconciling, or dead-lettered)",
+		`SELECT COUNT(*) FROM dispatch_intents
+		WHERE route_id = ? AND route_revision != ? AND state IN ('unknown','retry_wait','reconciling','dead_lettered')`,
+		routeID, currentRevision); err != nil {
+		return 0, "", err
+	}
+	if err := count("unresolved quarantine items",
+		`SELECT COUNT(*) FROM quarantine_items qi
+		JOIN policy_decisions pd ON pd.decision_id = qi.decision_id
+		WHERE pd.route_id = ? AND qi.route_revision != ? AND qi.resolved_at IS NULL`,
+		routeID, currentRevision); err != nil {
+		return 0, "", err
+	}
+	sort.Strings(parts)
+	return total, strings.Join(parts, ", "), nil
+}

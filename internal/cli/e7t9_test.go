@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -118,35 +117,28 @@ func TestDisabledReconcileRefusalClassified(t *testing.T) {
 	}
 }
 
-// TestRouteEnableValidatesCapabilities proves M-22: enabling a route
-// whose readable local report lacks a required capability refuses with
-// config_capability_missing.
-func TestRouteEnableValidatesCapabilities(t *testing.T) {
+// TestRouteEnableValidatesEligibility proves M-22's posture under the
+// E11-T1 contract: enabling a route whose installed Hermes sits below
+// the declared eligibility floor refuses with config_invalid (the
+// per-capability refusal returns with the E11-T2 probe).
+func TestRouteEnableValidatesEligibility(t *testing.T) {
 	configPath, vault := e4t3Fixture(t)
 	setPlanEnv(t, vault, false)
 	e4t3RegisterRoute(t, configPath)
-	// Point at a local copy of the report with one capability false,
-	// then require it: the enablement gate must refuse.
-	fake := filepath.Join(filepath.Dir(configPath), "caps.json")
-	report := map[string]any{}
-	raw, err := os.ReadFile("../../docs/integrations/hermes-capability-report.json")
-	if err != nil {
+	// Point at a stub reporting a below-floor version: the enablement
+	// gate must refuse.
+	cfgDir := filepath.Dir(configPath)
+	bin := filepath.Join(cfgDir, "hermes-below-floor")
+	script := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf 'Hermes Agent v0.18.9 (2026.6.9)\\n'; exit 0; fi\nexit 3\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := json.Unmarshal(raw, &report); err != nil {
-		t.Fatal(err)
-	}
-	report["capabilities"].(map[string]any)["durable_acceptance"] = false
-	encoded, _ := json.Marshal(report)
-	if err := os.WriteFile(fake, encoded, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	e5t4Rewrite(t, configPath, "capability_report: ../../docs/integrations/hermes-capability-report.json", "capability_report: "+fake)
+	e5t4Rewrite(t, configPath, "executable: "+stubExeOf(t, configPath), "executable: "+bin)
 	rev, _ := routeRevisionOf(t, configPath)
 	var out, errb bytes.Buffer
 	code := Run([]string{"route", "enable", "--config", configPath, "--route", "wiki", "--acknowledge-production-gate", rev, "--yes"}, &out, &errb)
-	if code != 3 || !strings.Contains(errb.String(), "config_capability_missing") {
-		t.Fatalf("the enablement gate must refuse the missing capability, got %d: %s", code, errb.String())
+	if code != 3 || !strings.Contains(errb.String(), "config_invalid") {
+		t.Fatalf("the enablement gate must refuse the below-floor target, got %d: %s", code, errb.String())
 	}
 }
 

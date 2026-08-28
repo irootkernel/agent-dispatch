@@ -119,15 +119,10 @@ func runDispatchesRefresh(command string, args []string, stdout, stderr io.Write
 	if routeID := flags.val("--route"); routeID != "" && routeID != intent.RouteID {
 		return usageError(stderr, command, fmt.Sprintf("dispatch %s belongs to route %q, not %q", dispatchID, intent.RouteID, routeID))
 	}
-	route, ok := cfg.Routes[intent.RouteID]
-	if !ok {
+	if _, ok := cfg.Routes[intent.RouteID]; !ok {
 		return planErr(stderr, command, "config_route_not_found", "configuration", fmt.Sprintf("route %q is not defined", intent.RouteID), 3)
 	}
-	target, ok := cfg.Targets[route.Dispatch.Target]
-	if !ok {
-		return planErr(stderr, command, "config_invalid", "configuration", fmt.Sprintf("target %q is not defined", route.Dispatch.Target), 3)
-	}
-	sink, err := resolveSink(cfg, target, route, opsLogger(stderr, cfg))
+	sink, err := resolveSink(cfg, intent.RouteID, opsLogger(stderr, cfg))
 	if err != nil {
 		return writeSinkError(stderr, command, err)
 	}
@@ -178,12 +173,8 @@ func runDispatchesRefresh(command string, args []string, stdout, stderr io.Write
 // targetBoard resolves the configured durable target scope for one
 // route: the kanban board slug or the webhook endpoint.
 func targetBoard(cfg *config.Config, routeID string) string {
-	route, ok := cfg.Routes[routeID]
-	if !ok {
-		return ""
-	}
-	if target, ok := cfg.Targets[route.Dispatch.Target]; ok {
-		return targetScope(target)
+	if _, resolved, err := resolveRouteTarget(cfg, routeID); err == nil {
+		return resolvedTargetScope(resolved)
 	}
 	return ""
 }

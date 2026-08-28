@@ -20,37 +20,38 @@ func CaseMode() string {
 }
 
 // RouteRevision computes the deterministic behavior-affecting revision of
-// one route (configuration-spec §13, POL-007). The canonical projection
-// covers the source binding, resource ID, normalized patterns, batch
-// limits, policy actions, target ID, profile, skills, mutex, latest-state
-// flag, submission retry, execution hints, failure budget, the
-// active-stale bound, the referenced target's capability requirements,
-// the referenced resource's root/file scope/git mode, the global limits
-// block, the target's type/board/endpoint (E8-T3), the transport bounds
-// (executable, submit timeout, environment allowlist, manifest byte
-// bound; E9-T3), and the delivery-evidence surface (authentication type,
-// secret reference, auth header name, idempotency header, lookup
-// timeout, capability-report path; E9-T6): changing how a dispatch
-// authenticates or deduplicates must pause an acknowledged route like
-// any other behavior change. The route's reconciliation block joins the
-// projection (its flags change which arrivals produce work), while the
-// retention block stays out by explicit disposition: it bounds record
-// pruning (OPS-003) and never changes what a dispatch submits or how a
-// plan is classified. The projection excludes comments, display order,
-// the state directory, log level, and secret values — a secret
+// one route (configuration-spec §13, POL-007, FAN-012). Since the v0.1.5
+// cutover the canonical projection covers the source binding, resource
+// ID, normalized patterns, batch limits, policy actions, the fan-out
+// mode, the sorted destination set with each destination revision
+// (E11-T1), the declared notification policy and sink references, the
+// route-level runtime envelope (submission retry, latest-state flag,
+// failure budget, active-stale bound), the referenced resource's shape,
+// the global limits block, and every referenced target's shape and
+// transport bounds (E8-T3, E9-T3, E9-T6): repointing a vault, moving a
+// board or endpoint, swapping the target binary, changing its execution
+// bounds, or changing how compatibility is proven must pause an
+// acknowledged route. The route's reconciliation block joins the
+// projection, while the retention block stays out by explicit
+// disposition (OPS-003). The projection excludes comments, display
+// order, the state directory, log level, and secret values — a secret
 // REFERENCE is behavior-affecting and joins; the resolved secret never
-// does. Map iteration order is neutralized by sorting, so the same
-// behavior yields the same revision on every run and platform.
+// does. Destination map order is non-semantic: destinations and their
+// lists are sorted (FAN-012), so the same behavior yields the same
+// revision on every run and platform.
 func RouteRevision(cfg *Config, routeID string) (string, bool) {
 	route, ok := cfg.Routes[routeID]
 	if !ok {
 		return "", false
 	}
-	target := cfg.Targets[route.Dispatch.Target]
 	resource := cfg.Resources[route.Source.Resource]
 	gitMode := ""
 	if resource.Git != nil {
 		gitMode = resource.Git.Mode
+	}
+	destinations := make([]map[string]any, 0, len(route.Destinations))
+	for _, dest := range route.SortedDestinations() {
+		destinations = append(destinations, destinationProjection(cfg, dest))
 	}
 	projection := map[string]any{
 		"source": map[string]any{
@@ -75,58 +76,28 @@ func RouteRevision(cfg *Config, routeID string) (string, bool) {
 			"fresh_instance_action": route.Policy.FreshInstanceAction,
 			"unsafe_path_action":    route.Policy.UnsafePathAction,
 		},
-		"dispatch": map[string]any{
-			"target":             route.Dispatch.Target,
-			"profile":            route.Dispatch.Profile,
-			"skills":             sortedCopy(route.Dispatch.Skills),
-			"mutex_key":          route.Dispatch.MutexKey,
-			"latest_state":       route.Dispatch.LatestState,
-			"submission_retry":   route.Dispatch.SubmissionRetry,
-			"execution_hints":    route.Dispatch.ExecutionHints,
-			"failure_budget":     route.Dispatch.FailureBudget,
-			"active_stale_after": route.Dispatch.ActiveStaleAfter,
+		"fanout_mode":   route.FanoutMode,
+		"destinations":  destinations,
+		"notifications": notificationsProjection(route.Notifications),
+		"runtime": map[string]any{
+			"submission_retry":   route.SubmissionRetry,
+			"latest_state":       route.LatestState,
+			"failure_budget":     route.FailureBudget,
+			"active_stale_after": route.ActiveStaleAfter,
 		},
-		"required_capabilities": sortedCopy(target.RequiredCapabilities),
-		// The referenced resource's shape and the target's binding are
-		// behavior-affecting (E8-T3, H-2/POL-007): repointing the vault
-		// root, switching the file scope or git mode, changing the global
-		// limits, or moving the board/endpoint must change the revision —
-		// and with it the idempotency key — so distinct vaults can never
-		// collide and a behavior change pauses the acknowledged route.
+		// The referenced resource's shape is behavior-affecting (E8-T3,
+		// H-2/POL-007): repointing the vault root, switching the file scope
+		// or git mode, or changing the global limits must change the
+		// revision — and with it the idempotency key — so distinct vaults
+		// can never collide and a behavior change pauses the acknowledged
+		// route.
 		"resource": map[string]any{
 			"root":       resource.Root,
 			"file_scope": resource.FileScope,
 			"git_mode":   gitMode,
 		},
-		"limits":       cfg.Limits,
-		"target_shape": map[string]any{"type": target.Type, "board": target.Board, "endpoint": target.Endpoint},
-		// Transport fields (E9-T3/T3-F006): swapping the target binary,
-		// its execution bounds, or its manifest byte bound is
-		// behavior-affecting — a route acknowledged under the old
-		// transport pauses until re-acknowledged.
-		"transport": map[string]any{
-			"executable":            target.Executable,
-			"submit_timeout":        target.SubmitTimeout,
-			"environment_allowlist": sortedCopy(target.EnvironmentAllowlist),
-			"max_manifest_bytes":    route.Batching.MaxManifestBytes,
-			// Delivery-evidence surface (E9-T6, D-023 F1): the lookup
-			// bound and the capability-evidence path gate the enable
-			// and reconciliation surfaces, so moving either must pause
-			// the acknowledged route.
-			"lookup_timeout":     target.LookupTimeout,
-			"capability_report":  target.CapabilityReport,
-			"idempotency_header": target.IdempotencyHeader,
-			// The authentication shape decides which header carries the
-			// secret and the deduplication key on the wire. The secret
-			// REFERENCE joins (repointing it changes the credential in
-			// use); the resolved secret value never does (SEC-006).
-			"auth": authProjection(target.Auth),
-		},
-		// The reconciliation flags change which arrivals produce work
-		// (the initial sweep and the daily-expected window), so they are
-		// behavior-affecting (E9-T6). The retention block stays out by
-		// the documented disposition: pruning bounds never change
-		// submission behavior.
+		"limits":         cfg.Limits,
+		"targets":        routeTargetsProjection(cfg, route),
 		"reconciliation": route.Reconciliation,
 	}
 	// Batching and the retry structs marshal through fixed field order in
@@ -137,6 +108,154 @@ func RouteRevision(cfg *Config, routeID string) (string, bool) {
 	}
 	sum := sha256.Sum256(enc)
 	return hex.EncodeToString(sum[:]), true
+}
+
+// destinationProjection renders one destination's behavior-affecting
+// shape: its target binding, profile, sorted skills, workstream,
+// workspace, mutex, execution hints, and sorted selection conditions
+// (§14: destination revision includes target, profile, skills,
+// workstream, workspace, mutex, hints, and conditions).
+func destinationProjection(cfg *Config, dest Destination) map[string]any {
+	out := map[string]any{
+		"id":              dest.ID,
+		"target":          dest.Target,
+		"profile":         dest.Profile,
+		"skills":          sortedCopy(dest.Skills),
+		"workstream":      dest.Workstream,
+		"workspace":       dest.Workspace,
+		"mutex_key":       dest.MutexKey,
+		"execution_hints": dest.ExecutionHints,
+	}
+	if dest.Conditions != nil {
+		out["conditions"] = map[string]any{
+			"path_include":    sortedCopy(dest.Conditions.PathInclude),
+			"path_exclude":    sortedCopy(dest.Conditions.PathExclude),
+			"operations":      sortedCopy(dest.Conditions.Operations),
+			"classifications": sortedCopy(dest.Conditions.Classifications),
+			"policy_outcomes": sortedCopy(dest.Conditions.PolicyOutcomes),
+		}
+	} else {
+		out["conditions"] = nil
+	}
+	return out
+}
+
+// routeTargetsProjection renders the shape and transport bounds of every
+// distinct target the route's destinations reference, keyed by target ID
+// and sorted for determinism. Hermes transport fields carry the
+// executable, execution bounds, and the probed-compatibility contract
+// (minimum_version, compatibility) that replaced the operator-authored
+// capability report (E11-T1); webhook transport carries the delivery
+// evidence surface (endpoint, authentication reference shape,
+// idempotency header).
+func routeTargetsProjection(cfg *Config, route Route) map[string]any {
+	ids := make([]string, 0, len(route.Destinations))
+	for _, dest := range route.Destinations {
+		ids = append(ids, dest.Target)
+	}
+	sort.Strings(ids)
+	out := make(map[string]any, len(ids))
+	last := ""
+	for _, id := range ids {
+		if id == last {
+			continue
+		}
+		last = id
+		resolved, ok := cfg.ResolveTarget(id)
+		if !ok {
+			out[id] = map[string]any{"type": "unknown"}
+			continue
+		}
+		if resolved.Hermes != nil {
+			t := resolved.Hermes
+			minimum := t.MinimumVersion
+			if minimum == "" {
+				minimum = MinimumEligibleHermesVersion
+			}
+			out[id] = map[string]any{
+				"type": "hermes-kanban",
+				// The board binding is behavior-affecting (E8-T3): moving a
+				// board changes the idempotency key.
+				"board": t.Board,
+				"transport": map[string]any{
+					"executable":            t.Executable,
+					"submit_timeout":        t.SubmitTimeout,
+					"environment_allowlist": sortedCopy(t.EnvironmentAllowlist),
+					"lookup_timeout":        t.LookupTimeout,
+					// How compatibility is proven gates enablement and
+					// submission (E9-T6 posture under the E11-T1 contract).
+					"minimum_version": minimum,
+					"compatibility":   t.Compatibility,
+				},
+			}
+			continue
+		}
+		t := resolved.Webhook
+		out[id] = map[string]any{
+			"type": t.Type,
+			"transport": map[string]any{
+				// The digest commits to the FULL endpoint through a
+				// one-way commitment, never the redacted display form: a
+				// query-string change (where webhook tokens ride) is
+				// behavior-affecting and must pause the acknowledged
+				// route, while the masked value stays for printed output
+				// only.
+				"endpoint_commitment":   endpointCommitment(t.Endpoint),
+				"submit_timeout":        t.SubmitTimeout,
+				"idempotency_header":    t.IdempotencyHeader,
+				"required_capabilities": sortedCopy(t.RequiredCapabilities),
+				"auth":                  authProjection(t.Auth),
+			},
+		}
+	}
+	return out
+}
+
+// endpointCommitment renders a non-reversible digest of the full
+// endpoint URL for the revision projection: the same bytes always
+// commit identically and the raw value never joins a printed surface.
+func endpointCommitment(endpoint string) string {
+	sum := sha256.Sum256([]byte("agent-dispatch:endpoint:v1:" + endpoint))
+	return hex.EncodeToString(sum[:])
+}
+
+// notificationsProjection renders the declared notification policy and
+// sink references (§14): the sorted event list and each sink's id, type,
+// endpoint, and authentication REFERENCE (never the resolved secret).
+// An absent block and an explicitly empty one hash identically.
+func notificationsProjection(n *Notifications) map[string]any {
+	shape := map[string]any{"events": []string{}, "sinks": []map[string]any{}}
+	if n == nil {
+		return shape
+	}
+	shape["events"] = sortedCopy(n.Events)
+	sinks := make([]map[string]any, 0, len(n.Sinks))
+	sorted := append([]NotificationSink(nil), n.Sinks...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].ID < sorted[j].ID })
+	for _, sink := range sorted {
+		sinks = append(sinks, map[string]any{
+			"id":                  sink.ID,
+			"type":                sink.Type,
+			"endpoint_commitment": endpointCommitment(sink.Endpoint),
+			"auth":                authProjection(sink.Auth),
+		})
+	}
+	shape["sinks"] = sinks
+	return shape
+}
+
+// DestinationRevision computes the deterministic revision of one
+// destination as the route projection sees it (§14): the same projection
+// the route revision digests for this destination, hashed alone, so a
+// destination-qualified edit can report its own revision and pause state
+// (used by the E11-T3 mutation commands).
+func DestinationRevision(cfg *Config, route Route, dest Destination) string {
+	enc, err := json.Marshal(destinationProjection(cfg, dest))
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(enc)
+	return "dst-" + hex.EncodeToString(sum[:])
 }
 
 func sortedCopy(in []string) []string {
@@ -173,7 +292,7 @@ func authProjection(auth *Auth) map[string]any {
 // which route declaration — produced a disposition: two revisions of a
 // route with identical policy share a policy revision, and one policy
 // edit inside an unchanged route revision still moves it. Transport,
-// target, and dispatch-envelope fields cannot change a decision and
+// target, and destination-envelope fields cannot change a decision and
 // stay out; inert keys (unsafe_path_action) join only when they become
 // behavior-affecting.
 func PolicyRevision(route Route) string {

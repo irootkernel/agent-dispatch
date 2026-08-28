@@ -188,7 +188,7 @@ func TestG5AC504CleanHostInstallDispatchScheduleUninstall(t *testing.T) {
 	// testsupport/hermesenv with the adapter owning the version judgment.
 	hermesenv.SkipUnlessSupportedHermes(t, func(firstLine string) bool {
 		ver, perr := hermeskanban.ParseVersionOutput(firstLine)
-		return perr == nil && ver.Supported()
+		return perr == nil && ver.Eligible(hermeskanban.MinimumEligibleVersion)
 	})
 	home := t.TempDir()
 	t.Setenv("HOME", home)

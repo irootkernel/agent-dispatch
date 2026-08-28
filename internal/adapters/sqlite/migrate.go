@@ -41,6 +41,7 @@ var Migrations = []Migration{
 	{Version: 7, Name: "record-revision-columns", SQL: schemaV7RecordRevisionColumns},
 	{Version: 8, Name: "resource-observation-revision", SQL: schemaV8ResourceObservationRevision},
 	{Version: 9, Name: "watch-bindings", SQL: schemaV9WatchBindings},
+	{Version: 10, Name: "destinations-contract-cutover", SQL: schemaV10DestinationsContractCutover},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
@@ -514,4 +515,25 @@ CREATE TABLE watch_bindings (
 	trigger_name    TEXT NOT NULL,
 	updated_at      TEXT NOT NULL
 );
+`
+
+// schemaV10DestinationsContractCutover records the v0.1.5 configuration
+// cutover boundary (E11-T1, D-025): the forward migration for the
+// destinations[] contract. No historic row is rewritten — every task,
+// attempt, receipt, and work-receipt created under the legacy
+// single-dispatch contract remains exactly as queryable as before
+// (DAT-012) — but the durable marker records that this database passed
+// through the cutover, and route enablement under the new contract
+// refuses while unresolved work created under a different (pre-cutover)
+// route revision remains (DAT-013, UnresolvedLegacyWork). The per-run
+// pre-migration backup (OPS-015) plus the documented rollback procedure
+// (keep the upgraded database aside, restore the verified backup with
+// the previous binary and configuration) cover the reverse direction;
+// no down migration exists.
+const schemaV10DestinationsContractCutover = `
+CREATE TABLE contract_state (
+	contract   TEXT PRIMARY KEY,
+	applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+INSERT INTO contract_state (contract) VALUES ('destinations-v1');
 `

@@ -140,15 +140,38 @@ func openOperatorStore(command string, configPath string, stderr io.Writer) (sto
 	return s, s, 0
 }
 
-// targetScope returns the durable target scope an intent records: the
-// kanban board slug for hermes-kanban targets and the endpoint URL for
-// hermes-webhook targets — in both cases the identity of the interface
-// that accepted the task, re-verified at reconciliation (migration v3).
-func targetScope(target config.Target) string {
-	if target.Type == "hermes-webhook" {
-		return target.Endpoint
+// resolveRouteTarget resolves the target of a route's certified
+// destination (E11-T1): the pre-E12 pipeline executes exactly one
+// destination per route, so more than one is the fail-closed E12 bound
+// and an unresolvable target is a configuration defect.
+func resolveRouteTarget(cfg *config.Config, routeID string) (config.Destination, config.ResolvedTarget, error) {
+	route, ok := cfg.Routes[routeID]
+	if !ok {
+		return config.Destination{}, config.ResolvedTarget{}, fmt.Errorf("route %q is not defined", routeID)
 	}
-	return target.Board
+	dest, err := route.CertifiedDestination(routeID)
+	if err != nil {
+		return config.Destination{}, config.ResolvedTarget{}, err
+	}
+	resolved, ok := cfg.ResolveTarget(dest.Target)
+	if !ok {
+		return config.Destination{}, config.ResolvedTarget{}, fmt.Errorf("route %q destination %q references unknown target %q (declare it under hermes_targets or targets)", routeID, dest.ID, dest.Target)
+	}
+	return dest, resolved, nil
+}
+
+// resolvedTargetScope returns the durable target scope an intent
+// records: the kanban board slug for hermes targets and the endpoint URL
+// for webhook targets — in both cases the identity of the interface
+// that accepted the task, re-verified at reconciliation (migration v3).
+func resolvedTargetScope(resolved config.ResolvedTarget) string {
+	if resolved.Webhook != nil {
+		return resolved.Webhook.Endpoint
+	}
+	if resolved.Hermes != nil {
+		return resolved.Hermes.Board
+	}
+	return ""
 }
 
 // webhookSinkOptions maps one hermes-webhook target onto the adapter
@@ -195,13 +218,25 @@ var webhookClientFactory = func(timeout time.Duration) hermeswebhook.HTTPClient 
 // site (E8-T2/M-1; the shared constructor is the E9-T4 pin for the
 // T2-F003/F004 wiring — a site cannot drift from the derivation
 // without leaving it).
-func newSubmitRuntime(store storeOp, sink ports.Sink, cfg *config.Config, target config.Target, backoff dispatch.Backoff, actor string, stderr io.Writer) *dispatch.Runtime {
+func newSubmitRuntime(store storeOp, sink ports.Sink, cfg *config.Config, submitTimeout string, backoff dispatch.Backoff, actor string, stderr io.Writer) *dispatch.Runtime {
 	return &dispatch.Runtime{
 		Store: store, Sink: sink, Now: time.Now,
-		LeaseTTL: leaseTTLFor(target.SubmitTimeout), Backoff: backoff, JitterUnit: jitterUnit, Actor: actor,
+		LeaseTTL: leaseTTLFor(submitTimeout), Backoff: backoff, JitterUnit: jitterUnit, Actor: actor,
 		Log: opsLogger(stderr, cfg), TraceID: globalTraceID,
 		StalenessCheck: stalenessCheckOf(cfg), StaleRebuilder: staleRebuilderOf(store, cfg),
 	}
+}
+
+// submitTimeoutOf resolves the effective submit timeout of one resolved
+// target across the two target maps.
+func submitTimeoutOf(resolved config.ResolvedTarget) string {
+	if resolved.Hermes != nil {
+		return resolved.Hermes.SubmitTimeout
+	}
+	if resolved.Webhook != nil {
+		return resolved.Webhook.SubmitTimeout
+	}
+	return ""
 }
 
 // resolveSink looks up and gates the sink adapter for one route target
@@ -215,27 +250,31 @@ func newSubmitRuntime(store storeOp, sink ports.Sink, cfg *config.Config, target
 // the command's trace id) is attached so submission-time render
 // decisions such as mutex suppression are operator-visible (E9-T3,
 // T3-F007).
-func resolveSink(cfg *config.Config, target config.Target, route config.Route, log *observability.Logger) (ports.Sink, error) {
-	switch target.Type {
-	case "hermes-kanban":
-		limits, err := hermesProcessLimits(cfg, target)
+func resolveSink(cfg *config.Config, routeID string, log *observability.Logger) (ports.Sink, error) {
+	dest, resolved, rerr := resolveRouteTarget(cfg, routeID)
+	if rerr != nil {
+		return nil, rerr
+	}
+	if resolved.Hermes != nil {
+		t := resolved.Hermes
+		limits, err := hermesTargetProcessLimits(cfg, *t)
 		if err != nil {
-			return nil, fmt.Errorf("target %s: %w", route.Dispatch.Target, err)
+			return nil, fmt.Errorf("hermes_targets.%s: %w", dest.Target, err)
 		}
-		sink, err := hermeskanban.NewSink(route.Dispatch.Target, target.Executable, target.CapabilityReport,
-			target.RequiredCapabilities, target.Board, limits, int64(route.Batching.MaxManifestBytes))
+		sink, err := hermeskanban.NewSink(dest.Target, t.Executable, t.MinimumVersion, t.Board, limits, int64(cfg.Routes[routeID].Batching.MaxManifestBytes))
 		if err != nil {
 			return nil, err
 		}
 		sink.Log, sink.TraceID = log, globalTraceID
 		if _, err := sink.Probe(context.Background()); err != nil {
-			return nil, fmt.Errorf("target %s: %w", route.Dispatch.Target, err)
+			return nil, fmt.Errorf("target %s: %w", dest.Target, err)
 		}
 		return sink, nil
-	case "hermes-webhook":
-		opts, err := webhookSinkOptions(route.Dispatch.Target, target)
+	}
+	if resolved.Webhook != nil {
+		opts, err := webhookSinkOptions(dest.Target, *resolved.Webhook)
 		if err != nil {
-			return nil, fmt.Errorf("target %s: %w", route.Dispatch.Target, err)
+			return nil, fmt.Errorf("target %s: %w", dest.Target, err)
 		}
 		timeout := opts.SubmitTimeout
 		if timeout == 0 {
@@ -247,12 +286,11 @@ func resolveSink(cfg *config.Config, target config.Target, route config.Route, l
 			return nil, err
 		}
 		if _, err := sink.Probe(context.Background()); err != nil {
-			return nil, fmt.Errorf("target %s: %w", route.Dispatch.Target, err)
+			return nil, fmt.Errorf("target %s: %w", dest.Target, err)
 		}
 		return sink, nil
-	default:
-		return nil, fmt.Errorf("unknown target type %q: no sink adapter exists and no fallback is permitted (DUR-008)", target.Type)
 	}
+	return nil, fmt.Errorf("unknown target %q: no sink adapter exists and no fallback is permitted (DUR-008)", dest.Target)
 }
 
 // backoffFromConfig maps the route's configured submission retry policy
@@ -309,11 +347,9 @@ const sinkUnavailableExit = 11
 func writeSinkError(stderr io.Writer, command string, err error) int {
 	var version *hermeskanban.VersionUnsupportedError
 	var executable *hermeskanban.ExecutableMissingError
-	var capability *hermeskanban.CapabilityError
-	var report *hermeskanban.ReportError
-	var requirement *hermeskanban.InvalidRequirementError
 	var webhookCapability *hermeswebhook.CapabilityError
 	var webhookConfig *hermeswebhook.ConfigError
+	var multi *config.ErrMultiDestination
 	switch {
 	case errors.As(err, &version):
 		writeError(stderr, command, "hermes_version_unsupported", "target_unavailable", version.Error()+"; "+version.Remediation())
@@ -327,11 +363,8 @@ func writeSinkError(stderr io.Writer, command string, err error) int {
 	case errors.As(err, &webhookConfig):
 		writeError(stderr, command, "config_invalid", "configuration", webhookConfig.Error())
 		return 3
-	case errors.As(err, &capability):
-		writeError(stderr, command, "config_capability_missing", "configuration", capability.Error()+"; "+capability.Remediation())
-		return 3
-	case errors.As(err, &report), errors.As(err, &requirement):
-		writeError(stderr, command, "config_invalid", "configuration", err.Error())
+	case errors.As(err, &multi):
+		writeError(stderr, command, "config_invalid", "configuration", multi.Error())
 		return 3
 	default:
 		writeError(stderr, command, "target_definite_unavailable", "target_unavailable", err.Error())
@@ -370,7 +403,11 @@ func registerRouteState(ctx context.Context, store *sqlite.Store, cfg *config.Co
 	if err := store.RegisterResource(nil, route.Source.Resource, revision, resource.Root, canonical, resource.FileScope, gitMode); err != nil {
 		return err
 	}
-	if err := store.RegisterRoute(nil, routeID, revision, revision, route.Source.Resource, route.Dispatch.Target, "{}", now); err != nil {
+	dest, err := route.CertifiedDestination(routeID)
+	if err != nil {
+		return err
+	}
+	if err := store.RegisterRoute(nil, routeID, revision, revision, route.Source.Resource, dest.Target, "{}", now); err != nil {
 		return err
 	}
 	var exists int

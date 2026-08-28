@@ -43,13 +43,12 @@ resources:
     type: directory
     root: ` + vault + `
     file_scope: markdown
-targets:
+hermes_targets:
   hermes-main:
-    type: hermes-kanban
     board: agent-dispatch
+    minimum_version: 0.19.1
+    compatibility: capability_probe
     executable: ` + filepath.Join(ancestor, "hermes-stub") + `
-    capability_report: "` + filepath.Join(ancestor, "cap.json") + `"
-    required_capabilities: [durable_acceptance, submit_idempotency_key]
 routes:
   wiki:
     enabled: true
@@ -71,23 +70,26 @@ routes:
       overflow_action: reconcile
       fresh_instance_action: reconcile
       unsafe_path_action: quarantine
-    dispatch:
-      target: hermes-main
-      profile: wiki-maintainer
-      skills: [llm-wiki]
-      mutex_key: wiki-e10t2
-      latest_state: true
-      submission_retry:
-        max_attempts: 3
-        initial_backoff: 1s
-        max_backoff: 2s
-        multiplier: 2.0
-        jitter_fraction: 0.0
-      execution_hints:
-        max_runtime: 30m
-        max_attempts: 2
-      failure_budget: 2
-      active_stale_after: 2h
+    fanout_mode: all
+    destinations:
+      - id: main
+        target: hermes-main
+        profile: wiki-maintainer
+        skills: [llm-wiki]
+        mutex_key: wiki-e10t2
+        workstream: main
+        execution_hints:
+          max_runtime: 30m
+          max_attempts: 2
+    submission_retry:
+      max_attempts: 3
+      initial_backoff: 1s
+      max_backoff: 2s
+      multiplier: 2.0
+      jitter_fraction: 0.0
+    latest_state: true
+    failure_budget: 2
+    active_stale_after: 2h
     reconciliation:
       initial: true
       daily_expected: true

@@ -53,24 +53,24 @@ func TestParseVersionFixture(t *testing.T) {
 	}
 }
 
-func TestVersionGate(t *testing.T) {
-	supported := []Version{
+func TestVersionEligibilityGate(t *testing.T) {
+	eligible := []Version{
 		{0, 19, 1, "2026.7.30"},
 		{0, 19, 1, "some-other-build"},
-	}
-	for _, v := range supported {
-		if err := CheckVersionSupported(v); err != nil {
-			t.Fatalf("0.19.1 must be supported (build date is evidence, not the gate): %v", err)
-		}
-	}
-	unsupported := []Version{
-		{0, 19, 0, "2026.7.01"},
-		{0, 18, 9, "old"},
 		{0, 20, 0, "2026.8.10"},
 		{1, 0, 0, "future"},
 	}
-	for _, v := range unsupported {
-		err := CheckVersionSupported(v)
+	for _, v := range eligible {
+		if err := CheckVersionEligible(v, MinimumEligibleVersion); err != nil {
+			t.Fatalf("version %s at or above the floor must be eligible with no maximum (HER-011): %v", v, err)
+		}
+	}
+	belowFloor := []Version{
+		{0, 19, 0, "2026.7.01"},
+		{0, 18, 9, "old"},
+	}
+	for _, v := range belowFloor {
+		err := CheckVersionEligible(v, MinimumEligibleVersion)
 		var gate *VersionUnsupportedError
 		if err == nil {
 			t.Fatalf("version %s must fail the gate", v)
@@ -78,5 +78,9 @@ func TestVersionGate(t *testing.T) {
 		if !errors.As(err, &gate) || gate.Remediation() == "" {
 			t.Fatalf("gate error must be VersionUnsupportedError with remediation: %v", err)
 		}
+	}
+	// A declared higher floor tightens the same comparison.
+	if err := CheckVersionEligible(Version{0, 19, 5, "x"}, Version{0, 19, 9, "y"}); err == nil {
+		t.Fatal("0.19.5 below a declared 0.19.9 floor must fail")
 	}
 }

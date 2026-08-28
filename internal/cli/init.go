@@ -96,7 +96,7 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 	if w := config.StateDirInsideRootWarning(stateDir, resourceRoot); w != "" {
 		warnings = append(warnings, w)
 	}
-	cfg := config.Example(instanceID, resourceRoot, platformpaths.DefaultCapabilityReportPath())
+	cfg := config.Example(instanceID, resourceRoot)
 	// An explicitly chosen state directory persists into the written
 	// configuration so later invocations honor it (E7-T9/M-29: recording
 	// an empty state_dir silently redirected subsequent commands to the

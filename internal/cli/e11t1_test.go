@@ -72,11 +72,14 @@ func TestE11T1EnableBlockedByUnresolvedLegacyWork(t *testing.T) {
 	}
 }
 
-// TestE11T1MultiDestinationRouteFailsClosed proves the pre-E12 bound at
-// the operator surface: a valid two-destination route parses, but
-// dispatching it fails closed naming the E12 lanes, and enabling names
-// the same bound.
-func TestE11T1MultiDestinationRouteFailsClosed(t *testing.T) {
+// TestE11T1MultiDestinationRouteExecutesLanes pins the E12-T2 lift of the
+// pre-E12 bound: a valid two-destination route parsing under the same
+// shared target now ENABLES (FAN-011) and DISPATCHES — the per-destination
+// lane coordination and fan-out of E12-T2 replaced the fail-closed
+// single-destination bound this test used to pin. The full AC-802
+// fan-out shape (two children under one aggregate with distinct keys) is
+// pinned by the E12-T2 CLI suite.
+func TestE11T1MultiDestinationRouteExecutesLanes(t *testing.T) {
 	configPath, vault := e4t3Fixture(t)
 	setPlanEnv(t, vault, false)
 	raw, err := os.ReadFile(configPath)
@@ -105,17 +108,17 @@ func TestE11T1MultiDestinationRouteFailsClosed(t *testing.T) {
 
 	var out, errb bytes.Buffer
 	code := Run([]string{"route", "enable", "--config", configPath, "--route", "wiki", "--acknowledge-production-gate", rev, "--yes"}, &out, &errb)
-	if code != 3 || !strings.Contains(errb.String(), "E12") {
-		t.Fatalf("enable must refuse the multi-destination route with the E12 bound, got %d: %s", code, errb.String())
+	if code != 0 {
+		t.Fatalf("enable must accept the multi-destination route under its shared target (E12-T2), got %d: %s", code, errb.String())
 	}
 
 	out.Reset()
 	errb.Reset()
 	withStdin(t, `[{"name":"Inbox/new.md","exists":true,"new":true,"size":5,"type":"f"}]`, func() {
-		code = Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman"}, &out, &errb)
+		code = Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman", "--no-submit"}, &out, &errb)
 	})
-	if code != 3 || !strings.Contains(errb.String(), "E12") {
-		t.Fatalf("dispatch must refuse the multi-destination route with the E12 bound, got %d: %s", code, errb.String())
+	if code != 0 {
+		t.Fatalf("dispatch must fan the multi-destination route out (E12-T2), got %d: %s", code, errb.String())
 	}
 }
 

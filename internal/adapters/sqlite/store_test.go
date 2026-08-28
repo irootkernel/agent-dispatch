@@ -1010,6 +1010,7 @@ func TestCompleteActiveRefusesUnpreparedFollowup(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	seedLegacyLane(t, s, "ACTIVE_CLEAN", "dispatch-1", 0)
 	// A reconciliation arrival or quarantine release flips pending_reconcile
 	// without moving the fenced dirty generation: the caller that read the
 	// earlier snapshot decided no follow-up was needed. The completion must
@@ -1054,6 +1055,7 @@ func TestCompleteActiveFollowupBudgetExhausted(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	seedLegacyLane(t, s, "ACTIVE_DIRTY", "dispatch-1", 1)
 	out, err := s.CompleteActive(context.Background(), ports.ActiveCompletion{
 		RouteID: "wiki-maintenance", DispatchID: "dispatch-1",
 		ReceiptRef: "rcpt-work-1", Actor: "hermes-task", Now: now(),
@@ -1102,6 +1104,7 @@ func TestCompleteActiveFollowupBudgetExhaustedOnFailure(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	seedLegacyLane(t, s, "ACTIVE_DIRTY", "dispatch-1", 1)
 	out, err := s.CompleteActive(context.Background(), ports.ActiveCompletion{
 		RouteID: "wiki-maintenance", DispatchID: "dispatch-1", Failed: true,
 		FailureBudgetRemaining: 2, ReceiptRef: "rcpt-work-1", Actor: "hermes-task", Now: now(),
@@ -1132,7 +1135,7 @@ func TestCommitMergePendingIdleEmptySlotRecordsPendingReconcile(t *testing.T) {
 	// openTestStore seeds the route with an IDLE, empty-slot runtime row.
 	s := openTestStore(t)
 	lin := mergeLineage("batch-idle", "decision-idle", now())
-	dirty, err := s.CommitMergePending(context.Background(), lin, "watchman", now())
+	dirty, err := s.CommitMergePending(context.Background(), lin, nil, "watchman", now())
 	if err != nil {
 		t.Fatalf("idle empty-slot merge: %v", err)
 	}
@@ -1145,6 +1148,19 @@ func TestCommitMergePendingIdleEmptySlotRecordsPendingReconcile(t *testing.T) {
 	}
 	if !rec.PendingReconcile || rec.DirtyGeneration != 0 || rec.RouteState != "IDLE" {
 		t.Fatalf("owed work must be recorded as a pending reconciliation on IDLE: %+v", rec)
+	}
+}
+
+// seedLegacyLane mirrors a route-row coordination seeding onto the
+// synthetic legacy lane (E12-T2: the seeded intents have no child rows, so
+// their coordination lives on the '__legacy__' lane row).
+func seedLegacyLane(t *testing.T, s *Store, laneState, active string, dirty int) {
+	t.Helper()
+	if _, err := s.Exec(`INSERT INTO destination_lane_state (route_id, destination_id, lane_state, active_dispatch_id, dirty_generation)
+		VALUES ('wiki-maintenance', '__legacy__', ?, ?, ?)
+		ON CONFLICT (route_id, destination_id) DO UPDATE SET lane_state = excluded.lane_state, active_dispatch_id = excluded.active_dispatch_id, dirty_generation = excluded.dirty_generation`,
+		laneState, nullString(active), dirty); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -1304,6 +1320,10 @@ func TestResolveUncertainReconciliation(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
+		// The uncertain hold also moved the resolved dispatch's lane into
+		// its own UNCERTAIN state, retaining the in-flight coordination
+		// (E12-T2: the hold's fence values live on the route row).
+		seedLegacyLane(t, s, "UNCERTAIN", active, 2)
 	}
 	intent := &ports.IntentInput{
 		DispatchID: "disp-u-resolved", DecisionID: "decision-r", RouteID: "wiki-maintenance",
@@ -1331,11 +1351,16 @@ func TestResolveUncertainReconciliation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The resolved intent holds the slot as its creation reservation, the
-	// same shape a completion's follow-up leaves behind, and keeps its
-	// pending generation for the documented completion follow-up.
-	if rec.RouteState != "FOLLOWUP_READY" || rec.ActiveDispatchID != "disp-u-resolved" || rec.DirtyGeneration != 0 || !rec.PendingReconcile {
-		t.Fatalf("resolution must collapse the generation behind the reserved intent with its pending flag: %+v", rec)
+	// The resolved intent holds its LANE's slot as its creation
+	// reservation — the same shape a completion's follow-up leaves behind
+	// (E12-T2) — and keeps its pending generation for the documented
+	// completion follow-up on the route row.
+	if rec.RouteState != "FOLLOWUP_READY" || rec.DirtyGeneration != 0 || !rec.PendingReconcile {
+		t.Fatalf("resolution must collapse the route's hold behind the resolved intent: %+v", rec)
+	}
+	var laneActive string
+	if err := s.QueryRow(`SELECT COALESCE(active_dispatch_id, '') FROM destination_lane_state WHERE route_id = 'wiki-maintenance' AND destination_id = '__legacy__'`).Scan(&laneActive); err != nil || laneActive != "disp-u-resolved" {
+		t.Fatalf("the resolved intent must hold its lane's slot: %q %v", laneActive, err)
 	}
 	var ready int
 	if err := s.QueryRow(`SELECT COUNT(*) FROM dispatch_intents WHERE dispatch_id = 'disp-u-resolved' AND state = 'ready'`).Scan(&ready); err != nil || ready != 1 {
@@ -1403,6 +1428,7 @@ func TestConcurrentUncertainResolutionSingleWinner(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	seedLegacyLane(t, s, "UNCERTAIN", "dispatch-u2", 1)
 	if err := s.SaveDecision(nil, DecisionRecord{DecisionID: "decision-rr", RouteID: "wiki-maintenance",
 		RouteRevision: "route-rev-1", PolicyRevision: "route-rev-1", Disposition: "reconcile", Classification: "normal",
 		GenerationLineageJSON: `{"route_id":"wiki-maintenance"}`, CreatedAt: now(), Actor: "reconcile"}); err != nil {
@@ -1610,7 +1636,8 @@ func TestE8AuditFailPathGenerationFence(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// The caller fenced generation 0; the route moved to 1 inside the
+	seedLegacyLane(t, s, "ACTIVE_CLEAN", "dispatch-1", 1)
+	// The caller fenced generation 0; the lane moved to 1 inside the
 	// window — the completion must refuse.
 	_, err = s.CompleteActive(context.Background(), ports.ActiveCompletion{
 		RouteID: "wiki-maintenance", DispatchID: "dispatch-1", Failed: true,

@@ -75,9 +75,22 @@ func TestE12T1MigrationV12PreservesHistoryAndAddsFanoutTables(t *testing.T) {
 	if err := s.SetRouteActivation(context.Background(), "wiki-maintenance", "enabled", "route-rev-1", "", now); err != nil {
 		t.Fatal(err)
 	}
-	// Seed one v11-era legacy intent through the ordinary commit path.
-	legacy := lineage("dispatch-legacy", "agent-dispatch:v1:sha256:"+repeat("0", 64))
-	if err := s.CommitLineage(context.Background(), legacy); err != nil {
+	// Seed one v11-era legacy intent as a raw insert in the v11 column
+	// shape (the ordinary commit path is lane-keyed since v13 and cannot
+	// run against a pre-v13 schema), exactly as the historical row stands.
+	if err := s.SaveDecision(nil, DecisionRecord{
+		DecisionID: "decision-dispatch-legacy", RouteID: "wiki-maintenance", RouteRevision: "route-rev-1",
+		PolicyRevision: "policy-rev-1", GenerationLineageJSON: `{"generations":[]}`,
+		Disposition: "dispatch", Classification: "normal", ReasonCodesJSON: `[]`,
+		CreatedAt: now, Actor: "planner",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Exec(`INSERT INTO dispatch_intents
+		(dispatch_id, decision_id, route_id, route_revision, target_id, target_type, resource_id, generation, idempotency_key, content_fingerprint, manifest_digest, request_version, request_json, state, created_at, updated_at, base_batch_seq)
+		VALUES ('dispatch-legacy', 'decision-dispatch-legacy', 'wiki-maintenance', 'route-rev-1', 'hermes-kanban-main', 'hermes_kanban', 'vault-main', 1,
+		'agent-dispatch:v1:sha256:`+repeat("0", 64)+`', 'sha256:`+repeat("c", 64)+`', 'sha256:`+repeat("d", 64)+`',
+		'agent-dispatch.hermes-task/v1', '{"contract_version":"agent-dispatch.hermes-task/v1"}', 'ready', ?, ?, 0)`, now, now); err != nil {
 		t.Fatal(err)
 	}
 	s.Close()
@@ -91,8 +104,8 @@ func TestE12T1MigrationV12PreservesHistoryAndAddsFanoutTables(t *testing.T) {
 		t.Fatal(err)
 	}
 	version, err := upgraded.SchemaVersion()
-	if err != nil || version != 12 {
-		t.Fatalf("upgraded ledger must record v12: %d %v", version, err)
+	if err != nil || version < 12 {
+		t.Fatalf("upgraded ledger must record the v12 fan-out families: %d %v", version, err)
 	}
 	for _, table := range []string{"aggregate_events", "destination_revisions", "child_dispatches"} {
 		if _, err := upgraded.Exec(`SELECT 1 FROM ` + table); err != nil {
@@ -200,7 +213,7 @@ func TestE12T1OneChildPerDestinationBeneathOneAggregate(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Free the slot so the reservation itself would succeed.
-	if _, err := s.Exec(`UPDATE route_runtime_state SET active_dispatch_id = NULL WHERE route_id = 'wiki-maintenance'`); err != nil {
+	if _, err := s.Exec(`UPDATE destination_lane_state SET active_dispatch_id = NULL WHERE route_id = 'wiki-maintenance'`); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SaveIntent(nil, portsIntent(second.Intent)); err == nil {
@@ -217,10 +230,11 @@ func TestE12T1FollowupCreatesNewAggregateAndChildPreservingLane(t *testing.T) {
 	if err := s.CommitLineage(context.Background(), e12t1FanoutLineage("dispatch-parent", "agg-parent")); err != nil {
 		t.Fatal(err)
 	}
-	// Mark the route dirty the ordinary way: a second burst merges.
+	// Mark the lane dirty the ordinary way: a second burst merges into the
+	// parent's destination lane (lane-keyed since E12-T2).
 	burst := lineage("dispatch-burst", "agent-dispatch:v2:sha256:"+repeat("f", 64))
 	burst.Decision.Disposition = "merge_pending"
-	if _, err := s.CommitMergePending(context.Background(), burst, "test", "2026-08-29T02:00:00Z"); err != nil {
+	if _, err := s.CommitMergePending(context.Background(), burst, []string{"wiki-primary"}, "test", "2026-08-29T02:00:00Z"); err != nil {
 		t.Fatal(err)
 	}
 	followupInput := ports.IntentInput{
@@ -311,7 +325,7 @@ func TestE12T1DestinationRevisionInsertIsIdempotent(t *testing.T) {
 	s := openTestStore(t)
 	release := func() {
 		t.Helper()
-		if _, err := s.Exec(`UPDATE route_runtime_state SET active_dispatch_id = NULL WHERE route_id = 'wiki-maintenance'`); err != nil {
+		if _, err := s.Exec(`UPDATE destination_lane_state SET active_dispatch_id = NULL WHERE route_id = 'wiki-maintenance'`); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -351,7 +365,7 @@ func TestE12T1LegacyIntentsRemainQueryableAfterFanoutWork(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Release the slot and create new-contract work.
-	if _, err := s.Exec(`UPDATE route_runtime_state SET active_dispatch_id = NULL WHERE route_id = 'wiki-maintenance'`); err != nil {
+	if _, err := s.Exec(`UPDATE destination_lane_state SET active_dispatch_id = NULL WHERE route_id = 'wiki-maintenance'`); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.CommitLineage(context.Background(), e12t1FanoutLineage("dispatch-new", "agg-new")); err != nil {

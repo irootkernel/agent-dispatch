@@ -101,7 +101,11 @@ type storeOp interface {
 	Backup(path string) error
 	SetRouteActivation(ctx context.Context, routeID, activation, acknowledgeRevision, capabilityFingerprint, now string) error
 	LoadRouteState(ctx context.Context, routeID string) (state.RouteSnapshot, error)
-	CommitMergePending(ctx context.Context, lin ports.Lineage, actor, now string) (int, error)
+	LoadLaneState(ctx context.Context, routeID, destinationID string) (state.RouteSnapshot, error)
+	LoadIntentLane(ctx context.Context, dispatchID string) (state.RouteSnapshot, error)
+	CommitMergePending(ctx context.Context, lin ports.Lineage, selectedDestinations []string, actor, now string) (int, error)
+	MergeSelectedLanes(ctx context.Context, routeID string, selectedDestinations []string, actor, now string) (int, error)
+	CommitFanoutChild(ctx context.Context, intent ports.IntentInput) error
 	CompleteActive(ctx context.Context, req ports.ActiveCompletion) (ports.FollowupCreated, error)
 	ActivateDispatch(ctx context.Context, dispatchID, actor, now string) error
 	ActivateFollowup(ctx context.Context, dispatchID, actor, now string) error
@@ -140,19 +144,28 @@ func openOperatorStore(command string, configPath string, stderr io.Writer) (sto
 	return s, s, 0
 }
 
-// resolveRouteTarget resolves the target of a route's certified
-// destination (E11-T1): the pre-E12 pipeline executes exactly one
-// destination per route, so more than one is the fail-closed E12 bound
-// and an unresolvable target is a configuration defect.
+// resolveRouteTarget resolves the shared target of a route's destinations
+// (E11-T1, E12-T2 FAN-011): every destination must bind the SAME target —
+// the one Hermes Kanban submission surface — and the first sorted
+// destination returns as the deterministic representative for the
+// single-lane surfaces (sink resolution, per-destination envelopes). An
+// unresolvable target is a configuration defect.
 func resolveRouteTarget(cfg *config.Config, routeID string) (config.Destination, config.ResolvedTarget, error) {
 	route, ok := cfg.Routes[routeID]
 	if !ok {
 		return config.Destination{}, config.ResolvedTarget{}, fmt.Errorf("route %q is not defined", routeID)
 	}
-	dest, err := route.CertifiedDestination(routeID)
-	if err != nil {
-		return config.Destination{}, config.ResolvedTarget{}, err
+	dests := route.SortedDestinations()
+	if len(dests) == 0 {
+		return config.Destination{}, config.ResolvedTarget{}, fmt.Errorf("route %q declares no destinations", routeID)
 	}
+	for _, d := range dests[1:] {
+		if d.Target != dests[0].Target {
+			return config.Destination{}, config.ResolvedTarget{}, fmt.Errorf("route %q destinations %q and %q reference different targets %q and %q; a multi-destination route binds exactly one shared target (FAN-011)",
+				routeID, dests[0].ID, d.ID, dests[0].Target, d.Target)
+		}
+	}
+	dest := dests[0]
 	resolved, ok := cfg.ResolveTarget(dest.Target)
 	if !ok {
 		return config.Destination{}, config.ResolvedTarget{}, fmt.Errorf("route %q destination %q references unknown target %q (declare it under hermes_targets or targets)", routeID, dest.ID, dest.Target)
@@ -160,30 +173,57 @@ func resolveRouteTarget(cfg *config.Config, routeID string) (config.Destination,
 	return dest, resolved, nil
 }
 
-// certifiedLane resolves the route's certified destination lane for
-// child-linked request creation (E12-T1, DAT-010/DAT-014): the
-// destination identity with its current destination revision and the
-// canonical projection bytes that revision digests. The v0.1.5 certified
-// path fans exactly this one lane out per occurrence; widening selection
-// to every eligible destination arrives with the E12-T2 evaluator.
-func certifiedLane(cfg *config.Config, routeID string) (ports.TaskDestinationRef, string, error) {
+// certifiedLaneInfo is one destination's resolved lane identity with the
+// canonical projection bytes its revision digests (E12-T2).
+type certifiedLaneInfo struct {
+	dest       config.Destination
+	lane       ports.TaskDestinationRef
+	projection string
+}
+
+// certifiedLanes resolves every destination lane of a route in sorted
+// order (E12-T2, FAN-012): each destination's identity with its current
+// destination revision and the canonical projection bytes that revision
+// digests, so the fan-out builder can evaluate selection per destination
+// and persist every referenced destination-revision record (DAT-010).
+func certifiedLanes(cfg *config.Config, routeID string) ([]certifiedLaneInfo, error) {
 	route, ok := cfg.Routes[routeID]
 	if !ok {
-		return ports.TaskDestinationRef{}, "", fmt.Errorf("route %q is not defined", routeID)
+		return nil, fmt.Errorf("route %q is not defined", routeID)
 	}
-	dest, err := route.CertifiedDestination(routeID)
+	dests := route.SortedDestinations()
+	if len(dests) == 0 {
+		return nil, fmt.Errorf("route %q declares no destinations", routeID)
+	}
+	out := make([]certifiedLaneInfo, 0, len(dests))
+	for _, dest := range dests {
+		projection, err := config.DestinationProjectionJSON(cfg, dest)
+		if err != nil {
+			return nil, fmt.Errorf("destination %q projection: %v", dest.ID, err)
+		}
+		revision := config.DestinationRevision(cfg, route, dest)
+		if revision == "" {
+			return nil, fmt.Errorf("destination %q revision could not be computed", dest.ID)
+		}
+		out = append(out, certifiedLaneInfo{
+			dest:       dest,
+			lane:       ports.TaskDestinationRef{ID: dest.ID, Revision: revision, Workstream: dest.Workstream},
+			projection: projection,
+		})
+	}
+	return out, nil
+}
+
+// firstCertifiedLane resolves the canonically-first destination lane
+// (E12-T2): legacy single-lane resolution — derived work whose own lane
+// cannot be recovered — deterministically picks the first sorted
+// destination.
+func firstCertifiedLane(cfg *config.Config, routeID string) (ports.TaskDestinationRef, string, error) {
+	lanes, err := certifiedLanes(cfg, routeID)
 	if err != nil {
 		return ports.TaskDestinationRef{}, "", err
 	}
-	projection, err := config.DestinationProjectionJSON(cfg, dest)
-	if err != nil {
-		return ports.TaskDestinationRef{}, "", fmt.Errorf("destination %q projection: %v", dest.ID, err)
-	}
-	revision := config.DestinationRevision(cfg, route, dest)
-	if revision == "" {
-		return ports.TaskDestinationRef{}, "", fmt.Errorf("destination %q revision could not be computed", dest.ID)
-	}
-	return ports.TaskDestinationRef{ID: dest.ID, Revision: revision, Workstream: dest.Workstream}, projection, nil
+	return lanes[0].lane, lanes[0].projection, nil
 }
 
 // laneRevisionInput maps one certified lane and its projection bytes
@@ -469,11 +509,14 @@ func registerRouteState(ctx context.Context, store *sqlite.Store, cfg *config.Co
 	if err := store.RegisterResource(nil, route.Source.Resource, revision, resource.Root, canonical, resource.FileScope, gitMode); err != nil {
 		return err
 	}
-	dest, err := route.CertifiedDestination(routeID)
-	if err != nil {
-		return err
+	// The route's target binding is the destinations' shared target
+	// (E12-T2, FAN-011: resolveRouteTarget guarantees they agree); the
+	// canonically-first destination is the deterministic representative.
+	dests := route.SortedDestinations()
+	if len(dests) == 0 {
+		return fmt.Errorf("route %q declares no destinations", routeID)
 	}
-	if err := store.RegisterRoute(nil, routeID, revision, revision, route.Source.Resource, dest.Target, "{}", now); err != nil {
+	if err := store.RegisterRoute(nil, routeID, revision, revision, route.Source.Resource, dests[0].Target, "{}", now); err != nil {
 		return err
 	}
 	var exists int

@@ -82,7 +82,7 @@ func TestG4FeedbackLoopGate(t *testing.T) {
 	if n := g4StoreInt(t, configPath, `SELECT COUNT(*) FROM dispatch_intents`); n != 1 {
 		t.Fatalf("AC-401: no parallel task may exist, got %d", n)
 	}
-	if n := g4StoreInt(t, configPath, `SELECT dirty_generation FROM route_runtime_state WHERE route_id='wiki'`); n != 1 {
+	if n := g4StoreInt(t, configPath, `SELECT COALESCE(MAX(dirty_generation), 0) FROM destination_lane_state WHERE route_id='wiki'`); n != 1 {
 		t.Fatalf("AC-401: dirty generation must be 1, got %d", n)
 	}
 
@@ -91,7 +91,7 @@ func TestG4FeedbackLoopGate(t *testing.T) {
 	for i := 0; i < 9; i++ {
 		g4Edit(t, configPath, vault, fmt.Sprintf("Inbox/burst-%d.md", i), "burst")
 	}
-	if n := g4StoreInt(t, configPath, `SELECT dirty_generation FROM route_runtime_state WHERE route_id='wiki'`); n != 10 {
+	if n := g4StoreInt(t, configPath, `SELECT COALESCE(MAX(dirty_generation), 0) FROM destination_lane_state WHERE route_id='wiki'`); n != 10 {
 		t.Fatalf("AC-402 setup: ten bursts must merge into the generation, got %d", n)
 	}
 	var out, errb bytes.Buffer
@@ -215,7 +215,7 @@ func submitFollowupProductPath(t *testing.T, configPath, dispatchID string) {
 	if err := store.QueryRow(`SELECT state FROM dispatch_intents WHERE dispatch_id=?`, dispatchID).Scan(&state); err != nil || state != "accepted" {
 		t.Fatalf("follow-up %s must reach accepted through the product path: %s %v", dispatchID, state, err)
 	}
-	if err := store.QueryRow(`SELECT route_state FROM route_runtime_state WHERE route_id='wiki'`).Scan(&routeState); err != nil || routeState != "ACTIVE_CLEAN" {
+	if err := store.QueryRow(`SELECT lane_state FROM destination_lane_state WHERE route_id='wiki'`).Scan(&routeState); err != nil || routeState != "ACTIVE_CLEAN" {
 		t.Fatalf("the accepted follow-up must activate the route (B-3): %s %v", routeState, err)
 	}
 }

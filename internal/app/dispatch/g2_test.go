@@ -432,9 +432,12 @@ func TestG2MultiProcessOneActiveRouteDispatch(t *testing.T) {
 	if err != nil || len(intents) != 1 {
 		t.Fatalf("one durable dispatch: %d %v", len(intents), err)
 	}
+	// The winner holds the legacy lane's slot (E12-T2: the crashbin
+	// lineages are pre-cutover, so they coordinate on the synthetic
+	// legacy lane).
 	var active string
-	if err := s.QueryRow(`SELECT active_dispatch_id FROM route_runtime_state WHERE route_id = 'wiki'`).Scan(&active); err != nil || active != intents[0].DispatchID {
-		t.Fatalf("the single dispatch holds the slot: %q %v", active, err)
+	if err := s.QueryRow(`SELECT COALESCE(active_dispatch_id, '') FROM destination_lane_state WHERE route_id = 'wiki' AND destination_id = '__legacy__'`).Scan(&active); err != nil || active != intents[0].DispatchID {
+		t.Fatalf("the single dispatch holds the lane slot: %q %v", active, err)
 	}
 }
 

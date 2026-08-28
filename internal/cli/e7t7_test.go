@@ -136,7 +136,7 @@ func TestDeadLetterDiscardClosesLineage(t *testing.T) {
 	if err := store.QueryRow(`SELECT state FROM dispatch_intents WHERE dispatch_id = ?`, id).Scan(&state); err != nil || state != "superseded" {
 		t.Fatalf("the dead letter must close as superseded: %q %v", state, err)
 	}
-	if err := store.QueryRow(`SELECT COALESCE(active_dispatch_id, '') FROM route_runtime_state WHERE route_id = 'wiki'`).Scan(&slot); err != nil || slot != "" {
+	if err := store.QueryRow(`SELECT COALESCE(active_dispatch_id, '') FROM destination_lane_state WHERE route_id = 'wiki'`).Scan(&slot); err != nil || slot != "" {
 		t.Fatalf("the route slot must be released: %q %v", slot, err)
 	}
 	// Discarding non-dead-lettered work is refused with the conflict.

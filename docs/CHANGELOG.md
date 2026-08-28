@@ -1,5 +1,48 @@
 # SOT Changelog
 
+## 1.1.10 - 2026-08-29
+
+E12-T2: per-destination lane coordination, the structural selection
+evaluator, and multi-destination fan-out (FAN-002 through FAN-005, FAN-009,
+FAN-011; CON-003, CON-007, CON-008, CON-010):
+
+- SQLite migration v13 adds `destination_lane_state` (primary key route +
+  destination) carrying the lane's single-active slot, dirty generation,
+  and follow-up chain; the backfill copies each route's in-flight
+  coordination onto the lane its active dispatch belongs to (the child
+  row's destination, else the synthetic `__legacy__` lane), and the
+  `route_runtime_state` coordination columns become the frozen v12-era
+  history plus the route-level QUARANTINED/UNCERTAIN hold — a hold blocks
+  every lane (CON-007);
+- the closed destination-selection evaluator ships with FAN-005 semantics
+  (values within one present condition class OR, present classes AND,
+  absent classes select unconditionally) over the FAN-004 structural
+  classes only — path include/exclude, operations, classification, and
+  policy outcome — failing closed on matcher errors and reporting the
+  closed machine reasons;
+- `dispatch` fans one occurrence out per selected destination under ONE
+  aggregate event and ONE shared decision: one child intent per lane with
+  its own request, DAT-014 key, and lane slot, the full selection summary
+  and every referenced destination revision on the aggregate, and
+  per-lane arrival (activate-or-merge) where one sibling's held slot
+  never blocks the others (CON-008); the envelope lists each lane's
+  dispatch and reports any lane that failed beside its successful
+  siblings with bounded, redacted error text (a failed activation keeps
+  its durable dispatch ID for the operator exits); an occurrence no
+  destination's conditions select fails closed at the configuration
+  class creating nothing;
+- the follow-up collapse is lane-scoped (CON-008): a completing lane's
+  follow-up manifest and attribution decision see only the dirty changes
+  its own destination's conditions select, so a sibling lane's
+  conditioned-out work can never ride along — a child-linked dispatch
+  whose lane conditions cannot be resolved fails the completion closed;
+- enablement lifts the single-destination bound: a route enables with
+  several destinations under ONE shared target (fail-closed on differing
+  targets, FAN-011) with every lane's profile checked on the board;
+- the rendered task body names the destination lane and its workstream
+  inside the trusted instruction block (FAN-009), from trusted
+  configuration data only.
+
 ## 1.1.9 - 2026-08-29
 
 E12-T1: the aggregate-event, destination-revision, and child-dispatch

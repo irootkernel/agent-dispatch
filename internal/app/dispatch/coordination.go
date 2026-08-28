@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/domain/fingerprint"
@@ -34,39 +35,204 @@ type CoordinatorStore interface {
 	ports.DispatchStore
 }
 
-// Arrival routes one persisted incoming lineage: an idle enabled route
-// activates a normal dispatch; any route that already holds unresolved
-// work merges the burst into the durable dirty generation instead
-// (never a second active dispatch).
+// LegacyDestinationLaneID is the ports-side declaration of the synthetic
+// legacy lane (ADR-0016): pre-cutover work without a child row coordinates
+// on this lane. The app layer references the shared constant so the value
+// has exactly one live encoding.
+const LegacyDestinationLaneID = ports.LegacyDestinationLaneID
+
+// laneOfLineage resolves the destination lane one arriving lineage's
+// intent belongs to (E12-T2): the fanout destination, else the synthetic
+// legacy lane of pre-cutover work.
+func laneOfLineage(lin ports.Lineage) string {
+	if lin.Intent.Fanout != nil && lin.Intent.Fanout.DestinationID != "" {
+		return lin.Intent.Fanout.DestinationID
+	}
+	return LegacyDestinationLaneID
+}
+
+// Arrival routes one persisted incoming lineage: a lane that may accept
+// work activates a normal dispatch; any lane that already holds unresolved
+// work merges the burst into that lane's durable dirty generation instead
+// (never a second active dispatch on the lane, CON-001/CON-007).
 func (c *Coordinator) Arrival(ctx context.Context, lin ports.Lineage) (merged bool, err error) {
-	snap, err := c.Store.LoadRouteState(ctx, lin.Decision.RouteID)
+	result, err := c.arrivalOne(ctx, lin)
+	return result.DispatchID == "", err
+}
+
+// FanoutOutcome reports the per-destination outcome of one fan-out arrival
+// (E12-T2, FAN-002/FAN-003): which lanes activated their child, which
+// merged into their lane's dirty generation, and which failed — one
+// sibling's failure never blocks the others (CON-007), so failures ride
+// along beside the successes instead of aborting the occurrence.
+type FanoutOutcome struct {
+	// Activated carries the per-destination dispatch IDs that activated
+	// their lane (one child per selected destination).
+	Activated []FanoutLaneResult
+	// Merged carries the per-destination merges into a held lane slot.
+	Merged []FanoutLaneResult
+	// Failed carries the per-destination failures with bounded, redacted
+	// error text; a failed activation keeps its durable dispatch ID so an
+	// operator can resolve the reserved slot (activate, drain, discard).
+	Failed []FanoutLaneFailure
+}
+
+// FanoutLaneResult is one destination's arrival outcome.
+type FanoutLaneResult struct {
+	DestinationID   string
+	DispatchID      string
+	DirtyGeneration int
+}
+
+// FanoutLaneFailure is one destination's failed arrival outcome.
+type FanoutLaneFailure struct {
+	DestinationID string
+	// DispatchID is set when the child is durable (a failed activation
+	// leaves a reserved slot behind) and empty when the commit itself
+	// refused.
+	DispatchID string
+	// Error is the bounded, redacted failure text (BoundLaneError).
+	Error string
+}
+
+// laneErrorBound caps one lane failure's reported text (OPS-009 posture:
+// the envelope stays bounded even when the underlying error is not).
+const laneErrorBound = 300
+
+// BoundLaneError renders one lane failure's bounded, redacted text:
+// control characters collapse to spaces (envelope-safe) and an oversized
+// tail is cut with an explicit marker.
+func BoundLaneError(err string) string {
+	var b strings.Builder
+	for _, r := range err {
+		if r == '\n' || r == '\r' || r == '\t' || r < 0x20 || r == 0x7f {
+			b.WriteByte(' ')
+			continue
+		}
+		b.WriteRune(r)
+	}
+	out := b.String()
+	if len(out) > laneErrorBound {
+		out = out[:laneErrorBound] + "...(truncated)"
+	}
+	return out
+}
+
+// arrivalOne applies the single-lane arrival decision: the lane's snapshot
+// gates activation (CON-001 per lane, CON-007); a held slot merges into
+// exactly this lane's dirty generation (CON-008).
+func (c *Coordinator) arrivalOne(ctx context.Context, lin ports.Lineage) (FanoutLaneResult, error) {
+	lane := laneOfLineage(lin)
+	snap, err := c.Store.LoadLaneState(ctx, lin.Decision.RouteID, lane)
 	if err != nil {
-		return false, err
+		return FanoutLaneResult{DestinationID: lane}, err
 	}
 	if err := state.CanActivateNormalDispatch(snap); err == nil {
 		err := c.Store.CommitLineage(ctx, lin)
 		if err == nil {
-			// The slot reservation commits with the intent (persistence
-			// §7); for coordination the reserved dispatch activates the
-			// route. The acceptance refinement arrives with the E4/E5
-			// receipt projections.
+			// The lane slot reservation commits with the intent
+			// (persistence §7); for coordination the reserved dispatch
+			// activates the lane. The acceptance refinement arrives with
+			// the E4/E5 receipt projections.
 			if err := c.Store.ActivateDispatch(ctx, lin.Intent.DispatchID, c.Actor, c.Now()); err != nil {
-				return false, err
+				return FanoutLaneResult{DestinationID: lane}, err
 			}
-			return false, nil
+			return FanoutLaneResult{DestinationID: lane, DispatchID: lin.Intent.DispatchID}, nil
 		}
 		if !errors.Is(err, ports.ErrRouteSlotHeld) {
-			return false, err
+			return FanoutLaneResult{DestinationID: lane}, err
 		}
-		// A concurrent arrival won the slot: this burst merges (AC-204
+		// A concurrent arrival won the lane's slot: this burst merges (AC-204
 		// posture — the loser observes existing ownership).
 	}
-	dirty, err := c.Store.CommitMergePending(ctx, lin, c.Actor, c.Now())
+	dirty, err := c.Store.CommitMergePending(ctx, lin, []string{lane}, c.Actor, c.Now())
 	if err != nil {
-		return false, err
+		return FanoutLaneResult{DestinationID: lane}, err
 	}
-	_ = dirty
-	return true, nil
+	return FanoutLaneResult{DestinationID: lane, DirtyGeneration: dirty}, nil
+}
+
+// ArrivalFanout routes one occurrence's per-destination lineages under
+// their shared aggregate (E12-T2, FAN-002/FAN-003): each selected
+// destination's lineage activates or merges on ITS lane independently —
+// one sibling's failure never blocks the others (CON-007) — and the call
+// fails only when every lane failed. The shared observation/batch/decision
+// prefix persists exactly once: the first lane to commit carries it, and
+// the remaining children commit beside it.
+func (c *Coordinator) ArrivalFanout(ctx context.Context, lins []ports.Lineage) (FanoutOutcome, error) {
+	var out FanoutOutcome
+	if len(lins) == 0 {
+		return out, fmt.Errorf("%w: a fan-out arrival needs at least one destination lineage", ports.ErrStateNotEligible)
+	}
+	var lastErr error
+	persisted := false
+	// recordFailure keeps one lane's failure visible beside its siblings'
+	// successes (CON-007): the bounded text rides in the outcome and the
+	// error stays live for the all-failed return.
+	recordFailure := func(lane, dispatchID string, err error) {
+		lastErr = err
+		out.Failed = append(out.Failed, FanoutLaneFailure{
+			DestinationID: lane, DispatchID: dispatchID, Error: BoundLaneError(err.Error()),
+		})
+	}
+	for _, lin := range lins {
+		lane := laneOfLineage(lin)
+		snap, err := c.Store.LoadLaneState(ctx, lin.Decision.RouteID, lane)
+		if err != nil {
+			recordFailure(lane, "", err)
+			continue
+		}
+		result := FanoutLaneResult{DestinationID: lane}
+		if state.CanActivateNormalDispatch(snap) == nil {
+			var commitErr error
+			if !persisted {
+				commitErr = c.Store.CommitLineage(ctx, lin)
+			} else {
+				commitErr = c.Store.CommitFanoutChild(ctx, lin.Intent)
+			}
+			if commitErr == nil {
+				persisted = true
+				// The lane slot reservation commits with the intent
+				// (persistence §7); for coordination the reserved dispatch
+				// activates the lane. A failed activation leaves the child
+				// durable with a reserved slot: record it as a failed
+				// activation so the operator sees the dispatch to resolve.
+				if err := c.Store.ActivateDispatch(ctx, lin.Intent.DispatchID, c.Actor, c.Now()); err != nil {
+					recordFailure(lane, lin.Intent.DispatchID, err)
+					continue
+				}
+				result.DispatchID = lin.Intent.DispatchID
+				out.Activated = append(out.Activated, result)
+				continue
+			}
+			if !errors.Is(commitErr, ports.ErrRouteSlotHeld) {
+				recordFailure(lane, "", commitErr)
+				continue
+			}
+			// A concurrent arrival won the lane's slot: this burst merges
+			// (AC-204 posture — the loser observes existing ownership).
+		}
+		var dirty int
+		var mergeErr error
+		if !persisted {
+			dirty, mergeErr = c.Store.CommitMergePending(ctx, lin, []string{lane}, c.Actor, c.Now())
+		} else {
+			dirty, mergeErr = c.Store.MergeSelectedLanes(ctx, lin.Decision.RouteID, []string{lane}, c.Actor, c.Now())
+		}
+		if mergeErr != nil {
+			recordFailure(lane, "", mergeErr)
+			continue
+		}
+		persisted = true
+		result.DirtyGeneration = dirty
+		out.Merged = append(out.Merged, result)
+	}
+	if len(out.Activated)+len(out.Merged) == 0 {
+		// Every lane failed: the occurrence did not happen; surface the
+		// last error (the per-lane detail stays in out.Failed).
+		return out, lastErr
+	}
+	return out, nil
 }
 
 // Completion applies one terminal outcome of the active dispatch and,

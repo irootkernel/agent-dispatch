@@ -119,9 +119,13 @@ func newRouteRuntime(cfg *config.Config, route config.Route, resource config.Res
 	return &routeRuntime{resolver: resolver, engine: engine, maxHash: maxHash}, nil
 }
 
-// reconcileIntentBuilder builds the one latest-state reconciliation
-// intent for an idle route: full-scope instruction, empty evidence
-// manifest, fresh idempotency key (CLI-005: no ambiguous replay).
+// reconcileIntentBuilder builds the latest-state reconciliation intent
+// for an idle route: full-scope instruction, empty evidence manifest,
+// fresh idempotency key (CLI-005: no ambiguous replay). Since E12-T2 the
+// child carries the full destination-selection summary of the route's
+// lanes with every referenced destination revision persisted beside it;
+// the child's own lane is the canonically-first selected destination
+// (FAN-012), because the reconciliation flow commits exactly one intent.
 func (a *reconcileArtifacts) reconcileIntentBuilder() func(routeID, reason, decisionID string, changes []records.ChangeItem) (ports.IntentInput, error) {
 	return func(routeID, reason, decisionID string, changes []records.ChangeItem) (ports.IntentInput, error) {
 		now := dispatch.Timestamp(time.Now())
@@ -130,9 +134,19 @@ func (a *reconcileArtifacts) reconcileIntentBuilder() func(routeID, reason, deci
 		if err != nil {
 			return ports.IntentInput{}, err
 		}
-		lane, projection, err := certifiedLane(a.cfg, routeID)
+		lanes, err := certifiedLanes(a.cfg, routeID)
 		if err != nil {
 			return ports.IntentInput{}, err
+		}
+		lane := lanes[0]
+		selections := make([]records.DestinationSelection, 0, len(lanes))
+		revisions := make([]ports.DestinationRevisionInput, 0, len(lanes))
+		for _, candidate := range lanes {
+			selections = append(selections, records.DestinationSelection{
+				DestinationID: candidate.lane.ID, DestinationRevision: candidate.lane.Revision,
+				Workstream: candidate.lane.Workstream, Reason: "reconcile:" + reason,
+			})
+			revisions = append(revisions, laneRevisionInput(candidate.lane, candidate.projection))
 		}
 		// The fingerprint derives from the reconciliation diff, so
 		// distinct generations produce distinct idempotency keys (a
@@ -160,7 +174,7 @@ func (a *reconcileArtifacts) reconcileIntentBuilder() func(routeID, reason, deci
 			Resource:           ports.TaskResource{ID: a.resourceID, Workspace: workspaceOf(a.dest, a.resource.Root)},
 			TargetID:           a.targetID,
 			TargetScope:        resolvedTargetScope(a.resolved),
-			Destination:        lane,
+			Destination:        lane.lane,
 			Generation:         1,
 			Fingerprint:        contentDigest,
 			Changes:            changes, // the reconciliation diff: bounded evidence, never content
@@ -185,12 +199,9 @@ func (a *reconcileArtifacts) reconcileIntentBuilder() func(routeID, reason, deci
 			RequestVersion:     dispatch.RequestContractVersion, RequestJSON: requestJSON,
 			Fanout: &ports.FanoutInput{
 				AggregateID: string(aggregateID), Origin: string(records.OriginReconcile),
-				DestinationID: lane.ID, DestinationRevision: lane.Revision, Workstream: lane.Workstream,
-				Selections: []records.DestinationSelection{{
-					DestinationID: lane.ID, DestinationRevision: lane.Revision, Workstream: lane.Workstream,
-					Reason: "reconcile:" + reason,
-				}},
-				Revisions: []ports.DestinationRevisionInput{laneRevisionInput(lane, projection)},
+				DestinationID: lane.lane.ID, DestinationRevision: lane.lane.Revision, Workstream: lane.lane.Workstream,
+				Selections: selections,
+				Revisions:  revisions,
 			},
 		}, nil
 	}

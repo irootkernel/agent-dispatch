@@ -65,11 +65,15 @@ type SubmitReport struct {
 }
 
 // RouteCoordinationView is the optional store surface the runtime uses
-// for route-slot enforcement and follow-up promotion. The durable store
+// for slot enforcement and follow-up promotion. The durable store
 // implements it; test fakes may not, in which case the slot guard is
-// skipped (E7-T2: the production store always provides it).
+// skipped (E7-T2: the production store always provides it). Since E12-T2
+// the slot guard reads the dispatch's LANE snapshot (CON-007): a sibling
+// lane's holder never blocks this dispatch, while the route envelope —
+// activation state and acknowledged revision — still gates every lane
+// through the merged snapshot.
 type RouteCoordinationView interface {
-	LoadRouteState(ctx context.Context, routeID string) (state.RouteSnapshot, error)
+	LoadIntentLane(ctx context.Context, dispatchID string) (state.RouteSnapshot, error)
 	ActivateFollowup(ctx context.Context, dispatchID, actor, now string) error
 }
 
@@ -127,13 +131,14 @@ func (r *Runtime) submitOnce(ctx context.Context, dispatchID, owner string, rebu
 			return r.submitOnce(ctx, replacement, owner, rebuildDepth+1)
 		}
 	}
-	// The route's active slot must be empty or held by exactly this
-	// dispatch before the lease commits (CON-001: a submission never runs
-	// beside another authoritative task; E7-T2). The lease transaction
-	// re-checks the same predicate, so this guard fails fast with the
-	// actionable error while the store remains the authority.
+	// The dispatch's lane slot must be empty or held by exactly this
+	// dispatch before the lease commits (CON-001/CON-007: a submission
+	// never runs beside another authoritative task on its lane; E7-T2).
+	// The lease transaction re-checks the same predicate, so this guard
+	// fails fast with the actionable error while the store remains the
+	// authority.
 	if view, ok := r.Store.(RouteCoordinationView); ok {
-		rs, err := view.LoadRouteState(ctx, snap.RouteID)
+		rs, err := view.LoadIntentLane(ctx, dispatchID)
 		if err != nil {
 			return report, err
 		}
@@ -278,18 +283,18 @@ func (r *Runtime) submitOnce(ctx context.Context, dispatchID, owner string, rebu
 	return report, nil
 }
 
-// promoteFollowup activates one just-accepted dispatch when its route is
-// the pending follow-up shape. Every other route state is skipped
-// silently: the store's own activation guard is the authority, and a
-// normal first-generation dispatch already activated its route at arrival.
+// promoteFollowup activates one just-accepted dispatch when its lane is
+// the pending follow-up shape. Every other lane state is skipped silently:
+// the store's own activation guard is the authority, and a normal
+// first-generation dispatch already activated its lane at arrival.
 func (r *Runtime) promoteFollowup(ctx context.Context, routeID, dispatchID string) {
 	view, ok := r.Store.(RouteCoordinationView)
 	if !ok {
 		return
 	}
-	rs, err := view.LoadRouteState(ctx, routeID)
+	rs, err := view.LoadIntentLane(ctx, dispatchID)
 	if err != nil {
-		r.logEvent(observability.LevelWarn, observability.EventDispatchUnknown, dispatchID, "", routeID, "", "follow-up promotion skipped: route state unreadable", map[string]any{"error": err.Error()})
+		r.logEvent(observability.LevelWarn, observability.EventDispatchUnknown, dispatchID, "", routeID, "", "follow-up promotion skipped: lane state unreadable", map[string]any{"error": err.Error()})
 		return
 	}
 	if rs.State != state.RouteFollowupReady {
@@ -354,13 +359,13 @@ func (r *Runtime) Drain(ctx context.Context, routeID string, max int, lister Dra
 		default:
 			continue
 		}
-		rs, err := lister.LoadRouteState(ctx, routeID)
+		rs, err := lister.LoadIntentLane(ctx, sum.DispatchID)
 		if err != nil {
-			return out, fmt.Errorf("drain stopped at %s: route state unreadable: %w", sum.DispatchID, err)
+			return out, fmt.Errorf("drain stopped at %s: lane state unreadable: %w", sum.DispatchID, err)
 		}
 		if !slotAdmissible(rs, sum.DispatchID) {
-			// The slot belongs to another authoritative dispatch (or the
-			// route must be reconciled first); this intent waits or was
+			// The lane slot belongs to another authoritative dispatch (or
+			// the route must be reconciled first); this intent waits or was
 			// superseded and must never run beside it (CON-001, E7-T2/B-2).
 			out.Skipped++
 			continue
@@ -398,20 +403,20 @@ func (r *Runtime) Drain(ctx context.Context, routeID string, max int, lister Dra
 	return out, nil
 }
 
-// promoteAcceptedFollowup promotes an accepted follow-up whose route was
+// promoteAcceptedFollowup promotes an accepted follow-up whose lane was
 // left in FOLLOWUP_READY (a crash or transient failure between the
-// acceptance commit and the promotion). Every other shape is skipped:
-// the store's activation guard stays the authority.
+// acceptance commit and the promotion). Every other shape is skipped: the
+// store's activation guard stays the authority.
 func (r *Runtime) promoteAcceptedFollowup(ctx context.Context, routeID string, lister DrainLister) {
-	rs, err := lister.LoadRouteState(ctx, routeID)
-	if err != nil || rs.State != state.RouteFollowupReady {
-		return
-	}
 	intents, err := lister.ListIntents(ctx, ports.IntentFilter{RouteID: routeID, State: records.IntentAccepted, Limit: 10})
 	if err != nil {
 		return
 	}
 	for _, sum := range intents {
+		rs, err := lister.LoadIntentLane(ctx, sum.DispatchID)
+		if err != nil || rs.State != state.RouteFollowupReady {
+			continue
+		}
 		if rs.ActiveDispatchID != "" && rs.ActiveDispatchID != sum.DispatchID {
 			continue
 		}

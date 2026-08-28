@@ -57,12 +57,31 @@ func (s *Store) saveFanoutTx(tx *sql.Tx, i IntentRecord) error {
 	if err != nil {
 		return err
 	}
-	if _, err := execOn(tx, s.DB, `INSERT INTO aggregate_events
+	// The aggregate event is one per occurrence (FAN-002): siblings of a
+	// fan-out reference the same aggregate a first child already created,
+	// so the insert is idempotent and the creation audit lands once.
+	res, err := execOn(tx, s.DB, `INSERT INTO aggregate_events
 		(aggregate_id, decision_id, route_id, route_revision, resource_id, origin, generation, content_fingerprint, schema_version, selection_json, created_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+		VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (aggregate_id) DO NOTHING`,
 		f.AggregateID, i.DecisionID, i.RouteID, i.RouteRevision, i.ResourceID, f.Origin, i.Generation,
-		i.ContentFingerprint, AggregateEventSchemaVersion, string(selectionJSON), i.CreatedAt); err != nil {
+		i.ContentFingerprint, AggregateEventSchemaVersion, string(selectionJSON), i.CreatedAt)
+	if err != nil {
 		return err
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		// The audit context is built through the JSON encoder, never Go %q
+		// quoting: %q renders non-printable code points as escapes JSON
+		// rejects, and this row is append-only evidence (review round 1).
+		auditContext, err := json.Marshal(map[string]any{
+			"reason": "fanout", "origin": f.Origin, "dispatch_id": i.DispatchID,
+			"destination_id": f.DestinationID, "selections": len(selections),
+		})
+		if err != nil {
+			return err
+		}
+		if err := s.AppendTransition(tx, f.AggregateID+":created", "aggregate_event", f.AggregateID, "", f.Origin, i.CreatedAt, string(auditContext)); err != nil {
+			return err
+		}
 	}
 	for _, rev := range f.Revisions {
 		if _, err := execOn(tx, s.DB, `INSERT INTO destination_revisions (route_id, destination_id, revision, projection_json, created_at)
@@ -78,17 +97,7 @@ func (s *Store) saveFanoutTx(tx *sql.Tx, i IntentRecord) error {
 		i.IdempotencyKey, ChildDispatchSchemaVersion, i.CreatedAt); err != nil {
 		return err
 	}
-	// The audit context is built through the JSON encoder, never Go %q
-	// quoting: %q renders non-printable code points as escapes JSON
-	// rejects, and this row is append-only evidence (review round 1).
-	auditContext, err := json.Marshal(map[string]any{
-		"reason": "fanout", "origin": f.Origin, "dispatch_id": i.DispatchID,
-		"destination_id": f.DestinationID, "selections": len(selections),
-	})
-	if err != nil {
-		return err
-	}
-	return s.AppendTransition(tx, f.AggregateID+":created", "aggregate_event", f.AggregateID, "", f.Origin, i.CreatedAt, string(auditContext))
+	return nil
 }
 
 // childJoinColumns selects the child linkage of one intent: empty

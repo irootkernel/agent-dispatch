@@ -201,13 +201,19 @@ func (s *Store) AcquireAttempt(ctx context.Context, req ports.AcquireAttempt) (s
 	defer tx.Rollback()
 	// Capture the from-state under the same eligibility predicates the
 	// conditional update rechecks, so the audit transition is exact. The
-	// route-slot predicate is part of the transaction itself: a dispatch
-	// may never be leased beside another authoritative task (CON-001,
-	// E7-T2/B-2).
+	// lane-slot predicate is part of the transaction itself: a dispatch
+	// may never be leased beside another authoritative task on ITS lane
+	// (CON-001/CON-007, E7-T2/B-2, E12-T2), and a route-level
+	// QUARANTINED/UNCERTAIN hold or a non-enabled activation state blocks
+	// every lane.
+	const laneOfIntent = `COALESCE((SELECT c.destination_id FROM child_dispatches c WHERE c.dispatch_id = dispatch_intents.dispatch_id), '` + LegacyLaneID + `')`
 	const slotFree = `AND NOT EXISTS (SELECT 1 FROM route_runtime_state r
 		WHERE r.route_id = dispatch_intents.route_id
-		  AND ((r.active_dispatch_id IS NOT NULL AND r.active_dispatch_id != ?)
-		    OR r.activation_state != 'enabled'))`
+		  AND (r.activation_state != 'enabled' OR r.route_state IN ('QUARANTINED','UNCERTAIN')))
+	AND NOT EXISTS (SELECT 1 FROM destination_lane_state l
+		WHERE l.route_id = dispatch_intents.route_id
+		  AND l.destination_id = ` + laneOfIntent + `
+		  AND l.active_dispatch_id IS NOT NULL AND l.active_dispatch_id != ?)`
 	var fromState string
 	err = tx.QueryRow(`SELECT state FROM dispatch_intents
 		WHERE dispatch_id = ?
@@ -259,7 +265,9 @@ func (s *Store) AcquireAttempt(ctx context.Context, req ports.AcquireAttempt) (s
 }
 
 // explainAcquireFailure distinguishes the port errors a lost lease
-// competition produces from other refusals.
+// competition produces from other refusals. Since E12-T2 the slot check
+// inspects the dispatch's lane (CON-007): a sibling lane's holder never
+// blocks this dispatch.
 func (s *Store) explainAcquireFailure(ctx context.Context, q queryer, dispatchID, now string) error {
 	var current, routeID string
 	var leaseExpires sql.NullString
@@ -273,14 +281,22 @@ func (s *Store) explainAcquireFailure(ctx context.Context, q queryer, dispatchID
 	if current == string(records.IntentSubmitting) && leaseExpires.Valid && leaseExpires.String >= now {
 		return fmt.Errorf("%w: dispatch %s leased to another owner until %s", ports.ErrLeaseHeld, dispatchID, leaseExpires.String)
 	}
-	var holder sql.NullString
-	var activation string
-	if err := q.QueryRow(`SELECT COALESCE(active_dispatch_id, ''), activation_state FROM route_runtime_state WHERE route_id = ?`, routeID).Scan(&holder, &activation); err == nil {
+	var activation, routeState string
+	if err := q.QueryRow(`SELECT activation_state, route_state FROM route_runtime_state WHERE route_id = ?`, routeID).Scan(&activation, &routeState); err == nil {
 		if activation != "enabled" {
 			return fmt.Errorf("%w: route %s activation state is %q, not enabled", ports.ErrStateNotEligible, routeID, activation)
 		}
+		if routeState == string(state.RouteQuarantined) || routeState == string(state.RouteUncertain) {
+			return fmt.Errorf("%w: route %s is %s, which blocks every lane", ports.ErrStateNotEligible, routeID, routeState)
+		}
+	}
+	var holder sql.NullString
+	if err := q.QueryRow(`SELECT l.active_dispatch_id FROM destination_lane_state l
+		WHERE l.route_id = (SELECT route_id FROM dispatch_intents WHERE dispatch_id = ?)
+		  AND l.destination_id = COALESCE((SELECT c.destination_id FROM child_dispatches c WHERE c.dispatch_id = ?), ?)`,
+		dispatchID, dispatchID, LegacyLaneID).Scan(&holder); err == nil {
 		if holder.Valid && holder.String != "" && holder.String != dispatchID {
-			return fmt.Errorf("%w: route %s holds active dispatch %s, not %s", ports.ErrRouteSlotHeld, routeID, holder.String, dispatchID)
+			return fmt.Errorf("%w: lane holds active dispatch %s, not %s", ports.ErrRouteSlotHeld, holder.String, dispatchID)
 		}
 	}
 	return fmt.Errorf("attempt not acquirable for %s in state %s at %s: %w", dispatchID, current, now, ErrOptimisticConcurrency)
@@ -501,33 +517,49 @@ func (s *Store) CloseDeadLetter(ctx context.Context, dispatchID, actor, reason, 
 		fmt.Sprintf(`{"reason":%q,"actor":%q,"operator_reason":%q}`, state.ReasonReprocessOrDiscard, actor, reason)); err != nil {
 		return outcome, err
 	}
-	// The slot releases only when this dead letter actually held it
-	// (an already-resolved route keeps its outcome; epic audit round 1).
-	res, err := tx.Exec(`UPDATE route_runtime_state SET active_dispatch_id = NULL, active_generation = 0 WHERE route_id = ? AND active_dispatch_id = ?`, routeID, dispatchID)
+	// The lane slot releases only when this dead letter actually held it
+	// (an already-resolved lane keeps its outcome; epic audit round 1).
+	// Since E12-T2 the slot is the dispatch's lane's (CON-007): closing one
+	// lane's letter never touches a sibling lane.
+	_, lane, laneErr := s.laneOfDispatch(tx, dispatchID)
+	if laneErr != nil {
+		return outcome, laneErr
+	}
+	res, err := tx.Exec(`UPDATE destination_lane_state SET active_dispatch_id = NULL, active_generation = 0 WHERE route_id = ? AND destination_id = ? AND active_dispatch_id = ?`, routeID, lane, dispatchID)
 	if err != nil {
 		return outcome, err
 	}
 	if n, _ := res.RowsAffected(); n > 0 {
 		outcome.SlotReleased = true
 	}
-	snap, rsErr := s.routeSnapshotInTx(tx, routeID)
-	if rsErr != nil {
-		return outcome, rsErr
+	merged, mErr := s.laneSnapshotInTx(tx, routeID, lane)
+	if mErr != nil {
+		return outcome, mErr
 	}
-	outcome.DirtyRetained = snap.ActiveDispatchID == "" && snap.State == state.RouteActiveDirty
-	if snap.ActiveDispatchID == "" && snap.State == state.RouteActiveClean {
-		// The closed letter was a clean route's only active work: the
-		// route moves to IDLE through the documented clean-completion
-		// edge with the discard as its evidence. A dirty route keeps
-		// its dirty generation (the documented edge to IDLE demands
-		// exact-suppression evidence a discard cannot supply), so the
-		// pending generation stays resolvable through reconciliation.
-		if err := s.applyRouteTransition(tx, snap, state.RouteIdle, state.ReasonWorkCompletedClean,
-			state.RouteEvidence{Actor: actor, ReceiptRef: "discard:" + dispatchID}, now,
-			fmt.Sprintf(`{"reason":%q,"actor":%q,"dispatch_id":%q,"operator_discard":true}`, state.ReasonWorkCompletedClean, actor, dispatchID)); err != nil {
-			return outcome, err
+	laneOwn := merged.State
+	if merged.ActiveDispatchID == "" {
+		var raw string
+		_ = tx.QueryRow(`SELECT lane_state FROM destination_lane_state WHERE route_id = ? AND destination_id = ?`, routeID, lane).Scan(&raw)
+		if parsed, perr := state.ParseRouteState(raw); perr == nil {
+			laneOwn = parsed
 		}
-		outcome.RouteToIDLE = true
+		outcome.DirtyRetained = laneOwn == state.RouteActiveDirty
+		if laneOwn == state.RouteActiveClean && merged.State != state.RouteUncertain && merged.State != state.RouteQuarantined {
+			// The closed letter was a clean lane's only active work: the
+			// lane moves to IDLE through the documented clean-completion
+			// edge with the discard as its evidence. A dirty lane keeps
+			// its dirty generation (the documented edge to IDLE demands
+			// exact-suppression evidence a discard cannot supply), so the
+			// pending generation stays resolvable through reconciliation.
+			idleSnap := merged
+			idleSnap.State = laneOwn
+			if err := s.applyLaneTransition(tx, routeID, lane, idleSnap, state.RouteIdle, state.ReasonWorkCompletedClean,
+				state.RouteEvidence{Actor: actor, ReceiptRef: "discard:" + dispatchID}, now,
+				auditJSON("reason", state.ReasonWorkCompletedClean, "actor", actor, "dispatch_id", dispatchID, "operator_discard", true, "destination_id", lane)); err != nil {
+				return outcome, err
+			}
+			outcome.RouteToIDLE = true
+		}
 	}
 	return outcome, tx.Commit()
 }

@@ -93,4 +93,10 @@ type DirtyChange struct {
 	DigestStatus string
 	ObservedAt   string
 	BatchID      string
+	// Classification and Disposition are the merging decision's recorded
+	// class and outcome for the change's batch (E12-T2: a lane's follow-up
+	// re-evaluates its destination's structural conditions per change, and
+	// the policy-outcome and classification classes read them).
+	Classification string
+	Disposition    string
 }

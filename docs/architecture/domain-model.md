@@ -242,6 +242,18 @@ active_dispatch_id != null
 
 `dirty_generation > 0` means at least one later relevant change requires a follow-up after the active task is resolved. The counter is cleared exactly when that work is resolved — by the creation of a follow-up intent, or by a verified exact suppression clearing the route to IDLE — and it never compares against `active_generation` (E8-T1 records the invariant in this direction).
 
+Since E12-T2 the coordination members of this record are lane-keyed: each
+destination of the route carries its own `DestinationLaneState`
+(`destination_lane_state`, primary key route ID + destination ID) holding
+the same state vocabulary, its own single-active slot, dirty generation,
+and follow-up chain (CON-007, CON-008, CON-003), and the members above are
+the frozen v12-era history plus the values of the route-level
+UNCERTAIN/QUARANTINED hold — a hold blocks every lane. The envelope members
+(activation state, acknowledged revision, capability fingerprint, pending
+reconciliation, source position, reconcile timestamp) stay route-scoped,
+and `LoadRouteState` reports the lanes' aggregation with the hold taking
+precedence.
+
 ## 12. WorkReceipt
 
 A work receipt is produced through Agent Dispatch's public receipt CLI or later MCP interface.

@@ -62,9 +62,9 @@ func TestRouteTransitionsFullyAudited(t *testing.T) {
 	if err := store.QueryRow(`SELECT COUNT(*) FROM state_transitions WHERE entity_type = 'dispatch_intent' AND entity_id = ? AND to_state = 'ready' AND context_json LIKE '%arrival%'`, id).Scan(&created); err != nil || created != 1 {
 		t.Fatalf("the intent creation must be audited: %d %v", created, err)
 	}
-	var routeAccepted int
-	if err := store.QueryRow(`SELECT COUNT(*) FROM state_transitions WHERE entity_type = 'route' AND entity_id = 'wiki' AND to_state = 'ACTIVE_CLEAN' AND context_json LIKE '%dispatch_accepted%'`).Scan(&routeAccepted); err != nil || routeAccepted < 1 {
-		t.Fatalf("the route acceptance transition must be audited: %d %v", routeAccepted, err)
+	var laneAccepted int
+	if err := store.QueryRow(`SELECT COUNT(*) FROM state_transitions WHERE entity_type = 'destination_lane' AND entity_id LIKE 'wiki/%' AND to_state = 'ACTIVE_CLEAN' AND context_json LIKE '%dispatch_accepted%'`).Scan(&laneAccepted); err != nil || laneAccepted < 1 {
+		t.Fatalf("the lane acceptance transition must be audited: %d %v", laneAccepted, err)
 	}
 }
 

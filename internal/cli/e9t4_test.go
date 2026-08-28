@@ -256,8 +256,7 @@ func TestE9T4PendingReconcileDeliveredThroughFollowup(t *testing.T) {
 	healed := e5t1Store(t, configPath)
 	defer healed.Close()
 	var pending int
-	var active string
-	if err := healed.QueryRow(`SELECT pending_reconcile, COALESCE(active_dispatch_id, '') FROM route_runtime_state WHERE route_id = 'wiki'`).Scan(&pending, &active); err != nil || pending != 0 {
+	if err := healed.QueryRow(`SELECT pending_reconcile FROM route_runtime_state WHERE route_id = 'wiki'`).Scan(&pending); err != nil || pending != 0 {
 		t.Fatalf("the follow-up must consume the pending generation: %d %v", pending, err)
 	}
 	var state string

@@ -38,11 +38,11 @@ func e6t2SeedLineage(t *testing.T, store *sqlite.Store, suffix, when string) {
 	t.Helper()
 	// Free the route's active slot so a second lineage may commit.
 	if _, err := store.ExecContext(context.Background(),
-		`UPDATE dispatch_intents SET state = 'superseded' WHERE dispatch_id = (SELECT active_dispatch_id FROM route_runtime_state WHERE route_id = 'wiki') AND state IN ('ready','retry_wait')`); err != nil {
+		`UPDATE dispatch_intents SET state = 'superseded' WHERE dispatch_id = (SELECT active_dispatch_id FROM destination_lane_state WHERE route_id = 'wiki') AND state IN ('ready','retry_wait')`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.ExecContext(context.Background(),
-		`UPDATE route_runtime_state SET active_dispatch_id = NULL WHERE route_id = 'wiki'`); err != nil {
+		`UPDATE destination_lane_state SET active_dispatch_id = NULL WHERE route_id = 'wiki'`); err != nil {
 		t.Fatal(err)
 	}
 	lin := ports.Lineage{
@@ -111,7 +111,12 @@ func TestStatusReportsRoutesQueuesAndTargets(t *testing.T) {
 	store := e6t2Open(t, configPath)
 	e6t2SeedLineage(t, store, "old", "2026-08-20T01:00:00Z")
 	e6t2SetIntentState(t, store, "dispatch-old", "unknown", "2026-08-20T02:00:00Z", "")
-	if _, err := store.ExecContext(context.Background(), `UPDATE route_runtime_state SET dirty_generation = 3, pending_reconcile = 1 WHERE route_id = 'wiki'`); err != nil {
+	// The dirty generation is lane coordination (E12-T2); the pending flag
+	// stays on the route envelope.
+	if _, err := store.ExecContext(context.Background(), `UPDATE destination_lane_state SET dirty_generation = 3 WHERE route_id = 'wiki'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ExecContext(context.Background(), `UPDATE route_runtime_state SET pending_reconcile = 1 WHERE route_id = 'wiki'`); err != nil {
 		t.Fatal(err)
 	}
 

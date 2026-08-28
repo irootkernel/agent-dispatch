@@ -320,18 +320,33 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 		return exit
 	}
 	if outcome.merged {
-		// Another dispatch holds the route slot: the burst merged into
-		// the durable dirty generation (CON-002, FBK-001).
+		// Another dispatch holds every selected lane: the burst merged
+		// into the lanes' durable dirty generations (CON-002, CON-008,
+		// FBK-001).
 		return writeEnvelope(stdout, command, map[string]any{
 			"route_id": artifacts.opts.routeID, "disposition": "merge_pending",
 			"dirty_generation": outcome.dirty, "submitted": false,
+			"merged_lanes": laneResultsEnvelope(outcome.children),
+			"failed_lanes": laneFailuresEnvelope(outcome.failures),
 		})
+	}
+	// The fan-out envelope lists every selected destination's dispatch
+	// (E12-T2, FAN-002): dispatch_id stays the canonically-first lane's
+	// child, which the submit phase submits; the siblings stay ready for
+	// the drain.
+	fanout := laneResultsEnvelope(outcome.children)
+	failedLanes := laneFailuresEnvelope(outcome.failures)
+	for _, failure := range outcome.failures {
+		// Never silent: a lane that failed beside a successful sibling is
+		// operator-visible on stderr too (CON-007 isolation cuts both
+		// ways — the failure must be seen).
+		fmt.Fprintf(stderr, "warning: destination lane %s failed: %s\n", failure.DestinationID, failure.Error)
 	}
 	if noSubmit {
 		outcome.Close()
 		return writeEnvelope(stdout, command, map[string]any{
 			"route_id": artifacts.opts.routeID, "dispatch_id": outcome.dispatchID,
-			"state": "ready", "submitted": false,
+			"state": "ready", "submitted": false, "fanout": fanout, "failed_lanes": failedLanes,
 		})
 	}
 	// The YAML key half of the two-key gate (E7-T6/M-2): a configuration
@@ -340,7 +355,7 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 		outcome.Close()
 		return writeEnvelopeWithWarnings(stdout, command, map[string]any{
 			"route_id": artifacts.opts.routeID, "dispatch_id": outcome.dispatchID,
-			"state": "ready", "submitted": false,
+			"state": "ready", "submitted": false, "fanout": fanout, "failed_lanes": failedLanes,
 		}, []string{fmt.Sprintf("route %q is disabled in configuration; the intent stays ready until the route is enabled", artifacts.opts.routeID)})
 	}
 	// The submit phase needs the E4 sink adapter; the intent is durable
@@ -370,7 +385,39 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	return writeEnvelope(stdout, command, map[string]any{
 		"route_id": artifacts.opts.routeID, "dispatch_id": outcome.dispatchID,
 		"state": string(report.To), "reason": string(report.Reason), "submitted": true,
+		"fanout": laneResultsEnvelope(outcome.children), "failed_lanes": laneFailuresEnvelope(outcome.failures),
 	})
+}
+
+// laneFailuresEnvelope renders the per-destination fan-out failures for
+// the dispatch envelope (E12-T2): bounded, redacted error text with the
+// durable dispatch ID of a failed activation (an empty list renders as an
+// empty array, never null).
+func laneFailuresEnvelope(failures []dispatch.FanoutLaneFailure) []map[string]any {
+	out := make([]map[string]any, 0, len(failures))
+	for _, failure := range failures {
+		out = append(out, map[string]any{
+			"destination_id": failure.DestinationID,
+			"dispatch_id":    failure.DispatchID,
+			"error":          failure.Error,
+		})
+	}
+	return out
+}
+
+// laneResultsEnvelope renders the per-destination fan-out results for the
+// dispatch envelope (E12-T2): one {destination_id, dispatch_id} row per
+// selected destination in selection order.
+func laneResultsEnvelope(children []dispatch.FanoutLaneResult) []map[string]any {
+	out := make([]map[string]any, 0, len(children))
+	for _, child := range children {
+		out = append(out, map[string]any{
+			"destination_id":   child.DestinationID,
+			"dispatch_id":      child.DispatchID,
+			"dirty_generation": child.DirtyGeneration,
+		})
+	}
+	return out
 }
 
 // persistOutcome reports what the coordinator did with one arrival. The
@@ -380,8 +427,16 @@ type persistOutcome struct {
 	merged     bool
 	dirty      int
 	dispatchID string
-	store      storeOp
-	closer     *sqlite.Store
+	// children lists the per-destination dispatch IDs of the fan-out
+	// (E12-T2, FAN-002): one entry per selected destination, destination
+	// order.
+	children []dispatch.FanoutLaneResult
+	// failures lists the per-destination lanes whose arrival failed while
+	// a sibling succeeded (E12-T2, CON-007): bounded, redacted error text
+	// with the durable dispatch ID of a failed activation.
+	failures []dispatch.FanoutLaneFailure
+	store    storeOp
+	closer   *sqlite.Store
 }
 
 // Close releases the outcome's store handle when the submit phase is
@@ -392,11 +447,12 @@ func (o persistOutcome) Close() {
 	}
 }
 
-// persistThroughCoordinator routes the planned arrival through the E3-T4
-// coordinator: the single slot winner commits and activates its intent
-// (DUR-002: the committed intent exists before any target invocation);
-// every competing burst merges into the durable dirty generation instead
-// of failing (CON-002, FBK-001).
+// persistThroughCoordinator routes the planned fan-out through the E3-T4
+// coordinator (E12-T2): each selected destination's lineage activates or
+// merges on its own lane — one sibling's held slot merges into that
+// lane's dirty generation while the others activate (CON-007, CON-008) —
+// and the single slot winner of the canonically-first lane remains the
+// submit phase's dispatch.
 func persistThroughCoordinator(command string, artifacts *planArtifacts, stderr io.Writer) (persistOutcome, int) {
 	store, closer, exit := openOperatorStore(command, artifacts.opts.configPath, stderr)
 	if exit != 0 {
@@ -405,7 +461,7 @@ func persistThroughCoordinator(command string, artifacts *planArtifacts, stderr 
 	// Head-of-entry recovery (DUR-010, E8-T2/H-6): expired submitting
 	// leases are recovered — and their unknowns reconciled — before this
 	// arrival is evaluated, so a process that died mid-submit heals on
-	// the next trigger and the freed route can accept the arriving work
+	// the next trigger and the freed lane can accept the arriving work
 	// instead of silently merging into a wedged generation. A failure to
 	// enumerate fails closed exactly like the drain.
 	headRecover := dispatch.Runtime{Store: store, Now: time.Now, Actor: "dispatch-cli"}
@@ -429,16 +485,20 @@ func persistThroughCoordinator(command string, artifacts *planArtifacts, stderr 
 			}
 		}
 	}
-	lin, err := buildLineage(artifacts)
+	lins, err := buildLineages(artifacts)
 	if err != nil {
 		closer.Close()
+		if errors.Is(err, errNoDestinationSelected) {
+			writeError(stderr, command, "config_invalid", "configuration", err.Error())
+			return persistOutcome{}, 3
+		}
 		writeError(stderr, command, "internal_unclassified", "internal", err.Error())
 		return persistOutcome{}, 40
 	}
 	coordinator := &dispatch.Coordinator{
 		Store: store, Now: func() string { return dispatch.Timestamp(time.Now()) }, Actor: "dispatch-cli",
 	}
-	merged, err := coordinator.Arrival(requestCtx(), lin)
+	outcome, err := coordinator.ArrivalFanout(requestCtx(), lins)
 	if err != nil {
 		closer.Close()
 		switch {
@@ -453,16 +513,30 @@ func persistThroughCoordinator(command string, artifacts *planArtifacts, stderr 
 			return persistOutcome{}, 20
 		}
 	}
-	if merged {
+	if len(outcome.Activated) == 0 && len(outcome.Failed) == 0 {
+		// Every lane merged: the occurrence is owed work recorded in the
+		// lanes' dirty generations (CON-002, CON-008).
 		snap, err := store.LoadRouteState(requestCtx(), artifacts.opts.routeID)
 		closer.Close()
 		if err != nil {
 			writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
 			return persistOutcome{}, 20
 		}
-		return persistOutcome{merged: true, dirty: snap.DirtyGeneration}, 0
+		return persistOutcome{merged: true, dirty: snap.DirtyGeneration, children: outcome.Merged}, 0
 	}
-	return persistOutcome{dispatchID: lin.Intent.DispatchID, store: store, closer: closer}, 0
+	if len(outcome.Activated) == 0 {
+		// No lane activated but some failed beside merges: the occurrence
+		// is partially recorded; report the merged lanes with the failures
+		// visible instead of a bare merge envelope.
+		snap, err := store.LoadRouteState(requestCtx(), artifacts.opts.routeID)
+		closer.Close()
+		if err != nil {
+			writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
+			return persistOutcome{}, 20
+		}
+		return persistOutcome{merged: true, dirty: snap.DirtyGeneration, children: outcome.Merged, failures: outcome.Failed}, 0
+	}
+	return persistOutcome{dispatchID: outcome.Activated[0].DispatchID, children: outcome.Activated, failures: outcome.Failed, store: store, closer: closer}, 0
 }
 
 // persistQuarantine commits the quarantine-classified arrival with its
@@ -616,77 +690,195 @@ func buildHeldLineage(a *planArtifacts) (ports.Lineage, ports.QuarantineInput, e
 		}, nil
 }
 
-// buildLineage assembles the durable persistence unit from the planned
-// artifacts: the shared observation, batch, and decision from
-// buildHeldLineage plus the intent with its self-contained request. The
-// intent is child-linked (E12-T1): one aggregate event records the
-// occurrence and its destination selection, and the intent's request and
-// idempotency key derive from the selected destination's lane.
-func buildLineage(a *planArtifacts) (ports.Lineage, error) {
-	lin, _, err := buildHeldLineage(a)
+// errNoDestinationSelected is the fail-closed no-selection sentinel
+// (FAN-005): an occurrence every destination's conditions refuse creates
+// nothing — no aggregate, no child, no intent — and classifies as a
+// configuration refusal, never an internal defect.
+var errNoDestinationSelected = errors.New("no destination selected")
+
+// buildLineages assembles the durable persistence units of one fan-out
+// occurrence from the planned artifacts (E12-T2, FAN-002/FAN-003): the
+// shared observation, batch, and decision of buildHeldLineage plus ONE
+// intent per selected destination, all under ONE aggregate ID and ONE
+// shared decision. Each intent's request and idempotency key derive from
+// its own destination lane; its fanout block names its lane, carries the
+// full selection summary (every selected destination), and references
+// every selected destination's revision record. Destinations whose
+// structural conditions (FAN-004/FAN-005) do not select this occurrence
+// are skipped.
+func buildLineages(a *planArtifacts) ([]ports.Lineage, error) {
+	base, _, err := buildHeldLineage(a)
 	if err != nil {
-		return ports.Lineage{}, err
+		return nil, err
 	}
 	gen := ids.NewUUIDv7(time.Now)
-	dispatchID, err := gen.NewID()
-	if err != nil {
-		return ports.Lineage{}, err
-	}
 	aggregateID, err := gen.NewID()
 	if err != nil {
-		return ports.Lineage{}, err
+		return nil, err
 	}
-	lane, projection, err := certifiedLane(a.cfg, a.opts.routeID)
+	lanes, err := certifiedLanes(a.cfg, a.opts.routeID)
 	if err != nil {
-		return ports.Lineage{}, err
+		return nil, err
 	}
-	req, key, err := dispatch.BuildRequest(dispatch.RequestInput{
-		DispatchID: string(dispatchID),
-		Route:      ports.TaskRouteRef{ID: a.opts.routeID, Revision: a.plan.Route.Revision},
-		// The contract workspace binding form (hermes-task-contract §2):
-		// the destination's declared workspace, defaulting to
-		// dir:<resolved root> for the v0.1 markdown vault resource.
-		Resource:           ports.TaskResource{ID: a.route.Source.Resource, Workspace: workspaceOf(a.dest, a.resource.Root)},
-		TargetID:           a.dest.Target,
-		TargetScope:        resolvedTargetScope(a.resolved),
-		Destination:        lane,
-		Generation:         1,
-		Fingerprint:        records.Digest(a.plan.ContentFingerprint),
-		Changes:            a.batch.Changes,
-		Flags:              flagsOf(a.env),
-		AcceptanceCriteria: dispatch.WikiAcceptanceCriteria,
-		Assignment:         assignmentOf(a.dest),
-		ExecutionHints:     a.hints,
-	})
+	selCtx := selectionContextOf(a)
+	matcher := destinationPathMatcher(a.route)
+	var selected []certifiedLaneInfo
+	var selections []records.DestinationSelection
+	var revisions []ports.DestinationRevisionInput
+	for _, lane := range lanes {
+		reason, err := selectionReason(a, lane.dest, selCtx, matcher)
+		if err != nil {
+			return nil, err
+		}
+		if reason == "" {
+			continue
+		}
+		selected = append(selected, lane)
+		selections = append(selections, records.DestinationSelection{
+			DestinationID: lane.lane.ID, DestinationRevision: lane.lane.Revision,
+			Workstream: lane.lane.Workstream, Reason: reason,
+		})
+		revisions = append(revisions, laneRevisionInput(lane.lane, lane.projection))
+	}
+	if len(selected) == 0 {
+		return nil, fmt.Errorf("%w: route %q selected no destination for this occurrence: every destination's conditions refused it (FAN-005)",
+			errNoDestinationSelected, a.opts.routeID)
+	}
+	out := make([]ports.Lineage, 0, len(selected))
+	for _, lane := range selected {
+		dispatchID, err := gen.NewID()
+		if err != nil {
+			return nil, err
+		}
+		hints, err := hintsOf(lane.dest)
+		if err != nil {
+			return nil, err
+		}
+		req, key, err := dispatch.BuildRequest(dispatch.RequestInput{
+			DispatchID: string(dispatchID),
+			Route:      ports.TaskRouteRef{ID: a.opts.routeID, Revision: a.plan.Route.Revision},
+			// The contract workspace binding form (hermes-task-contract §2):
+			// the destination's declared workspace, defaulting to
+			// dir:<resolved root> for the v0.1 markdown vault resource.
+			Resource:           ports.TaskResource{ID: a.route.Source.Resource, Workspace: workspaceOf(lane.dest, a.resource.Root)},
+			TargetID:           a.dest.Target,
+			TargetScope:        resolvedTargetScope(a.resolved),
+			Destination:        lane.lane,
+			Generation:         1,
+			Fingerprint:        records.Digest(a.plan.ContentFingerprint),
+			Changes:            a.batch.Changes,
+			Flags:              flagsOf(a.env),
+			AcceptanceCriteria: dispatch.WikiAcceptanceCriteria,
+			Assignment:         assignmentOf(lane.dest),
+			ExecutionHints:     hints,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("task request: %v", err)
+		}
+		requestJSON, err := dispatch.MarshalRequest(req)
+		if err != nil {
+			return nil, err
+		}
+		lin := base
+		lin.Intent = ports.IntentInput{
+			DispatchID: string(dispatchID), DecisionID: base.Decision.DecisionID, RouteID: a.opts.routeID,
+			RouteRevision: a.plan.Route.Revision, TargetID: a.dest.Target, TargetType: a.resolved.Type(),
+			TargetScope: resolvedTargetScope(a.resolved),
+			ResourceID:  a.route.Source.Resource, Generation: 1, IdempotencyKey: key,
+			ContentFingerprint: a.plan.ContentFingerprint, ManifestDigest: dispatch.ManifestDigest(a.batch.Changes),
+			RequestVersion: dispatch.RequestContractVersion, RequestJSON: requestJSON, CreatedAt: base.Decision.CreatedAt,
+			Fanout: &ports.FanoutInput{
+				AggregateID: string(aggregateID), Origin: string(records.OriginArrival),
+				DestinationID: lane.lane.ID, DestinationRevision: lane.lane.Revision, Workstream: lane.lane.Workstream,
+				Selections: selections,
+				Revisions:  revisions,
+			},
+		}
+		out = append(out, lin)
+	}
+	return out, nil
+}
+
+// selectionContextOf projects the occurrence's structural facts onto the
+// closed selection context (FAN-004: paths, operations, classification,
+// and policy outcome only — never content semantics).
+func selectionContextOf(a *planArtifacts) dispatch.SelectionContext {
+	paths := make([]string, 0, len(a.batch.Changes))
+	operations := make([]records.Operation, 0, len(a.batch.Changes))
+	for _, c := range a.batch.Changes {
+		paths = append(paths, c.Path)
+		operations = append(operations, c.Operation)
+	}
+	classification := "normal"
+	if len(a.plan.Classification) > 0 {
+		classification = a.plan.Classification[0]
+	}
+	return dispatch.SelectionContext{
+		Paths: paths, Operations: operations,
+		Classification: classification, Disposition: a.plan.Disposition,
+	}
+}
+
+// selectionReason evaluates one destination's structural conditions with
+// the FAN-005 evaluator and renders the closed selection-evidence reason
+// (FAN-010): an empty string means the occurrence does not select the
+// destination. The fanout_mode reason records the certified mode when the
+// destination declares no conditions; a conditioned destination records
+// the evaluator's closed outcome.
+func selectionReason(a *planArtifacts, dest config.Destination, selCtx dispatch.SelectionContext, matcher func(pattern, path string) (bool, error)) (string, error) {
+	var conds *dispatch.DestinationConditionSet
+	if dest.Conditions != nil {
+		conds = &dispatch.DestinationConditionSet{
+			PathInclude: dest.Conditions.PathInclude, PathExclude: dest.Conditions.PathExclude,
+			Operations: dest.Conditions.Operations, Classifications: dest.Conditions.Classifications,
+			PolicyOutcomes: dest.Conditions.PolicyOutcomes,
+		}
+	}
+	selected, reason, err := dispatch.SelectDestination(selCtx, conds, matcher)
 	if err != nil {
-		return ports.Lineage{}, fmt.Errorf("task request: %v", err)
+		return "", fmt.Errorf("destination %q conditions: %v", dest.ID, err)
 	}
-	requestJSON, err := dispatch.MarshalRequest(req)
-	if err != nil {
-		return ports.Lineage{}, err
+	if !selected {
+		return "", nil
 	}
-	lin.Intent = ports.IntentInput{
-		DispatchID: string(dispatchID), DecisionID: lin.Decision.DecisionID, RouteID: a.opts.routeID,
-		RouteRevision: a.plan.Route.Revision, TargetID: a.dest.Target, TargetType: a.resolved.Type(),
-		TargetScope: resolvedTargetScope(a.resolved),
-		ResourceID:  a.route.Source.Resource, Generation: 1, IdempotencyKey: key,
-		ContentFingerprint: a.plan.ContentFingerprint, ManifestDigest: dispatch.ManifestDigest(a.batch.Changes),
-		RequestVersion: dispatch.RequestContractVersion, RequestJSON: requestJSON, CreatedAt: lin.Decision.CreatedAt,
-		Fanout: &ports.FanoutInput{
-			AggregateID: string(aggregateID), Origin: string(records.OriginArrival),
-			DestinationID: lane.ID, DestinationRevision: lane.Revision, Workstream: lane.Workstream,
-			Selections: []records.DestinationSelection{{
-				DestinationID: lane.ID, DestinationRevision: lane.Revision, Workstream: lane.Workstream,
-				// The certified v0.1.5 selection is the closed fanout_mode
-				// "all" over the one certified lane: the reason records the
-				// mode, never an evaluated predicate (the E12-T2 evaluator
-				// adds per-destination structural reasons).
-				Reason: "fanout_mode:all",
-			}},
-			Revisions: []ports.DestinationRevisionInput{laneRevisionInput(lane, projection)},
-		},
+	if conds == nil || (len(conds.PathInclude) == 0 && len(conds.PathExclude) == 0 && len(conds.Operations) == 0 &&
+		len(conds.Classifications) == 0 && len(conds.PolicyOutcomes) == 0) {
+		mode := a.route.FanoutMode
+		if mode == "" {
+			mode = "all"
+		}
+		return "fanout_mode:" + mode, nil
 	}
-	return lin, nil
+	return "conditions:" + reason, nil
+}
+
+// destinationPathMatcher adapts the pattern engine onto the evaluator's
+// per-pattern matcher (E12-T2): one compiled single-pattern engine per
+// distinct condition pattern, with the same case mode the route revision
+// records, so a condition's matching behavior and the revision's recorded
+// mode cannot diverge.
+func destinationPathMatcher(route config.Route) func(pattern, path string) (bool, error) {
+	mode := policy.CaseSensitive
+	if config.CaseMode() == "insensitive" {
+		mode = policy.CaseInsensitive
+	}
+	cache := map[string]*policy.Engine{}
+	return func(pattern, path string) (bool, error) {
+		engine, ok := cache[pattern]
+		if !ok {
+			compiled, err := policy.NewEngine([]string{pattern}, nil, nil, nil, mode)
+			if err != nil {
+				return false, err
+			}
+			cache[pattern] = compiled
+			engine = compiled
+		}
+		status, err := engine.Classify(path)
+		if err != nil {
+			return false, err
+		}
+		return status == policy.StatusNormal, nil
+	}
 }
 
 // workspaceOf resolves the destination's Hermes workspace form,

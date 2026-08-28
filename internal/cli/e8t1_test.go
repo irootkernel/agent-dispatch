@@ -28,14 +28,15 @@ func e8t1CompleteEmpty(t *testing.T, configPath, dispatchID, runID string) map[s
 	return decodeEnvelope(t, &out)
 }
 
-// e8t1RouteState reads the route's durable state.
+// e8t1RouteState reads the route's durable lane state (E12-T2: the
+// coordination columns live on the destination lane).
 func e8t1RouteState(t *testing.T, configPath string) (string, int) {
 	t.Helper()
 	store := e5t1Store(t, configPath)
 	defer store.Close()
 	var routeState string
 	var dirty int
-	if err := store.QueryRow(`SELECT route_state, dirty_generation FROM route_runtime_state WHERE route_id='wiki'`).Scan(&routeState, &dirty); err != nil {
+	if err := store.QueryRow(`SELECT lane_state, dirty_generation FROM destination_lane_state WHERE route_id='wiki'`).Scan(&routeState, &dirty); err != nil {
 		t.Fatal(err)
 	}
 	return routeState, dirty

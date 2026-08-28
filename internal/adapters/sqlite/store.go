@@ -160,20 +160,43 @@ func (s *Store) SaveIntent(tx *sql.Tx, i IntentRecord) error {
 			return err
 		}
 	}
-	// Reserve the route's active slot in the same transaction.
-	res, err := execOn(tx, s.DB, `UPDATE route_runtime_state
+	// Reserve the intent's lane slot in the same transaction (E12-T2,
+	// CON-007): the destination lane comes from the fanout record, and a
+	// nil fanout is the pre-cutover legacy shape keyed on the synthetic
+	// legacy lane. Lanes materialize lazily on their first write
+	// (migration v13 backfills only lanes with pre-cutover active work).
+	// The route envelope row must exist: without it the activation state
+	// the coordination guards read is absent and the reservation fails
+	// closed. A genuinely missing row is the distinct not-found shape; a
+	// transient read failure surfaces as itself, never as the missing-row
+	// message (review round 1, security finding).
+	var exists int
+	switch err := txOrDB(tx, s.DB).QueryRow(`SELECT 1 FROM route_runtime_state WHERE route_id = ?`, i.RouteID).Scan(&exists); {
+	case errors.Is(err, sql.ErrNoRows):
+		return fmt.Errorf("route %s has no runtime state row: %w", i.RouteID, ErrOptimisticConcurrency)
+	case err != nil:
+		return fmt.Errorf("reading route %s runtime state: %w", i.RouteID, err)
+	}
+	lane := LegacyLaneID
+	if i.Fanout != nil {
+		lane = i.Fanout.DestinationID
+	}
+	if err := s.materializeLaneTx(tx, i.RouteID, lane); err != nil {
+		return err
+	}
+	res, err := execOn(tx, s.DB, `UPDATE destination_lane_state
 		SET active_dispatch_id = ?, active_generation = ?, version = version + 1
-		WHERE route_id = ? AND active_dispatch_id IS NULL`,
-		i.DispatchID, i.Generation, i.RouteID)
+		WHERE route_id = ? AND destination_id = ? AND active_dispatch_id IS NULL`,
+		i.DispatchID, i.Generation, i.RouteID, lane)
 	if err != nil {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		var exists int
-		if err := txOrDB(tx, s.DB).QueryRow(`SELECT 1 FROM route_runtime_state WHERE route_id = ?`, i.RouteID).Scan(&exists); err != nil {
+		var holder sql.NullString
+		if err := txOrDB(tx, s.DB).QueryRow(`SELECT active_dispatch_id FROM destination_lane_state WHERE route_id = ? AND destination_id = ?`, i.RouteID, lane).Scan(&holder); err != nil {
 			return fmt.Errorf("route %s has no runtime state row: %w", i.RouteID, ErrOptimisticConcurrency)
 		}
-		return fmt.Errorf("route %s: %w", i.RouteID, ports.ErrRouteSlotHeld)
+		return fmt.Errorf("route %s lane %s: %w", i.RouteID, lane, ports.ErrRouteSlotHeld)
 	}
 	return nil
 }

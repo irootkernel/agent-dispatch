@@ -82,8 +82,8 @@ func TestCommitLineagePersistsWholeChain(t *testing.T) {
 		}
 	}
 	var route string
-	if err := s.QueryRow(`SELECT active_dispatch_id FROM route_runtime_state WHERE route_id = 'wiki-maintenance'`).Scan(&route); err != nil || route != "dispatch-1" {
-		t.Fatalf("route slot must be reserved by the intent: %q %v", route, err)
+	if err := s.QueryRow(`SELECT COALESCE(active_dispatch_id, '') FROM destination_lane_state WHERE route_id = 'wiki-maintenance' AND destination_id = ?`, LegacyLaneID).Scan(&route); err != nil || route != "dispatch-1" {
+		t.Fatalf("the intent's lane slot must be reserved by the intent: %q %v", route, err)
 	}
 }
 

@@ -286,6 +286,56 @@ func TestRenderReceiptAndLatestState(t *testing.T) {
 	}
 }
 
+// TestRenderDestinationWorkstreamTrustedBlock pins FAN-009 (E12-T2): a
+// destination-carrying request renders its destination identity and
+// workstream inside the TRUSTED instruction block — before the manifest
+// delimiter — from trusted configuration data, never manifest data; a
+// request without a destination block renders neither line (the legacy
+// pre-cutover shape stays renderable).
+func TestRenderDestinationWorkstreamTrustedBlock(t *testing.T) {
+	req := loadGoldenRequest(t)
+	if req.Destination == nil {
+		t.Fatal("the frozen example request must carry a destination block")
+	}
+	rendered, err := Render(req, RenderOptions{MaxManifestBytes: goldenManifestBound, ResourceMutexSupported: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	workstreamLine := "Workstream: " + req.Destination.Workstream
+	destinationLine := "Destination: " + req.Destination.ID + " (revision " + req.Destination.Revision + ")"
+	manifestAt := strings.Index(rendered.Body, manifestBeginText)
+	if manifestAt < 0 {
+		t.Fatal("manifest delimiter missing")
+	}
+	for _, line := range []string{workstreamLine, destinationLine} {
+		at := strings.Index(rendered.Body, line)
+		if at < 0 || at > manifestAt {
+			t.Fatalf("%q must render inside the trusted instruction block: at=%d manifest=%d", line, at, manifestAt)
+		}
+	}
+	// The destination line stays out of the untrusted manifest section.
+	section, ok := bodyManifestSection(rendered.Body)
+	if !ok || strings.Contains(section, req.Destination.Workstream) {
+		t.Fatalf("manifest values must never carry the workstream: %q", section)
+	}
+	// The legacy shape (no destination block) renders without either line.
+	legacy := req
+	legacy.Destination = nil
+	legacyRendered, err := Render(legacy, RenderOptions{MaxManifestBytes: goldenManifestBound, ResourceMutexSupported: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(legacyRendered.Body, "Workstream:") || strings.Contains(legacyRendered.Body, "Destination:") {
+		t.Fatal("a request without a destination block must not render lane lines")
+	}
+	// An incomplete destination block fails closed as an invalid request.
+	incomplete := req
+	incomplete.Destination = &ports.TaskDestinationRef{ID: "wiki-primary", Revision: "dst-x"}
+	if _, err := Render(incomplete, RenderOptions{MaxManifestBytes: goldenManifestBound}); err == nil {
+		t.Fatal("a destination block without a workstream must fail closed")
+	}
+}
+
 // TestRenderManifestBound proves an oversized manifest is rejected with
 // the explicit policy error, never truncated (SEC-009).
 func TestRenderManifestBound(t *testing.T) {

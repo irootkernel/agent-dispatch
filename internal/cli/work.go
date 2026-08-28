@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
 	"github.com/irootkernel/agent-dispatch/internal/app/ingest"
 	"github.com/irootkernel/agent-dispatch/internal/app/workreceipt"
 	"github.com/irootkernel/agent-dispatch/internal/config"
@@ -275,7 +276,38 @@ func workService(command, configPath string, store storeOp, routeID string, stde
 		// A legacy completion owing a follow-up resolves the live
 		// certified lane so the follow-up child-links (E12-T1).
 		DestinationResolver: routeDestinationResolver(cfg),
+		// The lane-scoped follow-up (E12-T2, CON-008): each destination's
+		// structural conditions come from the live configuration, and the
+		// path classes evaluate through the same pattern-engine matcher
+		// the dispatch surface wires (identical case mode and semantics).
+		LaneConditions:  laneConditionsResolver(cfg),
+		LanePathMatcher: destinationPathMatcher(route),
 	}, 0
+}
+
+// laneConditionsResolver resolves one destination's structural selection
+// conditions from the live configuration (E12-T2): nil conditions mean
+// the destination selects unconditionally; an unknown destination fails
+// closed.
+func laneConditionsResolver(cfg *config.Config) func(routeID, destinationID string) (*dispatch.DestinationConditionSet, error) {
+	return func(routeID, destinationID string) (*dispatch.DestinationConditionSet, error) {
+		route, ok := cfg.Routes[routeID]
+		if !ok {
+			return nil, fmt.Errorf("route %q is not defined", routeID)
+		}
+		dest, ok := route.DestinationByID(destinationID)
+		if !ok {
+			return nil, fmt.Errorf("route %q has no destination %q", routeID, destinationID)
+		}
+		if dest.Conditions == nil {
+			return nil, nil
+		}
+		return &dispatch.DestinationConditionSet{
+			PathInclude: dest.Conditions.PathInclude, PathExclude: dest.Conditions.PathExclude,
+			Operations: dest.Conditions.Operations, Classifications: dest.Conditions.Classifications,
+			PolicyOutcomes: dest.Conditions.PolicyOutcomes,
+		}, nil
+	}
 }
 
 // readManifest loads the manifest document from a file or standard

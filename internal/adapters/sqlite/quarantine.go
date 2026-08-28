@@ -316,14 +316,28 @@ func (s *Store) ResolveUncertainReconciliation(ctx context.Context, routeID stri
 		auditJSON("reason", "reconciliation_resolved", "actor", actor, "dirty_generation", snap.DirtyGeneration, "pending_reconcile", snap.PendingReconcile)); err != nil {
 		return err
 	}
-	// The resolved dispatch releases the active slot; its record and audit
-	// history remain inspectable, and the reconciliation absorbs the
-	// retained generation. A created intent keeps its pending generation
-	// (marked atomically here) so its completion schedules the one
-	// documented follow-up; a no-work resolution clears it.
+	// The resolved dispatch's lane releases its slot and collapses its
+	// retained generation (E12-T2: the slot/coordination writes key on the
+	// dispatch's lane); the lane lands FOLLOWUP_READY — the same shape the
+	// audited route transition just produced — so the created follow-up
+	// activates through the lane's own edge. The route row keeps the
+	// envelope: its hold columns clear and the pending flag and reconcile
+	// timestamp stay route-keyed (the shared collapse).
 	pendingAfter := 0
 	if intent != nil {
 		pendingAfter = 1
+	}
+	// The held lane lands through its own guarded, audited transitions
+	// (E12-T2, review round 1: no raw lane writes beside the audited route
+	// transition) — UNCERTAIN -> FOLLOWUP_READY, plus the follow-up-dropped
+	// edge to IDLE when no work is due — and its retained slot and dirty
+	// generation clear with them.
+	_, holdLane, laneErr := s.laneOfDispatch(tx, snap.ActiveDispatchID)
+	if laneErr != nil {
+		return laneErr
+	}
+	if err := s.resolveHeldLaneTx(tx, routeID, holdLane, intent != nil, actor, now); err != nil {
+		return err
 	}
 	if _, err := tx.Exec(`UPDATE route_runtime_state SET active_dispatch_id = NULL, active_generation = 0,
 		dirty_generation = 0, dirty_since = NULL, pending_reconcile = ?, last_reconciled_at = ? WHERE route_id = ?`,
@@ -498,8 +512,8 @@ func (s *Store) CommitReconcileDecision(ctx context.Context, d ports.DecisionInp
 
 // CommitReconcileIntent persists and activates one latest-state
 // reconciliation intent for an idle route in a single transaction: the
-// intent, its audit transition, and the IDLE to ACTIVE_CLEAN activation
-// commit together or not at all.
+// intent, its audit transition, and the intent's lane IDLE -> ACTIVE_CLEAN
+// activation commit together or not at all (lane-keyed since E12-T2).
 func (s *Store) CommitReconcileIntent(ctx context.Context, intent ports.IntentInput, actor, now string) error {
 	tx, err := s.BeginTx(ctx, nil)
 	if err != nil {
@@ -513,17 +527,24 @@ func (s *Store) CommitReconcileIntent(ctx context.Context, intent ports.IntentIn
 		auditJSON("reason", "reconcile", "route_id", intent.RouteID, "latest_state", true)); err != nil {
 		return err
 	}
-	snap, err := s.routeSnapshotInTx(tx, intent.RouteID)
+	lane := LegacyLaneID
+	if intent.Fanout != nil {
+		lane = intent.Fanout.DestinationID
+	}
+	if err := s.materializeLaneTx(tx, intent.RouteID, lane); err != nil {
+		return err
+	}
+	snap, err := s.laneSnapshotInTx(tx, intent.RouteID, lane)
 	if err != nil {
 		return err
 	}
-	if err := s.applyRouteTransition(tx, snap, state.RouteActiveClean, state.ReasonDispatchAccepted,
+	if err := s.applyLaneTransition(tx, intent.RouteID, lane, snap, state.RouteActiveClean, state.ReasonDispatchAccepted,
 		state.RouteEvidence{Actor: actor, ActivatingDispatchID: intent.DispatchID}, now,
-		auditJSON("reason", "dispatch_accepted", "dispatch_id", intent.DispatchID, "origin", "reconcile")); err != nil {
+		auditJSON("reason", "dispatch_accepted", "dispatch_id", intent.DispatchID, "origin", "reconcile", "destination_id", lane)); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`UPDATE route_runtime_state SET active_dispatch_id = ? WHERE route_id = ? AND (active_dispatch_id IS NULL OR active_dispatch_id = ?)`,
-		intent.DispatchID, intent.RouteID, intent.DispatchID); err != nil {
+	if _, err := tx.Exec(`UPDATE destination_lane_state SET active_dispatch_id = ? WHERE route_id = ? AND destination_id = ? AND (active_dispatch_id IS NULL OR active_dispatch_id = ?)`,
+		intent.DispatchID, intent.RouteID, lane, intent.DispatchID); err != nil {
 		return err
 	}
 	return tx.Commit()

@@ -77,9 +77,14 @@ func (s *Store) StaleLeases(ctx context.Context, now string) ([]string, error) {
 }
 
 // notActiveSlotSQL is the shared active-slot guard for every prune
-// lineage delete (plan and execution, E9-T2/T4-F005): the route's live
-// dispatch keeps its lineage whatever its age.
-const notActiveSlotSQL = ` AND dispatch_id NOT IN (SELECT active_dispatch_id FROM route_runtime_state WHERE active_dispatch_id IS NOT NULL)`
+// lineage delete (plan and execution, E9-T2/T4-F005): the live dispatch
+// keeps its lineage whatever its age. Since E12-T2 the coordination slots
+// live on the destination lanes, and the frozen route row's slot is
+// guarded with them.
+const notActiveSlotSQL = ` AND dispatch_id NOT IN (
+	SELECT active_dispatch_id FROM route_runtime_state WHERE active_dispatch_id IS NOT NULL
+	UNION
+	SELECT active_dispatch_id FROM destination_lane_state WHERE active_dispatch_id IS NOT NULL)`
 
 // resolvedTerminalStates are the intent states whose lineage is fully
 // resolved for retention (retention-and-privacy §2: everything else is
@@ -284,14 +289,24 @@ func (s *Store) ExecutePrune(ctx context.Context, cutoffs PruneCutoffs, actor, r
 		return counts, err
 	}
 	// Intents only when nothing remains to orphan: no surviving
-	// attempts, receipts, or work receipts, and never the route's
-	// active slot.
+	// attempts, receipts, or work receipts, and never a lane's active
+	// slot. The child-dispatch projection of a pruned intent prunes with
+	// it (E12-T2: the child is the intent's destination projection; its
+	// aggregate event and destination revisions stand alone).
+	if _, err := exec("child dispatches",
+		`DELETE FROM child_dispatches WHERE dispatch_id IN (
+			SELECT dispatch_id FROM dispatch_intents WHERE state IN `+terminal+` AND updated_at < ?)`+notActiveSlotSQL, c.Attempts); err != nil {
+		return counts, err
+	}
 	if counts.Intents, err = exec("intents",
 		`DELETE FROM dispatch_intents WHERE state IN `+terminal+` AND updated_at < ?
 		 AND NOT EXISTS (SELECT 1 FROM dispatch_attempts a WHERE a.dispatch_id = dispatch_intents.dispatch_id)
 		 AND NOT EXISTS (SELECT 1 FROM dispatch_receipts r WHERE r.dispatch_id = dispatch_intents.dispatch_id)
 		 AND NOT EXISTS (SELECT 1 FROM work_receipts w WHERE w.dispatch_id = dispatch_intents.dispatch_id AND w.submitted_at >= ?)
-		 AND dispatch_id NOT IN (SELECT active_dispatch_id FROM route_runtime_state WHERE active_dispatch_id IS NOT NULL)`,
+		 AND dispatch_id NOT IN (
+			SELECT active_dispatch_id FROM route_runtime_state WHERE active_dispatch_id IS NOT NULL
+			UNION
+			SELECT active_dispatch_id FROM destination_lane_state WHERE active_dispatch_id IS NOT NULL)`,
 		c.Attempts, c.CompletedReceipts); err != nil {
 		return counts, err
 	}

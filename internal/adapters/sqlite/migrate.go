@@ -44,6 +44,7 @@ var Migrations = []Migration{
 	{Version: 10, Name: "destinations-contract-cutover", SQL: schemaV10DestinationsContractCutover},
 	{Version: 11, Name: "capability-fingerprint", SQL: schemaV11CapabilityFingerprint},
 	{Version: 12, Name: "aggregate-fanout-records", SQL: schemaV12AggregateFanoutRecords},
+	{Version: 13, Name: "destination-lane-state", SQL: schemaV13DestinationLaneState},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
@@ -603,4 +604,38 @@ CREATE TABLE child_dispatches (
 	UNIQUE (aggregate_id, destination_id)
 );
 CREATE INDEX idx_child_dispatches_lane ON child_dispatches(route_id, destination_id, created_at);
+`
+
+// schemaV13DestinationLaneState re-keys route coordination onto
+// per-destination lanes (E12-T2, CON-007/CON-008): one destination_lane_state
+// row per (route, destination) holds the lane's coordination state — the
+// per-lane single-active slot, dirty generation, and failure budget — while
+// route_runtime_state keeps the route envelope (activation, acknowledged
+// revision, capability fingerprint, pending reconciliation) and the
+// route-level QUARANTINED/UNCERTAIN holds. The route row's v12-era
+// coordination columns become frozen history: the backfill copies each
+// route's current in-flight coordination onto the lane its active dispatch
+// belongs to (the child row's destination, else the synthetic '__legacy__'
+// lane of ADR-0016), and routes without an active dispatch keep no lane row
+// — lanes materialize lazily on their first write.
+const schemaV13DestinationLaneState = `
+CREATE TABLE destination_lane_state (
+    route_id          TEXT NOT NULL REFERENCES routes(route_id),
+    destination_id    TEXT NOT NULL,
+    lane_state        TEXT NOT NULL CHECK (lane_state IN ('IDLE','ACTIVE_CLEAN','ACTIVE_DIRTY','FOLLOWUP_READY','UNCERTAIN','QUARANTINED')),
+    active_dispatch_id TEXT REFERENCES dispatch_intents(dispatch_id),
+    active_generation INTEGER NOT NULL DEFAULT 0,
+    dirty_generation  INTEGER NOT NULL DEFAULT 0,
+    dirty_since       TEXT,
+    failure_budget    INTEGER NOT NULL DEFAULT 0,
+    version           INTEGER NOT NULL DEFAULT 0 CHECK (version >= 0),
+    PRIMARY KEY (route_id, destination_id)
+);
+INSERT INTO destination_lane_state
+    (route_id, destination_id, lane_state, active_dispatch_id, active_generation, dirty_generation, dirty_since, version)
+SELECT route_id,
+    COALESCE((SELECT c.destination_id FROM child_dispatches c WHERE c.dispatch_id = route_runtime_state.active_dispatch_id), '__legacy__'),
+    route_state, active_dispatch_id, active_generation, dirty_generation, dirty_since, version
+FROM route_runtime_state
+WHERE active_dispatch_id IS NOT NULL;
 `

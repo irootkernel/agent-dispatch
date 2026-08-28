@@ -106,6 +106,13 @@ func TestE9T4OverBudgetUncertainResolvesThroughReconciliation(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	// The completion reads the dispatch's lane (E12-T2): seed the legacy
+	// lane with the same in-flight coordination.
+	if _, err := s.Exec(`INSERT INTO destination_lane_state (route_id, destination_id, lane_state, active_dispatch_id, dirty_generation)
+		VALUES ('wiki-maintenance', '__legacy__', 'ACTIVE_DIRTY', 'dispatch-1', 1)
+		ON CONFLICT (route_id, destination_id) DO UPDATE SET lane_state = 'ACTIVE_DIRTY', active_dispatch_id = 'dispatch-1', dirty_generation = 1`); err != nil {
+		t.Fatal(err)
+	}
 	out, err := s.CompleteActive(context.Background(), ports.ActiveCompletion{
 		RouteID: "wiki-maintenance", DispatchID: "dispatch-1",
 		ReceiptRef: "rcpt-work-1", Actor: "hermes-task", Now: now(),

@@ -134,7 +134,7 @@ func TestG5AC503PrunePreservesLineageAndAudit(t *testing.T) {
 	e6t2SeedLineage(t, store, "acc", "2025-01-01T00:00:00Z")
 	e6t2SetIntentState(t, store, "dispatch-acc", "accepted", "2025-01-02T00:00:00Z", "")
 	if _, err := store.ExecContext(context.Background(),
-		`UPDATE route_runtime_state SET active_dispatch_id = 'dispatch-acc' WHERE route_id = 'wiki' AND active_dispatch_id IS NULL`); err != nil {
+		`UPDATE destination_lane_state SET active_dispatch_id = 'dispatch-acc' WHERE route_id = 'wiki' AND active_dispatch_id IS NULL`); err != nil {
 		t.Fatal(err)
 	}
 	e6t2SeedLineage(t, store, "unk", "2025-01-01T00:00:00Z")
@@ -478,7 +478,7 @@ func TestG5UpgradeAndBackupRehearsal(t *testing.T) {
 	// resolves as accepted and the route's active slot is free, so the
 	// post-upgrade reconciliation meets its preconditions.
 	e6t2SetIntentState(t, store, dispatchID, "accepted", "2026-08-20T02:00:00Z", "")
-	if _, err := store.Exec(`UPDATE route_runtime_state SET active_dispatch_id = NULL WHERE route_id = 'wiki'`); err != nil {
+	if _, err := store.Exec(`UPDATE destination_lane_state SET active_dispatch_id = NULL WHERE route_id = 'wiki'`); err != nil {
 		t.Fatal(err)
 	}
 	store.Close()

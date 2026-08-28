@@ -47,13 +47,14 @@ func TestE9ValidationMigrationV7BackfillsAndPropagates(t *testing.T) {
 		`ALTER TABLE resources DROP COLUMN observation_revision`,
 		`DROP TABLE watch_bindings`,
 		`DROP TABLE contract_state`,
+		`DROP TABLE destination_lane_state`,
 		`DROP INDEX idx_child_dispatches_lane`,
 		`DROP TABLE child_dispatches`,
 		`DROP TABLE destination_revisions`,
 		`DROP INDEX idx_aggregate_events_route`,
 		`DROP TABLE aggregate_events`,
 		`ALTER TABLE route_runtime_state DROP COLUMN capability_fingerprint`,
-		`DELETE FROM schema_migrations WHERE version IN (7, 8, 9, 10, 11, 12)`,
+		`DELETE FROM schema_migrations WHERE version IN (7, 8, 9, 10, 11, 12, 13)`,
 	} {
 		if _, err := s.Exec(stmt); err != nil {
 			t.Fatalf("rewind %q: %v", stmt, err)
@@ -112,8 +113,11 @@ func TestE9ValidationPruneUnwedgesTerminalBegunReceipt(t *testing.T) {
 	if _, err := s.Exec(`UPDATE dispatch_intents SET state = 'superseded', updated_at = '2020-01-01T00:00:00Z' WHERE dispatch_id = 'dispatch-1'`); err != nil {
 		t.Fatal(err)
 	}
-	// A superseded dispatch holds no active slot.
+	// A superseded dispatch holds no active slot (lane-keyed since E12-T2).
 	if _, err := s.Exec(`UPDATE route_runtime_state SET active_dispatch_id = NULL`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Exec(`UPDATE destination_lane_state SET active_dispatch_id = NULL`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Exec(`INSERT INTO work_receipts (receipt_id, dispatch_id, run_id, resource_id, status, submitted_at, validation_state)
@@ -150,7 +154,7 @@ func TestE9ValidationPruneUnwedgesTerminalBegunReceipt(t *testing.T) {
 		VALUES ('w2', 'dispatch-live', 'run-1', 'vault-main', 'begun', '2020-01-01T00:00:00Z', 'valid')`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Exec(`UPDATE route_runtime_state SET active_dispatch_id = 'dispatch-live'`); err != nil {
+	if _, err := s.Exec(`UPDATE destination_lane_state SET active_dispatch_id = 'dispatch-live' WHERE route_id = 'wiki-maintenance' AND destination_id = '__legacy__'`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.ExecutePrune(context.Background(), PruneCutoffs{

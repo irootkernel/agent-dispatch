@@ -380,7 +380,7 @@ func TestWorkFailNeverErasesDirtyState(t *testing.T) {
 	// fail it too.
 	submitFollowupProductPath(t, configPath, followup)
 	var activeDispatch string
-	if err := store.QueryRow(`SELECT active_dispatch_id FROM route_runtime_state WHERE route_id = 'wiki'`).Scan(&activeDispatch); err != nil || activeDispatch != followup {
+	if err := store.QueryRow(`SELECT COALESCE(active_dispatch_id, '') FROM destination_lane_state WHERE route_id = 'wiki'`).Scan(&activeDispatch); err != nil || activeDispatch != followup {
 		t.Fatalf("follow-up must hold the slot: %q %v", activeDispatch, err)
 	}
 	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", followup, "--run-id", "run-2"}, &out, &errb); code != 0 {

@@ -118,6 +118,19 @@ type Service struct {
 	// the whole receipt. Nil disables the resolution and legacy
 	// completions fail closed with guidance.
 	DestinationResolver dispatch.DestinationLaneResolver
+	// LaneConditions resolves one destination's structural selection
+	// conditions (E12-T2, CON-008): the follow-up projection filters the
+	// dirty generation to the changes the completing dispatch's lane
+	// selects, so one lane's follow-up can never incorporate a sibling
+	// lane's conditioned-out work. Nil disables the filtering (legacy
+	// and test paths); a non-nil resolver that fails for a child-linked
+	// dispatch fails the completion closed.
+	LaneConditions func(routeID, destinationID string) (*dispatch.DestinationConditionSet, error)
+	// LanePathMatcher is the per-pattern path matcher the lane filter
+	// evaluates path conditions through (the CLI wires the pattern
+	// engine's matcher, the same delegate the dispatch surface uses).
+	// Path conditions with a nil matcher fail the completion closed.
+	LanePathMatcher func(pattern, path string) (bool, error)
 }
 
 // InvalidError reports a receipt rejected by validation; Reasons are the
@@ -266,12 +279,19 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 		SubmittedAt:     s.timestamp(),
 		ValidationState: "valid",
 	}
-	// Exact self-change attribution (E5-T3): match the receipt against
+	// Exact self-change attribution (E5-t3): match the receipt against
 	// the dirty generation; only a fully verified generation may clear
 	// the route without a follow-up, and the decision is always audited.
+	// The generation is scoped to the completing dispatch's lane first
+	// (E12-T2, CON-008): the matcher and the follow-up projection see
+	// only this lane's changes.
 	dirty, err := s.Store.LoadActiveGenerationChanges(ctx, intent.RouteID, in.DispatchID)
 	if err != nil {
 		return Result{}, ports.WrapStore(err)
+	}
+	dirty, err = s.filterDirtyToLane(intent, dirty)
+	if err != nil {
+		return Result{}, err
 	}
 	evidence := ReceiptEvidence{
 		ReceiptID: w.ReceiptID, DispatchID: in.DispatchID, RunID: in.RunID,
@@ -356,6 +376,12 @@ func (s *Service) Fail(ctx context.Context, in FailInput) (Result, error) {
 	if err != nil {
 		return Result{}, ports.WrapStore(err)
 	}
+	// The failure path's follow-up carries the same lane-scoped
+	// generation (E12-T2, CON-008).
+	dirty, err = s.filterDirtyToLane(intent, dirty)
+	if err != nil {
+		return Result{}, err
+	}
 	// The same generation fence as Complete: a burst merging between this
 	// snapshot and the transaction must not be silently dropped from the
 	// follow-up's coverage (E8-T1 round-1 F003).
@@ -364,6 +390,51 @@ func (s *Service) Fail(ctx context.Context, in FailInput) (Result, error) {
 		FailureBudgetRemaining: budget, ReceiptRef: w.ReceiptID, Actor: "hermes-task",
 		FenceGeneration: true, ExpectedDirtyGeneration: snap.DirtyGeneration,
 	}, nil, dirty)
+}
+
+// filterDirtyToLane scopes one dirty generation to the completing
+// dispatch's destination lane (E12-T2, CON-008): every change is offered
+// to the lane's structural conditions as a single-path occurrence (the
+// path, its operation, and the merging decision's classification and
+// disposition), and only the changes the lane selects survive into the
+// attribution match and the follow-up manifest — a sibling lane's
+// conditioned-out work can never ride along. A pre-contract dispatch
+// (empty destination identity) keeps the route-scoped generation; a
+// child-linked dispatch whose lane conditions cannot be resolved fails
+// the completion closed, never silently widens the follow-up.
+func (s *Service) filterDirtyToLane(intent ports.IntentSnapshot, dirty []ports.DirtyChange) ([]ports.DirtyChange, error) {
+	if intent.DestinationID == "" || s.LaneConditions == nil {
+		return dirty, nil
+	}
+	conds, err := s.LaneConditions(intent.RouteID, intent.DestinationID)
+	if err != nil {
+		return nil, fmt.Errorf("resolving the destination %q lane conditions of dispatch %s: %w", intent.DestinationID, intent.DispatchID, err)
+	}
+	if conds == nil {
+		// The destination selects unconditionally: the whole generation is
+		// this lane's (fanout_mode all over an unconditioned destination).
+		return dirty, nil
+	}
+	out := make([]ports.DirtyChange, 0, len(dirty))
+	for _, c := range dirty {
+		operation, opErr := records.ParseOperation(c.Operation)
+		if opErr != nil {
+			return nil, fmt.Errorf("dirty change %q operation %q: %v", c.Path, c.Operation, opErr)
+		}
+		selected, _, selErr := dispatch.SelectDestination(dispatch.SelectionContext{
+			Paths:          []string{c.Path},
+			Operations:     []records.Operation{operation},
+			Classification: c.Classification,
+			Disposition:    c.Disposition,
+		}, conds, s.LanePathMatcher)
+		if selErr != nil {
+			return nil, fmt.Errorf("evaluating the destination %q lane conditions for %q: %v", intent.DestinationID, c.Path, selErr)
+		}
+		if selected {
+			out = append(out, c)
+		}
+	}
+	return out, nil
 }
 
 // applyCompletion builds the follow-up request when the route needs one
@@ -502,12 +573,15 @@ func (s *Service) validateLineage(ctx context.Context, dispatchID, runID, extern
 		}
 		return ports.IntentSnapshot{}, state.RouteSnapshot{}, nil, ports.WrapStore(err)
 	}
-	snap, err := s.Store.LoadRouteState(ctx, intent.RouteID)
+	// The work-receipt surface admits the dispatch's LANE as active
+	// (E12-T2, CON-007): the merged lane snapshot carries the route
+	// envelope beside the lane's own slot and dirty generation.
+	snap, err := s.Store.LoadIntentLane(ctx, dispatchID)
 	if err != nil {
 		return ports.IntentSnapshot{}, state.RouteSnapshot{}, nil, ports.WrapStore(err)
 	}
 	if !snap.State.IsActive() || snap.ActiveDispatchID != dispatchID {
-		reasons = append(reasons, fmt.Sprintf("dispatch %s is not the active dispatch of route %s (state %s, active %q)", dispatchID, intent.RouteID, snap.State, snap.ActiveDispatchID))
+		reasons = append(reasons, fmt.Sprintf("dispatch %s is not the active dispatch of its lane on route %s (state %s, active %q)", dispatchID, intent.RouteID, snap.State, snap.ActiveDispatchID))
 	}
 	if externalTaskID != "" && intent.ExternalRef == "" {
 		reasons = append(reasons, fmt.Sprintf("dispatch %s has no accepted task reference, so task %q cannot be verified", dispatchID, externalTaskID))

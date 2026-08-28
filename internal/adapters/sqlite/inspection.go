@@ -487,23 +487,31 @@ func (s *Store) RerunIntent(ctx context.Context, in ports.RerunInput) (ports.Int
 	default:
 		return sum, fmt.Errorf("%w: original %s is %s; rerun requires ready or dead-lettered work", ports.ErrStateNotEligible, in.OriginalDispatchID, originalState)
 	}
-	// The takeover applies the route transition matching the state it
-	// found, so the rerun holds the slot as genuinely active work.
-	snap, err := s.routeSnapshotInTx(tx, in.New.RouteID)
+	// The takeover applies the lane transition matching the state it
+	// found, so the rerun holds its lane's slot as genuinely active work
+	// (E12-T2: the lane of the rerun's own destination).
+	takeoverLane := LegacyLaneID
+	if in.New.Fanout != nil {
+		takeoverLane = in.New.Fanout.DestinationID
+	}
+	if err := s.materializeLaneTx(tx, in.New.RouteID, takeoverLane); err != nil {
+		return sum, err
+	}
+	laneSnap, err := s.laneSnapshotInTx(tx, in.New.RouteID, takeoverLane)
 	if err != nil {
 		return sum, err
 	}
-	switch snap.State {
+	switch laneSnap.State {
 	case state.RouteIdle:
-		if err := s.applyRouteTransition(tx, snap, state.RouteActiveClean, state.ReasonDispatchAccepted,
+		if err := s.applyLaneTransition(tx, in.New.RouteID, takeoverLane, laneSnap, state.RouteActiveClean, state.ReasonDispatchAccepted,
 			state.RouteEvidence{Actor: in.Actor, ActivatingDispatchID: in.New.DispatchID}, now,
-			fmt.Sprintf(`{"reason":%q,"dispatch_id":%q,"operator_rerun":true}`, state.ReasonDispatchAccepted, in.New.DispatchID)); err != nil {
+			auditJSON("reason", state.ReasonDispatchAccepted, "dispatch_id", in.New.DispatchID, "operator_rerun", true, "destination_id", takeoverLane)); err != nil {
 			return sum, err
 		}
 	case state.RouteFollowupReady, state.RouteActiveClean, state.RouteActiveDirty:
 		// Already an activation shape holding the rerun's own takeover.
 	default:
-		return sum, fmt.Errorf("%w: route %s is %s; rerun requires a resolved route", ports.ErrStateNotEligible, in.New.RouteID, snap.State)
+		return sum, fmt.Errorf("%w: lane %s/%s is %s; rerun requires a resolved lane", ports.ErrStateNotEligible, in.New.RouteID, takeoverLane, laneSnap.State)
 	}
 	if err := s.AppendTransition(tx, in.New.DispatchID+":created", "dispatch_intent", in.New.DispatchID, "", "ready", now,
 		fmt.Sprintf(`{"reason":"operator_rerun","actor":%q,"operator_reason":%q,"supersedes_dispatch":%q,"new_generation":%d}`, in.Actor, in.Reason, in.OriginalDispatchID, in.New.Generation)); err != nil {
@@ -683,28 +691,55 @@ type RouteRow struct {
 }
 
 // ListRoutes returns every materialized route with its runtime state.
+// Since E12-T2 the coordination columns surface the SAME lane aggregation
+// LoadRouteState reports (a route-level QUARANTINED/UNCERTAIN hold reads
+// as-is, otherwise the route is as busy as its busiest lane): the listing
+// delegates per route to aggregateLaneState so the status surface and the
+// coordination surface can never disagree (review round 1,
+// maintainability finding — no second inline implementation).
 func (s *Store) ListRoutes(ctx context.Context) ([]RouteRow, error) {
 	rows, err := s.QueryContext(ctx, `SELECT r.route_id, r.revision, r.resource_id, r.target_id,
-			COALESCE(rr.activation_state, 'disabled'), COALESCE(rr.acknowledged_revision, ''), COALESCE(rr.route_state, 'IDLE'),
-			COALESCE(rr.active_dispatch_id, ''), COALESCE(rr.dirty_generation, 0),
+			COALESCE(rr.activation_state, 'disabled'), COALESCE(rr.acknowledged_revision, ''),
+			COALESCE(rr.route_state, 'IDLE'), COALESCE(rr.active_dispatch_id, ''), COALESCE(rr.dirty_generation, 0),
 			COALESCE(rr.pending_reconcile, 0), COALESCE(rr.last_source_position, ''), COALESCE(rr.last_reconciled_at, '')
 		FROM routes r LEFT JOIN route_runtime_state rr ON rr.route_id = r.route_id
 		ORDER BY r.route_id`)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []RouteRow
+	// Collect and close the raw rows BEFORE the per-route aggregation: the
+	// store is single-connection, so a nested query under an open rows set
+	// would deadlock (review round 1 regression).
+	var raw []RouteRow
 	for rows.Next() {
 		var row RouteRow
 		if err := rows.Scan(&row.RouteID, &row.Revision, &row.ResourceID, &row.TargetID,
 			&row.ActivationState, &row.AcknowledgedRevision, &row.RouteState, &row.ActiveDispatchID, &row.DirtyGeneration,
 			&row.PendingReconcile, &row.LastSourcePosition, &row.LastReconciledAt); err != nil {
+			rows.Close()
 			return nil, err
+		}
+		raw = append(raw, row)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+	out := make([]RouteRow, 0, len(raw))
+	for _, row := range raw {
+		if row.RouteState != "QUARANTINED" && row.RouteState != "UNCERTAIN" {
+			snap, err := s.aggregateLaneState(s.DB, state.RouteSnapshot{RouteID: row.RouteID})
+			if err != nil {
+				return nil, err
+			}
+			row.RouteState = string(snap.State)
+			row.ActiveDispatchID = snap.ActiveDispatchID
+			row.DirtyGeneration = snap.DirtyGeneration
 		}
 		out = append(out, row)
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 // saveIntentTakeOverOriginal persists the rerun intent and takes over
@@ -725,15 +760,39 @@ func (s *Store) saveIntentTakeOverOriginal(tx *sql.Tx, i IntentRecord, originalD
 			return err
 		}
 	}
-	res, err := execOn(tx, s.DB, `UPDATE route_runtime_state
+	// The takeover targets the new intent's lane (E12-T2, CON-007): the
+	// slot held by the dispatch it supersedes transfers to the rerun's
+	// lane when free or the original's own.
+	lane := LegacyLaneID
+	if i.Fanout != nil {
+		lane = i.Fanout.DestinationID
+	}
+	if err := s.materializeLaneTx(tx, i.RouteID, lane); err != nil {
+		return err
+	}
+	res, err := execOn(tx, s.DB, `UPDATE destination_lane_state
 		SET active_dispatch_id = ?, active_generation = ?, version = version + 1
-		WHERE route_id = ? AND (active_dispatch_id IS NULL OR active_dispatch_id = ?)`,
-		i.DispatchID, int(i.Generation), i.RouteID, originalDispatchID)
+		WHERE route_id = ? AND destination_id = ? AND (active_dispatch_id IS NULL OR active_dispatch_id = ?)`,
+		i.DispatchID, int(i.Generation), i.RouteID, lane, originalDispatchID)
 	if err != nil {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return fmt.Errorf("route %s already has an active dispatch (invariant 5): %w", i.RouteID, ErrOptimisticConcurrency)
+		return fmt.Errorf("route %s lane %s already has an active dispatch (invariant 5): %w", i.RouteID, lane, ErrOptimisticConcurrency)
+	}
+	// When the superseded original held a DIFFERENT lane (a rerun that
+	// moved from the legacy lane to a live destination lane), its lane's
+	// slot releases here: the superseded dispatch must not keep holding a
+	// slot beside its own replacement (E12-T2).
+	_, originalLane, laneErr := s.laneOfDispatch(tx, originalDispatchID)
+	if laneErr != nil {
+		return laneErr
+	}
+	if originalLane != lane {
+		if _, err := execOn(tx, s.DB, `UPDATE destination_lane_state SET active_dispatch_id = NULL, active_generation = 0
+			WHERE route_id = ? AND destination_id = ? AND active_dispatch_id = ?`, i.RouteID, originalLane, originalDispatchID); err != nil {
+			return err
+		}
 	}
 	return nil
 }

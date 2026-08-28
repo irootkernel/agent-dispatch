@@ -228,27 +228,25 @@ func runRouteEnable(command string, args []string, stdout, stderr io.Writer) int
 	return writeEnvelope(stdout, command, map[string]any{"route_id": routeID, "activation_state": "enabled", "acknowledged_revision": revision})
 }
 
-// routeEnableGate is the production enable precondition (E8-T3, E11-T1):
-// a route may only be enabled when (1) it executes exactly one
-// destination — the pre-E12 bound; per-destination lanes arrive with
-// E12-T2 — (2) a hermes destination's installed Hermes meets the
-// declared minimum-version eligibility floor (HER-011; the E11-T2
-// capability probe replaces this with the fingerprint-bound shape
-// proof), where an unreachable executable warns and defers to the
-// submit path's run-time gate, and (3) the route carries no unresolved
-// legacy work created under a different route revision (DAT-013: the
-// operator resolves it through the documented exits first; nothing is
-// silently submitted under the new destination contract).
+// routeEnableGate is the production enable precondition (E8-T3, E11-T1,
+// E12-T2 FAN-011): a route may be enabled when (1) every destination
+// binds the same target — one Hermes Kanban submission surface, refused
+// otherwise by resolveRouteTarget — and every configured destination
+// profile exists on the target's board, (2) a hermes destination's
+// installed Hermes meets the declared minimum-version eligibility floor
+// (HER-011; the E11-T2 capability probe replaces this with the
+// fingerprint-bound shape proof), where an unreachable executable warns
+// and defers to the submit path's run-time gate, and (3) the route
+// carries no unresolved legacy work created under a different route
+// revision (DAT-013: the operator resolves it through the documented
+// exits first; nothing is silently submitted under the new destination
+// contract).
 func routeEnableGate(command string, cfg *config.Config, routeID, revision string, store *sqlite.Store, stderr io.Writer) (string, int) {
 	if _, ok := cfg.Routes[routeID]; !ok {
 		return "", 0
 	}
 	_, resolved, rerr := resolveRouteTarget(cfg, routeID)
 	if rerr != nil {
-		var multi *config.ErrMultiDestination
-		if errors.As(rerr, &multi) {
-			return "", planErr(stderr, command, "config_invalid", "configuration", multi.Error(), 3)
-		}
 		return "", planErr(stderr, command, "config_invalid", "configuration", rerr.Error(), 3)
 	}
 	if count, detail, qerr := store.UnresolvedLegacyWork(requestCtx(), routeID, revision); qerr != nil {
@@ -280,35 +278,34 @@ func routeEnableGate(command string, cfg *config.Config, routeID, revision strin
 	}
 	switch summary.State {
 	case "available":
-		dest, _ := cfg.Routes[routeID].CertifiedDestination(routeID)
+		dests := cfg.Routes[routeID].SortedDestinations()
 		profile := ""
-		if dest.ID != "" {
-			profile = dest.Profile
+		if len(dests) > 0 {
+			profile = dests[0].Profile
 		}
-		// HER-015 (AC-704): a configured destination profile must exist
-		// on disk before enablement, with the bounded sorted
-		// alternatives preflight lists. Only a CONFIRMED missing profile
-		// fails the enable — an unreachable profile surface keeps the
-		// liveness posture below, because an outage must not hold
-		// re-acknowledgement hostage.
-		if profile != "" {
-			if profiles, aerr := adapter.Client().Assignees(requestCtx(), resolved.Hermes.Board); aerr == nil {
-				found := false
-				var onDisk []string
-				for _, p := range profiles {
-					if p.OnDisk {
-						onDisk = append(onDisk, p.Name)
-					}
-					if p.Name == profile {
-						found = p.OnDisk
-					}
+		// HER-015 (AC-704): every configured destination profile must
+		// exist on disk before enablement (E12-T2: the check covers each
+		// lane's profile), with the bounded sorted alternatives preflight
+		// lists. Only a CONFIRMED missing profile fails the enable — an
+		// unreachable profile surface keeps the liveness posture below,
+		// because an outage must not hold re-acknowledgement hostage.
+		if profiles, aerr := adapter.Client().Assignees(requestCtx(), resolved.Hermes.Board); aerr == nil {
+			var onDisk []string
+			onDiskSet := map[string]bool{}
+			for _, p := range profiles {
+				if p.OnDisk {
+					onDisk = append(onDisk, p.Name)
+					onDiskSet[p.Name] = true
 				}
-				if !found {
-					sort.Strings(onDisk)
-					return "", planErr(stderr, command, "config_capability_missing", "configuration",
-						fmt.Sprintf("destination profile %q does not exist on board %q; on-disk profiles: %s — run 'agent-dispatch route preflight --route %s', create the profile in Hermes, or select an on-disk profile with 'agent-dispatch route set-profile %s:%s <profile>' (HER-015)",
-							profile, resolved.Hermes.Board, strings.Join(boundedAlternatives(onDisk), ", "), routeID, routeID, dest.ID), 3)
+			}
+			for _, dest := range dests {
+				if dest.Profile == "" || onDiskSet[dest.Profile] {
+					continue
 				}
+				sort.Strings(onDisk)
+				return "", planErr(stderr, command, "config_capability_missing", "configuration",
+					fmt.Sprintf("destination profile %q does not exist on board %q; on-disk profiles: %s — run 'agent-dispatch route preflight --route %s', create the profile in Hermes, or select an on-disk profile with 'agent-dispatch route set-profile %s:%s <profile>' (HER-015)",
+						dest.Profile, resolved.Hermes.Board, strings.Join(boundedAlternatives(onDisk), ", "), routeID, routeID, dest.ID), 3)
 			}
 		}
 		// HER-018: activation binds the capability-evidence
@@ -335,10 +332,10 @@ func routeEnableGate(command string, cfg *config.Config, routeID, revision strin
 		// the submit-path shape re-proof; only a genuinely unprobed
 		// target enables without a binding, and the warning says so.
 		fingerprint := ""
-		dest, _ := cfg.Routes[routeID].CertifiedDestination(routeID)
+		dests := cfg.Routes[routeID].SortedDestinations()
 		profile := ""
-		if dest.ID != "" {
-			profile = dest.Profile
+		if len(dests) > 0 {
+			profile = dests[0].Profile
 		}
 		if cached, cerr := hermeskanban.LoadCapabilityRecord(capabilityCachePath(resolved.ID)); cerr == nil {
 			if digest, derr := hermeskanban.ExecutableDigest(resolved.Hermes.Executable); derr == nil {

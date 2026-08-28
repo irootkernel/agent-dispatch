@@ -66,6 +66,16 @@ func seedReadyIntent(t *testing.T, s *sqlite.Store, dispatchID string) {
 	requestJSON, _ := MarshalRequest(req)
 	lin := runtimeLineage(t, dispatchID, requestJSON)
 	lin.Intent.IdempotencyKey = req.IdempotencyKey
+	// The seeded intent is child-linked on the request's destination lane
+	// (E12-T2: coordination is lane-keyed, so the fixture must match the
+	// destinations[] contract the built request already carries).
+	lin.Intent.Fanout = &ports.FanoutInput{
+		AggregateID: "agg-" + dispatchID, Origin: string(records.OriginArrival),
+		DestinationID: "wiki-primary", DestinationRevision: "dst-rev-1", Workstream: "maintenance",
+		Selections: []records.DestinationSelection{{
+			DestinationID: "wiki-primary", DestinationRevision: "dst-rev-1", Workstream: "maintenance", Reason: "fanout_mode:all",
+		}},
+	}
 	if err := s.CommitLineage(context.Background(), lin); err != nil {
 		t.Fatal(err)
 	}

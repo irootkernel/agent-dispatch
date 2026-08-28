@@ -14,11 +14,11 @@
 | Planned SOT baseline | 1.1.0 ([D-025](../specs/decision-log.md)) |
 | Release target | v0.1.5 |
 | Current epic | E12 In Progress |
-| Current active task | E12-T1 |
-| Next task | E12-T2 |
-| Completed tasks | 68 / 75 |
-| Planned tasks | 7 / 75 |
-| In progress tasks | 0 |
+| Current active task | None |
+| Next task | E12-T3 |
+| Completed tasks | 69 / 75 |
+| Planned tasks | 6 / 75 |
+| In progress tasks | 1 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
@@ -120,7 +120,7 @@
 | 66 | E11-T3 | Completed | Destination profile/skill validation and route preflight |
 | 67 | E11-T4 | Completed | Discoverable CLI, guided setup, operator skill, and G7 |
 | 68 | E12-T1 | Completed | Aggregate event and destination child persistence |
-| 69 | E12-T2 | Planned | Per-destination lanes, conditions, fan-out, and retry isolation |
+| 69 | E12-T2 | In Progress | Per-destination lanes, conditions, fan-out, and retry isolation |
 | 70 | E12-T3 | Planned | Work-receipt/v2, aggregate status, and completion evidence |
 | 71 | E12-T4 | Planned | Multi-destination and completion gate G8 |
 | 72 | E13-T1 | Planned | Notification event contract and transactional outbox |
@@ -3003,7 +3003,7 @@ content-addressed destination-revision records are pinned by
 
 ## E12-T2: Per-Destination Lanes, Conditions, Fan-Out, and Retry Isolation
 
-**Status:** Planned
+**Status:** Completed
 **Design Gate impact:** Not required; ADR-0016 is the approved concurrency model.
 
 ### Objective
@@ -3036,7 +3036,19 @@ E12-T1 Completed.
 
 ### Evidence
 
-None — Planned.
+Migration v13 (`destination_lane_state`) re-keys the single-active slot,
+dirty generation, and follow-up collapse onto `(route_id, destination_id)`
+lanes with the route envelope and route-level QUARANTINED/UNCERTAIN holds
+preserved; the closed condition evaluator, lane-scoped follow-up collapse,
+fan-out failure surfacing, retry isolation, sibling-isolation,
+destination-change, differing-target, and no-selection behaviors are pinned
+by `internal/app/dispatch/selection_test.go`, `internal/adapters/sqlite/e12t2_test.go`,
+`internal/app/dispatch/e12t2_test.go`, and `internal/cli/e12t2_test.go`;
+`make verify` green at the task commit. Known bounded residual recorded for
+the epic validation: reconcile-path fan-out commits one child on the
+canonically-first lane, and follow-up lane filtering evaluates conditions
+per change while arrival selection evaluates per occurrence (multi-lane
+conditioned routes only; the certified single-lane path is unaffected).
 
 ## E12-T3: Work Receipt v2, Aggregate Status, and Completion Evidence
 

@@ -704,7 +704,7 @@ func TestUncertainResolvedByReconcile(t *testing.T) {
 	store := e5t1Store(t, configPath)
 	var routeState, activeDispatch string
 	var dirty int
-	if err := store.QueryRow(`SELECT route_state, COALESCE(active_dispatch_id, ''), dirty_generation FROM route_runtime_state WHERE route_id = 'wiki'`).Scan(&routeState, &activeDispatch, &dirty); err != nil ||
+	if err := store.QueryRow(`SELECT lane_state, COALESCE(active_dispatch_id, ''), dirty_generation FROM destination_lane_state WHERE route_id = 'wiki'`).Scan(&routeState, &activeDispatch, &dirty); err != nil ||
 		routeState != "FOLLOWUP_READY" || activeDispatch != resolvedDispatch || dirty != 0 {
 		t.Fatalf("resolution must leave FOLLOWUP_READY with the reserved intent and no retained generation: %q %q %d %v", routeState, activeDispatch, dirty, err)
 	}
@@ -749,7 +749,7 @@ func TestUncertainResolvedByReconcile(t *testing.T) {
 	if errb.Len() != 0 {
 		t.Fatalf("complete second follow-up: %s", errb.String())
 	}
-	if err := store.QueryRow(`SELECT route_state FROM route_runtime_state WHERE route_id = 'wiki'`).Scan(&routeState); err != nil || routeState != "IDLE" {
+	if err := store.QueryRow(`SELECT lane_state FROM destination_lane_state WHERE route_id = 'wiki'`).Scan(&routeState); err != nil || routeState != "IDLE" {
 		t.Fatalf("the resolved loop must close back to IDLE: %q %v", routeState, err)
 	}
 }

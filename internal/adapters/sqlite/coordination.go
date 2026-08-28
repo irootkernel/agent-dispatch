@@ -12,11 +12,20 @@ import (
 	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
-// Route coordination (E3-T4): merge-pending, work completion with
-// follow-up collapse, and follow-up activation. Every method is one
-// transaction and applies the E3-T1 route guards.
+// Route and destination-lane coordination (E3-T4, E12-T2): merge-pending,
+// work completion with follow-up collapse, and follow-up activation. Every
+// method is one transaction and applies the E3-T1 guards. Since E12-T2 the
+// single-active slot, the dirty generation, and the follow-up chain are
+// keyed on the dispatch's destination lane (CON-007/CON-008); the route row
+// keeps the envelope and the route-level QUARANTINED/UNCERTAIN holds.
 
-// LoadRouteState returns the route's runtime snapshot.
+// LoadRouteState returns the route's aggregated coordination snapshot
+// (E12-T2): the route envelope plus the route-level UNCERTAIN/QUARANTINED
+// hold when set, otherwise the aggregation over the route's lanes — a
+// route is as busy as its busiest lane (any ACTIVE_DIRTY, else any
+// ACTIVE_CLEAN, else any FOLLOWUP_READY, else IDLE), the reported active
+// dispatch is the first lane holder in destination order, and the dirty
+// generation is the lanes' maximum.
 func (s *Store) LoadRouteState(ctx context.Context, routeID string) (state.RouteSnapshot, error) {
 	rec, err := s.LoadRouteRuntimeState(routeID)
 	if err != nil {
@@ -26,7 +35,7 @@ func (s *Store) LoadRouteState(ctx context.Context, routeID string) (state.Route
 	if err != nil {
 		return state.RouteSnapshot{}, err
 	}
-	return state.RouteSnapshot{
+	snap := state.RouteSnapshot{
 		RouteID:               rec.RouteID,
 		ActivationState:       rec.ActivationState,
 		State:                 parsed,
@@ -35,13 +44,77 @@ func (s *Store) LoadRouteState(ctx context.Context, routeID string) (state.Route
 		PendingReconcile:      rec.PendingReconcile,
 		AcknowledgedRevision:  rec.AcknowledgedRevision,
 		CapabilityFingerprint: rec.CapabilityFingerprint,
-	}, nil
+	}
+	if parsed == state.RouteUncertain || parsed == state.RouteQuarantined {
+		// The route-level hold is authoritative and carries its own fence
+		// values (the uncertainty/resolution flows stay route-keyed).
+		return snap, nil
+	}
+	return s.aggregateLaneState(s.DB, snap)
+}
+
+// rowsQueryer is the read surface the lane aggregation needs: one
+// multi-row query beside the single-row queryer.
+type rowsQueryer interface {
+	Query(query string, args ...any) (*sql.Rows, error)
+}
+
+// aggregateLaneState folds the route's lanes into one route snapshot
+// inside the caller's read. A lane row in a hold state surfaces as the
+// route state (the defensive arm: holds are route-level by construction).
+func (s *Store) aggregateLaneState(q rowsQueryer, snap state.RouteSnapshot) (state.RouteSnapshot, error) {
+	rows, err := q.Query(`SELECT lane_state, COALESCE(active_dispatch_id, ''), dirty_generation
+		FROM destination_lane_state WHERE route_id = ? ORDER BY destination_id`, snap.RouteID)
+	if err != nil {
+		return snap, err
+	}
+	defer rows.Close()
+	snap.State = state.RouteIdle
+	snap.ActiveDispatchID = ""
+	snap.DirtyGeneration = 0
+	for rows.Next() {
+		var laneState string
+		var active string
+		var dirty int
+		if err := rows.Scan(&laneState, &active, &dirty); err != nil {
+			return snap, err
+		}
+		parsed, perr := state.ParseRouteState(laneState)
+		if perr != nil {
+			return snap, perr
+		}
+		switch parsed {
+		case state.RouteQuarantined, state.RouteUncertain:
+			snap.State = parsed
+		case state.RouteActiveDirty:
+			if snap.State != state.RouteQuarantined && snap.State != state.RouteUncertain {
+				snap.State = parsed
+			}
+		case state.RouteActiveClean:
+			if snap.State == state.RouteIdle || snap.State == state.RouteFollowupReady {
+				snap.State = parsed
+			}
+		case state.RouteFollowupReady:
+			if snap.State == state.RouteIdle {
+				snap.State = parsed
+			}
+		}
+		if active != "" && snap.ActiveDispatchID == "" {
+			snap.ActiveDispatchID = active
+		}
+		if dirty > snap.DirtyGeneration {
+			snap.DirtyGeneration = dirty
+		}
+	}
+	return snap, rows.Err()
 }
 
 // CommitMergePending persists one arriving lineage as merge_pending and
-// durably increments the dirty generation in the same transaction
-// (CON-002, FBK-001). It returns the new dirty count.
-func (s *Store) CommitMergePending(ctx context.Context, lin ports.Lineage, actor, now string) (int, error) {
+// durably increments the dirty generation of exactly the lanes whose
+// destinations the occurrence selected (CON-002, CON-008, FBK-001). An
+// empty selected-destination list merges the synthetic legacy lane
+// (pre-cutover work, ADR-0016). It returns the highest new dirty count.
+func (s *Store) CommitMergePending(ctx context.Context, lin ports.Lineage, selectedDestinations []string, actor, now string) (int, error) {
 	now = normalizeTimestamp(now)
 	tx, err := s.BeginTx(ctx, nil)
 	if err != nil {
@@ -65,73 +138,205 @@ func (s *Store) CommitMergePending(ctx context.Context, lin ports.Lineage, actor
 	if err := s.SaveDecision(tx, portsDecision(merged)); err != nil {
 		return 0, err
 	}
-	snap, err := s.routeSnapshotInTx(tx, lin.Decision.RouteID)
+	routeSnap, err := s.routeSnapshotInTx(tx, lin.Decision.RouteID)
 	if err != nil {
 		return 0, err
 	}
-	if !snap.State.IsActive() && snap.State != state.RouteFollowupReady && snap.State != state.RouteUncertain && snap.State != state.RouteIdle {
-		return 0, fmt.Errorf("%w: route %s is %s, arriving work cannot merge", ports.ErrStateNotEligible, lin.Decision.RouteID, snap.State)
+	if routeSnap.State == state.RouteQuarantined {
+		return 0, fmt.Errorf("%w: route %s is %s, arriving work cannot merge", ports.ErrStateNotEligible, lin.Decision.RouteID, routeSnap.State)
 	}
-	// An IDLE merge with an empty slot has no dispatch that could own the
-	// burst's dirty generation (a disabled or paused route, or the slot
-	// winner completing inside the race window): recording dirty here
-	// would wedge the next clean completion against a count no later
-	// receipt can clear — the pre-watermark batches sit below the next
-	// dispatch's generation window. The owed work is recorded as a
-	// pending reconciliation instead; the next arrival or the scheduled
-	// reconcile delivers it as latest-state work (E8-T1 round-1 F001).
-	if snap.State == state.RouteIdle && snap.ActiveDispatchID == "" {
-		if _, err := tx.Exec(`UPDATE route_runtime_state SET pending_reconcile = 1 WHERE route_id = ?`, lin.Decision.RouteID); err != nil {
-			return 0, err
-		}
-		if err := tx.Commit(); err != nil {
-			return 0, err
-		}
-		return snap.DirtyGeneration, nil
-	}
-	// Merging onto IDLE only happens when this arrival lost a slot race:
-	// the winner's completion collapses the recorded generation (the
-	// loser reached here through ErrRouteSlotHeld).
-	dirtyAfter := snap.DirtyGeneration + 1
-	if snap.State == state.RouteIdle && snap.ActiveDispatchID != "" {
-		// A reserved-but-not-yet-activated dispatch still implies route
-		// activity for coordination: consume its own reservation first.
-		if err := s.applyRouteTransition(tx, snap, state.RouteActiveClean, state.ReasonDispatchAccepted,
-			state.RouteEvidence{Actor: actor, ActivatingDispatchID: snap.ActiveDispatchID}, now,
-			fmt.Sprintf(`{"reason":%q,"dispatch_id":%q,"note":"reservation activation before merge"}`, state.ReasonDispatchAccepted, snap.ActiveDispatchID)); err != nil {
-			return 0, err
-		}
-		snap.State = state.RouteActiveClean
-	}
-	if snap.State.IsActive() {
-		// Active work exists: a validated ACTIVE_* -> ACTIVE_DIRTY
-		// transition marks the durable generation.
-		reason := state.ReasonLaterRelevantChange
-		if snap.State == state.RouteActiveDirty {
-			reason = state.ReasonMoreChangesMerged
-		}
-		if err := s.applyRouteTransition(tx, snap, state.RouteActiveDirty, reason, state.RouteEvidence{
-			Actor: actor, DirtyGenerationAfter: dirtyAfter,
-		}, now, fmt.Sprintf(`{"reason":%q,"batch_id":%q,"dirty_generation_after":%d}`, reason, lin.Batch.BatchID, dirtyAfter)); err != nil {
-			return 0, err
-		}
-	}
-	// FOLLOWUP_READY and UNCERTAIN keep their state: the latest-state
-	// follow-up (or the operator resolution) absorbs the retained
-	// changes (CON-004, CON-005); the dirty count still records them.
-	if _, err := tx.Exec(`UPDATE route_runtime_state SET dirty_generation = ?, dirty_since = COALESCE(dirty_since, ?) WHERE route_id = ?`, dirtyAfter, now, lin.Decision.RouteID); err != nil {
+	maxDirty, _, err := s.mergeLanesTx(tx, lin.Decision.RouteID, selectedDestinations, actor, now, lin.Batch.BatchID)
+	if err != nil {
 		return 0, err
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
-	return dirtyAfter, nil
+	return maxDirty, nil
+}
+
+// MergeSelectedLanes durably increments the dirty generation of exactly
+// the named destination lanes under the merge guards (CON-008, E12-T2)
+// without re-persisting the occurrence's lineage: a fan-out sibling that
+// lost its lane's slot race merges beside the winner's already-committed
+// prefix. An empty list merges the synthetic legacy lane.
+func (s *Store) MergeSelectedLanes(ctx context.Context, routeID string, selectedDestinations []string, actor, now string) (int, error) {
+	now = normalizeTimestamp(now)
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	routeSnap, err := s.routeSnapshotInTx(tx, routeID)
+	if err != nil {
+		return 0, err
+	}
+	if routeSnap.State == state.RouteQuarantined {
+		return 0, fmt.Errorf("%w: route %s is %s, arriving work cannot merge", ports.ErrStateNotEligible, routeID, routeSnap.State)
+	}
+	maxDirty, _, err := s.mergeLanesTx(tx, routeID, selectedDestinations, actor, now, "")
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return maxDirty, nil
+}
+
+// mergeLanesTx bumps the named lanes' dirty generations with the E3-T1
+// merge guards inside the caller's transaction (CON-008): an IDLE lane
+// with an empty slot records the owed work as the route's pending
+// reconciliation instead (the route-keyed collapse), a reserved-but-not-
+// activated slot consumes its reservation first, active lanes take the
+// ACTIVE_* -> ACTIVE_DIRTY edge, and FOLLOWUP_READY or route-level
+// UNCERTAIN lanes keep their state with the dirty count still recorded.
+// It returns the highest new dirty count and whether any lane recorded a
+// pending reconciliation instead.
+func (s *Store) mergeLanesTx(tx *sql.Tx, routeID string, selectedDestinations []string, actor, now, batchID string) (int, bool, error) {
+	destinations := selectedDestinations
+	if len(destinations) == 0 {
+		destinations = []string{LegacyLaneID}
+	}
+	maxDirty := 0
+	idleEmpty := false
+	for _, dest := range destinations {
+		if err := s.materializeLaneTx(tx, routeID, dest); err != nil {
+			return 0, false, err
+		}
+		snap, err := s.laneSnapshotInTx(tx, routeID, dest)
+		if err != nil {
+			return 0, false, err
+		}
+		// The lane's OWN dirty count drives the arithmetic: under the
+		// route-level UNCERTAIN hold the merged snapshot carries the route
+		// row's fence copy (another lane's value), and writing a computed
+		// count from it could lower this lane's durable generation. The
+		// write itself is monotonic (MAX) so no interleaving can decrement
+		// any lane (review round 1, logic finding).
+		ownDirty, err := s.laneOwnDirtyTx(tx, routeID, dest)
+		if err != nil {
+			return 0, false, err
+		}
+		// A lane-level IDLE merge with an empty slot has no dispatch that
+		// could own the burst's dirty generation (a disabled or paused
+		// lane, or the slot winner completing inside the race window):
+		// recording dirty here would wedge the next clean completion
+		// against a count no later receipt can clear. The owed work is
+		// recorded as the route's pending reconciliation instead; the next
+		// arrival or the scheduled reconcile delivers it as latest-state
+		// work (E8-T1 round-1 F001, route-keyed collapse).
+		if snap.State == state.RouteIdle && snap.ActiveDispatchID == "" {
+			idleEmpty = true
+			continue
+		}
+		// Merging onto IDLE only happens when this arrival lost the lane's
+		// slot race: the winner's completion collapses the recorded
+		// generation (the loser reached here through ErrRouteSlotHeld).
+		dirtyAfter := ownDirty + 1
+		if snap.State == state.RouteIdle && snap.ActiveDispatchID != "" {
+			// A reserved-but-not-yet-activated dispatch still implies lane
+			// activity for coordination: consume its own reservation first.
+			if err := s.applyLaneTransition(tx, routeID, dest, snap, state.RouteActiveClean, state.ReasonDispatchAccepted,
+				state.RouteEvidence{Actor: actor, ActivatingDispatchID: snap.ActiveDispatchID}, now,
+				auditJSON("reason", state.ReasonDispatchAccepted, "dispatch_id", snap.ActiveDispatchID, "note", "reservation activation before merge", "destination_id", dest)); err != nil {
+				return 0, false, err
+			}
+			snap.State = state.RouteActiveClean
+		}
+		if snap.State.IsActive() {
+			// Active work exists on this lane: a validated ACTIVE_* ->
+			// ACTIVE_DIRTY transition marks the durable generation.
+			reason := state.ReasonLaterRelevantChange
+			if snap.State == state.RouteActiveDirty {
+				reason = state.ReasonMoreChangesMerged
+			}
+			if err := s.applyLaneTransition(tx, routeID, dest, snap, state.RouteActiveDirty, reason, state.RouteEvidence{
+				Actor: actor, DirtyGenerationAfter: dirtyAfter,
+			}, now, auditJSON("reason", reason, "batch_id", batchID, "dirty_generation_after", dirtyAfter, "destination_id", dest)); err != nil {
+				return 0, false, err
+			}
+		}
+		// FOLLOWUP_READY and the route-level UNCERTAIN hold keep their
+		// state: the latest-state follow-up (or the operator resolution)
+		// absorbs the retained changes (CON-004, CON-005); the dirty count
+		// still records them. MAX keeps the write monotonic: a stale
+		// snapshot can never lower the lane's durable generation.
+		if _, err := tx.Exec(`UPDATE destination_lane_state SET dirty_generation = MAX(dirty_generation, ?), dirty_since = COALESCE(dirty_since, ?) WHERE route_id = ? AND destination_id = ?`,
+			dirtyAfter, now, routeID, dest); err != nil {
+			return 0, false, err
+		}
+		if dirtyAfter > maxDirty {
+			maxDirty = dirtyAfter
+		}
+	}
+	if idleEmpty {
+		if _, err := tx.Exec(`UPDATE route_runtime_state SET pending_reconcile = 1 WHERE route_id = ?`, routeID); err != nil {
+			return 0, false, err
+		}
+	}
+	// While the route holds uncertainty the resolution fence compares the
+	// ROUTE row's dirty generation, so a merge under the hold keeps the
+	// route-level copy fresh (the hold's flows stay route-keyed).
+	if routeSnapState, rerr := s.routeStateOfTx(tx, routeID); rerr == nil && routeSnapState == state.RouteUncertain {
+		if _, err := tx.Exec(`UPDATE route_runtime_state SET dirty_generation = dirty_generation + 1, dirty_since = COALESCE(dirty_since, ?) WHERE route_id = ?`,
+			now, routeID); err != nil {
+			return 0, false, err
+		}
+	}
+	return maxDirty, idleEmpty, nil
+}
+
+// laneOwnDirtyTx reads one lane row's own dirty generation inside the
+// caller's transaction (the merged snapshot may carry the route-level
+// hold's fence copy instead, mergeLanesTx's monotonic arithmetic reads
+// this value).
+func (s *Store) laneOwnDirtyTx(tx *sql.Tx, routeID, destinationID string) (int, error) {
+	var dirty int
+	if err := tx.QueryRow(`SELECT dirty_generation FROM destination_lane_state WHERE route_id = ? AND destination_id = ?`,
+		routeID, destinationID).Scan(&dirty); err != nil {
+		return 0, err
+	}
+	return dirty, nil
+}
+
+// routeStateOfTx reads only the route row's coordination state inside a
+// transaction.
+func (s *Store) routeStateOfTx(tx *sql.Tx, routeID string) (state.RouteState, error) {
+	var routeState string
+	if err := tx.QueryRow(`SELECT route_state FROM route_runtime_state WHERE route_id = ?`, routeID).Scan(&routeState); err != nil {
+		return "", err
+	}
+	return state.ParseRouteState(routeState)
+}
+
+// CommitFanoutChild persists one additional child intent of an occurrence
+// whose shared observation/batch/decision lineage a sibling already
+// committed (E12-T2, FAN-003): the intent, its child-dispatch record and
+// aggregate references, and its lane-slot reservation commit in one
+// transaction. ErrRouteSlotHeld reports the lane's held slot.
+func (s *Store) CommitFanoutChild(ctx context.Context, intent ports.IntentInput) error {
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := s.SaveIntent(tx, portsIntent(intent)); err != nil {
+		return mapIntentConstraint(err)
+	}
+	if err := s.AppendTransition(tx, intent.DispatchID+":created", "dispatch_intent", intent.DispatchID, "", "ready", intent.CreatedAt,
+		auditJSON("reason", "arrival", "route_id", intent.RouteID, "route_revision", intent.RouteRevision, "generation", intent.Generation, "fanout_child", true)); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // CompleteActive applies one work-completion transaction (persistence
-// §7): the E3-T1-validated route transition and, when dirty work or
-// pending reconciliation remains, exactly one follow-up decision and
-// intent for latest state.
+// §7, E12-T2 lane-keyed): the E3-T1-validated lane transition of the
+// completed dispatch's lane and, when dirty work or pending
+// reconciliation remains, exactly one follow-up decision and intent for
+// latest state. The pending-reconciliation collapse stays on the route row
+// (the shared generation every lane's completion may absorb).
 func (s *Store) CompleteActive(ctx context.Context, req ports.ActiveCompletion) (ports.FollowupCreated, error) {
 	now := normalizeTimestamp(req.Now)
 	tx, err := s.BeginTx(ctx, nil)
@@ -155,15 +360,25 @@ func (s *Store) CompleteActive(ctx context.Context, req ports.ActiveCompletion) 
 func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.ActiveCompletion) (ports.FollowupCreated, error) {
 	var out ports.FollowupCreated
 	now := req.Now
-	snap, err := s.routeSnapshotInTx(tx, req.RouteID)
+	routeID, lane, laneErr := s.laneOfDispatch(tx, req.DispatchID)
+	if laneErr != nil {
+		return out, laneErr
+	}
+	if routeID == "" {
+		return out, fmt.Errorf("%w: %s", ports.ErrIntentNotFound, req.DispatchID)
+	}
+	if err := s.materializeLaneTx(tx, routeID, lane); err != nil {
+		return out, err
+	}
+	snap, err := s.laneSnapshotInTx(tx, routeID, lane)
 	if err != nil {
 		return out, err
 	}
 	if !snap.State.IsActive() {
-		return out, fmt.Errorf("%w: route %s is %s, not active", ports.ErrStateNotEligible, req.RouteID, snap.State)
+		return out, fmt.Errorf("%w: lane %s/%s is %s, not active", ports.ErrStateNotEligible, routeID, lane, snap.State)
 	}
 	if snap.ActiveDispatchID != req.DispatchID {
-		return out, fmt.Errorf("%w: active dispatch is %s, not %s", ports.ErrStateNotEligible, snap.ActiveDispatchID, req.DispatchID)
+		return out, fmt.Errorf("%w: lane %s/%s active dispatch is %s, not %s", ports.ErrStateNotEligible, routeID, lane, snap.ActiveDispatchID, req.DispatchID)
 	}
 	// The failure budget is configuration-owned (configuration-spec §9):
 	// the caller's remaining count is the authoritative value the E3-T1
@@ -188,7 +403,7 @@ func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.Acti
 	// (E8-T1, FBK-008).
 	overFollowupBudget := needsFollowup && req.FollowupGeneration > state.MaxConsecutiveFollowups
 	if needsFollowup && !overFollowupBudget && req.FollowupRequest == nil {
-		return out, fmt.Errorf("%w: route %s needs a follow-up (dirty %d, pending reconciliation %v) but none was prepared", ErrOptimisticConcurrency, req.RouteID, snap.DirtyGeneration, snap.PendingReconcile)
+		return out, fmt.Errorf("%w: lane %s/%s needs a follow-up (dirty %d, pending reconciliation %v) but none was prepared", ErrOptimisticConcurrency, routeID, lane, snap.DirtyGeneration, snap.PendingReconcile)
 	}
 	var to state.RouteState
 	var reason state.RouteReason
@@ -219,25 +434,41 @@ func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.Acti
 		}
 	}
 	evidence := state.RouteEvidence{Actor: req.Actor, ReceiptRef: req.ReceiptRef, FollowupGeneration: req.FollowupGeneration}
-	if err := s.applyRouteTransition(tx, snap, to, reason, evidence, now,
-		fmt.Sprintf(`{"reason":%q,"dispatch_id":%q,"dirty_generation":%d,"failed":%v}`, reason, req.DispatchID, snap.DirtyGeneration, req.Failed)); err != nil {
+	transitionCtx := auditJSON("reason", reason, "dispatch_id", req.DispatchID, "dirty_generation", snap.DirtyGeneration, "failed", req.Failed, "destination_id", lane)
+	if to == state.RouteUncertain {
+		// Uncertainty is a route-level hold (E12-T2): it blocks every lane
+		// and its resolution stays route-keyed. The held lane takes its own
+		// audited UNCERTAIN transition (retaining its slot and dirty
+		// generation) and the route row carries the fence copy.
+		if err := s.routeUncertainHoldTx(tx, snap, lane, reason, evidence, now, transitionCtx); err != nil {
+			return out, err
+		}
+		out.RouteTo = to
+		return out, nil
+	}
+	if err := s.applyLaneTransition(tx, routeID, lane, snap, to, reason, evidence, now, transitionCtx); err != nil {
 		return out, err
 	}
 	if to == state.RouteIdle {
-		// Clean completion clears the active slot (invariant 5 freed);
-		// an exact-suppressed dirty generation clears with it.
-		if _, err := tx.Exec(`UPDATE route_runtime_state SET active_dispatch_id = NULL, active_generation = 0,
+		// Clean completion clears the lane's active slot (invariant 5
+		// freed per lane); an exact-suppressed dirty generation clears
+		// with it.
+		if _, err := tx.Exec(`UPDATE destination_lane_state SET active_dispatch_id = NULL, active_generation = 0,
 			dirty_generation = CASE WHEN ? THEN 0 ELSE dirty_generation END,
 			dirty_since = CASE WHEN ? THEN NULL ELSE dirty_since END
-			WHERE route_id = ? AND active_dispatch_id = ?`, req.DirtySuppressed, req.DirtySuppressed, req.RouteID, req.DispatchID); err != nil {
+			WHERE route_id = ? AND destination_id = ? AND active_dispatch_id = ?`, req.DirtySuppressed, req.DirtySuppressed, routeID, lane, req.DispatchID); err != nil {
 			return out, err
 		}
 	} else if to == state.RouteFollowupReady {
-		// The completed dispatch no longer holds the slot; the follow-up
-		// takes it at activation.
+		// The completed dispatch no longer holds the lane's slot; the
+		// follow-up takes it at activation.
 		// The pending reconciliation generation collapses into this one
-		// follow-up (repeated reconciliations never stack generations).
-		if _, err := tx.Exec(`UPDATE route_runtime_state SET active_dispatch_id = NULL, dirty_generation = 0, dirty_since = NULL, pending_reconcile = 0 WHERE route_id = ? AND active_dispatch_id = ?`, req.RouteID, req.DispatchID); err != nil {
+		// follow-up (repeated reconciliations never stack generations);
+		// the flag stays route-keyed as the shared collapse.
+		if _, err := tx.Exec(`UPDATE destination_lane_state SET active_dispatch_id = NULL, dirty_generation = 0, dirty_since = NULL WHERE route_id = ? AND destination_id = ? AND active_dispatch_id = ?`, routeID, lane, req.DispatchID); err != nil {
+			return out, err
+		}
+		if _, err := tx.Exec(`UPDATE route_runtime_state SET pending_reconcile = 0 WHERE route_id = ?`, routeID); err != nil {
 			return out, err
 		}
 		if req.FollowupRequest != nil {
@@ -262,13 +493,13 @@ func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.Acti
 			req.FollowupRequest.DecisionID = decisionID
 			req.FollowupRequest.CreatedAt = now
 			if err := s.SaveIntent(tx, portsIntent(*req.FollowupRequest)); err != nil {
-				// The slot was just freed by this transaction, so the
+				// The lane's slot was just freed by this transaction, so the
 				// reservation succeeds; a failure here is a constraint
 				// violation the caller must see.
 				return out, mapIntentConstraint(err)
 			}
 			if err := s.AppendTransition(tx, req.FollowupRequest.DispatchID+":created", "dispatch_intent", req.FollowupRequest.DispatchID, "", "ready", now,
-				fmt.Sprintf(`{"reason":"followup","dirty_generation":%d,"supersedes_dispatch":%q,"latest_state":true}`, out.DirtyGeneration, req.DispatchID)); err != nil {
+				auditJSON("reason", "followup", "dirty_generation", out.DirtyGeneration, "supersedes_dispatch", req.DispatchID, "latest_state", true, "destination_id", lane)); err != nil {
 				return out, err
 			}
 			out.FollowupDispatchID = req.FollowupRequest.DispatchID
@@ -279,8 +510,9 @@ func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.Acti
 }
 
 // ActivateDispatch applies the acceptance transition of one normal
-// dispatch: IDLE -> ACTIVE_CLEAN consuming the dispatch's own slot
-// reservation (persistence §6 "dispatch accepted").
+// dispatch: the dispatch's lane IDLE -> ACTIVE_CLEAN consuming the
+// dispatch's own slot reservation (persistence §6 "dispatch accepted",
+// lane-keyed since E12-T2).
 func (s *Store) ActivateDispatch(ctx context.Context, dispatchID, actor, now string) error {
 	now = normalizeTimestamp(now)
 	tx, err := s.BeginTx(ctx, nil)
@@ -288,14 +520,14 @@ func (s *Store) ActivateDispatch(ctx context.Context, dispatchID, actor, now str
 		return err
 	}
 	defer tx.Rollback()
-	var routeID string
-	if err := tx.QueryRow(`SELECT route_id FROM dispatch_intents WHERE dispatch_id = ?`, dispatchID).Scan(&routeID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("%w: %s", ports.ErrIntentNotFound, dispatchID)
-		}
-		return err
+	routeID, lane, laneErr := s.laneOfDispatch(tx, dispatchID)
+	if laneErr != nil {
+		return laneErr
 	}
-	snap, err := s.routeSnapshotInTx(tx, routeID)
+	if routeID == "" {
+		return fmt.Errorf("%w: %s", ports.ErrIntentNotFound, dispatchID)
+	}
+	snap, err := s.laneSnapshotInTx(tx, routeID, lane)
 	if err != nil {
 		return err
 	}
@@ -306,23 +538,24 @@ func (s *Store) ActivateDispatch(ctx context.Context, dispatchID, actor, now str
 		if snap.ActiveDispatchID == dispatchID {
 			return tx.Rollback()
 		}
-		return fmt.Errorf("%w: route %s is active with %s", ports.ErrStateNotEligible, routeID, snap.ActiveDispatchID)
+		return fmt.Errorf("%w: lane %s/%s is active with %s", ports.ErrStateNotEligible, routeID, lane, snap.ActiveDispatchID)
 	}
-	if err := s.applyRouteTransition(tx, snap, state.RouteActiveClean, state.ReasonDispatchAccepted,
+	if err := s.applyLaneTransition(tx, routeID, lane, snap, state.RouteActiveClean, state.ReasonDispatchAccepted,
 		state.RouteEvidence{Actor: actor, ActivatingDispatchID: dispatchID}, now,
-		fmt.Sprintf(`{"reason":%q,"dispatch_id":%q}`, state.ReasonDispatchAccepted, dispatchID)); err != nil {
+		auditJSON("reason", state.ReasonDispatchAccepted, "dispatch_id", dispatchID, "destination_id", lane)); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`UPDATE route_runtime_state SET active_dispatch_id = ? WHERE route_id = ? AND (active_dispatch_id IS NULL OR active_dispatch_id = ?)`, dispatchID, routeID, dispatchID); err != nil {
+	if _, err := tx.Exec(`UPDATE destination_lane_state SET active_dispatch_id = ? WHERE route_id = ? AND destination_id = ? AND (active_dispatch_id IS NULL OR active_dispatch_id = ?)`,
+		dispatchID, routeID, lane, dispatchID); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
-// ActivateFollowup moves FOLLOWUP_READY to ACTIVE_CLEAN (no dirty
-// generation) or ACTIVE_DIRTY (a later burst merged while the follow-up
-// waited, E8-T1/B-1) with the follow-up dispatch taking the active slot
-// (E3-T1 activation guard).
+// ActivateFollowup moves the dispatch's lane from FOLLOWUP_READY to
+// ACTIVE_CLEAN (no dirty generation) or ACTIVE_DIRTY (a later burst merged
+// while the follow-up waited, E8-T1/B-1) with the follow-up dispatch
+// taking the lane's active slot (E3-T1 activation guard).
 func (s *Store) ActivateFollowup(ctx context.Context, dispatchID, actor, now string) error {
 	now = normalizeTimestamp(now)
 	tx, err := s.BeginTx(ctx, nil)
@@ -330,15 +563,24 @@ func (s *Store) ActivateFollowup(ctx context.Context, dispatchID, actor, now str
 		return err
 	}
 	defer tx.Rollback()
-	var routeID string
 	var generation int64
-	if err := tx.QueryRow(`SELECT route_id, generation FROM dispatch_intents WHERE dispatch_id = ?`, dispatchID).Scan(&routeID, &generation); err != nil {
+	if err := tx.QueryRow(`SELECT generation FROM dispatch_intents WHERE dispatch_id = ?`, dispatchID).Scan(&generation); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("%w: %s", ports.ErrIntentNotFound, dispatchID)
 		}
 		return err
 	}
-	snap, err := s.routeSnapshotInTx(tx, routeID)
+	routeID, lane, laneErr := s.laneOfDispatch(tx, dispatchID)
+	if laneErr != nil {
+		return laneErr
+	}
+	if routeID == "" {
+		return fmt.Errorf("%w: %s", ports.ErrIntentNotFound, dispatchID)
+	}
+	if err := s.materializeLaneTx(tx, routeID, lane); err != nil {
+		return err
+	}
+	snap, err := s.laneSnapshotInTx(tx, routeID, lane)
 	if err != nil {
 		return err
 	}
@@ -351,12 +593,13 @@ func (s *Store) ActivateFollowup(ctx context.Context, dispatchID, actor, now str
 	if snap.DirtyGeneration > 0 {
 		to, reason = state.RouteActiveDirty, state.ReasonFollowupAcceptedDirty
 	}
-	if err := s.applyRouteTransition(tx, snap, to, reason,
+	if err := s.applyLaneTransition(tx, routeID, lane, snap, to, reason,
 		state.RouteEvidence{Actor: actor, ActivatingDispatchID: dispatchID}, now,
-		fmt.Sprintf(`{"reason":%q,"dispatch_id":%q,"dirty_generation":%d}`, reason, dispatchID, snap.DirtyGeneration)); err != nil {
+		auditJSON("reason", reason, "dispatch_id", dispatchID, "dirty_generation", snap.DirtyGeneration, "destination_id", lane)); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`UPDATE route_runtime_state SET active_dispatch_id = ?, active_generation = ? WHERE route_id = ?`, dispatchID, int(generation), routeID); err != nil {
+	if _, err := tx.Exec(`UPDATE destination_lane_state SET active_dispatch_id = ?, active_generation = ? WHERE route_id = ? AND destination_id = ?`,
+		dispatchID, int(generation), routeID, lane); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -373,24 +616,27 @@ const (
 	AgeMeasured
 )
 
-// ActiveDispatchAge reports the route's active-dispatch age with its
-// tri-state: AgeNone (nothing holds the slot), AgeUnreadable (the row
-// exists but the timestamp does not parse), or AgeMeasured with the
-// nanoseconds since creation. The stored second-precision timestamp
-// truncates downward, so a sub-second bound only applies once the
-// dispatch crosses a full second.
+// ActiveDispatchAge reports the route's oldest lane-held active-dispatch
+// age with its tri-state: AgeNone (no lane holds a slot), AgeUnreadable
+// (the row exists but the timestamp does not parse), or AgeMeasured with
+// the nanoseconds since creation. Since E12-T2 the slot lives on the
+// lanes, so the age is measured over every lane of the route. The stored
+// second-precision timestamp truncates downward, so a sub-second bound
+// only applies once the dispatch crosses a full second.
 func (s *Store) ActiveDispatchAge(ctx context.Context, routeID string) (AgeState, int64, error) {
-	var createdAt string
-	err := s.QueryRowContext(ctx, `SELECT i.created_at FROM dispatch_intents i
-		JOIN route_runtime_state r ON r.active_dispatch_id = i.dispatch_id
-		WHERE r.route_id = ?`, routeID).Scan(&createdAt)
-	if errors.Is(err, sql.ErrNoRows) {
-		return AgeNone, 0, nil
-	}
+	// MIN over no rows is NULL, not a value: scan nullable so a route with
+	// no lane-held slot reads AgeNone instead of a scan failure.
+	var createdAt sql.NullString
+	err := s.QueryRowContext(ctx, `SELECT MIN(i.created_at) FROM dispatch_intents i
+		JOIN destination_lane_state l ON l.route_id = i.route_id AND l.active_dispatch_id = i.dispatch_id
+		WHERE i.route_id = ?`, routeID).Scan(&createdAt)
 	if err != nil {
 		return AgeNone, 0, err
 	}
-	created, perr := time.Parse(time.RFC3339, normalizeTimestamp(createdAt))
+	if !createdAt.Valid || createdAt.String == "" {
+		return AgeNone, 0, nil
+	}
+	created, perr := time.Parse(time.RFC3339, normalizeTimestamp(createdAt.String))
 	if perr != nil {
 		return AgeUnreadable, 0, nil
 	}
@@ -398,31 +644,35 @@ func (s *Store) ActiveDispatchAge(ctx context.Context, routeID string) (AgeState
 }
 
 // EligibleForStale is the store-level route-stale eligibility rule
-// (E9-T2/T4-F006): staling live work requires the active dispatch to
-// have held the slot at least as long as the configured bound. An
+// (E9-T2/T4-F006): staling live work requires an active lane dispatch to
+// have held its slot at least as long as the configured bound. An
 // unreadable age refuses (fail closed).
 func (s *Store) EligibleForStale(ctx context.Context, routeID string, bound time.Duration) (bool, string, error) {
-	state, age, err := s.ActiveDispatchAge(ctx, routeID)
+	ageState, age, err := s.ActiveDispatchAge(ctx, routeID)
 	if err != nil {
 		return false, "", err
 	}
-	switch state {
+	switch ageState {
 	case AgeNone:
-		return false, "no active dispatch holds the route slot", nil
+		return false, "no active dispatch holds any lane slot", nil
 	case AgeUnreadable:
 		return false, "the active dispatch's creation timestamp is unreadable", nil
 	default:
 		if age < int64(bound) {
 			var id string
-			_ = s.QueryRowContext(ctx, `SELECT active_dispatch_id FROM route_runtime_state WHERE route_id = ?`, routeID).Scan(&id)
+			_ = s.QueryRowContext(ctx, `SELECT active_dispatch_id FROM destination_lane_state
+				WHERE route_id = ? AND active_dispatch_id IS NOT NULL ORDER BY destination_id LIMIT 1`, routeID).Scan(&id)
 			return false, fmt.Sprintf("active dispatch %s is inside the active_stale_after bound; live work is not stale", id), nil
 		}
 		return true, "", nil
 	}
 }
 
-// routeSnapshotInTx reads the route runtime snapshot inside a
-// transaction.
+// routeSnapshotInTx reads the raw route runtime row inside a transaction.
+// Since E12-T2 the route row's coordination columns are the frozen v12-era
+// history plus the route-level hold values; only the route-keyed
+// uncertainty/resolution flows read it directly. Coordination readers use
+// laneSnapshotInTx or the aggregating LoadRouteState.
 func (s *Store) routeSnapshotInTx(tx *sql.Tx, routeID string) (state.RouteSnapshot, error) {
 	var activation, routeState string
 	var ack, active sql.NullString
@@ -449,7 +699,9 @@ func (s *Store) routeSnapshotInTx(tx *sql.Tx, routeID string) (state.RouteSnapsh
 
 // applyRouteTransition validates the E3-T1 guards and applies one route
 // state transition inside the caller's transaction, bumping the version;
-// dirty-count changes stay with the callers' explicit updates.
+// dirty-count changes stay with the callers' explicit updates. Since
+// E12-T2 this is the route-level hold machinery (QUARANTINED/UNCERTAIN
+// resolution edges); lane coordination uses applyLaneTransition.
 func (s *Store) applyRouteTransition(tx *sql.Tx, snap state.RouteSnapshot, to state.RouteState, reason state.RouteReason, evidence state.RouteEvidence, now, contextJSON string) error {
 	if err := state.ValidateRouteTransition(snap, to, reason, evidence); err != nil {
 		return err
@@ -481,9 +733,10 @@ func lineageOr(json string) string {
 	return json
 }
 
-// MarkRouteStale moves an active route to UNCERTAIN through the declared
-// execution-evidence-stale edge (E7-T7/M-6): the operator exit for a
-// route whose active dispatch is older than active_stale_after. The
+// MarkRouteStale moves a route with a stale active lane to the route-level
+// UNCERTAIN hold through the declared execution-evidence-stale edge
+// (E7-T7/M-6, lane-aware since E12-T2): the operator exit for a route
+// whose lane-held active dispatch is older than active_stale_after. The
 // uncertain route is then resolved through the documented reconciliation
 // or lookup exits.
 func (s *Store) MarkRouteStaleWithReason(ctx context.Context, routeID, actor, reason, now string) error {
@@ -493,16 +746,40 @@ func (s *Store) MarkRouteStaleWithReason(ctx context.Context, routeID, actor, re
 		return err
 	}
 	defer tx.Rollback()
-	snap, err := s.routeSnapshotInTx(tx, routeID)
+	// The first lane holding an active dispatch (destination order is the
+	// deterministic choice) is the stale evidence.
+	rows, err := tx.Query(`SELECT destination_id FROM destination_lane_state
+		WHERE route_id = ? AND lane_state IN ('ACTIVE_CLEAN','ACTIVE_DIRTY') AND active_dispatch_id IS NOT NULL
+		ORDER BY destination_id LIMIT 1`, routeID)
 	if err != nil {
 		return err
 	}
-	if !snap.State.IsActive() {
-		return fmt.Errorf("%w: route %s is %s, not active", ports.ErrStateNotEligible, routeID, snap.State)
+	var lane string
+	if rows.Next() {
+		if err := rows.Scan(&lane); err != nil {
+			rows.Close()
+			return err
+		}
 	}
-	if err := s.applyRouteTransition(tx, snap, state.RouteUncertain, state.ReasonExecutionEvidenceStale,
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if lane == "" {
+		snap, serr := s.routeSnapshotInTx(tx, routeID)
+		if serr != nil {
+			return serr
+		}
+		return fmt.Errorf("%w: route %s is %s with no active lane, not staled", ports.ErrStateNotEligible, routeID, snap.State)
+	}
+	snap, err := s.laneSnapshotInTx(tx, routeID, lane)
+	if err != nil {
+		return err
+	}
+	if err := s.routeUncertainHoldTx(tx, snap, lane, state.ReasonExecutionEvidenceStale,
 		state.RouteEvidence{Actor: actor}, now,
-		fmt.Sprintf(`{"reason":%q,"actor":%q,"active_dispatch_id":%q,"operator_stale":true,"operator_reason":%q}`, state.ReasonExecutionEvidenceStale, actor, snap.ActiveDispatchID, reason)); err != nil {
+		auditJSON("reason", state.ReasonExecutionEvidenceStale, "actor", actor, "active_dispatch_id", snap.ActiveDispatchID,
+			"destination_id", lane, "operator_stale", true, "operator_reason", reason)); err != nil {
 		return err
 	}
 	return tx.Commit()

@@ -34,11 +34,28 @@ The implementation must verify the resulting journal mode and fail `doctor` if t
 | `child_dispatches` | Aggregate/destination lineage of one intent (E12-T1) | unique child ID; unique dispatch ID; unique aggregate + destination |
 | `dispatch_attempts` | Submission attempts and leases | unique attempt ID |
 | `dispatch_receipts` | Acceptance/execution evidence | unique receipt ID |
-| `route_runtime_state` | One active task and dirty generation | primary key route ID |
+| `route_runtime_state` | Route envelope (activation, acknowledged revision, capability fingerprint, pending reconciliation) and the route-level QUARANTINED/UNCERTAIN hold | primary key route ID |
+| `destination_lane_state` | Per-destination lane coordination (E12-T2): the lane's single-active slot, dirty generation, and follow-up chain | primary key route ID + destination ID |
 | `path_facts` | Last known digest/existence by resource path | unique resource ID + path |
 | `work_receipts` | Hermes companion provenance | unique receipt ID; indexed dispatch/run |
 | `quarantine_items` | Operator-visible holds | unique quarantine ID |
 | `state_transitions` | Append-only audit transitions | unique transition ID |
+
+Since E12-T2 the single-active slot, the dirty generation, and the follow-up
+chain are keyed on the dispatch's destination lane (`destination_lane_state`,
+one row per route and destination): two lanes of one route hold independent
+slots and dirty generations (CON-007, CON-008), and a lane's completion
+collapses only its own follow-up chain (CON-003). The `route_runtime_state`
+coordination columns (`route_state`, `active_dispatch_id`,
+`active_generation`, `dirty_generation`, `dirty_since`) are frozen v12-era
+history plus the values of the route-level UNCERTAIN/QUARANTINED hold — a
+hold blocks every lane, carries the held lane's slot and dirty generation
+for its route-keyed resolution fence, and is written when a lane enters
+uncertainty; every other coordination read goes through the lane rows (the
+route's aggregated snapshot folds its lanes). Lane rows materialize lazily
+on their first write; migration v13 backfilled one lane row per route whose
+active dispatch existed at the cutover (the child row's destination, else
+the synthetic `__legacy__` lane of pre-cutover work).
 
 ## 3. Dispatch State Machine
 

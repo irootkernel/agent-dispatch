@@ -241,9 +241,13 @@ func routeTargetResolver(cfg *config.Config) func(routeID string) (string, strin
 // request without a destination block resolves the certified lane — with
 // the canonical projection bytes its revision digests — so the derived
 // child also persists the destination-revision record it references.
+// Since E12-T2 a route may hold several lanes and this single-lane
+// resolution deterministically picks the canonically-first sorted
+// destination (FAN-012); a rerun or rebuild whose own lane is recoverable
+// never consults it.
 func routeDestinationResolver(cfg *config.Config) dispatch.DestinationLaneResolver {
 	return func(routeID string) (ports.TaskDestinationRef, string, bool) {
-		lane, projection, err := certifiedLane(cfg, routeID)
+		lane, projection, err := firstCertifiedLane(cfg, routeID)
 		if err != nil {
 			return ports.TaskDestinationRef{}, "", false
 		}

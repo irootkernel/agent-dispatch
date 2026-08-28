@@ -160,7 +160,7 @@ func TestScheduledReconcileSubmitsDueFollowup(t *testing.T) {
 	if err := healed.QueryRow(`SELECT state FROM dispatch_intents WHERE dispatch_id = ?`, followup).Scan(&state); err != nil || state != "accepted" {
 		t.Fatalf("the follow-up must be accepted by the scheduled path: %q %v", state, err)
 	}
-	if err := healed.QueryRow(`SELECT route_state FROM route_runtime_state WHERE route_id = 'wiki'`).Scan(&routeState); err != nil || routeState != "ACTIVE_CLEAN" {
+	if err := healed.QueryRow(`SELECT lane_state FROM destination_lane_state WHERE route_id = 'wiki'`).Scan(&routeState); err != nil || routeState != "ACTIVE_CLEAN" {
 		t.Fatalf("the accepted follow-up must be active (B-3): %q %v", routeState, err)
 	}
 }

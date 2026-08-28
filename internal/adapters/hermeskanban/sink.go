@@ -77,13 +77,22 @@ func NewSink(targetID, executable, minimumVersion string, board string, limits P
 			MaxManifestBytes: maxManifestBytes,
 			// resource_mutex is consulted before --mutex-key is ever sent
 			// (E8-T3, M-6): a target that does not honor the flag never
-			// receives it. Interim truth source: the frozen 0.19.1
-			// runtime-verified interface (docs/integrations/hermes-capability-report.json)
-			// until the E11-T2 probe records it per executable.
+			// receives it. The default is the frozen 0.19.1 runtime-
+			// verified interface; the CLI replaces it with the fresh
+			// per-executable probe truth through SetResourceMutexSupported
+			// (E11-T2) whenever the capability record is current.
 			ResourceMutexSupported: true,
 		},
 		targetID: targetID,
 	}, nil
+}
+
+// SetResourceMutexSupported overrides the resource-mutex posture from
+// the fresh per-executable capability record: a probed create surface
+// missing --mutex-key downgrades resource_mutex, so the renderer
+// suppresses the key for a target that cannot honor it (E8-T3, M-6).
+func (s *Sink) SetResourceMutexSupported(supported bool) {
+	s.renderOpts.ResourceMutexSupported = supported
 }
 
 // liveFingerprint recomputes the capability-evidence fingerprint for

@@ -267,6 +267,18 @@ func resolveSink(cfg *config.Config, routeID string, log *observability.Logger) 
 			return nil, err
 		}
 		sink.Log, sink.TraceID = log, globalTraceID
+		// E11-T2/E8-T3 (M-6): the fresh per-executable capability record
+		// owns the resource-mutex posture — a probed create surface
+		// missing --mutex-key downgrades resource_mutex and the renderer
+		// must suppress the key for a target that cannot honor it. A
+		// missing or stale record keeps the frozen-interface default; the
+		// submit path's fingerprint re-proof still blocks a changed
+		// executable before any side effect.
+		if record, rerr := hermeskanban.LoadCapabilityRecord(capabilityCachePath(dest.Target)); rerr == nil {
+			if digest, derr := hermeskanban.ExecutableDigest(t.Executable); derr == nil && record.StaleReasonForProfile(t.Executable, digest, "", "") == "" {
+				sink.SetResourceMutexSupported(record.CapabilitiesIncludeMutex())
+			}
+		}
 		// HER-018: bind the activation-accepted capability fingerprint
 		// when the route is enabled, so the submit path re-proves the
 		// live executable identity before any side effect. A store that

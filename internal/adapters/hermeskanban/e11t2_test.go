@@ -266,3 +266,132 @@ func readFileOr(t *testing.T, path string) []byte {
 	}
 	return raw
 }
+
+// TestE11T2MutexOnlyDowngrade proves the documented resilience posture
+// for the installed-0.20.5 shape: a create surface missing only
+// --mutex-key passes every required shape with resource_mutex
+// downgraded, so the probe record (not the frozen interface) owns the
+// submit-path mutex suppression.
+func TestE11T2MutexOnlyDowngrade(t *testing.T) {
+	bin := stubFull(t)
+	raw, err := os.ReadFile(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rewritten := strings.Replace(string(raw), " [--mutex-key KEY]", "", 1)
+	if rewritten == string(raw) {
+		t.Fatal("the stub's create help does not carry --mutex-key to drift")
+	}
+	if err := os.WriteFile(bin, []byte(rewritten), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	record, err := e11t2Prober(t, bin).Probe(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !record.AllRequiredPassed() || !record.Shapes.CreateSurface.Passed {
+		t.Fatalf("a mutex-only drift must pass every required shape: %+v", record.Shapes)
+	}
+	if len(record.MissingFlags) != 1 || record.MissingFlags[0] != "--mutex-key" {
+		t.Fatalf("exactly --mutex-key may be missing, got %v", record.MissingFlags)
+	}
+	caps, cerr := record.Capabilities()
+	if cerr != nil || caps.ResourceMutex {
+		t.Fatalf("resource_mutex must downgrade on a mutex-only drift: %+v %v", caps, cerr)
+	}
+	if record.CapabilitiesIncludeMutex() {
+		t.Fatal("CapabilitiesIncludeMutex must report the downgrade")
+	}
+}
+
+// TestE11T2CapabilityRecordInventoryContract proves the published
+// evidence contract through the cache file itself: a passing skill
+// table always records its inventory (a healthy zero-skill table
+// persists []), a failed shape leaves the field absent (never null),
+// and a corrupt or foreign-schema cache fails closed on load.
+func TestE11T2CapabilityRecordInventoryContract(t *testing.T) {
+	dir := t.TempDir()
+	passedShape := ProbeShape{Ran: true, Passed: true}
+	base := func() *CapabilityRecord {
+		return &CapabilityRecord{
+			SchemaVersion:    CapabilityRecordSchema,
+			Contract:         ProbeContractVersion,
+			ExecutablePath:   filepath.Join(dir, "hermes"),
+			ExecutableDigest: "sha256:" + strings.Repeat("a", 64),
+			HermesVersion:    "0.19.1",
+			Shapes: ProbeShapes{
+				Version:       passedShape,
+				AssigneesJSON: passedShape,
+				ListJSON:      passedShape,
+				CreateSurface: passedShape,
+				SkillTable:    passedShape,
+			},
+			Fingerprint: "cap:0123456789abcdef0123456789abcdef",
+		}
+	}
+	// A healthy zero-skill table persists the empty inventory as [].
+	healthy := base()
+	empty := []string{}
+	healthy.EnabledSkills = &empty
+	healthyPath := filepath.Join(dir, "healthy.json")
+	if err := WriteCapabilityRecord(healthy, healthyPath); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(healthyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"enabled_skills": []`) || strings.Contains(string(raw), `"enabled_skills": null`) {
+		t.Fatalf("a healthy zero-skill table must persist [], got: %s", raw)
+	}
+	loaded, err := LoadCapabilityRecord(healthyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if names := loaded.EnabledSkillNames(); names == nil || len(names) != 0 {
+		t.Fatalf("the round-tripped healthy zero-skill inventory must be empty non-nil, got %v", names)
+	}
+	// A failed skill-table shape leaves the field absent.
+	failed := base()
+	failed.Shapes.SkillTable = ProbeShape{Ran: true, Detail: "foreign header"}
+	failedPath := filepath.Join(dir, "failed.json")
+	if err := WriteCapabilityRecord(failed, failedPath); err != nil {
+		t.Fatal(err)
+	}
+	raw, err = os.ReadFile(failedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "enabled_skills") {
+		t.Fatalf("a failed skill-table shape must leave the inventory absent, got: %s", raw)
+	}
+	loaded, err = LoadCapabilityRecord(failedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if names := loaded.EnabledSkillNames(); names != nil {
+		t.Fatalf("a failed shape must load a nil inventory, got %v", names)
+	}
+	// Corrupt and foreign-schema caches fail closed.
+	truncated := filepath.Join(dir, "truncated.json")
+	if err := os.WriteFile(truncated, []byte(`{"schema_version": "agent-dispatch.he`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadCapabilityRecord(truncated); err == nil {
+		t.Fatal("truncated JSON must fail closed")
+	}
+	emptyFile := filepath.Join(dir, "empty.json")
+	if err := os.WriteFile(emptyFile, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadCapabilityRecord(emptyFile); err == nil {
+		t.Fatal("an empty cache file must fail closed")
+	}
+	foreign := filepath.Join(dir, "foreign.json")
+	if err := os.WriteFile(foreign, []byte(`{"schema_version":"other","probe_contract":"x"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadCapabilityRecord(foreign); err == nil || !strings.Contains(err.Error(), "not the v2 probe record") {
+		t.Fatalf("a foreign-schema record must fail closed naming the schema, got %v", err)
+	}
+}

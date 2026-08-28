@@ -34,7 +34,8 @@
   replace only after review, test, then re-enable with the current revision.
 - **Reconciliation conflict:** keep the newer facts and drain the single due
   reconciliation; never force snapshot replacement.
-- **Capability/profile/skill drift:** run `hermes probe --refresh` and
+- **Capability/profile/skill drift:** run `hermes probe` (the probe
+  always re-probes; `--refresh` belongs to `hermes capabilities`) and
   `route preflight`; explicit route re-acknowledgement is required.
 - **Partial work:** inspect completed/remaining scope and allow only the bounded
   lane follow-up. **Blocked work:** resolve manually; do not retry blindly.

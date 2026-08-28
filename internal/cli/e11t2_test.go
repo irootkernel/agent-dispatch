@@ -352,3 +352,96 @@ func TestE11T2ActivationRecordsFingerprint(t *testing.T) {
 		t.Fatalf("stored fingerprint %q must equal the probe record's %q", snap.CapabilityFingerprint, record.Fingerprint)
 	}
 }
+
+// TestE11T2RefreshBelongsToCapabilities proves the documented usage
+// contract: --refresh is a `hermes capabilities` flag, so `hermes
+// probe --refresh` and `hermes profiles --refresh` refuse at the
+// usage exit instead of silently ignoring the flag.
+func TestE11T2RefreshBelongsToCapabilities(t *testing.T) {
+	bin := stubhermes.Write(t)
+	configPath := e11t2HermesConfig(t, bin)
+	for _, argv := range [][]string{
+		{"hermes", "probe", "--config", configPath, "--refresh"},
+		{"hermes", "profiles", "--config", configPath, "--refresh"},
+	} {
+		var out, errb bytes.Buffer
+		if code := Run(argv, &out, &errb); code != 2 || !strings.Contains(errb.String(), "--refresh belongs to 'hermes capabilities'") {
+			t.Fatalf("%v must refuse at the usage exit 2 naming the owner command, got %d: %s", argv, code, errb.String())
+		}
+	}
+}
+
+// TestE11T2SubmitSuppressesMutexKeyForDriftedSurface proves the wired
+// resource-mutex posture end to end (E11-T2, E8-T3/M-6): against a
+// create surface missing only --mutex-key, the fresh probe record
+// downgrades resource_mutex, the production submit renders and the
+// stub's recorded create argv carries no --mutex-key while the task
+// is still created.
+func TestE11T2SubmitSuppressesMutexKeyForDriftedSurface(t *testing.T) {
+	bin := stubhermes.Write(t)
+	raw, err := os.ReadFile(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := strings.Replace(string(raw), " [--mutex-key KEY]", "", 1)
+	if script == string(raw) {
+		t.Fatal("the stub's create help does not carry --mutex-key to drift")
+	}
+	script = strings.Replace(script, "  create)\n", "  create)\n    printf '%s\\n' \"$*\" >> \"$DIR/argv-create\"\n", 1)
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configPath := e11t2HermesConfig(t, bin)
+	// A fresh probe records the downgrade so the enable gate and the
+	// submit path read the same capability truth.
+	var out, errb bytes.Buffer
+	if code := Run([]string{"hermes", "probe", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("probe: %s", errb.String())
+	}
+	cfgRaw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, bytes.Replace(cfgRaw, []byte("enabled: false"), []byte("enabled: true"), 1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setPlanEnv(t, cfg.Resources["vault-main"].Root, false)
+	t.Setenv("WATCHMAN_TRIGGER", "agent-dispatch.wiki.e11t2")
+	e4t3RegisterRoute(t, configPath)
+	revision, _ := config.RouteRevision(cfg, "wiki")
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"route", "enable", "--config", configPath, "--route", "wiki", "--acknowledge-production-gate", revision, "--yes"}, &out, &errb); code != 0 {
+		t.Fatalf("route enable: %s", errb.String())
+	}
+	if err := os.MkdirAll(filepath.Join(cfg.Resources["vault-main"].Root, "Inbox"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg.Resources["vault-main"].Root, "Inbox", "new.md"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errb.Reset()
+	var code int
+	withStdin(t, `[{"name":"Inbox/new.md","exists":true,"new":true,"size":5,"type":"f"}]`, func() {
+		code = Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman"}, &out, &errb)
+	})
+	if code != 0 {
+		t.Fatalf("dispatch exit %d: %s", code, errb.String())
+	}
+	stateDir := filepath.Join(filepath.Dir(bin), "state")
+	if _, err := os.Stat(filepath.Join(stateDir, "count")); err != nil {
+		t.Fatalf("the task must reach the drifted surface: %v", err)
+	}
+	argvLog, err := os.ReadFile(filepath.Join(stateDir, "argv-create"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(argvLog), "--mutex-key") {
+		t.Fatalf("a target that cannot honor --mutex-key must never receive it, got: %s", argvLog)
+	}
+}

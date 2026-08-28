@@ -22,11 +22,15 @@ import (
 
 // runHermesProfiles implements `hermes profiles` (CLI-010, HER-015):
 // the typed assignees surface with each profile's on-disk status —
-// no Hermes state is touched.
+// no Hermes state is touched. --refresh belongs to `hermes
+// capabilities` only and is refused at the documented usage exit.
 func runHermesProfiles(command string, args []string, stdout, stderr io.Writer) int {
-	cfg, targetID, _, _, code := hermesTargetSelection(command, args, stderr)
+	cfg, targetID, _, refresh, code := hermesTargetSelection(command, args, stderr)
 	if code != 0 {
 		return code
+	}
+	if refresh {
+		return usageError(stderr, command, "--refresh belongs to 'hermes capabilities'; profiles enumerates the live public surface")
 	}
 	target := cfg.HermesTargets[targetID]
 	limits, err := hermesTargetProcessLimits(cfg, target)

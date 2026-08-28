@@ -42,10 +42,14 @@ type CapabilityRecord struct {
 	// (HER-013 completeness).
 	Profile string `json:"profile"`
 	// EnabledSkills is the parsed enabled-skill inventory for the
-	// probed profile scope (nil when the skill-table shape failed);
-	// recorded at probe time so consumers never re-parse the summary
-	// detail (E11-T3 preflight).
-	EnabledSkills []string    `json:"enabled_skills,omitempty"`
+	// probed profile scope, recorded at probe time so consumers never
+	// re-parse the summary detail (E11-T3 preflight). It is a pointer
+	// so the persisted contract holds exactly as published: the field
+	// is present (possibly []) when the skill-table shape passed and
+	// absent when it failed — a plain slice with omitempty would also
+	// drop the healthy zero-skill inventory, and without omitempty a
+	// failed shape would publish null.
+	EnabledSkills *[]string   `json:"enabled_skills,omitempty"`
 	Shapes        ProbeShapes `json:"shapes"`
 	MissingFlags  []string    `json:"missing_create_flags,omitempty"`
 	Fingerprint   string      `json:"fingerprint"`
@@ -174,7 +178,7 @@ func (p *Prober) Probe(ctx context.Context) (*CapabilityRecord, error) {
 			}
 		}
 		sort.Strings(enabled)
-		rec.EnabledSkills = enabled
+		rec.EnabledSkills = &enabled
 		rec.Shapes.SkillTable = ProbeShape{Ran: true, Passed: true, Detail: fmt.Sprintf("%d enabled skills", len(skills))}
 	}
 
@@ -413,7 +417,10 @@ func (r *CapabilityRecord) EnabledSkillNames() []string {
 	if r.EnabledSkills == nil {
 		return []string{}
 	}
-	return append([]string(nil), r.EnabledSkills...)
+	// make (never append onto nil) so a healthy zero-skill inventory
+	// stays non-nil and distinguishable from a failed shape.
+	names := make([]string, 0, len(*r.EnabledSkills))
+	return append(names, *r.EnabledSkills...)
 }
 
 // CapabilitiesIncludeMutex reports whether the probed create surface

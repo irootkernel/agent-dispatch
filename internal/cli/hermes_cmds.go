@@ -77,11 +77,16 @@ func capabilityCachePath(targetID string) string {
 	return filepath.Join(filepath.Dir(platformpaths.DefaultCapabilityReportPath()), "hermes-capability-"+targetID+".json")
 }
 
-// runHermesProbe runs the probe and writes the cache (HER-012).
+// runHermesProbe runs the probe and writes the cache (HER-012). The
+// probe always re-probes, so --refresh belongs to `hermes capabilities`
+// only and is refused here at the documented usage exit (CLI-009).
 func runHermesProbe(command string, args []string, stdout, stderr io.Writer) int {
-	cfg, targetID, flags, _, code := hermesTargetSelection(command, args, stderr)
+	cfg, targetID, flags, refresh, code := hermesTargetSelection(command, args, stderr)
 	if code != 0 {
 		return code
+	}
+	if refresh {
+		return usageError(stderr, command, "--refresh belongs to 'hermes capabilities'; the probe always re-probes")
 	}
 	target := cfg.HermesTargets[targetID]
 	limits, err := hermesTargetProcessLimits(cfg, target)

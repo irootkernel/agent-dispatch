@@ -30,7 +30,7 @@ Rules:
 agent-dispatch version
 agent-dispatch init
 agent-dispatch config validate|show
-agent-dispatch route list|show|plan|enable|disable|stale
+agent-dispatch route list|show|plan|enable|disable|stale|preflight|set-profile|set-skills
 agent-dispatch watchman install|status|remove|test
 agent-dispatch dispatch
 agent-dispatch dispatches list|show|retry|reprocess|rerun|discard|refresh|drain
@@ -264,7 +264,7 @@ Default behavior persists the current-state reconciliation decision. `--submit` 
 
 ### `status`
 
-Returns route active/dirty state, queue counts, unresolved delivery, quarantine, last reconciliation, and the per-target summary (the static webhook capability declaration; the hermes probed-compatibility contract with its frozen-interface capability set).
+Returns route active/dirty state, queue counts, unresolved delivery, quarantine, last reconciliation, the per-target summary (the static webhook capability declaration; the hermes probed-compatibility contract with its frozen-interface capability set), and the per-route OPS-013 drift projection (capability, profile, skill, watchman, reconciliation).
 
 ### `doctor`
 
@@ -307,7 +307,7 @@ agent-dispatch --help
 agent-dispatch setup wiki
 agent-dispatch hermes probe [--target <id>] [--profile <profile>]
 agent-dispatch hermes capabilities [--refresh] [--target <id>] [--profile <profile>]
-agent-dispatch hermes profiles
+agent-dispatch hermes profiles [--target <id>]
 agent-dispatch route preflight --route <id>
 agent-dispatch route set-profile <route>:<destination> <profile>
 agent-dispatch route set-skills <route>:<destination> <skill>...

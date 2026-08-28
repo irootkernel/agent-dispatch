@@ -50,6 +50,9 @@ type ErrorEnvelope struct {
 	OK         bool      `json:"ok"`
 	Error      ErrorBody `json:"error"`
 	TraceID    string    `json:"trace_id"`
+	// Result carries the failing command's structured detail (for
+	// example the per-check preflight report) beside the error body.
+	Result any `json:"result,omitempty"`
 }
 
 // VersionResult is the result payload of the version command (cli-spec §3).
@@ -316,6 +319,12 @@ func writeEnvelopeWithWarnings(w io.Writer, command string, result interface{}, 
 }
 
 func writeError(w io.Writer, command, code, category, message string) {
+	writeErrorWithResult(w, command, code, category, message, nil)
+}
+
+// writeErrorWithResult writes an error envelope carrying the command's
+// structured detail in its result slot.
+func writeErrorWithResult(w io.Writer, command, code, category, message string, result any) {
 	enc := json.NewEncoder(w)
 	enc.SetEscapeHTML(false)
 	_ = enc.Encode(ErrorEnvelope{
@@ -329,6 +338,7 @@ func writeError(w io.Writer, command, code, category, message string) {
 			Retryable: false,
 		},
 		TraceID: globalTraceID,
+		Result:  result,
 	})
 }
 

@@ -13,11 +13,11 @@
 | Shipped release | v0.1.4 |
 | Planned SOT baseline | 1.1.0 ([D-025](../specs/decision-log.md)) |
 | Release target | v0.1.5 |
-| Current epic | E11 (In Progress; E11-T1, E11-T2 Completed) |
+| Current epic | E11 (In Progress; E11-T1 through E11-T3 Completed) |
 | Current active task | None |
-| Next task | E11-T3 |
-| Completed tasks | 65 / 75 |
-| Planned tasks | 10 / 75 |
+| Next task | E11-T4 |
+| Completed tasks | 66 / 75 |
+| Planned tasks | 9 / 75 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -117,7 +117,7 @@
 | 63 | E10-T3 | Completed | Source/reconciliation integrity gate G6 |
 | 64 | E11-T1 | Completed | Config v1 destination cutover and forward migration |
 | 65 | E11-T2 | Completed | Hermes 0.19.1+ capability probe and evidence cache |
-| 66 | E11-T3 | Planned | Destination profile/skill validation and route preflight |
+| 66 | E11-T3 | Completed | Destination profile/skill validation and route preflight |
 | 67 | E11-T4 | Planned | Discoverable CLI, guided setup, operator skill, and G7 |
 | 68 | E12-T1 | Planned | Aggregate event and destination child persistence |
 | 69 | E12-T2 | Planned | Per-destination lanes, conditions, fan-out, and retry isolation |
@@ -2814,7 +2814,7 @@ E11-T1 Completed.
 
 ## E11-T3: Destination Profile and Skill Preflight
 
-**Status:** Planned
+**Status:** Completed
 **Design Gate impact:** Not required; ADR-0017 owns the boundary.
 
 ### Objective
@@ -2845,7 +2845,40 @@ E11-T2 Completed.
 
 ### Evidence
 
-None — Planned.
+- `TestE11T3HermesProfiles` (`internal/cli/e11t3_test.go`): the public
+  profiles list with on-disk status through the typed assignees
+  surface (CLI-010, HER-015).
+- `TestE11T3PreflightPassesAndBlocks`: a complete destination passes
+  every check; a missing profile blocks at exit 3 with the sorted
+  on-disk alternatives and the set-profile remediation in the error
+  envelope's result slot; a required skill the profile does not enable
+  blocks naming it; no task is created (HER-016/HER-017, AC-704/705
+  posture).
+- `TestE11T3SetProfileQualifiedAndAmbiguity` and
+  `TestE11T3SetSkillsQualified`: the destination-qualified edits write
+  atomically, change only their destination, pause the route revision,
+  and reject the rejected candidate without touching the file; the
+  qualifier may be omitted only with exactly one destination, and the
+  ambiguous route-only edit is a usage error naming the declared set
+  (CLI-011).
+- `TestE11T3StatusSurfacesDrift`: `status` reports the capability,
+  watchman, profile, skill, and reconciliation drift classes per route
+  (OPS-013), with the capability class proven against a drifted
+  executable after a production-gate enable.
+- Mulgae member-task review: ordinal 1 (run
+  `r_01a04846-3dd7-7035-bedb-2e6f510f533d`, ci pass, coverage
+  complete, publication committed, zero findings) with its report-level
+  defects remediated after capture — the mutation path's dropped
+  `--config=<path>` equals form (previously validated and wrote the
+  default config instead of the named file), the post-mutation reload
+  error now on stderr, the healthy zero-skill skill table recording an
+  empty non-nil inventory so an absent field unambiguously means the
+  shape failed, the cli-spec command tree and `hermes profiles
+  [--target <id>]` surface sync, and the status drift enumeration —
+  covered by the whole-epic audit together with the new equals-form
+  test.
+- `make verify` green on darwin/arm64; Gaori manifest-check,
+  schema-validation, and traceability passed.
 
 ## E11-T4: Discoverable CLI, Guided Setup, Operator Skill, and G7
 

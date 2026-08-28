@@ -17,13 +17,15 @@ import (
 // explicitly refreshed (HER-011 through HER-013).
 func runHermes(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		return usageError(stderr, "hermes", "hermes requires a subcommand: probe or capabilities")
+		return usageError(stderr, "hermes", "hermes requires a subcommand: probe, capabilities, or profiles")
 	}
 	switch args[0] {
 	case "probe":
 		return runHermesProbe("hermes probe", args[1:], stdout, stderr)
 	case "capabilities":
 		return runHermesCapabilities("hermes capabilities", args[1:], stdout, stderr)
+	case "profiles":
+		return runHermesProfiles("hermes profiles", args[1:], stdout, stderr)
 	default:
 		return usageError(stderr, "hermes", fmt.Sprintf("unknown hermes subcommand %q", args[0]))
 	}

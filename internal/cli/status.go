@@ -101,6 +101,10 @@ func runStatus(args []string, stdout, stderr io.Writer) int {
 		"oldest_unresolved": nilIfEmpty(oldestUnresolved),
 		"database_bytes":    dbBytes,
 		"targets":           targetCapabilitySummary(cfg),
+		// OPS-013: the five drift classes — capability, profile, skill,
+		// watchman, reconciliation — surfaced per route; each is also an
+		// eligible notification target once E13 delivers sinks.
+		"drift": routeDriftSummary(ctx, cfg, closer),
 	}, warnings)
 }
 

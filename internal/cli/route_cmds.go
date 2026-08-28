@@ -19,7 +19,7 @@ import (
 // enable, and disable. `route plan` stays in plan.go.
 func runRoute(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		return usageError(stderr, "route", "route requires a subcommand: plan, list, show, enable, disable, or stale")
+		return usageError(stderr, "route", "route requires a subcommand: plan, list, show, enable, disable, stale, preflight, set-profile, or set-skills")
 	}
 	switch args[0] {
 	case "plan":
@@ -34,6 +34,12 @@ func runRoute(args []string, stdout, stderr io.Writer) int {
 		return runRouteDisable("route disable", args[1:], stdout, stderr)
 	case "stale":
 		return runRouteStale("route stale", args[1:], stdout, stderr)
+	case "preflight":
+		return runRoutePreflight("route preflight", args[1:], stdout, stderr)
+	case "set-profile":
+		return runRouteSetProfile("route set-profile", args[1:], stdout, stderr)
+	case "set-skills":
+		return runRouteSetSkills("route set-skills", args[1:], stdout, stderr)
 	default:
 		return usageError(stderr, "route", fmt.Sprintf("unknown route subcommand %q", args[0]))
 	}

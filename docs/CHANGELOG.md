@@ -1,5 +1,33 @@
 # SOT Changelog
 
+## 1.1.7 - 2026-08-28
+
+E11-T3: the destination preflight surface lands (HER-015 through
+HER-017, CLI-010, CLI-011, OPS-013):
+
+- `hermes profiles` lists the public profiles with on-disk status;
+  `route preflight` proves every destination executable before
+  enablement — target, board, profile, skills, workspace, mutex,
+  hints, notification sinks, and the persisted Watchman binding —
+  blocking at exit 3 with bounded sorted alternatives and the concrete
+  set-profile/set-skills remediation, and creating no task;
+- the destination-qualified `route set-profile`/`set-skills` edit
+  exactly one destination through the validated atomic mutation and
+  pause the route revision; the qualifier may be omitted only with
+  exactly one destination and an ambiguous route-only edit is a usage
+  error naming the declared set;
+- the probe record now carries the parsed enabled-skill inventory for
+  its profile scope so preflight never re-parses table text;
+- `status` reports the five OPS-013 drift classes per route —
+  capability, profile, skill, watchman, and reconciliation — as an
+  observational projection, and the mutation commands accept the
+  `--config=<path>` equals form exactly like every shared parser
+  (round-one review remediation: the dropped equals form previously
+  mutated the default config instead of the named one); a passing
+  skill table always records its inventory (an absent field now
+  unambiguously means the shape failed, including the healthy
+  zero-skill table).
+
 ## 1.1.6 - 2026-08-28
 
 E11-T2: the capability probe and evidence cache land (HER-011 through

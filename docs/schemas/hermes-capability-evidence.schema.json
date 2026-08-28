@@ -81,6 +81,14 @@
     "profile": {
       "type": "string",
       "description": "The skill-table scope the record was probed under (\"\" = unscoped); a cache read with a different scope is stale (HER-013)."
+    },
+    "enabled_skills": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "The parsed enabled-skill inventory for the probed profile scope; absent when the skill-table shape failed."
     }
   },
   "$defs": {

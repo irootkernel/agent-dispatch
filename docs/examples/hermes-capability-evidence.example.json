@@ -6,6 +6,10 @@
   "executable_sha256": "sha256:e968ae4eeee62de7e0cae0a4abe3b68dfa253ad20eabab180bf90f3f76573d91",
   "hermes_version": "0.19.1",
   "profile": "wiki-maintainer",
+  "enabled_skills": [
+    "agent-dispatch-wiki-maintenance",
+    "llm-wiki"
+  ],
   "shapes": {
     "version": {
       "ran": true,

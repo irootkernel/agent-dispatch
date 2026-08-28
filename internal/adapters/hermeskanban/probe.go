@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -39,10 +40,15 @@ type CapabilityRecord struct {
 	// ("" = unscoped): a cache read with a different scope is stale, so
 	// one destination's profile evidence is never served as another's
 	// (HER-013 completeness).
-	Profile      string      `json:"profile"`
-	Shapes       ProbeShapes `json:"shapes"`
-	MissingFlags []string    `json:"missing_create_flags,omitempty"`
-	Fingerprint  string      `json:"fingerprint"`
+	Profile string `json:"profile"`
+	// EnabledSkills is the parsed enabled-skill inventory for the
+	// probed profile scope (nil when the skill-table shape failed);
+	// recorded at probe time so consumers never re-parse the summary
+	// detail (E11-T3 preflight).
+	EnabledSkills []string    `json:"enabled_skills,omitempty"`
+	Shapes        ProbeShapes `json:"shapes"`
+	MissingFlags  []string    `json:"missing_create_flags,omitempty"`
+	Fingerprint   string      `json:"fingerprint"`
 }
 
 // ProbeShapes carries each bounded shape probe's outcome. A shape
@@ -158,6 +164,17 @@ func (p *Prober) Probe(ctx context.Context) (*CapabilityRecord, error) {
 	if skills, serr := p.probeSkillTable(ctx); serr != nil {
 		rec.Shapes.SkillTable = ProbeShape{Ran: true, Detail: truncate(serr.Error(), diagnosticBound)}
 	} else {
+		// A passing table always records a non-nil inventory (possibly
+		// empty), so an absent field unambiguously means the shape
+		// failed — never a healthy zero-skill table.
+		enabled := []string{}
+		for _, row := range skills {
+			if row.Enabled() {
+				enabled = append(enabled, row.Name)
+			}
+		}
+		sort.Strings(enabled)
+		rec.EnabledSkills = enabled
 		rec.Shapes.SkillTable = ProbeShape{Ran: true, Passed: true, Detail: fmt.Sprintf("%d enabled skills", len(skills))}
 	}
 
@@ -384,4 +401,24 @@ func WriteCapabilityRecord(rec *CapabilityRecord, path string) error {
 		return err
 	}
 	return os.Rename(tmp.Name(), path)
+}
+
+// EnabledSkillNames returns the sorted enabled-skill inventory the
+// skill-table probe recorded, or nil when the skill-table shape did
+// not pass (the preflight path then fails closed on its own check).
+func (r *CapabilityRecord) EnabledSkillNames() []string {
+	if !r.Shapes.SkillTable.Passed {
+		return nil
+	}
+	if r.EnabledSkills == nil {
+		return []string{}
+	}
+	return append([]string(nil), r.EnabledSkills...)
+}
+
+// CapabilitiesIncludeMutex reports whether the probed create surface
+// carries --mutex-key (the resource_mutex capability).
+func (r *CapabilityRecord) CapabilitiesIncludeMutex() bool {
+	caps, err := r.Capabilities()
+	return err == nil && caps.ResourceMutex
 }

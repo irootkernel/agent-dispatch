@@ -1,5 +1,59 @@
 # SOT Changelog
 
+## 1.1.11 - 2026-08-29
+
+E12-T3: work-receipt/v2, aggregate inspection, and completion evidence
+(FBK-009 through FBK-012, DAT-011, FAN-010, CLI-013, OPS-011):
+
+- `docs/schemas/work-receipt.schema.json` moves to v2: the status
+  vocabulary gains `partially_completed` (both scopes required, the
+  remaining scope non-empty) and `blocked` (a non-empty bounded
+  `manual_reason` required); v1 documents remain valid (the stored
+  history stays readable, DAT-009 posture), and three validating
+  examples ship (partial, completed, blocked);
+- SQLite migration v14 rebuilds `work_receipts` with the widened status
+  CHECK plus the scope and manual-reason columns — no historic row is
+  rewritten (the v2 columns default empty on v1 rows);
+- `work complete --status completed|partially_completed|blocked`
+  (completed stays the default): partially_completed requires
+  `--remaining-manifest` (FBK-010) — the current child closes its lane
+  and exactly one follow-up on the SAME destination lane carries the
+  remaining scope unioned with the lane's unresolved dirty changes
+  (an empty remaining scope rejects with guidance to use completed);
+  blocked requires `--manual-reason` (FBK-011) — the receipt records the
+  reason and NOTHING else happens: the lane stays active with its child,
+  nothing auto-runs (the automatic retry machinery only touches
+  retry_wait/dead-lettered work), and resolution is operator-only
+  (`work complete`/`work fail` later, or a rerun);
+- the full-document form routes through the document's own outcome
+  (review round 1): a work-receipt/v2 document carrying
+  `partially_completed` or `blocked` submits through `--manifest` alone —
+  its scopes or manual reason are the outcome's members — while an
+  explicit `--status` that disagrees, or a `--remaining-manifest` that
+  differs from the document's remaining scope, rejects as a conflict;
+  `--remaining-manifest` outside the partial outcome is a usage error
+  and a bare change-array manifest beside `blocked` rejects with
+  guidance (blocked takes its manual reason);
+- the receipt views name the child lane explicitly (DAT-011): the
+  work-receipt read model, `receipts list` work rows, and the intent
+  lineage carry `destination_id` (empty for pre-cutover legacy
+  dispatches), and the lineage surfaces the blocked reason;
+- `events show <aggregate-id>` (CLI-013, FAN-010): one occurrence's
+  aggregate with its selection summary and closed reasons, and every
+  child's separate destination, intent-state, acceptance, execution,
+  work-receipt, retry, and completion-evidence projections; the
+  `aggregate_status` projection is the worst child class — evidence-gap
+  > manual-intervention > failed > in-progress > completed — and
+  accepted work without a valid attributable work receipt (absent or
+  invalid) renders `completion_evidence: missing` with the actionable
+  next step, never "completed", while a never-accepted child renders
+  `not-applicable` — its pending state is the story, not a false
+  "present" (FBK-012, AC-806 posture);
+- `status` grows one bounded lane summary row per destination (OPS-011);
+- the rendered task receipt block, the worker skill, and the task
+  contract document the four outcomes and their exact CLI invocations
+  (no Hermes installation or modification is involved).
+
 ## 1.1.10 - 2026-08-29
 
 E12-T2: per-destination lane coordination, the structural selection

@@ -168,3 +168,99 @@ func (s *Store) LoadChildDispatch(ctx context.Context, dispatchID string) (Child
 	}
 	return rec, err
 }
+
+// AggregateChildRow is one child's inspection projection beneath an
+// aggregate event (E12-T3, CLI-013/DAT-011): the destination lane, the
+// intent's submit state, the latest acceptance and execution-projection
+// receipts, and the latest work receipt with its validity.
+type AggregateChildRow struct {
+	DispatchID          string
+	DestinationID       string
+	DestinationRevision string
+	Workstream          string
+	IntentState         string
+	AttemptCount        int
+	NextAttemptAt       string
+	ExternalRef         string
+	// Acceptance is the latest acceptance receipt's state ('' when none).
+	Acceptance string
+	// Execution is the latest execution-projection receipt's state (''
+	// when none).
+	Execution string
+	// WorkReceipt is the latest work receipt's status ('' when none).
+	WorkReceipt string
+	// WorkReceiptValid reports the latest work receipt's validation state.
+	WorkReceiptValid bool
+}
+
+// LoadAggregateChildren returns every child beneath one aggregate event
+// with its per-child evidence projections (E12-T3, CLI-013): the joins
+// are table-qualified and the latest-receipt columns come from
+// deterministic correlated subqueries.
+func (s *Store) LoadAggregateChildren(ctx context.Context, aggregateID string) ([]AggregateChildRow, error) {
+	rows, err := s.QueryContext(ctx, `SELECT c.dispatch_id, c.destination_id, c.destination_revision, c.workstream,
+			i.state, i.attempt_count, COALESCE(i.next_attempt_at, ''), COALESCE(i.external_ref, ''),
+			COALESCE((SELECT r.acceptance_state FROM dispatch_receipts r
+				WHERE r.dispatch_id = c.dispatch_id AND r.receipt_kind = 'acceptance'
+				ORDER BY r.received_at DESC, r.receipt_id DESC LIMIT 1), ''),
+			COALESCE((SELECT r2.execution_state FROM dispatch_receipts r2
+				WHERE r2.dispatch_id = c.dispatch_id AND r2.receipt_kind = 'execution_projection'
+				ORDER BY r2.received_at DESC, r2.receipt_id DESC LIMIT 1), ''),
+			COALESCE((SELECT w.status FROM work_receipts w
+				WHERE w.dispatch_id = c.dispatch_id
+				ORDER BY w.submitted_at DESC, w.receipt_id DESC LIMIT 1), ''),
+			COALESCE((SELECT w2.validation_state FROM work_receipts w2
+				WHERE w2.dispatch_id = c.dispatch_id
+				ORDER BY w2.submitted_at DESC, w2.receipt_id DESC LIMIT 1), '')
+		FROM child_dispatches c
+		JOIN dispatch_intents i ON i.dispatch_id = c.dispatch_id
+		WHERE c.aggregate_id = ?
+		ORDER BY c.destination_id`, aggregateID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AggregateChildRow
+	for rows.Next() {
+		var row AggregateChildRow
+		var validity string
+		if err := rows.Scan(&row.DispatchID, &row.DestinationID, &row.DestinationRevision, &row.Workstream,
+			&row.IntentState, &row.AttemptCount, &row.NextAttemptAt, &row.ExternalRef,
+			&row.Acceptance, &row.Execution, &row.WorkReceipt, &validity); err != nil {
+			return nil, err
+		}
+		row.WorkReceiptValid = validity == "valid"
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
+// LaneStateRow is one destination lane's coordination summary (E12-T3,
+// OPS-011): the status surface's bounded per-lane projection.
+type LaneStateRow struct {
+	DestinationID    string `json:"destination_id"`
+	LaneState        string `json:"lane_state"`
+	ActiveDispatchID string `json:"active_dispatch_id,omitempty"`
+	DirtyGeneration  int    `json:"dirty_generation"`
+}
+
+// ListRouteLanes returns one row per destination lane of a route in
+// destination order (E12-T3, OPS-011); a route with no materialized lane
+// returns an empty slice.
+func (s *Store) ListRouteLanes(ctx context.Context, routeID string) ([]LaneStateRow, error) {
+	rows, err := s.QueryContext(ctx, `SELECT destination_id, lane_state, COALESCE(active_dispatch_id, ''), dirty_generation
+		FROM destination_lane_state WHERE route_id = ? ORDER BY destination_id`, routeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []LaneStateRow{}
+	for rows.Next() {
+		var row LaneStateRow
+		if err := rows.Scan(&row.DestinationID, &row.LaneState, &row.ActiveDispatchID, &row.DirtyGeneration); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}

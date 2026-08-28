@@ -99,8 +99,24 @@ The task may include:
 ```text
 agent-dispatch work begin --dispatch-id <dispatch-id> --run-id <generated-run-id>
 ...
-agent-dispatch work complete --dispatch-id <dispatch-id> --run-id <run-id> --manifest <file>
+agent-dispatch work complete --dispatch-id <dispatch-id> --run-id <run-id> --status completed --manifest <file>
+agent-dispatch work complete --dispatch-id <dispatch-id> --run-id <run-id> --status partially_completed --manifest <file> --remaining-manifest <file>
+agent-dispatch work complete --dispatch-id <dispatch-id> --run-id <run-id> --status blocked --manual-reason <bounded text>
+agent-dispatch work fail --dispatch-id <dispatch-id> --run-id <run-id> --failure-code <code>
 ```
+
+The four outcomes after a run begins (work-receipt/v2, E12-T3, FBK-009):
+`completed` carries the bounded manifest of changed relative paths and
+may clear the lane exactly; `partially_completed` (FBK-010) carries the
+completed scope AND a non-empty remaining scope — the lane closes the
+current child and schedules exactly one same-lane follow-up whose
+manifest is the remaining scope (unioned with the lane's unresolved
+dirty changes); `blocked` (FBK-011) carries a non-empty bounded manual
+reason — the lane stays active with its child, nothing auto-runs, and
+resolution is operator-only (`work complete`/`work fail` for that
+dispatch later, or a rerun); `failed` keeps the closed failure-code set
+(`agent_error`, `canceled`, `timeout`, `environment_error`) and the
+consecutive-failure budget decides follow-up versus operator resolution.
 
 The skill must not claim success if the domain work failed merely because receipt submission succeeded.
 

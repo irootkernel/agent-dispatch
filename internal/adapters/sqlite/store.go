@@ -303,13 +303,18 @@ func (s *Store) InitializeRouteState(tx *sql.Tx, routeID string) error {
 }
 
 // SaveWorkReceipt stores the verified work receipt (bounded: manifest
-// paths and digests only, DAT-008).
+// paths and digests only, DAT-008). The v2 outcome members — the partial
+// completion's scopes and the blocked outcome's manual reason — persist
+// since migration v14 (E12-T3, FBK-009 through FBK-011).
 func (s *Store) SaveWorkReceipt(tx *sql.Tx, w WorkReceiptRecord) error {
 	_, err := execOn(tx, s.DB, `INSERT INTO work_receipts
-		(receipt_id, dispatch_id, run_id, resource_id, status, failure_code, external_task_id, base_revision, result_revision, changes_json, submitted_at, validation_state, validation_reasons_json, begun_at, route_revision)
-		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, route_revision FROM dispatch_intents WHERE dispatch_id = ?`,
+		(receipt_id, dispatch_id, run_id, resource_id, status, failure_code, external_task_id, base_revision, result_revision, changes_json,
+		 completed_scope_json, remaining_scope_json, manual_reason, submitted_at, validation_state, validation_reasons_json, begun_at, route_revision)
+		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, route_revision FROM dispatch_intents WHERE dispatch_id = ?`,
 		w.ReceiptID, w.DispatchID, w.RunID, w.ResourceID, w.Status, nullString(w.FailureCode), nullString(w.ExternalTaskID),
-		nullString(w.BaseRevision), nullString(w.ResultRevision), w.ChangesJSON, w.SubmittedAt, w.ValidationState, w.ValidationReasonsJSON,
+		nullString(w.BaseRevision), nullString(w.ResultRevision), w.ChangesJSON,
+		w.CompletedScopeJSON, w.RemainingScopeJSON, nullString(w.ManualReason),
+		w.SubmittedAt, w.ValidationState, w.ValidationReasonsJSON,
 		nullString(w.BegunAt), w.DispatchID)
 	return err
 }
@@ -332,6 +337,12 @@ type WorkReceiptRecord struct {
 	// BegunAt preserves the run's begin timestamp across terminal
 	// updates (migration v4); it equals SubmittedAt on a begin insert.
 	BegunAt string
+	// CompletedScopeJSON and RemainingScopeJSON carry the
+	// partially_completed outcome's bounded scopes; ManualReason carries
+	// the blocked outcome's operator reason (E12-T3, migration v14).
+	CompletedScopeJSON string
+	RemainingScopeJSON string
+	ManualReason       string
 }
 
 // validIntentTransition enforces the dispatch state machine (§3) by

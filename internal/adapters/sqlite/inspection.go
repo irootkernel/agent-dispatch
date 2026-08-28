@@ -262,14 +262,14 @@ func (s *Store) LoadIntentLineage(ctx context.Context, dispatchID string) (ports
 		}
 		lin.Decision = d
 	}
-	wrows, werr := s.QueryContext(ctx, `SELECT receipt_id, run_id, status, COALESCE(failure_code, ''), submitted_at, COALESCE(begun_at, submitted_at)
+	wrows, werr := s.QueryContext(ctx, `SELECT receipt_id, run_id, status, COALESCE(failure_code, ''), submitted_at, COALESCE(begun_at, submitted_at), COALESCE(manual_reason, '')
 		FROM work_receipts WHERE dispatch_id = ? ORDER BY COALESCE(begun_at, submitted_at), receipt_id`, dispatchID)
 	if werr != nil {
 		return lin, werr
 	}
 	for wrows.Next() {
 		var w ports.WorkReceiptLineage
-		if err := wrows.Scan(&w.ReceiptID, &w.RunID, &w.Status, &w.FailureCode, &w.SubmittedAt, &w.BegunAt); err != nil {
+		if err := wrows.Scan(&w.ReceiptID, &w.RunID, &w.Status, &w.FailureCode, &w.SubmittedAt, &w.BegunAt, &w.ManualReason); err != nil {
 			wrows.Close()
 			return lin, err
 		}
@@ -936,7 +936,8 @@ func (s *Store) listWorkReceipts(ctx context.Context, f ports.ReceiptFilter) ([]
 		limit = 100
 	}
 	args = append(args, limit)
-	rows, err := s.QueryContext(ctx, `SELECT w.receipt_id, w.dispatch_id, w.status, w.external_task_id, w.submitted_at
+	rows, err := s.QueryContext(ctx, `SELECT w.receipt_id, w.dispatch_id, w.status, w.external_task_id, w.submitted_at,
+			COALESCE((SELECT c.destination_id FROM child_dispatches c WHERE c.dispatch_id = w.dispatch_id), '')
 		FROM work_receipts w JOIN dispatch_intents i ON i.dispatch_id = w.dispatch_id
 		WHERE `+strings.Join(where, " AND ")+`
 		ORDER BY w.submitted_at DESC, w.receipt_id DESC LIMIT ?`, args...)
@@ -948,18 +949,20 @@ func (s *Store) listWorkReceipts(ctx context.Context, f ports.ReceiptFilter) ([]
 	for rows.Next() {
 		var rec ports.ReceiptRecord
 		var status, external sql.NullString
-		if err := rows.Scan(&rec.ReceiptID, &rec.DispatchID, &status, &external, &rec.ReceivedAt); err != nil {
+		if err := rows.Scan(&rec.ReceiptID, &rec.DispatchID, &status, &external, &rec.ReceivedAt, &rec.DestinationID); err != nil {
 			return nil, err
 		}
 		rec.ReceiptKind = "work"
 		rec.ExternalRef = nullPtr(external)
 		// The work-receipt status is the agent run's execution outcome;
 		// it maps onto the portable execution axis (begun=running,
-		// completed=succeeded, failed=failed).
-		switch status.String {
-		case "completed":
+		// completed=succeeded, failed=failed; the v2 outcomes keep the
+		// running shape — partially_completed still owes work and blocked
+		// awaits the operator, so neither is terminal success, E12-T3).
+		switch records.WorkStatus(status.String) {
+		case records.WorkCompleted:
 			rec.ExecutionState = records.ExecSucceeded
-		case "failed":
+		case records.WorkFailed:
 			rec.ExecutionState = records.ExecFailed
 		default:
 			rec.ExecutionState = records.ExecRunning

@@ -197,18 +197,23 @@ func ParseExecutionState(s string) (ExecutionState, error) {
 	return "", fmt.Errorf("unknown execution state %q", s)
 }
 
-// WorkStatus is the work receipt status.
+// WorkStatus is the work receipt status. Since work-receipt/v2 (E12-T3,
+// FBK-009) the outcome vocabulary is four-way after a run begins:
+// completed, partially_completed (remaining scope owed), blocked (manual
+// intervention required), or failed.
 type WorkStatus string
 
 const (
-	WorkBegan     WorkStatus = "begun"
-	WorkCompleted WorkStatus = "completed"
-	WorkFailed    WorkStatus = "failed"
+	WorkBegan             WorkStatus = "begun"
+	WorkCompleted         WorkStatus = "completed"
+	WorkPartiallyComplete WorkStatus = "partially_completed"
+	WorkBlocked           WorkStatus = "blocked"
+	WorkFailed            WorkStatus = "failed"
 )
 
 func ParseWorkStatus(s string) (WorkStatus, error) {
 	switch WorkStatus(s) {
-	case WorkBegan, WorkCompleted, WorkFailed:
+	case WorkBegan, WorkCompleted, WorkPartiallyComplete, WorkBlocked, WorkFailed:
 		return WorkStatus(s), nil
 	}
 	return "", fmt.Errorf("unknown work status %q", s)

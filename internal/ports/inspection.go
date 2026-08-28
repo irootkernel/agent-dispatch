@@ -103,9 +103,12 @@ type AttemptRecord struct {
 // and the nullable members render null, never empty strings (E9-T1
 // audit F007, reconciled by the E9 validation).
 type ReceiptRecord struct {
-	SchemaVersion    string                  `json:"schema_version"`
-	ReceiptID        string                  `json:"receipt_id"`
-	DispatchID       string                  `json:"dispatch_id"`
+	SchemaVersion string `json:"schema_version"`
+	ReceiptID     string `json:"receipt_id"`
+	DispatchID    string `json:"dispatch_id"`
+	// DestinationID names the work receipt's child lane (E12-T3,
+	// DAT-011): set on work rows, empty on dispatch receipts.
+	DestinationID    string                  `json:"destination_id,omitempty"`
 	ReceiptKind      string                  `json:"receipt_kind"`
 	AcceptanceState  records.AcceptanceState `json:"acceptance_state,omitempty"`
 	ExecutionState   records.ExecutionState  `json:"execution_state,omitempty"`
@@ -195,6 +198,9 @@ type WorkReceiptLineage struct {
 	FailureCode string `json:"failure_code,omitempty"`
 	SubmittedAt string `json:"submitted_at"`
 	BegunAt     string `json:"begun_at"`
+	// ManualReason is the blocked outcome's operator reason (E12-T3,
+	// FBK-011).
+	ManualReason string `json:"manual_reason,omitempty"`
 }
 
 // BatchEvidence is a retained batch with its normalized changes, for

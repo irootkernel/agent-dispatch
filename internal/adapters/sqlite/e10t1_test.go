@@ -222,6 +222,26 @@ func TestE10T1MigrationV8BackfillAndIntegrity(t *testing.T) {
 		`DROP TABLE watch_bindings`,
 		`DROP TABLE contract_state`,
 		`DROP TABLE destination_lane_state`,
+		`DROP TABLE work_receipts`,
+		`CREATE TABLE work_receipts (
+	receipt_id      TEXT PRIMARY KEY,
+	dispatch_id     TEXT NOT NULL REFERENCES dispatch_intents(dispatch_id),
+	run_id          TEXT NOT NULL,
+	resource_id     TEXT NOT NULL REFERENCES resources(resource_id),
+	status          TEXT NOT NULL CHECK (status IN ('begun','completed','failed')),
+	failure_code    TEXT CHECK (failure_code IN ('agent_error','canceled','timeout','environment_error')),
+	external_task_id TEXT,
+	base_revision   TEXT,
+	result_revision TEXT,
+	changes_json    TEXT NOT NULL DEFAULT '[]',
+	submitted_at    TEXT NOT NULL,
+	begun_at        TEXT,
+	validation_state TEXT NOT NULL CHECK (validation_state IN ('valid','invalid','incomplete')),
+	validation_reasons_json TEXT NOT NULL DEFAULT '[]',
+	route_revision  TEXT NOT NULL DEFAULT '',
+	UNIQUE (dispatch_id, run_id)
+)`,
+		`CREATE INDEX idx_work_receipts_route_revision ON work_receipts(route_revision)`,
 		`DROP INDEX idx_child_dispatches_lane`,
 		`DROP TABLE child_dispatches`,
 		`DROP TABLE destination_revisions`,
@@ -229,7 +249,7 @@ func TestE10T1MigrationV8BackfillAndIntegrity(t *testing.T) {
 		`DROP TABLE aggregate_events`,
 		`ALTER TABLE resources DROP COLUMN observation_revision`,
 		`ALTER TABLE route_runtime_state DROP COLUMN capability_fingerprint`,
-		`DELETE FROM schema_migrations WHERE version IN (8, 9, 10, 11, 12, 13)`,
+		`DELETE FROM schema_migrations WHERE version IN (8, 9, 10, 11, 12, 13, 14)`,
 	} {
 		if _, err := crashed.Exec(stmt); err != nil {
 			t.Fatalf("rewind %q: %v", stmt, err)

@@ -22,13 +22,22 @@ var ErrRunAlreadyRecorded = errors.New("run already recorded for the dispatch")
 // (v0.1 has no completion-only policy, feedback-loop §4).
 var ErrRunNotBegun = errors.New("run has no begun receipt")
 
+// WorkChange is one bounded scope item of a work receipt (E12-T3,
+// FBK-010): the v1 changes-manifest item shape — a relative path with
+// optional before/after digests, never note bodies.
+type WorkChange struct {
+	Path         string `json:"path"`
+	BeforeDigest string `json:"before_digest,omitempty"`
+	AfterDigest  string `json:"after_digest,omitempty"`
+}
+
 // WorkReceiptInput is the persistence shape of one work receipt.
 type WorkReceiptInput struct {
 	ReceiptID             string
 	DispatchID            string
 	RunID                 string
 	ResourceID            string
-	Status                string // begun | completed | failed
+	Status                string // begun | completed | partially_completed | blocked | failed
 	FailureCode           string
 	ExternalTaskID        string
 	BaseRevision          string
@@ -40,6 +49,14 @@ type WorkReceiptInput struct {
 	// BegunAt preserves the run's begin timestamp across terminal
 	// updates (migration v4).
 	BegunAt string
+	// CompletedScope and RemainingScope carry the partially_completed
+	// outcome's bounded scopes (E12-T3, FBK-010); the store persists them
+	// as their JSON columns from migration v14.
+	CompletedScope []WorkChange
+	RemainingScope []WorkChange
+	// ManualReason is the blocked outcome's non-empty operator reason
+	// (FBK-011).
+	ManualReason string
 }
 
 // WorkReceiptView is the durable read model of one run's receipt.
@@ -54,6 +71,12 @@ type WorkReceiptView struct {
 	SubmittedAt           string
 	// BegunAt is the run's begin timestamp (the attribution window).
 	BegunAt string
+	// DestinationID names the child lane the receipt's dispatch belongs
+	// to (E12-T3, DAT-011): the receipt-to-child association is explicit
+	// on every view row; empty for a pre-cutover legacy dispatch.
+	DestinationID string
+	// ManualReason is the blocked outcome's operator reason (FBK-011).
+	ManualReason string
 }
 
 // WorkReceiptStore is the durable work-receipt surface.
@@ -67,6 +90,12 @@ type WorkReceiptStore interface {
 	// transaction (route transition, follow-up scheduling) atomically; the
 	// row must currently be a begun receipt of the same run.
 	CompleteWork(ctx context.Context, w WorkReceiptInput, req ActiveCompletion) (FollowupCreated, error)
+	// BlockWork records the blocked outcome (E12-T3, FBK-011): the run's
+	// begun receipt becomes blocked with its manual reason, and NO lane
+	// completion or follow-up scheduling happens — the child stays active
+	// awaiting operator resolution. The row must currently be the begun
+	// receipt of the same run.
+	BlockWork(ctx context.Context, w WorkReceiptInput) error
 	// FailureBudgetRemaining returns the route's remaining consecutive
 	// failure budget: the configured budget minus failed work completions
 	// recorded since the route's last completed work receipt.

@@ -1,0 +1,19 @@
+{
+  "schema_version": "agent-dispatch.work-receipt/v2",
+  "dispatch_id": "019c2234-5678-7abc-9def-0123456789ab",
+  "external_task_id": "hermes-task-12345",
+  "run_id": "wiki-maintenance-run-002",
+  "resource_id": "vault-main",
+  "status": "completed",
+  "base_revision": "git:def456",
+  "result_revision": "git:789abc",
+  "submitted_at": "2026-08-19T05:30:00+09:00",
+  "changes": [
+    {
+      "path": "Indexes/topic-index.md",
+      "before_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "after_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    }
+  ],
+  "failure_code": null
+}

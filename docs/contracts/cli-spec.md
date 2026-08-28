@@ -214,11 +214,14 @@ Registers an agent run. Returns the run ID that `work complete` and `work fail` 
 agent-dispatch work complete \
   --dispatch-id <id> \
   --run-id <id> \
+  [--status completed|partially_completed|blocked] \
   --manifest <json-file-or-stdin> \
+  [--remaining-manifest <json-file-or-stdin>] \
+  [--manual-reason <text>] \
   [--result-revision <opaque>]
 ```
 
-Manifest contains only relative paths and before/after digests. It may trigger exact suppression and one follow-up decision transactionally.
+Manifest contains only relative paths and before/after digests. It may trigger exact suppression and one follow-up decision transactionally. Since work-receipt/v2 (E12-T3, FBK-009) the outcome is explicit: `--status completed` (the default) is the full-completion path; `--status partially_completed` requires `--remaining-manifest` (a non-empty bounded scope of the paths that remain) and records both scopes — the current child completes its lane and exactly one follow-up on the SAME destination lane carries the remaining scope unioned with the lane's unresolved dirty changes (FBK-010; an empty remaining scope is rejected with guidance to use completed); `--status blocked` requires `--manual-reason` (non-empty, bounded) and records the blocked receipt WITHOUT completing the lane or scheduling anything (FBK-011) — the child stays active on its lane, nothing auto-runs (the automatic retry machinery only touches retry_wait/dead-lettered states), and resolution is operator-only: run `work begin` with a fresh `--run-id` for that dispatch, then `work complete` or `work fail` under that run (or `dispatches rerun`). `--manifest` is the completed scope and is required except for `--status blocked` (a blocked run may have changed nothing). The full work-receipt/v2 document form routes through its own outcome: a document carrying `partially_completed` (with both scopes) or `blocked` (with its manual reason) submits through `--manifest` alone, an explicit `--status` that disagrees with the document rejects as a conflict, and a `--remaining-manifest` that differs from the document's remaining scope rejects likewise. `--remaining-manifest` outside the partial outcome is a usage error, and a bare change-array manifest beside `--status blocked` rejects — blocked takes its manual reason (or a v2 blocked document).
 
 ### `work fail`
 
@@ -266,7 +269,7 @@ Default behavior persists the current-state reconciliation decision. `--submit` 
 
 ### `status`
 
-Returns route active/dirty state, queue counts, unresolved delivery, quarantine, last reconciliation, the per-target summary (the static webhook capability declaration; the hermes probed-compatibility contract with its frozen-interface capability set), and the per-route OPS-013 drift projection (capability, profile, skill, watchman, reconciliation).
+Returns route active/dirty state, queue counts, unresolved delivery, quarantine, last reconciliation, the per-target summary (the static webhook capability declaration; the hermes probed-compatibility contract with its frozen-interface capability set), the per-route OPS-013 drift projection (capability, profile, skill, watchman, reconciliation), and — since E12-T3 (OPS-011) — one bounded per-destination lane summary per route (destination id, lane state, active child, dirty generation) from the destination-lane coordination rows.
 
 ### `doctor`
 
@@ -317,9 +320,19 @@ agent-dispatch route set-profile <route>:<destination> <profile>
 agent-dispatch route set-skills <route>:<destination> <skill>...
 ```
 
-`events show <event-id>` and `notifications test|list|retry|drain` are
-E12/E13 work and are not part of the shipped surface; an invocation
-today is `command_unknown` at exit 2.
+`events show <aggregate-id>` lands with E12-T3 (CLI-013): it renders one
+occurrence's aggregate — the selection summary with its closed reasons,
+origin, generation, and content fingerprint — every child beneath it with
+separate destination, intent-state, acceptance, execution-projection,
+work-receipt (status + validity), retry, and completion-evidence
+projections, and the aggregate status as the worst child class
+(evidence-gap > manual-intervention > failed > in-progress > completed;
+FBK-012: accepted work without a valid attributable work receipt — absent
+or invalid — renders `completion_evidence: missing` with the actionable
+next step, never "completed"; a never-accepted child renders
+`not-applicable`). `notifications test|list|retry|drain` remain E13 work and
+are not part of the shipped surface; an invocation today is
+`command_unknown` at exit 2.
 
 Every root and group parser accepts `-h` and `--help`. Help states required
 flags, defaults, output modes, exit codes, side effects, production approval,

@@ -1,0 +1,14 @@
+{
+  "schema_version": "agent-dispatch.work-receipt/v2",
+  "dispatch_id": "019c2234-5678-7abc-9def-0123456789ab",
+  "external_task_id": "hermes-task-12345",
+  "run_id": "wiki-maintenance-run-003",
+  "resource_id": "vault-main",
+  "status": "blocked",
+  "base_revision": null,
+  "result_revision": null,
+  "submitted_at": "2026-08-19T07:30:00+09:00",
+  "changes": [],
+  "manual_reason": "protected-path policy forbids the required index rewrite; operator decision needed",
+  "failure_code": null
+}

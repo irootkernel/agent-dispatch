@@ -91,7 +91,7 @@ var knownCommands = map[string]bool{
 	"receipts": true, "work": true, "quarantine": true,
 	"reconcile": true, "status": true, "doctor": true,
 	"maintenance": true, "completion": true, "hermes": true,
-	"setup": true,
+	"setup": true, "events": true,
 }
 
 // Run executes the CLI with the given arguments and writes output to the
@@ -158,6 +158,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runReceipts(args[1:], stdout, stderr)
 	case "work":
 		return runWork(args[1:], stdout, stderr)
+	case "events":
+		return runEvents(args[1:], stdout, stderr)
 	case "quarantine":
 		return runQuarantine(args[1:], stdout, stderr)
 	case "reconcile":

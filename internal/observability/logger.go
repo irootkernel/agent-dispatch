@@ -81,6 +81,8 @@ const (
 	EventRouteFollowupCreated         = "route.followup_created"
 	EventWorkBegun                    = "work.begun"
 	EventWorkCompleted                = "work.completed"
+	EventWorkPartiallyCompleted       = "work.partially_completed"
+	EventWorkBlocked                  = "work.blocked"
 	EventWorkReceiptInvalid           = "work.receipt_invalid"
 	EventFeedbackSuppressedExact      = "feedback.suppressed_exact"
 	EventFeedbackUnresolved           = "feedback.unresolved"

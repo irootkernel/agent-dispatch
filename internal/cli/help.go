@@ -223,14 +223,38 @@ Example:
   agent-dispatch receipts list --dispatch <id>
 
 Next safe command: agent-dispatch work begin --help`,
+	"events": `events — aggregate-event inspection
+
+Usage: agent-dispatch events <show> [flags]
+
+Flags: --config; show takes one aggregate event ID.
+
+Exit codes: 0; 2 usage; 3 configuration; 4 not found; 20 storage.
+
+Side effects: none — events are read-only inspection over one
+occurrence's aggregate and its per-destination children (acceptance,
+execution, work receipt, retry, and completion-evidence projections;
+the aggregate status is the worst child class: evidence-gap,
+manual-intervention, failed, in-progress, completed).
+
+Example:
+  agent-dispatch events show <aggregate-id>
+
+Next safe command: agent-dispatch receipts list --kind work`,
 	"work": `work — the Hermes companion receipt surface
 
 Usage: agent-dispatch work <begin|complete|fail> [flags]
 
 Flags: --dispatch-id (required), --run-id, --external-task-id,
-  --reason (fail), --manifest (bounded path evidence).
+  --reason (fail), --manifest (bounded path evidence), and for
+  complete: --status completed|partially_completed|blocked (default
+  completed), --remaining-manifest (partially_completed, or the v2
+  document's own remaining scope), --manual-reason (blocked, or the v2
+  document's own manual reason).
 
-Exit codes: 0; 2 usage; 3 configuration; 14 conflict.
+Exit codes: 0; 2 usage; 3 configuration; 4 rejected receipt (invalid
+evidence, unknown dispatch or run, unknown document version, status
+conflict); 14 conflict (generation fence, state guards); 20 storage.
 
 Side effects: records the work receipt beside the dispatch lineage.
 

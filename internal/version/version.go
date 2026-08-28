@@ -28,8 +28,8 @@ const ConfigVersion = "1"
 // cutover marker (E11-T1); v11 binds the capability fingerprint to
 // route activation (E11-T2); v12 adds the aggregate fan-out record
 // families (E12-T1); v13 re-keys coordination onto destination lanes
-// (E12-T2).
-const SchemaRange = "1-13"
+// (E12-T2); v14 widens the work-receipt outcome vocabulary (E12-T3).
+const SchemaRange = "1-14"
 
 // AdapterVersions returns the pinned adapter implementation versions the
 // build carries. Each entry names the delivered surface and its verified

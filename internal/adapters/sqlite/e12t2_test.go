@@ -323,8 +323,10 @@ func TestE12T2MigrationV13BackfillsActiveLanes(t *testing.T) {
 	if err := upgraded.Migrate(t.TempDir()); err != nil {
 		t.Fatalf("upgrade to v13: %v", err)
 	}
-	if version, err := upgraded.SchemaVersion(); err != nil || version != 13 {
-		t.Fatalf("the ledger must record v13: %d %v", version, err)
+	// The upgrade runs every pending unit through the current baseline
+	// (v14 since E12-T3); v13's objects exist and the lane backfill ran.
+	if version, err := upgraded.SchemaVersion(); err != nil || version < 13 {
+		t.Fatalf("the ledger must reach the v13 lane state: %d %v", version, err)
 	}
 	// The child-linked active dispatch lands on its child's destination.
 	if st, active, dirty := laneCoordination(t, upgraded, "wiki-maintenance", "wiki-primary"); st != "ACTIVE_DIRTY" || active != "dispatch-child-linked" || dirty != 2 {

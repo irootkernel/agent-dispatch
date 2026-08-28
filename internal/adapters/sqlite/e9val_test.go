@@ -48,13 +48,41 @@ func TestE9ValidationMigrationV7BackfillsAndPropagates(t *testing.T) {
 		`DROP TABLE watch_bindings`,
 		`DROP TABLE contract_state`,
 		`DROP TABLE destination_lane_state`,
+		// Rewind work_receipts to the v6-era column shape while keeping the
+		// seeded row: migration v14 rebuilt the table with the v2 outcome
+		// columns, and migration v7 re-adds route_revision by ALTER.
+		`CREATE TABLE work_receipts_v6 (
+	receipt_id      TEXT PRIMARY KEY,
+	dispatch_id     TEXT NOT NULL REFERENCES dispatch_intents(dispatch_id),
+	run_id          TEXT NOT NULL,
+	resource_id     TEXT NOT NULL REFERENCES resources(resource_id),
+	status          TEXT NOT NULL CHECK (status IN ('begun','completed','failed')),
+	failure_code    TEXT CHECK (failure_code IN ('agent_error','canceled','timeout','environment_error')),
+	external_task_id TEXT,
+	base_revision   TEXT,
+	result_revision TEXT,
+	changes_json    TEXT NOT NULL DEFAULT '[]',
+	submitted_at    TEXT NOT NULL,
+	begun_at        TEXT,
+	validation_state TEXT NOT NULL CHECK (validation_state IN ('valid','invalid','incomplete')),
+	validation_reasons_json TEXT NOT NULL DEFAULT '[]',
+	UNIQUE (dispatch_id, run_id)
+)`,
+		`INSERT INTO work_receipts_v6
+	(receipt_id, dispatch_id, run_id, resource_id, status, failure_code, external_task_id, base_revision,
+	 result_revision, changes_json, submitted_at, begun_at, validation_state, validation_reasons_json)
+	SELECT receipt_id, dispatch_id, run_id, resource_id, status, failure_code, external_task_id, base_revision,
+	       result_revision, changes_json, submitted_at, begun_at, validation_state, validation_reasons_json
+	FROM work_receipts`,
+		`DROP TABLE work_receipts`,
+		`ALTER TABLE work_receipts_v6 RENAME TO work_receipts`,
 		`DROP INDEX idx_child_dispatches_lane`,
 		`DROP TABLE child_dispatches`,
 		`DROP TABLE destination_revisions`,
 		`DROP INDEX idx_aggregate_events_route`,
 		`DROP TABLE aggregate_events`,
 		`ALTER TABLE route_runtime_state DROP COLUMN capability_fingerprint`,
-		`DELETE FROM schema_migrations WHERE version IN (7, 8, 9, 10, 11, 12, 13)`,
+		`DELETE FROM schema_migrations WHERE version IN (7, 8, 9, 10, 11, 12, 13, 14)`,
 	} {
 		if _, err := s.Exec(stmt); err != nil {
 			t.Fatalf("rewind %q: %v", stmt, err)

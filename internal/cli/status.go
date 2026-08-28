@@ -78,6 +78,14 @@ func runStatus(args []string, stdout, stderr io.Writer) int {
 		if r.ActiveDispatchID != "" {
 			row["active_dispatch_id"] = r.ActiveDispatchID
 		}
+		// Per-destination lane summaries (E12-T3, OPS-011): one bounded
+		// row per lane — destination id, lane state, active child, dirty
+		// generation.
+		lanes, laneErr := closer.ListRouteLanes(ctx, r.RouteID)
+		if laneErr != nil {
+			return planErr(stderr, command, "sqlite_query_failed", "storage", laneErr.Error(), 20)
+		}
+		row["lanes"] = lanes
 		if r.RouteState == "ACTIVE_DIRTY" || r.DirtyGeneration > 0 {
 			warnings = append(warnings, fmt.Sprintf("route %s is dirty (generation %d): vault changes await the next dispatch", r.RouteID, r.DirtyGeneration))
 		}

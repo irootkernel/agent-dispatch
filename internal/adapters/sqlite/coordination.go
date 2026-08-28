@@ -392,6 +392,21 @@ func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.Acti
 	if req.FenceGeneration && req.ExpectedDirtyGeneration != snap.DirtyGeneration {
 		return out, fmt.Errorf("%w: dirty generation moved to %d while the receipt was being evaluated (expected %d)", ErrOptimisticConcurrency, snap.DirtyGeneration, req.ExpectedDirtyGeneration)
 	}
+	// A partially_completed outcome owes the remaining scope (E12-T3,
+	// FBK-010): when the lane's dirty generation is zero the remaining
+	// work is recorded through the documented dirtying edge — the same
+	// guarded, audited transition a merged burst takes — so the follow-up
+	// edge below carries exactly one same-lane follow-up.
+	if req.RemainingWork && snap.DirtyGeneration == 0 && snap.State.IsActive() {
+		if err := s.applyLaneTransition(tx, routeID, lane, snap, state.RouteActiveDirty, state.ReasonLaterRelevantChange,
+			state.RouteEvidence{Actor: req.Actor, DirtyGenerationAfter: 1}, now,
+			auditJSON("reason", state.ReasonLaterRelevantChange, "dispatch_id", req.DispatchID, "dirty_generation_after", 1,
+				"destination_id", lane, "note", "partially completed remaining scope")); err != nil {
+			return out, err
+		}
+		snap.State = state.RouteActiveDirty
+		snap.DirtyGeneration = 1
+	}
 	needsFollowup := (snap.DirtyGeneration > 0 && !req.DirtySuppressed) || snap.PendingReconcile
 	// The caller built the follow-up from an earlier read. If the
 	// transaction now sees work the caller did not (a reconciliation

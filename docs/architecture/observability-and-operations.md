@@ -79,11 +79,24 @@ only value is `json`) and `doctor` (always JSON):
 
 - `status --output json` exposes `routes` (per route: activation and
   route state, dirty generation, pending-reconcile flag, active dispatch
-  id, `last_reconciled_at`), `queues` (dispatch intents by state),
+  id, `last_reconciled_at`, and — since E12-T3 (OPS-011) — `lanes`, one
+  bounded row per destination lane: destination id, lane state, active
+  child, dirty generation), `queues` (dispatch intents by state),
   `quarantine` (items by state), `oldest_unresolved`, `database_bytes`,
   and `targets` (the offline capability summary per target), with the
   dirty/pending/unknown/dead-letter/held conditions repeated as envelope
   warnings;
+- `events show <aggregate-id> --output json` (E12-T3, CLI-013) exposes one
+  occurrence's aggregate — the selection summary with its closed reasons,
+  origin, generation, content fingerprint — and every child beneath it
+  with separate destination, intent-state, acceptance, execution,
+  work-receipt (status + validity), retry, and completion-evidence
+  projections; the `aggregate_status` member is the worst child class
+  (evidence-gap > manual-intervention > failed > in-progress >
+  completed, FBK-012: accepted work without a valid attributable work
+  receipt — absent or invalid — renders `completion_evidence: missing`
+  with the actionable next step, never "completed"; a never-accepted
+  child renders `not-applicable`);
 - `doctor` always emits its findings envelope on stdout (no `--output`
   flag required; `--output json` is accepted and ignored): `findings` (stable code, severity, summary, details,
   remediation, and the request's `trace_id`) and `findings_count`.

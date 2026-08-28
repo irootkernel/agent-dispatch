@@ -25,4 +25,7 @@ Acceptance criteria:
 Work receipt (via the Agent Dispatch companion CLI when available):
 agent-dispatch work begin --dispatch-id 019c2234-5678-7abc-9def-0123456789ab --run-id <generated-run-id>
 ...
-agent-dispatch work complete --dispatch-id 019c2234-5678-7abc-9def-0123456789ab --run-id <run-id> --manifest <file>
+agent-dispatch work complete --dispatch-id 019c2234-5678-7abc-9def-0123456789ab --run-id <run-id> --status completed --manifest <file>
+agent-dispatch work complete --dispatch-id 019c2234-5678-7abc-9def-0123456789ab --run-id <run-id> --status partially_completed --manifest <file> --remaining-manifest <file>
+agent-dispatch work complete --dispatch-id 019c2234-5678-7abc-9def-0123456789ab --run-id <run-id> --status blocked --manual-reason <bounded text>
+agent-dispatch work fail --dispatch-id 019c2234-5678-7abc-9def-0123456789ab --run-id <run-id> --failure-code <agent_error|canceled|timeout|environment_error>

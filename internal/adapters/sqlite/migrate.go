@@ -45,6 +45,7 @@ var Migrations = []Migration{
 	{Version: 11, Name: "capability-fingerprint", SQL: schemaV11CapabilityFingerprint},
 	{Version: 12, Name: "aggregate-fanout-records", SQL: schemaV12AggregateFanoutRecords},
 	{Version: 13, Name: "destination-lane-state", SQL: schemaV13DestinationLaneState},
+	{Version: 14, Name: "work-receipt-v2-outcomes", SQL: schemaV14WorkReceiptV2Outcomes},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
@@ -379,10 +380,14 @@ func acquireMigrationFileLock(dbPath string) (func(), error) {
 			// Heartbeat: a migration slower than the staleness bound
 			// refreshes its lock's mtime so a waiter cannot steal a lock
 			// its holder still owns (E8-T2, M-4 — a VACUUM INTO plus
-			// table rebuilds can outlive the old once-written mtime).
+			// table rebuilds can outlive the old once-written mtime). The
+			// interval is read before the goroutine spawns: the package
+			// variable is a test injection point, and capturing it here
+			// keeps the spawn race-free against a concurrent restore.
+			interval := migrationLockRefresh
 			stop := make(chan struct{})
 			go func() {
-				ticker := time.NewTicker(migrationLockRefresh)
+				ticker := time.NewTicker(interval)
 				defer ticker.Stop()
 				for {
 					select {
@@ -618,6 +623,49 @@ CREATE INDEX idx_child_dispatches_lane ON child_dispatches(route_id, destination
 // belongs to (the child row's destination, else the synthetic '__legacy__'
 // lane of ADR-0016), and routes without an active dispatch keep no lane row
 // — lanes materialize lazily on their first write.
+// schemaV14WorkReceiptV2Outcomes widens the work-receipt outcome vocabulary
+// (E12-T3, FBK-009/FBK-010/FBK-011): the status CHECK gains
+// partially_completed and blocked, and the v2 record members — the partial
+// completion's completed/remaining scope and the blocked outcome's manual
+// reason — persist as their own bounded JSON/text columns. The table is
+// rebuilt the way migration v2 rebuilt dispatch_attempts (create beside,
+// copy, drop, rename): no historic row is rewritten, every v1 receipt
+// keeps its exact evidence (DAT-009 — the v1 schema version stays
+// readable), and the UNIQUE(dispatch_id, run_id) semantics carry over.
+const schemaV14WorkReceiptV2Outcomes = `
+CREATE TABLE work_receipts_v14 (
+	receipt_id      TEXT PRIMARY KEY,
+	dispatch_id     TEXT NOT NULL REFERENCES dispatch_intents(dispatch_id),
+	run_id          TEXT NOT NULL,
+	resource_id     TEXT NOT NULL REFERENCES resources(resource_id),
+	status          TEXT NOT NULL CHECK (status IN ('begun','completed','partially_completed','blocked','failed')),
+	failure_code    TEXT CHECK (failure_code IN ('agent_error','canceled','timeout','environment_error')),
+	external_task_id TEXT,
+	base_revision   TEXT,
+	result_revision TEXT,
+	changes_json    TEXT NOT NULL DEFAULT '[]',
+	completed_scope_json TEXT NOT NULL DEFAULT '[]',
+	remaining_scope_json TEXT NOT NULL DEFAULT '[]',
+	manual_reason   TEXT,
+	submitted_at    TEXT NOT NULL,
+	begun_at        TEXT,
+	validation_state TEXT NOT NULL CHECK (validation_state IN ('valid','invalid','incomplete')),
+	validation_reasons_json TEXT NOT NULL DEFAULT '[]',
+	route_revision  TEXT NOT NULL DEFAULT '',
+	UNIQUE (dispatch_id, run_id)
+);
+INSERT INTO work_receipts_v14
+	(receipt_id, dispatch_id, run_id, resource_id, status, failure_code, external_task_id, base_revision,
+	 result_revision, changes_json, submitted_at, begun_at, validation_state, validation_reasons_json, route_revision)
+SELECT receipt_id, dispatch_id, run_id, resource_id, status, failure_code, external_task_id, base_revision,
+       result_revision, changes_json, submitted_at, begun_at, validation_state, validation_reasons_json,
+       COALESCE(route_revision, '')
+FROM work_receipts;
+DROP TABLE work_receipts;
+ALTER TABLE work_receipts_v14 RENAME TO work_receipts;
+CREATE INDEX idx_work_receipts_route_revision ON work_receipts(route_revision);
+`
+
 const schemaV13DestinationLaneState = `
 CREATE TABLE destination_lane_state (
     route_id          TEXT NOT NULL REFERENCES routes(route_id),

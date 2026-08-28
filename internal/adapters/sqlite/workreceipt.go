@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
 
 	"modernc.org/sqlite"
@@ -17,13 +18,16 @@ import (
 // the atomic completion transaction, and audited-invalid receipts keep
 // their evidence through the append-only transition history (FBK-003).
 
-// LoadWorkReceipt returns the run's receipt row.
+// LoadWorkReceipt returns the run's receipt row with its child-lane
+// association (E12-T3, DAT-011: the destination comes from the child
+// join; empty for a pre-cutover legacy dispatch).
 func (s *Store) LoadWorkReceipt(ctx context.Context, dispatchID, runID string) (ports.WorkReceiptView, error) {
 	var view ports.WorkReceiptView
-	var failureCode, begunAt sql.NullString
-	err := s.QueryRowContext(ctx, `SELECT receipt_id, dispatch_id, run_id, status, failure_code, validation_state, validation_reasons_json, submitted_at, begun_at
-		FROM work_receipts WHERE dispatch_id = ? AND run_id = ?`, dispatchID, runID).
-		Scan(&view.ReceiptID, &view.DispatchID, &view.RunID, &view.Status, &failureCode, &view.ValidationState, &view.ValidationReasonsJSON, &view.SubmittedAt, &begunAt)
+	var failureCode, begunAt, manualReason sql.NullString
+	err := s.QueryRowContext(ctx, `SELECT w.receipt_id, w.dispatch_id, w.run_id, w.status, w.failure_code, w.validation_state, w.validation_reasons_json, w.submitted_at, w.begun_at, w.manual_reason,
+			COALESCE((SELECT c.destination_id FROM child_dispatches c WHERE c.dispatch_id = w.dispatch_id), '')
+		FROM work_receipts w WHERE w.dispatch_id = ? AND w.run_id = ?`, dispatchID, runID).
+		Scan(&view.ReceiptID, &view.DispatchID, &view.RunID, &view.Status, &failureCode, &view.ValidationState, &view.ValidationReasonsJSON, &view.SubmittedAt, &begunAt, &manualReason, &view.DestinationID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return view, fmt.Errorf("%w: dispatch %s run %s", ports.ErrWorkReceiptNotFound, dispatchID, runID)
 	}
@@ -32,6 +36,7 @@ func (s *Store) LoadWorkReceipt(ctx context.Context, dispatchID, runID string) (
 	}
 	view.FailureCode = nullText(failureCode)
 	view.BegunAt = nullText(begunAt)
+	view.ManualReason = nullText(manualReason)
 	return view, nil
 }
 
@@ -65,10 +70,14 @@ func (s *Store) CompleteWork(ctx context.Context, w ports.WorkReceiptInput, req 
 		return ports.FollowupCreated{}, err
 	}
 	defer tx.Rollback()
+	row := workReceiptRow(w)
 	res, err := tx.Exec(`UPDATE work_receipts
-		SET status = ?, failure_code = ?, result_revision = ?, changes_json = ?, submitted_at = ?, validation_state = ?, validation_reasons_json = ?
+		SET status = ?, failure_code = ?, result_revision = ?, changes_json = ?, completed_scope_json = ?, remaining_scope_json = ?, manual_reason = ?,
+		    submitted_at = ?, validation_state = ?, validation_reasons_json = ?
 		WHERE dispatch_id = ? AND run_id = ? AND status = 'begun'`,
-		w.Status, nullString(w.FailureCode), nullString(w.ResultRevision), w.ChangesJSON, w.SubmittedAt, w.ValidationState, w.ValidationReasonsJSON,
+		w.Status, nullString(w.FailureCode), nullString(w.ResultRevision), w.ChangesJSON,
+		row.CompletedScopeJSON, row.RemainingScopeJSON, nullString(w.ManualReason),
+		w.SubmittedAt, w.ValidationState, w.ValidationReasonsJSON,
 		w.DispatchID, w.RunID)
 	if err != nil {
 		return ports.FollowupCreated{}, mapWorkReceiptConstraint(err)
@@ -98,6 +107,53 @@ func (s *Store) CompleteWork(ctx context.Context, w ports.WorkReceiptInput, req 
 		return out, err
 	}
 	return out, nil
+}
+
+// BlockWork records the blocked outcome (E12-T3, FBK-011): the run's
+// begun receipt becomes blocked with its manual reason inside one
+// transaction with the audit row. NO lane completion, follow-up
+// scheduling, or slot change happens — the child stays active on its
+// lane awaiting operator resolution (`work complete`/`work fail` later,
+// or a rerun); the automatic retry machinery never touches it because it
+// never enters retry_wait or dead_lettered.
+func (s *Store) BlockWork(ctx context.Context, w ports.WorkReceiptInput) error {
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if w.ManualReason == "" {
+		// An input-shape defect, never a row-state failure: the row-state
+		// sentinels stay reserved for absent and already-terminal runs
+		// (review round 1, product finding).
+		return fmt.Errorf("invalid blocked work receipt: a blocked receipt requires a non-empty manual reason")
+	}
+	if _, err := records.ParseWorkStatus(w.Status); err != nil || w.Status != string(records.WorkBlocked) {
+		return fmt.Errorf("invalid blocked work receipt: status %q is not the blocked outcome", w.Status)
+	}
+	res, err := tx.Exec(`UPDATE work_receipts
+		SET status = ?, manual_reason = ?, submitted_at = ?, validation_state = ?, validation_reasons_json = ?
+		WHERE dispatch_id = ? AND run_id = ? AND status = ?`,
+		w.Status, w.ManualReason, w.SubmittedAt, w.ValidationState, w.ValidationReasonsJSON, w.DispatchID, w.RunID, string(records.WorkBegan))
+	if err != nil {
+		return mapWorkReceiptConstraint(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		var status string
+		err := tx.QueryRow(`SELECT status FROM work_receipts WHERE dispatch_id = ? AND run_id = ?`, w.DispatchID, w.RunID).Scan(&status)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: dispatch %s run %s", ports.ErrRunNotBegun, w.DispatchID, w.RunID)
+		}
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("%w: run %s of dispatch %s is already %s", ports.ErrRunAlreadyRecorded, w.RunID, w.DispatchID, status)
+	}
+	if err := s.AppendTransition(tx, w.ReceiptID+":"+w.Status, "work_receipt", w.DispatchID, string(records.WorkBegan),
+		receiptAuditState(w.Status, w.ValidationState), w.SubmittedAt, workReceiptAuditContext(w, "")); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // FailureBudgetRemaining returns the configured budget minus the failed
@@ -148,10 +204,19 @@ func mapWorkReceiptConstraint(err error) error {
 }
 
 func workReceiptRow(w ports.WorkReceiptInput) WorkReceiptRecord {
+	completed, _ := json.Marshal(w.CompletedScope)
+	if w.CompletedScope == nil {
+		completed = []byte("[]")
+	}
+	remaining, _ := json.Marshal(w.RemainingScope)
+	if w.RemainingScope == nil {
+		remaining = []byte("[]")
+	}
 	return WorkReceiptRecord{
 		ReceiptID: w.ReceiptID, DispatchID: w.DispatchID, RunID: w.RunID, ResourceID: w.ResourceID,
 		Status: w.Status, FailureCode: w.FailureCode, ExternalTaskID: w.ExternalTaskID,
 		BaseRevision: w.BaseRevision, ResultRevision: w.ResultRevision, ChangesJSON: w.ChangesJSON,
+		CompletedScopeJSON: string(completed), RemainingScopeJSON: string(remaining), ManualReason: w.ManualReason,
 		SubmittedAt: w.SubmittedAt, ValidationState: w.ValidationState, ValidationReasonsJSON: w.ValidationReasonsJSON,
 		BegunAt: w.BegunAt,
 	}
@@ -171,6 +236,9 @@ func workReceiptAuditContext(w ports.WorkReceiptInput, actor string) string {
 	}
 	if w.FailureCode != "" {
 		doc["failure_code"] = w.FailureCode
+	}
+	if w.ManualReason != "" {
+		doc["manual_reason"] = w.ManualReason
 	}
 	if actor != "" {
 		doc["actor"] = actor

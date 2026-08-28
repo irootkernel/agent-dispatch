@@ -37,7 +37,7 @@ The implementation must verify the resulting journal mode and fail `doctor` if t
 | `route_runtime_state` | Route envelope (activation, acknowledged revision, capability fingerprint, pending reconciliation) and the route-level QUARANTINED/UNCERTAIN hold | primary key route ID |
 | `destination_lane_state` | Per-destination lane coordination (E12-T2): the lane's single-active slot, dirty generation, and follow-up chain | primary key route ID + destination ID |
 | `path_facts` | Last known digest/existence by resource path | unique resource ID + path |
-| `work_receipts` | Hermes companion provenance | unique receipt ID; indexed dispatch/run |
+| `work_receipts` | Hermes companion provenance with the v2 four-outcome vocabulary (E12-T3: begun/completed/partially_completed/blocked/failed plus the partial scopes and the blocked manual reason) | unique receipt ID; indexed dispatch/run |
 | `quarantine_items` | Operator-visible holds | unique quarantine ID |
 | `state_transitions` | Append-only audit transitions | unique transition ID |
 

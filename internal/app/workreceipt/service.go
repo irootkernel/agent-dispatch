@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/localfs"
 	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
@@ -24,8 +25,61 @@ import (
 )
 
 // SchemaVersion is the receipt document version this service accepts
-// (docs/schemas/work-receipt.schema.json).
-const SchemaVersion = "agent-dispatch.work-receipt/v1"
+// (docs/schemas/work-receipt.schema.json). v2 (E12-T3, FBK-009) widens
+// the outcome vocabulary; v1 documents remain valid inputs (the stored
+// history stays readable, DAT-009).
+const SchemaVersion = "agent-dispatch.work-receipt/v2"
+
+// The closed v2 outcome set after a run begins (FBK-009): the completed,
+// partially_completed (FBK-010), blocked (FBK-011), and failed outcomes
+// the CLI's `work complete --status` / `work fail` surfaces record. The
+// values are the domain's WorkStatus declarations — the one live
+// vocabulary (review round 1, maintainability finding); no parallel
+// string set exists.
+const (
+	StatusCompleted         = string(records.WorkCompleted)
+	StatusPartiallyComplete = string(records.WorkPartiallyComplete)
+	StatusBlocked           = string(records.WorkBlocked)
+	StatusBegun             = string(records.WorkBegan)
+	StatusFailed            = string(records.WorkFailed)
+)
+
+// maxManualReasonCharacters bounds the blocked outcome's manual reason in
+// characters (FBK-011): the schema's 200-code-point limit, counted in
+// runes so multi-byte operator text is bounded exactly as documented.
+const maxManualReasonCharacters = 200
+
+// Echo bounds for rejection reasons that quote untrusted submission
+// members into the append-only audit trail (review round 1, security
+// finding): statuses and identifiers are truncated before any write.
+const (
+	statusEchoBound = 64
+	idEchoBound     = 256
+)
+
+// boundEcho renders one untrusted echo clearly truncated at the bound.
+func boundEcho(text string, bound int) string {
+	runes := []rune(text)
+	if len(runes) <= bound {
+		return text
+	}
+	return string(runes[:bound]) + "...(truncated)"
+}
+
+// sameChangeEntries compares two scope sets for content equality in
+// canonical order (the document-vs-flag conflict check; order-sensitive
+// inputs are already canonicalized by validation).
+func sameChangeEntries(a, b []changeEntry) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
 
 // Limits bound one receipt submission (SEC-009); the change count and
 // digest shapes mirror the schema, the byte caps bound the untrusted
@@ -48,6 +102,8 @@ var docKeys = map[string]bool{
 	"schema_version": true, "dispatch_id": true, "external_task_id": true, "run_id": true,
 	"resource_id": true, "status": true, "base_revision": true, "result_revision": true,
 	"submitted_at": true, "changes": true, "failure_code": true,
+	// The v2 outcome members (E12-T3, FBK-009 through FBK-011).
+	"completed_scope": true, "remaining_scope": true, "manual_reason": true,
 }
 
 var changeKeys = map[string]bool{"path": true, "before_digest": true, "after_digest": true}
@@ -66,6 +122,25 @@ type receiptDoc struct {
 	SubmittedAt    *string        `json:"submitted_at"`
 	Changes        *[]changeEntry `json:"changes"`
 	FailureCode    *string        `json:"failure_code"`
+	// The v2 outcome members (E12-T3, FBK-009 through FBK-011): a v2
+	// document carries its own outcome and the members that outcome
+	// requires, and the submission routes through them (review round 1).
+	CompletedScope *[]changeEntry `json:"completed_scope"`
+	RemainingScope *[]changeEntry `json:"remaining_scope"`
+	ManualReason   *string        `json:"manual_reason"`
+}
+
+// manifestDocument is the parsed full-document form beside its change
+// entries (E12-T3 review round 1): zeroed when the submission was the
+// bare changes array, and carrying the v2 outcome members when it was a
+// v2 document.
+type manifestDocument struct {
+	IsV2           bool
+	SchemaVersion  string
+	Status         string
+	CompletedScope []changeEntry
+	RemainingScope []changeEntry
+	ManualReason   string
 }
 
 // changeEntry is one manifest row: only a relative path and before/after
@@ -159,6 +234,16 @@ type CompleteInput struct {
 	// ManifestJSON is the raw manifest document: either the full
 	// work-receipt object or its bare changes array.
 	ManifestJSON string
+	// Status is the outcome (E12-T3, FBK-009): completed (the default),
+	// partially_completed (FBK-010), or blocked (FBK-011). The failed
+	// outcome stays on `work fail`.
+	Status string
+	// RemainingManifestJSON is the partially_completed outcome's remaining
+	// scope (required, non-empty, bounded like the manifest).
+	RemainingManifestJSON string
+	// ManualReason is the blocked outcome's non-empty operator reason
+	// (required for blocked).
+	ManualReason string
 }
 
 // FailInput is the `work fail` submission.
@@ -183,6 +268,9 @@ type Result struct {
 	// SelfChangeSuppressed reports the whole generation cleared (E5-T3).
 	SuppressedPaths      []string `json:"suppressed_paths,omitempty"`
 	SelfChangeSuppressed bool     `json:"self_change_suppressed,omitempty"`
+	// ManualIntervention reports the blocked outcome (FBK-011): the lane
+	// stays active awaiting operator resolution; nothing auto-runs.
+	ManualIntervention bool `json:"manual_intervention,omitempty"`
 	// AuditWarning reports a failed post-commit attribution audit
 	// append (the completion stands; the evidence gap is visible).
 	AuditWarning error `json:"-"`
@@ -240,6 +328,20 @@ func (s *Service) logEvent(event, dispatchID, runID string) {
 // pending reconciliation remains, exactly one latest-state follow-up is
 // scheduled atomically with the receipt update (CON-003).
 func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error) {
+	// The outcome vocabulary is closed (FBK-009): completed is the
+	// default; partially_completed and blocked carry their own required
+	// members; failed stays on `work fail`. A v2 full document names its
+	// own outcome and routes through it (review round 1): the flag and
+	// the document must agree.
+	requestedStatus := in.Status
+	if requestedStatus == "" {
+		requestedStatus = StatusCompleted
+	}
+	if _, err := records.ParseWorkStatus(requestedStatus); err != nil || requestedStatus == StatusBegun || requestedStatus == StatusFailed {
+		reason := fmt.Sprintf("status %q is not a work complete outcome (completed, partially_completed, blocked; failed belongs to work fail)", boundEcho(in.Status, statusEchoBound))
+		s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: []string{reason}})
+		return Result{}, &InvalidError{Reasons: []string{reason}}
+	}
 	intent, snap, reasons, err := s.validateLineage(ctx, in.DispatchID, in.RunID, "")
 	if err != nil {
 		return Result{}, err
@@ -248,7 +350,13 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 		s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: reasons})
 		return Result{}, &InvalidError{Reasons: reasons}
 	}
-	changes, resultRevision, manifestReasons := s.validateManifest(in.ManifestJSON, in.DispatchID, in.RunID, intent.ResourceID, intent.ExternalRef)
+	// A blocked run may have changed nothing: the empty manifest is the
+	// honest scope when no document was submitted (FBK-011).
+	manifestJSON := in.ManifestJSON
+	if manifestJSON == "" {
+		manifestJSON = "[]"
+	}
+	changes, resultRevision, document, manifestReasons := s.validateManifest(manifestJSON, in.DispatchID, in.RunID, intent.ResourceID, intent.ExternalRef)
 	if len(manifestReasons) > 0 {
 		s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: manifestReasons})
 		return Result{}, &InvalidError{Reasons: manifestReasons}
@@ -256,16 +364,105 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 	if in.ResultRevision != "" {
 		resultRevision = in.ResultRevision
 	}
+	// Reconcile the outcome: a v2 full document's status is authoritative
+	// for the document's own members; an explicit --status must agree with
+	// it (a conflict is a validation error, review round 1).
+	status := requestedStatus
+	if document.IsV2 && document.Status != "" {
+		if in.Status != "" && in.Status != document.Status {
+			reason := fmt.Sprintf("the document status %q conflicts with --status %q; submit one outcome", document.Status, boundEcho(in.Status, statusEchoBound))
+			s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: []string{reason}})
+			return Result{}, &InvalidError{Reasons: []string{reason}}
+		}
+		status = document.Status
+	}
+	manualReason := strings.TrimSpace(in.ManualReason)
+	if document.IsV2 && document.ManualReason != "" {
+		if manualReason != "" && manualReason != document.ManualReason {
+			reason := "the document manual_reason conflicts with --manual-reason; submit one manual reason"
+			s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: []string{reason}})
+			return Result{}, &InvalidError{Reasons: []string{reason}}
+		}
+		manualReason = document.ManualReason
+	}
+	if status == StatusBlocked {
+		// A blocked outcome takes its manual reason — never a completion
+		// manifest: a bare change array (or v1 document) beside a blocked
+		// outcome is a shape error, while the v2 blocked document (whose
+		// changes are the honest empty scope) is the shipped example form
+		// (review round 1, security finding).
+		if !document.IsV2 && strings.TrimSpace(in.ManifestJSON) != "" && strings.TrimSpace(in.ManifestJSON) != "[]" {
+			reason := "a blocked receipt takes --manual-reason only; submit the completion manifest through the resolving work complete"
+			s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: []string{reason}})
+			return Result{}, &InvalidError{Reasons: []string{reason}}
+		}
+		if manualReason == "" {
+			reason := "a blocked receipt requires a non-empty manual reason (--manual-reason or the document's manual_reason)"
+			s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: []string{reason}})
+			return Result{}, &InvalidError{Reasons: []string{reason}}
+		}
+		if utf8.RuneCountInString(manualReason) > maxManualReasonCharacters {
+			reason := fmt.Sprintf("manual_reason exceeds %d characters", maxManualReasonCharacters)
+			s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: []string{reason}})
+			return Result{}, &InvalidError{Reasons: []string{reason}}
+		}
+	}
 	// The begun receipt anchors the attribution window; a completion
 	// without one is rejected by the atomic update too, but the matcher
 	// needs its timestamp before any mutation.
 	begun, err := s.Store.LoadWorkReceipt(ctx, in.DispatchID, in.RunID)
 	if errors.Is(err, ports.ErrWorkReceiptNotFound) {
-		s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: []string{fmt.Sprintf("run %s has no begun receipt for dispatch %s", in.RunID, in.DispatchID)}})
-		return Result{}, &InvalidError{Reasons: []string{fmt.Sprintf("run %s has no begun receipt for dispatch %s", in.RunID, in.DispatchID)}}
+		reason := fmt.Sprintf("run %s has no begun receipt for dispatch %s", boundEcho(in.RunID, idEchoBound), boundEcho(in.DispatchID, idEchoBound))
+		s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: []string{reason}})
+		return Result{}, &InvalidError{Reasons: []string{reason}}
 	}
 	if err != nil {
 		return Result{}, ports.WrapStore(err)
+	}
+	// The blocked outcome (FBK-011): the receipt records its manual
+	// reason and NOTHING else happens — the lane stays active with its
+	// child, no completion, no follow-up, nothing auto-runs (the automatic
+	// retry machinery only touches retry_wait/dead_lettered states).
+	if status == StatusBlocked {
+		in.ManualReason = manualReason
+		return s.completeBlocked(ctx, intent, snap, in)
+	}
+	// The partially_completed outcome (FBK-010): the remaining scope is
+	// required, bounded, and non-empty (an empty scope is the completed
+	// outcome — the operator is told so). The scope comes from
+	// --remaining-manifest or the v2 document's remaining_scope; both
+	// present with different content is an explicit conflict.
+	var remainingScope []records.ChangeItem
+	if status == StatusPartiallyComplete {
+		remainingEntries := document.RemainingScope
+		if strings.TrimSpace(in.RemainingManifestJSON) != "" {
+			flagRemaining, _, flagDoc, flagReasons := s.validateManifest(in.RemainingManifestJSON, in.DispatchID, in.RunID, intent.ResourceID, intent.ExternalRef)
+			if len(flagReasons) > 0 {
+				s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: flagReasons})
+				return Result{}, &InvalidError{Reasons: flagReasons}
+			}
+			if len(document.RemainingScope) > 0 && !sameChangeEntries(flagRemaining, document.RemainingScope) {
+				reason := "the document remaining_scope conflicts with --remaining-manifest; submit one remaining scope"
+				s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: []string{reason}})
+				return Result{}, &InvalidError{Reasons: []string{reason}}
+			}
+			if flagDoc.IsV2 && len(flagDoc.RemainingScope) > 0 {
+				remainingEntries = flagDoc.RemainingScope
+			} else {
+				remainingEntries = flagRemaining
+			}
+		}
+		if len(remainingEntries) == 0 {
+			reason := "the remaining scope of a partially_completed receipt must not be empty; submit --status completed when no work remains"
+			s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: []string{reason}})
+			return Result{}, &InvalidError{Reasons: []string{reason}}
+		}
+		for _, entry := range remainingEntries {
+			remainingScope = append(remainingScope, records.ChangeItem{
+				Path: entry.Path, Operation: scopeOperation(entry.BeforeDigest, entry.AfterDigest),
+				BeforeDigest: derefDigest(entry.BeforeDigest), AfterDigest: derefDigest(entry.AfterDigest),
+			})
+		}
 	}
 	changesJSON, _ := json.Marshal(changes)
 	w := ports.WorkReceiptInput{
@@ -273,11 +470,16 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 		DispatchID:      in.DispatchID,
 		RunID:           in.RunID,
 		ResourceID:      intent.ResourceID,
-		Status:          "completed",
+		Status:          status,
 		ResultRevision:  resultRevision,
 		ChangesJSON:     string(changesJSON),
 		SubmittedAt:     s.timestamp(),
 		ValidationState: "valid",
+		// The partial outcome's scopes persist beside the receipt
+		// (migration v14): the completed scope is the manifest above; the
+		// remaining scope is exactly what the follow-up will carry.
+		CompletedScope: workScopeOf(entriesToItems(changes)),
+		RemainingScope: workScopeOf(remainingScope),
 	}
 	// Exact self-change attribution (E5-t3): match the receipt against
 	// the dirty generation; only a fully verified generation may clear
@@ -316,9 +518,13 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 	var auditErr error
 	out, err := s.applyCompletion(ctx, intent, snap, w, ports.ActiveCompletion{
 		RouteID: intent.RouteID, DispatchID: in.DispatchID, Failed: false,
-		ReceiptRef: w.ReceiptID, Actor: "hermes-task", DirtySuppressed: decision.FullySuppressed,
+		ReceiptRef: w.ReceiptID,
+		// A partial completion always owes the remaining scope: the
+		// receipt never clears the lane as fully suppressed (FBK-010).
+		DirtySuppressed: decision.FullySuppressed && status != StatusPartiallyComplete,
 		FenceGeneration: true, ExpectedDirtyGeneration: snap.DirtyGeneration,
-	}, &decision, dirty)
+		RemainingWork: status == StatusPartiallyComplete,
+	}, &decision, dirty, remainingScope)
 	if err != nil {
 		return out, err
 	}
@@ -333,7 +539,11 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 	// The completion already committed: a failed audit append is
 	// surfaced, never silently discarded (E5 audit round 7).
 	out.AuditWarning = auditErr
-	s.logEvent(observability.EventWorkCompleted, in.DispatchID, in.RunID)
+	if status == StatusPartiallyComplete {
+		s.logEvent(observability.EventWorkPartiallyCompleted, in.DispatchID, in.RunID)
+	} else {
+		s.logEvent(observability.EventWorkCompleted, in.DispatchID, in.RunID)
+	}
 	return out, nil
 }
 
@@ -389,7 +599,90 @@ func (s *Service) Fail(ctx context.Context, in FailInput) (Result, error) {
 		RouteID: intent.RouteID, DispatchID: in.DispatchID, Failed: true,
 		FailureBudgetRemaining: budget, ReceiptRef: w.ReceiptID, Actor: "hermes-task",
 		FenceGeneration: true, ExpectedDirtyGeneration: snap.DirtyGeneration,
-	}, nil, dirty)
+	}, nil, dirty, nil)
+}
+
+// completeBlocked records the blocked outcome (E12-T3, FBK-011): the
+// begun receipt becomes blocked with its manual reason and the child
+// keeps its lane — no completion transaction, no follow-up, no state
+// change. Resolution is operator-only: a later `work complete`/`work
+// fail` for the same dispatch (a fresh run), or a rerun.
+func (s *Service) completeBlocked(ctx context.Context, intent ports.IntentSnapshot, snap state.RouteSnapshot, in CompleteInput) (Result, error) {
+	if _, err := s.Store.LoadWorkReceipt(ctx, in.DispatchID, in.RunID); errors.Is(err, ports.ErrWorkReceiptNotFound) {
+		s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: []string{fmt.Sprintf("run %s has no begun receipt for dispatch %s", in.RunID, in.DispatchID)}})
+		return Result{}, &InvalidError{Reasons: []string{fmt.Sprintf("run %s has no begun receipt for dispatch %s", in.RunID, in.DispatchID)}}
+	} else if err != nil {
+		return Result{}, ports.WrapStore(err)
+	}
+	w := ports.WorkReceiptInput{
+		ReceiptID:       s.receiptID(in.DispatchID),
+		DispatchID:      in.DispatchID,
+		RunID:           in.RunID,
+		ResourceID:      intent.ResourceID,
+		Status:          StatusBlocked,
+		SubmittedAt:     s.timestamp(),
+		ValidationState: "valid",
+		ManualReason:    strings.TrimSpace(in.ManualReason),
+	}
+	if err := s.Store.BlockWork(ctx, w); err != nil {
+		return Result{}, ports.WrapStore(err)
+	}
+	s.logEvent(observability.EventWorkBlocked, in.DispatchID, in.RunID)
+	return Result{
+		ReceiptID: w.ReceiptID, DispatchID: in.DispatchID, RunID: in.RunID,
+		Status: StatusBlocked, RouteState: string(snap.State), ManualIntervention: true,
+	}, nil
+}
+
+// scopeOperation derives a scope item's change operation from its
+// optional digests (FBK-010): the manifest item shape carries no
+// operation member, and the follow-up's fingerprint projection needs one.
+// An absent after-digest is a removal; a first-seen after-digest is a
+// create; everything else (and digest-less rows) is a modify — the
+// conservative default that never fabricates creation or removal
+// evidence.
+func scopeOperation(before, after *string) records.Operation {
+	switch {
+	case after == nil || *after == "":
+		return records.OpDelete
+	case before == nil || *before == "":
+		return records.OpCreate
+	default:
+		return records.OpModify
+	}
+}
+
+// derefDigest renders an optional manifest digest pointer as the plain
+// digest value (nil stays empty).
+func derefDigest(d *string) records.Digest {
+	if d == nil {
+		return ""
+	}
+	return records.Digest(*d)
+}
+
+// entriesToItems projects validated receipt entries onto the canonical
+// change-item shape (digests stay optional; the manifest item members
+// only).
+func entriesToItems(entries []changeEntry) []records.ChangeItem {
+	out := make([]records.ChangeItem, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, records.ChangeItem{Path: e.Path, BeforeDigest: derefDigest(e.BeforeDigest), AfterDigest: derefDigest(e.AfterDigest)})
+	}
+	return out
+}
+
+// workScopeOf projects receipt change entries onto the durable
+// WorkChange scope shape (the v1 manifest item members only, FBK-010).
+func workScopeOf(changes []records.ChangeItem) []ports.WorkChange {
+	if len(changes) == 0 {
+		return nil
+	}
+	out := make([]ports.WorkChange, 0, len(changes))
+	for _, c := range changes {
+		out = append(out, ports.WorkChange{Path: c.Path, BeforeDigest: string(c.BeforeDigest), AfterDigest: string(c.AfterDigest)})
+	}
+	return out
 }
 
 // filterDirtyToLane scopes one dirty generation to the completing
@@ -444,11 +737,15 @@ func (s *Service) filterDirtyToLane(intent ports.IntentSnapshot, dirty []ports.D
 // outstanding work (M-10); a consecutive-follow-up chain past
 // state.MaxConsecutiveFollowups schedules no follow-up and resolves the
 // route through UNCERTAIN instead (E8-T1, H-1.1).
-func (s *Service) applyCompletion(ctx context.Context, intent ports.IntentSnapshot, snap state.RouteSnapshot, w ports.WorkReceiptInput, base ports.ActiveCompletion, decision *AttributionDecision, dirty []ports.DirtyChange) (Result, error) {
+func (s *Service) applyCompletion(ctx context.Context, intent ports.IntentSnapshot, snap state.RouteSnapshot, w ports.WorkReceiptInput, base ports.ActiveCompletion, decision *AttributionDecision, dirty []ports.DirtyChange, remainingScope []records.ChangeItem) (Result, error) {
 	base.FollowupRequest = nil
 	base.PolicyRevision = s.PolicyRevision
 	base.FollowupGeneration = intent.Generation + 1
-	storeNeedsFollowup := (snap.DirtyGeneration > 0 && !base.DirtySuppressed) || snap.PendingReconcile
+	// A partial completion always schedules its same-lane follow-up for
+	// the remaining scope (FBK-010): the store's decision point sees the
+	// owed work through RemainingWork, and the manifest below unions the
+	// remaining scope with the lane's unresolved dirty changes.
+	storeNeedsFollowup := (snap.DirtyGeneration > 0 && !base.DirtySuppressed) || snap.PendingReconcile || base.RemainingWork
 	overBudget := storeNeedsFollowup && base.FollowupGeneration > state.MaxConsecutiveFollowups
 	// The store is the single decision point (it re-reads the fenced
 	// snapshot): build the follow-up exactly when the store would take the
@@ -457,7 +754,7 @@ func (s *Service) applyCompletion(ctx context.Context, intent ports.IntentSnapsh
 	// resolve through UNCERTAIN and schedule nothing (E8-T1 round-1 F002).
 	failureExhausted := base.Failed && base.FailureBudgetRemaining <= 0
 	if (storeNeedsFollowup || base.Failed) && !failureExhausted && !overBudget {
-		followup, err := s.buildFollowup(intent, decision, dirty)
+		followup, err := s.buildFollowup(intent, decision, dirty, remainingScope)
 		if err != nil {
 			return Result{}, fmt.Errorf("building the follow-up request: %w", err)
 		}
@@ -487,7 +784,7 @@ func (s *Service) applyCompletion(ctx context.Context, intent ports.IntentSnapsh
 // each as its latest observation; with nothing unresolved the parent
 // manifest remains the best available description (a pending
 // reconciliation with no observed changes).
-func (s *Service) buildFollowup(original ports.IntentSnapshot, decision *AttributionDecision, dirty []ports.DirtyChange) (ports.IntentInput, error) {
+func (s *Service) buildFollowup(original ports.IntentSnapshot, decision *AttributionDecision, dirty []ports.DirtyChange, remainingScope []records.ChangeItem) (ports.IntentInput, error) {
 	var req ports.TaskRequest
 	if err := json.Unmarshal([]byte(original.RequestJSON), &req); err != nil {
 		return ports.IntentInput{}, fmt.Errorf("stored request is not the task contract shape: %w", err)
@@ -508,7 +805,37 @@ func (s *Service) buildFollowup(original ports.IntentSnapshot, decision *Attribu
 	if unresolved := unresolvedManifest(decision, dirty); len(unresolved) > 0 {
 		items = unresolved
 	}
+	if len(remainingScope) > 0 {
+		// The partial outcome's follow-up manifest is the union of the
+		// remaining scope and the lane's UNRESOLVED dirty changes
+		// (FBK-010): the remaining scope entries lead, dirty changes only
+		// add paths the scope does not already carry, and the
+		// parent-manifest fallback never rides along — with nothing
+		// unresolved the manifest is exactly the remaining scope (review
+		// round 1, testing finding).
+		items = unionScopes(remainingScope, unresolvedManifest(decision, dirty))
+	}
 	return dispatch.BuildFollowupRequest(original, items, req.Activation.Flags, s.DestinationResolver)
+}
+
+// unionScopes merges the remaining scope with the unresolved dirty
+// projection (FBK-010): scope entries win their paths, dirty entries add
+// only new paths, and the result keeps deterministic scope-then-dirty
+// order.
+func unionScopes(scope, unresolved []records.ChangeItem) []records.ChangeItem {
+	seen := make(map[string]bool, len(scope))
+	out := make([]records.ChangeItem, 0, len(scope)+len(unresolved))
+	for _, item := range scope {
+		seen[item.Path] = true
+		out = append(out, item)
+	}
+	for _, item := range unresolved {
+		if seen[item.Path] {
+			continue
+		}
+		out = append(out, item)
+	}
+	return out
 }
 
 // unresolvedManifest projects the dirty generation's unresolved paths
@@ -612,9 +939,9 @@ func (s *Service) validateNewRun(ctx context.Context, dispatchID, runID string) 
 // work-receipt rules: full-document receipts re-verify their identity
 // fields, and every change entry carries a normalized contained relative
 // path and well-formed digests (SEC-002, SEC-009).
-func (s *Service) validateManifest(raw, dispatchID, runID, resourceID, externalRef string) ([]changeEntry, string, []string) {
+func (s *Service) validateManifest(raw, dispatchID, runID, resourceID, externalRef string) ([]changeEntry, string, manifestDocument, []string) {
 	if len(raw) > MaxManifestBytes {
-		return nil, "", []string{fmt.Sprintf("manifest exceeds %d bytes", MaxManifestBytes)}
+		return nil, "", manifestDocument{}, []string{fmt.Sprintf("manifest exceeds %d bytes", MaxManifestBytes)}
 	}
 	trimmed := strings.TrimSpace(raw)
 	// Exactly one JSON value, with exact key spellings: the decoder
@@ -624,18 +951,19 @@ func (s *Service) validateManifest(raw, dispatchID, runID, resourceID, externalR
 	dec := json.NewDecoder(strings.NewReader(raw))
 	var top json.RawMessage
 	if err := dec.Decode(&top); err != nil {
-		return nil, "", []string{fmt.Sprintf("manifest is not one JSON value: %v", err)}
+		return nil, "", manifestDocument{}, []string{fmt.Sprintf("manifest is not one JSON value: %v", err)}
 	}
 	if dec.More() {
-		return nil, "", []string{"manifest must carry exactly one JSON value"}
+		return nil, "", manifestDocument{}, []string{"manifest must carry exactly one JSON value"}
 	}
 	var entries []changeEntry
 	var resultRevision string
+	var doc manifestDocument
 	var reasons []string
 	if strings.HasPrefix(trimmed, "[") {
 		var rawItems []map[string]json.RawMessage
 		if err := json.Unmarshal(top, &rawItems); err != nil {
-			return nil, "", []string{fmt.Sprintf("manifest is not a change array: %v", err)}
+			return nil, "", manifestDocument{}, []string{fmt.Sprintf("manifest is not a change array: %v", err)}
 		}
 		for _, item := range rawItems {
 			for k := range item {
@@ -646,13 +974,13 @@ func (s *Service) validateManifest(raw, dispatchID, runID, resourceID, externalR
 		}
 		if len(reasons) == 0 {
 			if err := json.Unmarshal(top, &entries); err != nil {
-				return nil, "", []string{fmt.Sprintf("manifest is not a change array: %v", err)}
+				return nil, "", manifestDocument{}, []string{fmt.Sprintf("manifest is not a change array: %v", err)}
 			}
 		}
 	} else {
 		var rawDoc map[string]json.RawMessage
 		if err := json.Unmarshal(top, &rawDoc); err != nil {
-			return nil, "", []string{fmt.Sprintf("manifest is not a work-receipt document: %v", err)}
+			return nil, "", manifestDocument{}, []string{fmt.Sprintf("manifest is not a work-receipt document: %v", err)}
 		}
 		for k := range rawDoc {
 			if !docKeys[k] {
@@ -660,69 +988,117 @@ func (s *Service) validateManifest(raw, dispatchID, runID, resourceID, externalR
 			}
 		}
 		if len(reasons) > 0 {
-			return nil, "", reasons
+			return nil, "", manifestDocument{}, reasons
 		}
-		var doc receiptDoc
-		if err := json.Unmarshal(top, &doc); err != nil {
-			return nil, "", []string{fmt.Sprintf("manifest is not a work-receipt document: %v", err)}
+		var parsed receiptDoc
+		if err := json.Unmarshal(top, &parsed); err != nil {
+			return nil, "", manifestDocument{}, []string{fmt.Sprintf("manifest is not a work-receipt document: %v", err)}
 		}
-		if doc.SchemaVersion == nil || *doc.SchemaVersion != SchemaVersion {
-			reasons = append(reasons, "schema_version must be "+SchemaVersion)
+		doc.IsV2 = parsed.SchemaVersion != nil && *parsed.SchemaVersion == SchemaVersion
+		if parsed.SchemaVersion != nil {
+			doc.SchemaVersion = *parsed.SchemaVersion
+		}
+		if parsed.Status != nil {
+			doc.Status = *parsed.Status
+		}
+		if parsed.ManualReason != nil {
+			doc.ManualReason = *parsed.ManualReason
+		}
+		if parsed.CompletedScope != nil {
+			doc.CompletedScope = *parsed.CompletedScope
+		}
+		if parsed.RemainingScope != nil {
+			doc.RemainingScope = *parsed.RemainingScope
+		}
+		// The document version is the closed two-value set (E12-T3,
+		// FBK-009): v2 names the four-outcome vocabulary and v1 documents
+		// remain valid submissions — the stored history stays readable
+		// (DAT-009 posture applies to major versions, and v2 is minor).
+		if parsed.SchemaVersion == nil || (*parsed.SchemaVersion != SchemaVersion && *parsed.SchemaVersion != "agent-dispatch.work-receipt/v1") {
+			reasons = append(reasons, "schema_version must be "+SchemaVersion+" or agent-dispatch.work-receipt/v1")
 		}
 		// The document form is schema-equivalent (docs/schemas/
 		// work-receipt.schema.json): its required fields must be present,
 		// with the values cross-checked against the invoked lineage.
-		if doc.DispatchID == nil {
+		if parsed.DispatchID == nil {
 			reasons = append(reasons, "dispatch_id is required in the document form")
 		}
-		if doc.RunID == nil {
+		if parsed.RunID == nil {
 			reasons = append(reasons, "run_id is required in the document form")
 		}
-		if doc.ResourceID == nil {
+		if parsed.ResourceID == nil {
 			reasons = append(reasons, "resource_id is required in the document form")
 		}
-		if doc.Status == nil {
+		if parsed.Status == nil {
 			reasons = append(reasons, "status is required in the document form")
 		}
-		if doc.SubmittedAt == nil {
+		if parsed.SubmittedAt == nil {
 			reasons = append(reasons, "submitted_at is required in the document form")
 		}
-		if doc.Changes == nil {
+		if parsed.Changes == nil {
 			reasons = append(reasons, "changes is required in the document form")
 		}
-		if doc.DispatchID != nil && *doc.DispatchID != dispatchID {
-			reasons = append(reasons, fmt.Sprintf("dispatch_id %q does not match the invoked dispatch %q", *doc.DispatchID, dispatchID))
+		if parsed.DispatchID != nil && *parsed.DispatchID != dispatchID {
+			reasons = append(reasons, fmt.Sprintf("dispatch_id %q does not match the invoked dispatch %q", *parsed.DispatchID, dispatchID))
 		}
-		if doc.RunID != nil && *doc.RunID != runID {
-			reasons = append(reasons, fmt.Sprintf("run_id %q does not match the invoked run %q", *doc.RunID, runID))
+		if parsed.RunID != nil && *parsed.RunID != runID {
+			reasons = append(reasons, fmt.Sprintf("run_id %q does not match the invoked run %q", *parsed.RunID, runID))
 		}
-		if doc.ResourceID != nil && resourceID != "" && *doc.ResourceID != resourceID {
-			reasons = append(reasons, fmt.Sprintf("resource_id %q does not match the dispatch resource %q", *doc.ResourceID, resourceID))
+		if parsed.ResourceID != nil && resourceID != "" && *parsed.ResourceID != resourceID {
+			reasons = append(reasons, fmt.Sprintf("resource_id %q does not match the dispatch resource %q", *parsed.ResourceID, resourceID))
 		}
-		if doc.ExternalTaskID != nil && *doc.ExternalTaskID != "" && externalRef != "" && *doc.ExternalTaskID != externalRef {
-			reasons = append(reasons, fmt.Sprintf("external task %q does not match the accepted task %q", *doc.ExternalTaskID, externalRef))
+		if parsed.ExternalTaskID != nil && *parsed.ExternalTaskID != "" && externalRef != "" && *parsed.ExternalTaskID != externalRef {
+			reasons = append(reasons, fmt.Sprintf("external task %q does not match the accepted task %q", *parsed.ExternalTaskID, externalRef))
 		}
-		if doc.Status != nil && *doc.Status != "completed" {
-			reasons = append(reasons, fmt.Sprintf("a completion manifest must carry status completed, got %q", *doc.Status))
+		// A v2 document names its own outcome (E12-T3 review round 1):
+		// completed, partially_completed, and blocked route through their
+		// branches; a v1 document keeps the completed-only contract.
+		// begun/failed never arrive here (failed belongs to `work fail`).
+		if doc.IsV2 {
+			if parsed.Status == nil {
+				reasons = append(reasons, "status is required in the document form")
+			} else if _, err := records.ParseWorkStatus(doc.Status); err != nil || doc.Status == string(records.WorkBegan) || doc.Status == string(records.WorkFailed) {
+				reasons = append(reasons, fmt.Sprintf("a completion document must carry a work complete outcome (completed, partially_completed, blocked), got %q", doc.Status))
+			}
+		} else if doc.Status != string(records.WorkCompleted) {
+			reasons = append(reasons, fmt.Sprintf("a completion manifest must carry status completed, got %q", doc.Status))
 		}
-		if doc.SubmittedAt != nil {
-			if _, err := time.Parse(time.RFC3339, *doc.SubmittedAt); err != nil {
+		if parsed.SubmittedAt != nil {
+			if _, err := time.Parse(time.RFC3339, *parsed.SubmittedAt); err != nil {
 				reasons = append(reasons, "submitted_at is not an RFC 3339 timestamp")
 			}
 		}
-		if doc.FailureCode != nil && *doc.FailureCode != "" {
+		if parsed.FailureCode != nil && *parsed.FailureCode != "" {
 			reasons = append(reasons, "a completion manifest must not carry a failure code")
 		}
-		if doc.ResultRevision != nil {
-			resultRevision = *doc.ResultRevision
+		if parsed.ResultRevision != nil {
+			resultRevision = *parsed.ResultRevision
 		}
-		if doc.Changes != nil {
-			entries = *doc.Changes
+		if parsed.Changes != nil {
+			entries = *parsed.Changes
 		}
 	}
 	if len(entries) > MaxChanges {
 		reasons = append(reasons, fmt.Sprintf("manifest carries %d changes (limit %d)", len(entries), MaxChanges))
 	}
+	reasons = append(reasons, s.validateChangeEntries(entries)...)
+	if doc.IsV2 {
+		// The v2 outcome scopes validate under the same per-entry rules
+		// as the manifest (paths, digests, bounds; E12-T3 review round 1).
+		reasons = append(reasons, s.validateChangeEntries(doc.CompletedScope)...)
+		reasons = append(reasons, s.validateChangeEntries(doc.RemainingScope)...)
+	}
+	if len(reasons) > 0 {
+		return nil, "", manifestDocument{}, reasons
+	}
+	return entries, resultRevision, doc, nil
+}
+
+// validateChangeEntries applies the shared per-entry rules to one change
+// set: canonical relative paths, uniqueness, containment, and digest
+// shapes (the manifest and the v2 outcome scopes share them).
+func (s *Service) validateChangeEntries(entries []changeEntry) []string {
+	var reasons []string
 	seen := map[string]bool{}
 	for _, c := range entries {
 		normalized, err := records.NormalizePath(c.Path)
@@ -754,10 +1130,10 @@ func (s *Service) validateManifest(raw, dispatchID, runID, resourceID, externalR
 			}
 		}
 	}
-	if len(reasons) > 0 {
-		return nil, "", reasons
+	if len(entries) > MaxChanges {
+		reasons = append(reasons, fmt.Sprintf("change set carries %d entries (limit %d)", len(entries), MaxChanges))
 	}
-	return entries, resultRevision, nil
+	return reasons
 }
 
 // AuditUnknownDispatch records the work-command rejection of an unknown
@@ -771,7 +1147,14 @@ func (s *Service) AuditUnknownDispatch(ctx context.Context, dispatchID string) {
 // history (FBK-003: invalid provenance is retained evidence, never a
 // deletion). An audit failure never masks the validation error.
 func (s *Service) auditInvalid(ctx context.Context, dispatchID, runID string, invalid *InvalidError) {
-	reasons, _ := json.Marshal(invalid.Reasons)
+	// The append-only audit trail quotes untrusted submission members:
+	// every reason is bounded before the write (review round 1, security
+	// finding — the operator-facing error keeps its full text).
+	bounded := make([]string, 0, len(invalid.Reasons))
+	for _, reason := range invalid.Reasons {
+		bounded = append(bounded, boundEcho(reason, 300))
+	}
+	reasons, _ := json.Marshal(bounded)
 	now := s.timestamp()
 	auditDoc, _ := json.Marshal(map[string]any{"run_id": runID, "reasons": json.RawMessage(string(reasons))})
 	if s.Log != nil {

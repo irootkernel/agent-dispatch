@@ -44,6 +44,10 @@ func runWorkFlags(command string, args []string, stderr io.Writer) (dispatchesFl
 		"--dispatch-id": true, "--run-id": true, "--external-task-id": true,
 		"--base-revision": true, "--result-revision": true, "--manifest": true,
 		"--failure-code": true, "--detail": true,
+		// The v2 work complete outcomes (E12-T3, FBK-009): the status
+		// selector plus the members partially_completed and blocked
+		// require.
+		"--status": true, "--remaining-manifest": true, "--manual-reason": true,
 	})
 }
 
@@ -130,12 +134,49 @@ func runWorkComplete(command string, args []string, stdout, stderr io.Writer) in
 	dispatchID := flags.val("--dispatch-id")
 	runID := flags.val("--run-id")
 	manifestRef := flags.val("--manifest")
-	if dispatchID == "" || runID == "" || manifestRef == "" {
-		return usageError(stderr, command, "work complete requires --dispatch-id, --run-id, and --manifest")
+	// The outcome selector (E12-T3, FBK-009): completed is the default;
+	// partially_completed requires the remaining scope beside the
+	// completed manifest; blocked requires the manual reason and changes
+	// nothing (a blocked run may have an empty scope).
+	status := flags.val("--status")
+	if status == "" {
+		status = workreceipt.StatusCompleted
 	}
-	manifest, code := readManifest(command, manifestRef, stderr)
-	if code != 0 {
-		return code
+	switch status {
+	case workreceipt.StatusCompleted, workreceipt.StatusPartiallyComplete, workreceipt.StatusBlocked:
+	default:
+		return usageError(stderr, command, fmt.Sprintf("--status %q is not a work complete outcome (completed, partially_completed, blocked)", status))
+	}
+	if dispatchID == "" || runID == "" {
+		return usageError(stderr, command, "work complete requires --dispatch-id and --run-id")
+	}
+	// The flag grammar stays closed over the outcome (review round 1,
+	// security finding): --remaining-manifest belongs to the explicit
+	// partial outcome only — a v2 document carries its own scopes without
+	// the flag — and a blocked outcome takes its manual reason from the
+	// flag or its v2 document.
+	if flags.val("--remaining-manifest") != "" && status != workreceipt.StatusPartiallyComplete {
+		return usageError(stderr, command, "--remaining-manifest requires --status partially_completed (a work-receipt/v2 document carries its own remaining scope)")
+	}
+	if status == workreceipt.StatusBlocked && flags.val("--manual-reason") == "" && manifestRef == "" {
+		return usageError(stderr, command, "work complete --status blocked requires --manual-reason (or a work-receipt/v2 blocked document through --manifest)")
+	}
+	if manifestRef == "" && status != workreceipt.StatusBlocked {
+		return usageError(stderr, command, "work complete requires --manifest (the completed scope; a blocked outcome takes --manual-reason or a v2 blocked document)")
+	}
+	manifest := "[]"
+	if manifestRef != "" {
+		manifest, code = readManifest(command, manifestRef, stderr)
+		if code != 0 {
+			return code
+		}
+	}
+	remainingManifest := ""
+	if ref := flags.val("--remaining-manifest"); ref != "" {
+		remainingManifest, code = readManifest(command, ref, stderr)
+		if code != 0 {
+			return code
+		}
 	}
 	intent, store, exit := loadWorkIntent(command, flags.val("--config"), dispatchID, stderr)
 	if exit != 0 {
@@ -146,9 +187,15 @@ func runWorkComplete(command string, args []string, stdout, stderr io.Writer) in
 	if exit != 0 {
 		return exit
 	}
+	// The raw flag rides through (empty when the operator did not select
+	// one): a v2 full document names its own outcome and the service
+	// reconciles the two (review round 1) — an explicit conflicting
+	// --status is rejected there.
 	result, err := service.Complete(requestCtx(), workreceipt.CompleteInput{
 		DispatchID: dispatchID, RunID: runID, ManifestJSON: manifest,
 		ResultRevision: flags.val("--result-revision"),
+		Status:         flags.val("--status"), RemainingManifestJSON: remainingManifest,
+		ManualReason: flags.val("--manual-reason"),
 	})
 	if err != nil {
 		return workReceiptErr(stderr, command, err)

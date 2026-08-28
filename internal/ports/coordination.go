@@ -114,7 +114,13 @@ type ActiveCompletion struct {
 	// of clearing a generation the receipt never matched (E5 audit).
 	FenceGeneration         bool
 	ExpectedDirtyGeneration int
-	Now                     string
+	// RemainingWork marks a partially_completed outcome (E12-T3,
+	// FBK-010): when the lane's dirty generation is zero it is advanced
+	// through the documented dirtying edge, so the follow-up edge carries
+	// exactly one same-lane follow-up for the remaining scope (the
+	// follow-up itself is the caller's FollowupRequest).
+	RemainingWork bool
+	Now           string
 }
 
 // FollowupCreated reports the completion outcome.

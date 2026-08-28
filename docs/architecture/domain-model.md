@@ -265,17 +265,20 @@ WorkReceipt {
   external_task_id
   run_id
   resource_id
-  status                 begun | completed | failed
+  status                 begun | completed | partially_completed | blocked | failed
   base_revision          optional Git or opaque revision
   result_revision        optional
   changes[]              relative path, before/after digest
+  completed_scope[]      partially_completed: the paths this run finished
+  remaining_scope[]      partially_completed: the non-empty paths that remain (FBK-010)
+  manual_reason          blocked: the non-empty operator reason (FBK-011)
   submitted_at
   validation_state       valid | invalid | incomplete
   validation_reasons[]
 }
 ```
 
-A work receipt is not accepted merely because a Hermes agent supplied it. Agent Dispatch verifies route lineage, active dispatch, resource containment, path set, and digest evidence.
+A work receipt is not accepted merely because a Hermes agent supplied it. Agent Dispatch verifies route lineage, active dispatch, resource containment, path set, and digest evidence. Since work-receipt/v2 (E12-T3, FBK-009) the outcome vocabulary after a run begins is four-way: `completed` may clear the lane exactly; `partially_completed` closes the current child and schedules exactly one follow-up on the SAME destination lane whose manifest is the remaining scope unioned with the lane's unresolved dirty changes; `blocked` records its manual reason and changes nothing — the lane stays active with its child, nothing auto-runs, and resolution is operator-only; `failed` keeps the closed failure-code set and the consecutive-failure budget decides follow-up versus operator resolution. The receipt names its child lane explicitly on every view row (DAT-011).
 
 ## 13. QuarantineItem
 

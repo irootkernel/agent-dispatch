@@ -15,10 +15,10 @@
 | Release target | v0.1.5 |
 | Current epic | E12 In Progress |
 | Current active task | None |
-| Next task | E12-T3 |
-| Completed tasks | 69 / 75 |
-| Planned tasks | 6 / 75 |
-| In progress tasks | 1 |
+| Next task | E12-T4 |
+| Completed tasks | 70 / 75 |
+| Planned tasks | 4 / 75 |
+| In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
@@ -120,8 +120,8 @@
 | 66 | E11-T3 | Completed | Destination profile/skill validation and route preflight |
 | 67 | E11-T4 | Completed | Discoverable CLI, guided setup, operator skill, and G7 |
 | 68 | E12-T1 | Completed | Aggregate event and destination child persistence |
-| 69 | E12-T2 | In Progress | Per-destination lanes, conditions, fan-out, and retry isolation |
-| 70 | E12-T3 | Planned | Work-receipt/v2, aggregate status, and completion evidence |
+| 69 | E12-T2 | Completed | Per-destination lanes, conditions, fan-out, and retry isolation |
+| 70 | E12-T3 | In Progress | Work-receipt/v2, aggregate status, and completion evidence |
 | 71 | E12-T4 | Planned | Multi-destination and completion gate G8 |
 | 72 | E13-T1 | Planned | Notification event contract and transactional outbox |
 | 73 | E13-T2 | Planned | Webhook/log sinks, retry commands, and scheduling |
@@ -3052,7 +3052,7 @@ conditioned routes only; the certified single-lane path is unaffected).
 
 ## E12-T3: Work Receipt v2, Aggregate Status, and Completion Evidence
 
-**Status:** Planned
+**Status:** Completed
 **Design Gate impact:** Not required; the feedback and record contracts own the behavior.
 
 ### Objective
@@ -3084,7 +3084,21 @@ E12-T2 Completed.
 
 ### Evidence
 
-None — Planned.
+Migration v14 widens the work-receipt status contract to the four worker
+outcomes with completed/remaining scope and manual-reason columns while
+v1 rows stay valid; the partial, blocked, and failed transitions, the
+full-document v2 submission form, receipt association with the exact
+child (destination identity on receipt views), `events show` with
+separate per-child destination/acceptance/execution/receipt/retry
+projections and the actionable completion-evidence gap, status lane
+summaries, and the worker task contract updates are pinned by
+`internal/adapters/sqlite/e12t3_test.go`,
+`internal/app/workreceipt/e12t3_test.go`, and `internal/cli/e12t3_test.go`;
+`make verify` green at the task commit. Known bounded residuals recorded
+for the epic validation: digest-less remaining-scope entries classify as
+deletions in the follow-up projection, and the document-vs-flag scope
+conflict comparison is order/pointer-sensitive (both partial-outcome
+surface only).
 
 ## E12-T4: Multi-Destination and Completion Gate G8
 

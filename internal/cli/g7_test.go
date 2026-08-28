@@ -206,6 +206,16 @@ func TestG7AC706HelpAndSetupReachDisabledGate(t *testing.T) {
 	// The stub's profile/skill set satisfies the preflight; the flow
 	// stops before enablement and prints the gate command.
 	setPlanEnv(t, "/tmp", false)
+	// The initial reconciliation enumerates the real resource root, so
+	// the walkthrough's vault must exist on disk (the step is no longer
+	// advisory: a failed dry reconciliation stops the walkthrough).
+	g7cfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(g7cfg.Resources["vault-main"].Root, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	out.Reset()
 	errb.Reset()
 	var code int
@@ -228,12 +238,18 @@ func TestG7AC706HelpAndSetupReachDisabledGate(t *testing.T) {
 			t.Fatalf("the gate summary must contain %q: %s", want, summary)
 		}
 	}
-	// The written configuration stays disabled.
-	cfg, err := config.Load(configPath)
-	if err != nil {
-		t.Fatal(err)
+	// The written configuration stays disabled. The lookup must name
+	// the driven route (the fixture declares `wiki`): a miss would
+	// return a zero-value route and the guard could never fire.
+	cfg, rerr := config.Load(configPath)
+	if rerr != nil {
+		t.Fatal(rerr)
 	}
-	if cfg.Routes["wiki-maintenance"].Enabled {
+	route, ok := cfg.Routes["wiki"]
+	if !ok {
+		t.Fatal("the driven route must exist in the written configuration")
+	}
+	if route.Enabled {
 		t.Fatal("setup must leave the route disabled")
 	}
 	// No direct SQLite or Watchman commands were needed: the flow ran
@@ -285,4 +301,102 @@ func decodeChecks(t *testing.T, raw string) []map[string]any {
 		t.Fatal(err)
 	}
 	return env.Result.Checks
+}
+
+// TestE11T4SetupDraftsDisabledCopyFromEnabledBase proves the drafting
+// safety path end to end: an enabled base is never touched, the draft
+// carries the generated-by marker with every route disabled, a re-run
+// replaces only this flow's own draft, and a foreign file with the
+// draft name is refused instead of deleted.
+func TestE11T4SetupDraftsDisabledCopyFromEnabledBase(t *testing.T) {
+	bin := stubhermes.Write(t)
+	configPath := e11t2HermesConfig(t, bin)
+	raw, _ := os.ReadFile(configPath)
+	if err := os.WriteFile(configPath, bytes.Replace(raw, []byte("enabled: false"), []byte("enabled: true"), 1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setPlanEnv(t, "/tmp", false)
+	draft := filepath.Join(filepath.Dir(configPath), "config-setup-draft.yaml")
+
+	var out, errb bytes.Buffer
+	var code int
+	withStdin(t, strings.Repeat("\n", 8), func() {
+		code = Run([]string{"setup", "wiki", "--config", configPath}, &out, &errb)
+	})
+	if code != 0 {
+		t.Fatalf("setup against an enabled base must draft and complete: %d %s", code, errb.String())
+	}
+	// The enabled base is untouched.
+	base, err := config.Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !base.Routes["wiki"].Enabled {
+		t.Fatal("setup must never weaken the enabled base configuration")
+	}
+	// The draft exists, carries the marker, and is fully disabled.
+	draftRaw, err := os.ReadFile(draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(draftRaw), "# generated-by: agent-dispatch setup wiki") {
+		t.Fatalf("the draft must carry the generated-by marker, got: %s", draftRaw[:80])
+	}
+	draftCfg, err := config.Load(draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if draftCfg.Routes["wiki"].Enabled {
+		t.Fatal("the draft must disable every route")
+	}
+	// A re-run replaces this flow's own draft.
+	out.Reset()
+	errb.Reset()
+	withStdin(t, strings.Repeat("\n", 8), func() {
+		code = Run([]string{"setup", "wiki", "--config", configPath}, &out, &errb)
+	})
+	if code != 0 {
+		t.Fatalf("the re-run must replace the flow's own draft: %d %s", code, errb.String())
+	}
+	if _, err := os.Stat(draft); err != nil {
+		t.Fatal(err)
+	}
+	// A foreign file with the draft name is refused, never deleted.
+	foreign := "# operator-owned file\n" + string(draftRaw)
+	if err := os.WriteFile(draft, []byte(foreign), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errb.Reset()
+	withStdin(t, strings.Repeat("\n", 8), func() {
+		code = Run([]string{"setup", "wiki", "--config", configPath}, &out, &errb)
+	})
+	if code != 3 || !strings.Contains(errb.String(), "lacks the generated-by marker") {
+		t.Fatalf("a foreign draft-named file must be refused at exit 3, got %d: %s", code, errb.String())
+	}
+	kept, err := os.ReadFile(draft)
+	if err != nil || string(kept) != foreign {
+		t.Fatal("the refused file must be untouched")
+	}
+}
+
+// TestE11T4SetupForwardsOperatorGlobals proves the forwarding contract:
+// the operator's global options were stripped from the subcommand argv
+// before dispatch, so the walkthrough re-passes the exact spellings to
+// every nested step — observed through the nested envelopes' trace id.
+func TestE11T4SetupForwardsOperatorGlobals(t *testing.T) {
+	bin := stubhermes.Write(t)
+	configPath := e11t2HermesConfig(t, bin)
+	setPlanEnv(t, "/tmp", false)
+	var out, errb bytes.Buffer
+	var code int
+	withStdin(t, strings.Repeat("\n", 8), func() {
+		code = Run([]string{"setup", "wiki", "--trace-id", "fwd-proof", "--config", configPath}, &out, &errb)
+	})
+	if code != 0 {
+		t.Fatalf("setup with globals must complete: %d %s", code, errb.String())
+	}
+	if !strings.Contains(out.String(), `"trace_id":"fwd-proof"`) {
+		t.Fatalf("the nested step envelopes must carry the forwarded trace id: %s", out.String())
+	}
 }

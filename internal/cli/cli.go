@@ -69,6 +69,18 @@ type VersionResult struct {
 // test invocations of Run.
 var globalOptionsMu sync.Mutex
 
+// The raw spellings of this invocation's global options, captured as
+// they were scanned: nested re-entry (setup wiki re-running Run per
+// step) resets the parsed globals, so a wrapper that must forward the
+// operator's options to every nested step re-passes these exact
+// strings instead of re-deriving them from parsed values.
+var (
+	globalRawLogLevel string
+	globalRawTraceID  string
+	globalRawStateDir string
+	globalRawTimeout  string
+)
+
 // knownCommands lists the top-level commands of the v0.1 CLI tree
 // (cli-spec §2). Every command in this set is implemented; the default
 // Run branch keeps its not-implemented guard as a safety net for future
@@ -102,6 +114,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	globalTraceID = ""
 	globalStateDir = ""
 	globalRequestTimeout = 0
+	globalRawLogLevel = ""
+	globalRawTraceID = ""
+	globalRawStateDir = ""
+	globalRawTimeout = ""
 	globalOptionsMu.Unlock()
 	rest, ok := scanGlobalOptions(args[0], args[1:], stderr)
 	if !ok {
@@ -202,6 +218,7 @@ func scanGlobalOptions(command string, args []string, stderr io.Writer) ([]strin
 				return nil, false
 			}
 			globalLogLevel = level
+			globalRawLogLevel = value
 		case arg == "--trace-id" || strings.HasPrefix(arg, "--trace-id="):
 			value, ok := take()
 			if !ok {
@@ -209,6 +226,7 @@ func scanGlobalOptions(command string, args []string, stderr io.Writer) ([]strin
 				return nil, false
 			}
 			globalTraceID = value
+			globalRawTraceID = value
 		case arg == "--state-dir" || strings.HasPrefix(arg, "--state-dir="):
 			value, ok := take()
 			if !ok {
@@ -220,6 +238,7 @@ func scanGlobalOptions(command string, args []string, stderr io.Writer) ([]strin
 				return nil, false
 			}
 			globalStateDir = value
+			globalRawStateDir = value
 		case arg == "--timeout" || strings.HasPrefix(arg, "--timeout="):
 			value, ok := take()
 			if !ok {
@@ -232,6 +251,7 @@ func scanGlobalOptions(command string, args []string, stderr io.Writer) ([]strin
 				return nil, false
 			}
 			globalRequestTimeout = time.Duration(d.Nanos)
+			globalRawTimeout = value
 		default:
 			rest = append(rest, arg)
 		}
@@ -318,9 +338,6 @@ func WriteInternalError(w io.Writer, cause any) {
 
 // writeEnvelopeWithWarnings emits a success envelope carrying warnings.
 func writeEnvelopeWithWarnings(w io.Writer, command string, result interface{}, warnings []string) int {
-	if warnings == nil {
-		warnings = []string{}
-	}
 	if warnings == nil {
 		warnings = []string{}
 	}

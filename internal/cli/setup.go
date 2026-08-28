@@ -131,20 +131,22 @@ func runSetupWiki(command string, args []string, ui *setupUI) int {
 				loaded.Routes[id] = route
 			}
 			cfg = loaded
-			configPath = filepath.Join(filepath.Dir(basePath), "config-setup-draft.yaml")
-			// The draft name is stable so the walkthrough is re-runnable:
-			// a previous run's own draft is replaced (this flow created
-			// it), and any other existing file is never overwritten.
-			if _, derr := os.Stat(configPath); derr == nil {
-				if rerr := os.Remove(configPath); rerr != nil {
-					writeError(ui.stderr, command, "config_invalid", "configuration", rerr.Error())
-					return 3
-				}
+			configPath = filepath.Join(filepath.Dir(basePath), setupDraftName)
+			// The draft name is stable so the walkthrough is re-runnable,
+			// and the generated-by marker is the provenance proof: a
+			// previous run's own draft is replaced, while any other file
+			// carrying this name is refused — setup never deletes a file
+			// it cannot prove it created.
+			if existing, rerr := os.ReadFile(configPath); rerr == nil && !strings.HasPrefix(string(existing), setupDraftMarker+"\n") {
+				writeError(ui.stderr, command, "config_invalid", "configuration",
+					configPath+" exists but is not a setup-generated draft (it lacks the generated-by marker); move or rename it, then re-run setup wiki")
+				return 3
 			}
-			if werr := config.WriteExample(cfg, configPath); werr != nil {
+			if werr := writeSetupDraft(cfg, configPath); werr != nil {
 				writeError(ui.stderr, command, "config_invalid", "configuration", werr.Error())
 				return 3
 			}
+			fmt.Fprintf(ui.stdout, "wrote disabled draft: %s (the enabled base %s is untouched)\n", configPath, basePath)
 		}
 	} else if werr := config.WriteExample(cfg, configPath); werr != nil {
 		writeError(ui.stderr, command, "config_invalid", "configuration", werr.Error())
@@ -153,20 +155,23 @@ func runSetupWiki(command string, args []string, ui *setupUI) int {
 		fmt.Fprintf(ui.stdout, "wrote disabled configuration: %s\n", configPath)
 	}
 
-	// Global options the operator set for the walkthrough ride every
-	// nested step (Run resets per invocation, so forward them).
+	// The operator's global options ride every nested step: Run resets
+	// the parsed globals per invocation (the nested steps would inherit
+	// nothing), so the exact spellings scanned from this invocation are
+	// re-passed to every nested Run. --config is threaded explicitly per
+	// step and is not forwarded.
 	var forwarded []string
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		switch {
-		case a == "--log-level" || a == "--trace-id":
-			if i+1 < len(args) {
-				forwarded = append(forwarded, a, args[i+1])
-				i++
-			}
-		case strings.HasPrefix(a, "--log-level=") || strings.HasPrefix(a, "--trace-id="):
-			forwarded = append(forwarded, a)
-		}
+	if globalRawStateDir != "" {
+		forwarded = append(forwarded, "--state-dir", globalRawStateDir)
+	}
+	if globalRawLogLevel != "" {
+		forwarded = append(forwarded, "--log-level", globalRawLogLevel)
+	}
+	if globalRawTraceID != "" {
+		forwarded = append(forwarded, "--trace-id", globalRawTraceID)
+	}
+	if globalRawTimeout != "" {
+		forwarded = append(forwarded, "--timeout", globalRawTimeout)
 	}
 	step := func(argv []string) int {
 		return Run(append(argv, forwarded...), ui.stdout, ui.stderr)
@@ -210,15 +215,33 @@ func runSetupWiki(command string, args []string, ui *setupUI) int {
 	fmt.Fprintln(ui.stderr, "  agent-dispatch watchman test --route "+routeID+" --config "+configPath)
 
 	ui.step("Step 5/6 — initial reconciliation (dry enumeration)")
-	reconcileCode := step([]string{"reconcile", "--route", routeID, "--reason", "setup-initial", "--config", configPath})
+	// A fresh walkthrough has no runtime state yet (registration happens
+	// at the first dispatch or watchman install), so a failing dry
+	// reconciliation is the expected first-use outcome there — reported
+	// with the exact re-run command, never as a completed enumeration.
+	// Against a registered route the same failure is a real finding and
+	// stops the walkthrough before the gate summary.
+	registered := false
+	if store, serr := openUnmigratedStore(configPath); serr == nil {
+		_, lerr := store.LoadRouteState(requestCtx(), routeID)
+		registered = lerr == nil
+		store.Close()
+	}
+	reconcileCode := step([]string{"reconcile", "--route", routeID, "--reason", "initial", "--config", configPath})
 	if reconcileCode != 0 {
-		fmt.Fprintln(ui.stderr, "the initial reconciliation did not complete; it can be re-run after setup")
+		if !registered {
+			fmt.Fprintf(ui.stderr, "the route has no runtime state yet (nothing dispatched and no trigger installed); the initial reconciliation runs after registration — re-run it then with:\n  agent-dispatch reconcile --route %s --reason initial --config %s\n", routeID, configPath)
+		} else {
+			fmt.Fprintf(ui.stderr, "the initial reconciliation did not complete; resolve the reported findings and re-run it with:\n  agent-dispatch reconcile --route %s --reason initial --config %s\n", routeID, configPath)
+			writeError(ui.stderr, command, "config_invalid", "configuration", "the initial reconciliation failed; setup stops before the gate summary")
+			return 3
+		}
 	}
 
 	ui.step("Step 6/6 — the production gate (NOT performed by setup)")
 	revision, ok := config.RouteRevision(cfg, routeID)
 	if !ok {
-		revision = "<run 'agent-dispatch route show --route wiki-maintenance' for the computed revision>"
+		revision = "<run 'agent-dispatch route show --route " + routeID + "' for the computed revision>"
 	}
 	fmt.Fprintln(ui.stdout, "setup complete; the route is DISABLED and nothing was submitted")
 	fmt.Fprintln(ui.stdout, "review the configuration, then enable explicitly with:")
@@ -236,6 +259,44 @@ func anyRouteEnabled(cfg *config.Config) bool {
 		}
 	}
 	return false
+}
+
+// setupDraftName is the stable draft file the walkthrough writes beside
+// an enabled base, and setupDraftMarker is its provenance proof: the
+// first line of every draft this flow creates.
+const (
+	setupDraftName   = "config-setup-draft.yaml"
+	setupDraftMarker = "# generated-by: agent-dispatch setup wiki; safe to replace on re-run"
+)
+
+// writeSetupDraft writes the disabled draft carrying the generated-by
+// marker through a private temporary file and an atomic rename, so a
+// failed write never leaves a partial draft behind.
+func writeSetupDraft(cfg *config.Config, configPath string) error {
+	data, err := config.MarshalYAML(cfg)
+	if err != nil {
+		return err
+	}
+	out := append([]byte(setupDraftMarker+"\n"), data...)
+	dir := filepath.Dir(configPath)
+	tmp, err := os.CreateTemp(dir, ".agent-dispatch-setup-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if _, err := tmp.Write(out); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, configPath)
 }
 
 // Run0 is a test seam returning only the exit code of one in-process

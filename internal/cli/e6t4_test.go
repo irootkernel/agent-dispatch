@@ -269,6 +269,10 @@ func TestG5AC504CleanHostInstallDispatchScheduleUninstall(t *testing.T) {
 	// corrected installation order (configuration-spec §5) — and removes
 	// it after the walkthrough.
 	e5t4Rewrite(t, cfgPath, "board: agent-dispatch", "board: "+g5Board)
+	// A fresh board carries only the default on-disk profile: the
+	// destination must select it, because the enable gate enforces
+	// HER-015 (a configured profile exists on disk before enablement).
+	e5t4Rewrite(t, cfgPath, "profile: wiki-maintainer", "profile: default")
 	if outb, berr := runHermesBin(t, "kanban", "boards", "create", g5Board); berr != nil {
 		t.Fatalf("AC-504 board create failed: %v: %s", berr, outb)
 	}

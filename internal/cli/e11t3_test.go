@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -281,5 +282,157 @@ func TestE11T3MutationConfigEqualsForm(t *testing.T) {
 	dest, _ := cfg.Routes["wiki"].CertifiedDestination("wiki")
 	if dest.Profile != "wolyeong" {
 		t.Fatalf("the named file must carry the edit: %+v", dest)
+	}
+}
+
+// TestE11T3EnableFailsOnMissingProfile proves the AC-704 enable arm
+// (HER-015): a confirmed-missing on-disk profile refuses enable at
+// exit 3 with the bounded sorted alternatives, while enumeration
+// itself stays the preflight surface.
+func TestE11T3EnableFailsOnMissingProfile(t *testing.T) {
+	bin := stubhermes.Write(t)
+	raw, err := os.ReadFile(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	trimmed := strings.Replace(string(raw),
+		`[{"name":"default","on_disk":true},{"name":"wiki-maintainer","on_disk":true}]`,
+		`[{"name":"default","on_disk":true}]`, 1)
+	if trimmed == string(raw) {
+		t.Fatal("the stub's assignees surface does not carry wiki-maintainer to remove")
+	}
+	if err := os.WriteFile(bin, []byte(trimmed), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configPath := e11t3Config(t, bin)
+	cfgRaw, _ := os.ReadFile(configPath)
+	if err := os.WriteFile(configPath, bytes.Replace(cfgRaw, []byte("enabled: false"), []byte("enabled: true"), 1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setPlanEnv(t, "/tmp", false)
+	e4t3RegisterRoute(t, configPath)
+	cfg, _ := config.Load(configPath)
+	revision, ok := config.RouteRevision(cfg, "wiki")
+	if !ok {
+		t.Fatal("revision unavailable")
+	}
+	var out, errb bytes.Buffer
+	code := Run([]string{"route", "enable", "--config", configPath, "--route", "wiki", "--acknowledge-production-gate", revision, "--yes"}, &out, &errb)
+	if code != 3 || !strings.Contains(errb.String(), "does not exist on board") || !strings.Contains(errb.String(), "default") {
+		t.Fatalf("enable must refuse a confirmed-missing profile at exit 3 listing the on-disk alternatives, got %d: %s", code, errb.String())
+	}
+	if !strings.Contains(errb.String(), "HER-015") {
+		t.Fatalf("the refusal must name the requirement, got: %s", errb.String())
+	}
+}
+
+// TestE11T3PreflightBlocksOnIneligibleCapability proves the preflight
+// inspects the probe record instead of deferring shape failures to the
+// production gate: a below-floor version and a create surface missing
+// a required flag both block with the probe remediation.
+func TestE11T3PreflightBlocksOnIneligibleCapability(t *testing.T) {
+	// Below the eligibility floor.
+	old := stubhermes.WriteVersioned(t, "Hermes Agent v0.18.5 (2026.6.6)")
+	configPath := e11t3Config(t, old)
+	var out, errb bytes.Buffer
+	code := Run([]string{"route", "preflight", "--config", configPath, "--route", "wiki"}, &out, &errb)
+	if code != 3 || !strings.Contains(errb.String(), "below the eligibility floor") {
+		t.Fatalf("a below-floor version must block preflight naming the floor, got %d: %s", code, errb.String())
+	}
+	// A create surface missing --idempotency-key (a required flag).
+	drifted := stubhermes.Write(t)
+	raw, err := os.ReadFile(drifted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := strings.Replace(string(raw), " [--idempotency-key IDEMPOTENCY_KEY]", "", 1)
+	if script == string(raw) {
+		t.Fatal("the stub's create help does not carry --idempotency-key to drift")
+	}
+	if err := os.WriteFile(drifted, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configPath = e11t3Config(t, drifted)
+	out.Reset()
+	errb.Reset()
+	code = Run([]string{"route", "preflight", "--config", configPath, "--route", "wiki"}, &out, &errb)
+	if code != 3 || !strings.Contains(errb.String(), "--idempotency-key") {
+		t.Fatalf("a drifted create surface must block preflight naming the missing flag, got %d: %s", code, errb.String())
+	}
+}
+
+// TestE11T3MutationDefaultConfigPath proves the CLI-011 default path:
+// without an explicit --config, the destination-qualified mutation
+// resolves and writes the platform-default configuration exactly like
+// every other route command (AGENT_DISPATCH_CONFIG in the test).
+func TestE11T3MutationDefaultConfigPath(t *testing.T) {
+	bin := stubhermes.Write(t)
+	configPath := e11t3Config(t, bin)
+	t.Setenv("AGENT_DISPATCH_CONFIG", configPath)
+	var out, errb bytes.Buffer
+	if code := Run([]string{"route", "set-skills", "wiki", "sleepy-skill"}, &out, &errb); code != 0 {
+		t.Fatalf("the default-config mutation must apply: %s", errb.String())
+	}
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dest, _ := cfg.Routes["wiki"].CertifiedDestination("wiki")
+	if len(dest.Skills) != 1 || dest.Skills[0] != "sleepy-skill" {
+		t.Fatalf("the default-resolved file must carry the edit: %+v", dest.Skills)
+	}
+}
+
+// TestE11T3StatusSkillDriftScoped proves the scoped drift classes:
+// after a profile-scoped probe and enable, editing the destination to
+// require a skill the cached inventory does not list surfaces skill
+// drift, and an unscoped record (a bare probe) fabricates none.
+func TestE11T3StatusSkillDriftScoped(t *testing.T) {
+	bin := stubhermes.Write(t)
+	configPath := e11t3Config(t, bin)
+	var out, errb bytes.Buffer
+	// Scoped probe so the cached evidence answers profile questions.
+	if code := Run([]string{"hermes", "probe", "--config", configPath, "--profile", "wiki-maintainer"}, &out, &errb); code != 0 {
+		t.Fatalf("scoped probe: %s", errb.String())
+	}
+	// Edit the destination to a skill the stub never lists.
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"route", "set-skills", "--config", configPath, "wiki", "sleepy-skill"}, &out, &errb); code != 0 {
+		t.Fatalf("set-skills: %s", errb.String())
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"status", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("status: %s", errb.String())
+	}
+	res := decodeEnvelope(t, &out)
+	driftRows, _ := res["drift"].([]any)
+	if len(driftRows) != 1 {
+		t.Fatalf("one configured route must report drift: %v", res["drift"])
+	}
+	row, _ := driftRows[0].(map[string]any)
+	kinds, _ := row["drift"].(map[string]any)
+	if msg, has := kinds["skill"]; !has || !strings.Contains(fmt.Sprint(msg), "sleepy-skill") {
+		t.Fatalf("the scoped drift must name the missing skill: %v", kinds)
+	}
+	// An unscoped record must not fabricate profile-scoped drift: the
+	// kinds reset after a bare probe leaves no skill class.
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"hermes", "probe", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("bare probe: %s", errb.String())
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"status", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("status after bare probe: %s", errb.String())
+	}
+	res = decodeEnvelope(t, &out)
+	driftRows, _ = res["drift"].([]any)
+	row, _ = driftRows[0].(map[string]any)
+	kinds, _ = row["drift"].(map[string]any)
+	if _, has := kinds["skill"]; has {
+		t.Fatalf("an unscoped record must not fabricate skill drift: %v", kinds)
 	}
 }

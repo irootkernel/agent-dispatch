@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
@@ -279,17 +280,43 @@ func routeEnableGate(command string, cfg *config.Config, routeID, revision strin
 	}
 	switch summary.State {
 	case "available":
+		dest, _ := cfg.Routes[routeID].CertifiedDestination(routeID)
+		profile := ""
+		if dest.ID != "" {
+			profile = dest.Profile
+		}
+		// HER-015 (AC-704): a configured destination profile must exist
+		// on disk before enablement, with the bounded sorted
+		// alternatives preflight lists. Only a CONFIRMED missing profile
+		// fails the enable — an unreachable profile surface keeps the
+		// liveness posture below, because an outage must not hold
+		// re-acknowledgement hostage.
+		if profile != "" {
+			if profiles, aerr := adapter.Client().Assignees(requestCtx(), resolved.Hermes.Board); aerr == nil {
+				found := false
+				var onDisk []string
+				for _, p := range profiles {
+					if p.OnDisk {
+						onDisk = append(onDisk, p.Name)
+					}
+					if p.Name == profile {
+						found = p.OnDisk
+					}
+				}
+				if !found {
+					sort.Strings(onDisk)
+					return "", planErr(stderr, command, "config_capability_missing", "configuration",
+						fmt.Sprintf("destination profile %q does not exist on board %q; on-disk profiles: %s — run 'agent-dispatch route preflight --route %s', create the profile in Hermes, or select an on-disk profile with 'agent-dispatch route set-profile %s:%s <profile>' (HER-015)",
+							profile, resolved.Hermes.Board, strings.Join(boundedAlternatives(onDisk), ", "), routeID, routeID, dest.ID), 3)
+				}
+			}
+		}
 		// HER-018: activation binds the capability-evidence
 		// fingerprint on top of the eligibility gate. A usable cached
 		// record binds its fingerprint; an unavailable cache is probed
 		// now; an unprobeable executable keeps the liveness deferral
 		// with an empty fingerprint (the submit path re-proves it
 		// before any side effect).
-		dest, _ := cfg.Routes[routeID].CertifiedDestination(routeID)
-		profile := ""
-		if dest.ID != "" {
-			profile = dest.Profile
-		}
 		fingerprint, ferr := currentCapabilityFingerprint(cfg, resolved, profile, limits)
 		if ferr != nil {
 			return "", planErr(stderr, command, "config_capability_missing", "configuration", ferr.Error(), 3)

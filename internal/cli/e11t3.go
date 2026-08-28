@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -9,7 +10,6 @@ import (
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/hermeskanban"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
-	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 )
 
@@ -94,7 +94,7 @@ func runRoutePreflight(command string, args []string, stdout, stderr io.Writer) 
 		blocked = true
 		checks = append(checks, map[string]any{
 			"check": check, "state": "fail", "detail": detail,
-			"alternatives": alternatives, "remediation": remediation,
+			"alternatives": boundedAlternatives(alternatives), "remediation": remediation,
 		})
 	}
 	pass := func(check, detail string) {
@@ -166,6 +166,35 @@ func runRoutePreflight(command string, args []string, stdout, stderr io.Writer) 
 				"run 'agent-dispatch hermes probe --target "+dest.Target+"'", nil)
 			continue
 		}
+		// The probe records shape failures instead of returning them,
+		// so the preflight inspects the record: a below-floor version
+		// and a create surface missing a required flag block here,
+		// mirroring the enable gate instead of deferring the defect to
+		// the production gate after a green preflight. A mutex-only
+		// downgrade stays the warn below.
+		floor, _ := hermeskanban.ParseMinimumVersion(orDefault(t.MinimumVersion, config.MinimumEligibleHermesVersion))
+		if !record.Shapes.Version.Passed {
+			block("capability", fmt.Sprintf("destination %q: the version probe did not pass (%s)", dest.ID, record.Shapes.Version.Detail),
+				"run 'agent-dispatch hermes probe --target "+dest.Target+"' and resolve the named failure", nil)
+			continue
+		}
+		// The version shape proves discovery and the frozen first-line
+		// contract; eligibility against the configured floor is the
+		// same gate the enable path applies (HER-011).
+		if parsed, verr := hermeskanban.ParseMinimumVersion(record.HermesVersion); verr != nil {
+			block("capability", fmt.Sprintf("destination %q: the discovered version %q is not a dotted triple", dest.ID, record.HermesVersion),
+				"run 'agent-dispatch hermes probe --target "+dest.Target+"' and inspect the version shape", nil)
+			continue
+		} else if eerr := hermeskanban.CheckVersionEligible(parsed, floor); eerr != nil {
+			block("capability", fmt.Sprintf("destination %q: %v", dest.ID, eerr),
+				"install a Hermes at or above the floor and re-run 'agent-dispatch hermes probe --target "+dest.Target+"' (verify the public interface before raising minimum_version)", nil)
+			continue
+		}
+		if !record.AllRequiredPassed() {
+			block("capability", fmt.Sprintf("destination %q: capability evidence incomplete (%s)", dest.ID, incompleteDetail(record)),
+				"run 'agent-dispatch hermes probe --target "+dest.Target+"' and resolve the named failures", nil)
+			continue
+		}
 		enabled := record.EnabledSkillNames()
 		if enabled == nil {
 			block("skills", fmt.Sprintf("destination %q: the skill table for profile %q did not parse; the preflight fails closed", dest.ID, dest.Profile),
@@ -223,17 +252,25 @@ func runRoutePreflight(command string, args []string, stdout, stderr io.Writer) 
 	}
 
 	// The effective Watchman binding (SRC-009): the persisted managed
-	// record for the route's resource, when a store exists.
+	// record for the route's resource. An unreadable store or binding
+	// is a warn naming the error, never a first-use pass: a locked or
+	// corrupt state directory must not be misdiagnosed as "install the
+	// trigger".
 	bindingState := "no database yet (first use); the binding is validated at install and dispatch time"
+	bindingClass := "pass"
 	if store, serr := openUnmigratedStore(resolveConfigPath(flags.val("--config"))); serr == nil {
 		if binding, berr := store.LoadWatchBinding(requestCtx(), routeID); berr == nil {
 			bindingState = fmt.Sprintf("configured root %s, actual watch root %s, trigger %s", binding.ConfiguredRoot, binding.ActualRoot, binding.TriggerName)
-		} else {
+		} else if errors.Is(berr, sqlite.ErrWatchBindingNotFound) {
 			bindingState = "no persisted binding yet; run 'agent-dispatch watchman install --route " + routeID + "'"
+		} else {
+			bindingClass, bindingState = "warn", fmt.Sprintf("the persisted binding could not be read: %v; the binding is validated at install and dispatch time", berr)
 		}
 		store.Close()
+	} else {
+		bindingClass, bindingState = "warn", fmt.Sprintf("the state store could not be opened: %v; the binding is validated at install and dispatch time", serr)
 	}
-	pass("watchman", bindingState)
+	checks = append(checks, map[string]any{"check": "watchman", "state": bindingClass, "detail": bindingState})
 
 	if blocked {
 		// The failing checks ride the error envelope so the operator
@@ -263,7 +300,7 @@ func runRouteSetProfile(command string, args []string, stdout, stderr io.Writer)
 	if code != 0 {
 		return code
 	}
-	configPath := selectorConfigPath(args)
+	configPath := resolveConfigPath(selectorConfigPath(args))
 	if err := config.MutateDestination(configPath, routeID, destID, func(d *config.Destination) error {
 		d.Profile = profile
 		return nil
@@ -289,7 +326,7 @@ func runRouteSetSkills(command string, args []string, stdout, stderr io.Writer) 
 	if code != 0 {
 		return code
 	}
-	configPath := selectorConfigPath(args)
+	configPath := resolveConfigPath(selectorConfigPath(args))
 	if err := config.MutateDestination(configPath, routeID, destID, func(d *config.Destination) error {
 		d.Skills = append([]string(nil), skills...)
 		return nil
@@ -421,12 +458,19 @@ func containsString(list []string, want string) bool {
 	return false
 }
 
-// Compile-time assertions keeping the preflight imports honest.
-var (
-	_ = watchman.ValidateBinding
-	_ = sqlite.ErrOptimisticConcurrency
-	_ = context.Background
-)
+// alternativesBound caps the sorted alternatives a failure document
+// carries so a large board cannot produce an unbounded error (HER-017).
+const alternativesBound = 20
+
+// boundedAlternatives caps a sorted alternatives list, marking the
+// truncation.
+func boundedAlternatives(alts []string) []string {
+	if len(alts) <= alternativesBound {
+		return alts
+	}
+	capped := append([]string(nil), alts[:alternativesBound]...)
+	return append(capped, fmt.Sprintf("(+%d more)", len(alts)-alternativesBound))
+}
 
 // routeDriftSummary reports the five OPS-013 drift classes per route —
 // capability, profile, skill, watchman, and reconciliation — as an
@@ -439,12 +483,14 @@ func routeDriftSummary(ctx context.Context, cfg *config.Config, store *sqlite.St
 		entry := map[string]any{"route_id": routeID, "drift": map[string]any{}}
 		drift := entry["drift"].(map[string]any)
 
+		// The route state loads once per route: the reconciliation and
+		// capability classes read the same snapshot.
+		snap, snapErr := store.LoadRouteState(ctx, routeID)
+
 		// Reconciliation drift: a pending generation or a stale
 		// last-reconciled window.
-		if snap, err := store.LoadRouteState(ctx, routeID); err == nil {
-			if snap.PendingReconcile {
-				drift["reconciliation"] = "a reconciliation generation is pending"
-			}
+		if snapErr == nil && snap.PendingReconcile {
+			drift["reconciliation"] = "a reconciliation generation is pending"
 		}
 
 		// Watchman drift: the persisted managed binding's trigger
@@ -454,49 +500,48 @@ func routeDriftSummary(ctx context.Context, cfg *config.Config, store *sqlite.St
 			if binding.TriggerName != route.Source.TriggerName {
 				drift["watchman"] = fmt.Sprintf("persisted trigger %q differs from the configured %q", binding.TriggerName, route.Source.TriggerName)
 			}
-		} else if route.Enabled {
+		} else if errors.Is(err, sqlite.ErrWatchBindingNotFound) && route.Enabled {
 			drift["watchman"] = "no persisted Watchman binding; run 'agent-dispatch watchman install --route " + routeID + "'"
 		}
 
-		// Capability, profile, and skill drift against the cached
-		// probe evidence: observational, bounded, offline where the
-		// evidence is absent.
+		// Capability, profile, and skill drift against the cached probe
+		// evidence: observational, bounded, offline where the evidence
+		// is absent. The capability record loads once per destination,
+		// and the profile/skill classes read it only when its scope
+		// answers profile-scoped questions — an unscoped record (a bare
+		// `hermes probe`) cannot, and comparing against its inventory
+		// would fabricate drift.
 		for _, dest := range route.SortedDestinations() {
 			resolved, ok := cfg.ResolveTarget(dest.Target)
 			if !ok || resolved.Hermes == nil {
 				continue
 			}
 			t := resolved.Hermes
-			if snap, err := store.LoadRouteState(ctx, routeID); err == nil && snap.CapabilityFingerprint != "" {
+			record, rerr := hermeskanban.LoadCapabilityRecord(capabilityCachePath(dest.Target))
+			if snapErr == nil && snap.CapabilityFingerprint != "" {
 				digest, derr := hermeskanban.ExecutableDigest(t.Executable)
-				if derr != nil {
+				switch {
+				case derr != nil:
 					drift["capability"] = "the executable identity could not be verified: " + derr.Error()
-				} else {
-					record, rerr := hermeskanban.LoadCapabilityRecord(capabilityCachePath(dest.Target))
-					if rerr != nil {
-						drift["capability"] = "no capability evidence is cached; run 'agent-dispatch hermes probe --target " + dest.Target + "'"
-					} else if reason := record.StaleReasonForProfile(t.Executable, digest, "", dest.Profile); reason != "" {
+				case rerr != nil:
+					drift["capability"] = "no capability evidence is cached; run 'agent-dispatch hermes probe --target " + dest.Target + "'"
+				default:
+					if reason := record.StaleReasonForProfile(t.Executable, digest, "", dest.Profile); reason != "" {
 						drift["capability"] = reason
 					}
 				}
 			}
-			record, rerr := hermeskanban.LoadCapabilityRecord(capabilityCachePath(dest.Target))
-			if rerr == nil && record.EnabledSkillNames() != nil {
-				if !containsString(record.EnabledSkillNames(), "") {
-					// Profile drift: the destination's profile is not
-					// among the probed evidence's scope or the board's
-					// on-disk set is unknown offline; the definitive
-					// check lives in preflight, so status reports only
-					// the cached scope mismatch.
-					if record.Profile != "" && record.Profile != dest.Profile {
-						drift["profile"] = fmt.Sprintf("cached evidence covers profile %q, destination %q uses %q", record.Profile, dest.ID, dest.Profile)
-					}
+			if rerr == nil {
+				switch {
+				case record.Profile == dest.Profile:
 					for _, want := range dest.Skills {
 						if !containsString(record.EnabledSkillNames(), want) {
 							drift["skill"] = fmt.Sprintf("destination %q requires skill %q that the cached profile evidence does not list as enabled", dest.ID, want)
 							break
 						}
 					}
+				case record.Profile != "":
+					drift["profile"] = fmt.Sprintf("cached evidence covers profile %q, destination %q uses %q; run 'agent-dispatch hermes capabilities --target %s --profile %s'", record.Profile, dest.ID, dest.Profile, dest.Target, dest.Profile)
 				}
 			}
 			break // one certified destination pre-E12; E12 widens this

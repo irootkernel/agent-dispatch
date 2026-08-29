@@ -252,8 +252,10 @@ Flags: --config; test takes --route and --sink; list takes --route,
 --state, --sink, and --limit; retry takes one notification ID; drain
 takes --limit.
 
-Exit codes: 0; 2 usage; 3 configuration; 4 not found (retry only);
-20 storage. Delivery outcomes are data, never exit codes.
+Exit codes: 0; 2 usage; 3 configuration; 4 not found or already
+  delivered (the retry command only: an unknown notification id, or
+  retrying one already delivered); 20 storage. Delivery outcomes are
+  data, never exit codes.
 
 Side effects: test delivers one transport-level probe (nothing stored,
 no source event, no Hermes task — NTF-008); list is read-only; retry

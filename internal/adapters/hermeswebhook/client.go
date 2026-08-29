@@ -31,13 +31,15 @@ func NewStrictClient(timeout time.Duration) *http.Client {
 	}
 }
 
-// provableNoSend reports whether one client error proves no request
+// ProvableNoSend reports whether one client error proves no request
 // bytes were transmitted: name resolution, connection dialing, and the
 // TLS handshake all precede HTTP transmission, so their failures are
 // definite non-submission. Every other failure — cancellation or reset
 // after the request started, response read timeouts — leaves the
 // delivery state unprovable (sink-adapter-contract.md §5, DUR-005).
-func provableNoSend(err error) bool {
+// Exported for the notification webhook adapter, which shares this
+// strict-transport classification (E13 epic audit).
+func ProvableNoSend(err error) bool {
 	var urlErr *url.Error
 	if errors.As(err, &urlErr) {
 		err = urlErr.Err

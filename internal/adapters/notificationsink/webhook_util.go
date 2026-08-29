@@ -2,13 +2,10 @@ package notificationsink
 
 import (
 	"crypto/sha256"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/hex"
-	"errors"
-	"net"
-	"net/url"
 	"strings"
+
+	"github.com/irootkernel/agent-dispatch/internal/adapters/hermeswebhook"
 )
 
 // redact removes every occurrence of the resolved secret from a text
@@ -37,36 +34,9 @@ func digestOf(text string) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-// provableNoSend reports whether one client error proves no request
-// bytes were transmitted: name resolution, connection dialing, and the
-// TLS handshake all precede HTTP transmission, so their failures are
-// retryable pre-delivery failures; every other failure leaves the
-// delivery outcome unprovable (ambiguous).
+// provableNoSend delegates to the shared strict-transport
+// classification the hermes-webhook target adapter owns (E13 epic
+// audit: one classification, not two verbatim copies).
 func provableNoSend(err error) bool {
-	var urlErr *url.Error
-	if errors.As(err, &urlErr) {
-		err = urlErr.Err
-	}
-	var opErr *net.OpError
-	if errors.As(err, &opErr) && opErr.Op == "dial" {
-		return true
-	}
-	var certVerify *tls.CertificateVerificationError
-	if errors.As(err, &certVerify) {
-		return true
-	}
-	var unknownAuthority x509.UnknownAuthorityError
-	if errors.As(err, &unknownAuthority) {
-		return true
-	}
-	var hostname x509.HostnameError
-	if errors.As(err, &hostname) {
-		return true
-	}
-	var recordHeader tls.RecordHeaderError
-	if errors.As(err, &recordHeader) {
-		return true
-	}
-	var alert tls.AlertError
-	return errors.As(err, &alert)
+	return hermeswebhook.ProvableNoSend(err)
 }

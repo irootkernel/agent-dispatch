@@ -358,7 +358,7 @@ func classifyStatus(status int, body []byte, readErr error, secret string) ports
 // is unknown (sink-adapter-contract.md §5). The diagnostic is redacted
 // because Go error text can echo request-derived values (SEC-007).
 func classifyTransportFailure(err error, secret string) ports.SubmitResult {
-	if provableNoSend(err) {
+	if ProvableNoSend(err) {
 		return ports.SubmitResult{
 			Classification: ports.SubmitDefiniteNotSubmitted,
 			Durable:        ports.DurableFalse,

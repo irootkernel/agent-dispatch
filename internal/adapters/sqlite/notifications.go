@@ -290,6 +290,18 @@ func (s *Store) RetryNotification(ctx context.Context, notificationID string) er
 	}
 }
 
+// CountNotificationsByTransition counts the durable notifications of
+// one route transition occurrence: the drain's replay-versus-filtered
+// diagnostic reads through this store surface instead of raw SQL from
+// the CLI layer (E13 epic audit).
+func (s *Store) CountNotificationsByTransition(ctx context.Context, routeID, transition string) (int, error) {
+	var n int
+	if err := s.QueryRowContext(ctx, `SELECT COUNT(*) FROM notification_events WHERE route_id = ? AND transition = ?`, routeID, transition).Scan(&n); err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
 // PendingNotifications returns the pending delivery work, oldest
 // first, bounded (the drain surface).
 func (s *Store) PendingNotifications(ctx context.Context, limit int) ([]ports.NotificationEventRecord, error) {

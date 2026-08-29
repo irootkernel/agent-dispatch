@@ -360,8 +360,8 @@ func runNotificationsDrain(command string, args []string, stdout, stderr io.Writ
 		return exit
 	}
 	defer closer.Close()
-	ctx := requestCtx()
-	drift := evaluateDriftNotifications(ctx, cfg, closer, dispatch.Timestamp(time.Now()))
+	// The limit validates BEFORE any drift side effect: a usage error
+	// must not leave half-evaluated notification intents behind.
 	delivery := appnotifications.Delivery{
 		Store:    notificationDeliveryStore{store: closer},
 		Resolver: notificationSinkResolver(cfg, stderr),
@@ -374,6 +374,8 @@ func runNotificationsDrain(command string, args []string, stdout, stderr io.Writ
 		}
 		delivery.MaxPerRun = n
 	}
+	ctx := requestCtx()
+	drift := evaluateDriftNotifications(ctx, cfg, closer, dispatch.Timestamp(time.Now()))
 	report, err := delivery.DeliverPending(ctx)
 	if err != nil {
 		var construction *appnotifications.SinkConstructionError
@@ -428,9 +430,10 @@ func evaluateDriftNotifications(ctx context.Context, cfg *config.Config, store *
 			if created == 0 {
 				// Zero created is either the policy filter or a
 				// dedup-collapsed replay of the same drift appearance —
-				// distinguished by the durable row, never guessed.
-				var existing int
-				if qerr := store.QueryRowContext(ctx, `SELECT COUNT(*) FROM notification_events WHERE route_id = ? AND transition = ?`, routeID, transition).Scan(&existing); qerr == nil && existing > 0 {
+				// distinguished through the store surface, never raw SQL
+				// from the CLI layer.
+				existing, qerr := store.CountNotificationsByTransition(ctx, routeID, transition)
+				if qerr == nil && existing > 0 {
 					enqueued[finding.Class] = map[string]any{"already_notified": true, "detail": finding.Detail}
 				} else {
 					enqueued[finding.Class] = map[string]any{"filtered": true, "detail": finding.Detail}

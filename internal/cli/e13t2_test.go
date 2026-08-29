@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"database/sql"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -27,7 +28,9 @@ import (
 // e13t2WebhookFixture extends the two-destination fixture with a log
 // sink and a webhook sink pointed at one loopback HTTPS endpoint whose
 // behavior the test flips; the CLI's client factory is overridden to
-// trust the endpoint's certificate and enforce a short deadline.
+// trust the endpoint's certificate and enforce a short deadline. The
+// capture records both headers and payload bytes (E13-T2 and G9 share
+// this scaffolding).
 type e13t2WebhookFixture struct {
 	configPath string
 	vault      string
@@ -36,15 +39,25 @@ type e13t2WebhookFixture struct {
 	status     int
 	delay      time.Duration
 	requests   []http.Header
+	payloads   []string
 }
 
 func newE13T2WebhookFixture(t *testing.T) *e13t2WebhookFixture {
+	return newNotificationWebhookFixture(t, "E13T2_NOTIFICATION_TOKEN", "e13t2-secret-token", 400*time.Millisecond)
+}
+
+// newNotificationWebhookFixture builds the two-destination fixture with
+// both notification sinks wired to one loopback HTTPS capture endpoint
+// under the named token environment variable.
+func newNotificationWebhookFixture(t *testing.T, tokenEnv, tokenValue string, clientTimeout time.Duration) *e13t2WebhookFixture {
 	t.Helper()
 	f := &e13t2WebhookFixture{status: http.StatusOK}
 	f.server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
 		f.mu.Lock()
 		status, delay := f.status, f.delay
 		f.requests = append(f.requests, r.Header.Clone())
+		f.payloads = append(f.payloads, string(body))
 		f.mu.Unlock()
 		if delay > 0 {
 			time.Sleep(delay)
@@ -64,19 +77,19 @@ func newE13T2WebhookFixture(t *testing.T) *e13t2WebhookFixture {
 	if at < 0 {
 		t.Fatal("fixture no longer carries the submission_retry block")
 	}
-	block := "\n    notifications:\n      sinks:\n        - id: ops-log\n          type: log\n        - id: ops-webhook\n          type: webhook\n          endpoint: " + f.server.URL + "\n          auth:\n            type: bearer\n            secret_ref: env:E13T2_NOTIFICATION_TOKEN"
+	block := "\n    notifications:\n      sinks:\n        - id: ops-log\n          type: log\n        - id: ops-webhook\n          type: webhook\n          endpoint: " + f.server.URL + "\n          auth:\n            type: bearer\n            secret_ref: env:" + tokenEnv
 	updated = updated[:at] + block + updated[at:]
 	if err := os.WriteFile(configPath, []byte(updated), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("E13T2_NOTIFICATION_TOKEN", "e13t2-secret-token")
+	t.Setenv(tokenEnv, tokenValue)
 
 	pool := x509.NewCertPool()
 	if leaf := f.server.Certificate(); leaf != nil {
 		pool.AddCert(leaf)
 	}
 	loopback := &http.Client{
-		Timeout: 400 * time.Millisecond,
+		Timeout: clientTimeout,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
 		},
@@ -87,6 +100,13 @@ func newE13T2WebhookFixture(t *testing.T) *e13t2WebhookFixture {
 	t.Cleanup(func() { webhookClientFactory = original })
 	f.configPath, f.vault = configPath, vault
 	return f
+}
+
+// deliveredPayloads returns the captured webhook payload bytes.
+func (f *e13t2WebhookFixture) deliveredPayloads() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.payloads...)
 }
 
 func (f *e13t2WebhookFixture) setStatus(status int, delay time.Duration) {

@@ -1,5 +1,49 @@
 # SOT Changelog
 
+## 1.1.16 - 2026-08-30
+
+E13-T3: the operator and worker skills and the G9 operational
+walkthrough land (BND-003/BND-004, FBK-006, FBK-009 through FBK-012,
+CLI-012, NTF-*, TST-012 through TST-014):
+
+- the operator skill ships as 2.0.0 with the v0.1.5 compatibility
+  declaration and the notification operational guidance: the drain's
+  bounded one-attempt posture, the probe's nothing-created guarantee,
+  the explicit refused-notification retry under the stable idempotency
+  identity, the configuration-owned sink/credential posture, and the
+  history-preserving disable/removal exits;
+- the worker skill ships as 1.2.0 with the scope-discipline guidance
+  beside its existing untrusted-manifest, latest-state, and
+  work-receipt/v2 rules: stay inside the task instruction's workstream,
+  never expand into a sibling lane's workstream, and treat route
+  exclusions as the operator's scope decision — the occurrence's
+  selection defines the follow-up, never a per-file re-evaluation;
+- `internal/cli/g9_test.go` proves AC-905 deterministically: one vault
+  change on the two-destination fixture fans out to both lanes, both
+  runs complete through the work-receipt surface, and the configured
+  notification carries the completion to both sinks (the webhook
+  capture proves the payload bytes carry the event and no note body or
+  credential; the log lines land on stderr); the lifecycle walkthrough
+  covers failure diagnosis through events show, the refused
+  notification's explicit retry, disable with the durable history
+  preserved, managed-trigger removal leaving no binding with the audit
+  history intact, and the quiesced system still answering every
+  inspection; the packaging test pins both skills' versioned guidance
+  and manifest coverage and installs the operator skill through the
+  documented public mechanism into a disposable Hermes profile; and the
+  isolated real-Hermes leg (disposable board under a redirected HOME,
+  a real Watchman binding on the disposable vault, detection through
+  receipt to the delivered notification, managed-trigger removal
+  afterwards) is skip-guarded as the documented TST-007
+  environment-dependent evidence gap where the installed Hermes
+  create surface drifts from the frozen 0.19.1 flags — the
+  deterministic legs own the gate;
+- review round 1 hardening: the G9 suite shares the E13-T2 capture
+  fixture (one parameterized loopback-TLS scaffolding instead of two),
+  the real-Hermes leg reuses the shared testsupport hermes guard and
+  bounds every cleanup subprocess with the G8 30-second deadline
+  instead of an unbounded copy.
+
 ## 1.1.15 - 2026-08-30
 
 E13-T2: notification sinks, retry commands, and scheduling land

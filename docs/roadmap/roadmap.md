@@ -15,9 +15,9 @@
 | Release target | v0.1.5 |
 | Current epic | E13 In Progress |
 | Current active task | None |
-| Next task | E13-T3 |
-| Completed tasks | 73 / 75 |
-| Planned tasks | 2 / 75 |
+| Next task | E13-T4 |
+| Completed tasks | 74 / 75 |
+| Planned tasks | 1 / 75 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -125,7 +125,7 @@
 | 71 | E12-T4 | Completed | Multi-destination and completion gate G8 |
 | 72 | E13-T1 | Completed | Notification event contract and transactional outbox |
 | 73 | E13-T2 | Completed | Webhook/log sinks, retry commands, and scheduling |
-| 74 | E13-T3 | Planned | Operator/worker skills and operational walkthrough |
+| 74 | E13-T3 | Completed | Operator/worker skills and operational walkthrough |
 | 75 | E13-T4 | Planned | Documentation truth, release proof, and v0.1.5 |
 
 ---
@@ -3293,7 +3293,7 @@ payloads, diagnostics, and ordinary output. `make verify` green at SOT
 
 ## E13-T3: Operator and Worker Skills and Operational Walkthrough
 
-**Status:** Planned
+**Status:** Completed
 **Design Gate impact:** Not required; the skills implement existing public contracts.
 
 ### Objective
@@ -3324,7 +3324,29 @@ E13-T2 Completed.
 
 ### Evidence
 
-None — Planned.
+Completed 2026-08-30. The operator skill ships as 2.0.0 with the v0.1.5
+compatibility declaration and the notification operational guidance
+(drain posture, probe guarantee, explicit retry, configuration-owned
+sinks, history-preserving exits); the worker skill ships as 1.2.0 with
+the scope-discipline guidance (workstream scope, exclusions as the
+operator's occurrence-level decision) beside its untrusted-manifest,
+latest-state, and work-receipt/v2 rules. `internal/cli/g9_test.go`
+proves AC-905 deterministically over the two-destination fixture with
+both notification sinks wired: detection fans out to both lanes, both
+runs complete through the work-receipt surface, and the configured
+notification delivers the completion to both sinks with the payload
+proven free of note bodies and credentials; the lifecycle walkthrough
+covers failure diagnosis, the refused notification's explicit retry,
+disable and managed-trigger removal with the durable and audit history
+preserved, and the quiesced system answering every inspection; the
+packaging test pins the versioned guidance, the manifest coverage, and
+the operator skill's documented public install into a disposable
+Hermes profile. The isolated real-Hermes leg (disposable board,
+redirected HOME, real Watchman binding, detection through receipt to
+the delivered notification, managed-trigger removal) is skip-guarded
+under the documented TST-007 posture where the installed Hermes create
+surface drifts from the frozen 0.19.1 flags. `make verify` green at SOT
+1.1.16.
 
 ## E13-T4: Documentation Truth, Release Proof, and v0.1.5
 

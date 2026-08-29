@@ -153,6 +153,40 @@ routes:
 	return path, vault
 }
 
+// twoDestinationFixture rewrites the e4t3 fixture's single-destination
+// block into TWO destinations over the one shared Hermes target (FAN-011)
+// — the single surgery every multi-destination test (e12t2, e12t3, g8)
+// uses (E12-T4 review round 1: one helper, not four inline copies).
+// secondProfile picks the AC-801 shape (different profiles) versus the
+// AC-802/e12 default (same profile, different workstreams).
+func twoDestinationFixture(t *testing.T, configPath, secondProfile string) {
+	t.Helper()
+	main := "      - id: main\n        target: hermes-main\n        profile: wiki-maintainer\n        skills: [llm-wiki]\n        mutex_key: wiki-publish\n        workstream: main\n        execution_hints:\n          max_runtime: 30m\n          max_attempts: 2"
+	review := "      - id: review\n        target: hermes-main\n        profile: " + secondProfile + "\n        skills: [llm-wiki]\n        workstream: review\n        execution_hints:\n          max_runtime: 30m\n          max_attempts: 2"
+	twoDestinationBlockFixture(t, configPath, main+"\n"+review)
+}
+
+// twoDestinationBlockFixture performs the same locate-and-replace surgery
+// over a caller-supplied destinations block (the conditioned fixtures
+// carry per-lane condition lines; the scaffold stays in ONE place).
+func twoDestinationBlockFixture(t *testing.T, configPath, destinationsBlock string) {
+	t.Helper()
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := string(raw)
+	start := strings.Index(updated, "    fanout_mode: all\n    destinations:\n")
+	end := strings.Index(updated, "\n    submission_retry:")
+	if start < 0 || end <= start {
+		t.Fatal("fixture no longer carries the single-destination block")
+	}
+	updated = updated[:start] + "    fanout_mode: all\n    destinations:\n" + destinationsBlock + updated[end:]
+	if err := os.WriteFile(configPath, []byte(updated), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func e4t3Dispatch(t *testing.T, configPath, vault string) (map[string]any, string) {
 	t.Helper()
 	setPlanEnv(t, vault, false)

@@ -1,7 +1,7 @@
 # SOT Package Validation
 
-> **Validated:** 2026-08-28 (E11 delivers gate G7; implementation gates G8-G9 remain Planned)
-> **Package target:** Agent Dispatch SOT 1.1.8 / implementation v0.1.5 (planned); v0.1.4 is shipped
+> **Validated:** 2026-08-29 (E12 delivers gate G8; implementation gate G9 remains Planned)
+> **Package target:** Agent Dispatch SOT 1.1.12 / implementation v0.1.5 (planned); v0.1.4 is shipped
 
 ## Completed Checks
 
@@ -50,7 +50,7 @@ All package checks are reachable from the repository root through the Makefile, 
 
 These checks cannot be completed by a design-only SOT package:
 
-- gates G8 and G9 and AC-801 through AC-906; their task owners are E12 and E13 and no executable evidence is claimed for them yet (gates G6 and G7 with AC-601 through AC-605 and AC-701 through AC-706 are delivered by E10 and E11 and evidenced below);
+- gate G9 and AC-901 through AC-906; their task owner is E13 and no executable evidence is claimed for them yet (gates G6 through G8 with AC-601 through AC-605, AC-701 through AC-706, and AC-801 through AC-806 are delivered by E10, E11, and E12 and evidenced below);
 - the v0.1.5 executable config/record schemas, examples, packaged skills, database migrations, code, release notes, artifacts, and tag;
 
 - automated cross-reference/filename integrity and roadmap-prose consistency assertions for the docs package (currently covered by the manual checks above), deferred to a future internal task;
@@ -223,6 +223,59 @@ coverage complete, publication committed, zero findings at low or
 above). The audit therefore closed after the second round under the
 zero-unresolved-findings stop rule; no confirmation-only round was
 required.
+
+## Gate G8: Multi-Destination and Completion (E12)
+
+Every criterion drives the real CLI surface over the deterministic stub
+Hermes (the frozen 0.19.1 interface, TST-012); the migration, crash, and
+race evidence is the existing suite cited per criterion, and the isolated
+real-Hermes walkthrough is the skip-guarded TST-007 leg recorded below
+the table.
+
+| Criterion | Evidence |
+|---|---|
+| AC-801 one event, two eligible destinations with different profiles, two independent children and Hermes tasks beneath one aggregate event | `TestG8AC801TwoProfilesTwoTasksBeneathOneAggregate`: one aggregate, two children with the two distinct stub task assignees, `events show` listing both and the selection carrying both lanes |
+| AC-802 two destinations with the same profile but different workstreams keep distinct identities and idempotency keys | `TestG8AC802SameProfileDistinctIdentities`: distinct destination IDs, workstreams, and DAT-014 child keys under the one aggregate (the persistent-shape coverage is `TestE12T2OneArrivalFansOutTwoChildrenUnderOneAggregate` and `TestE12T1ChildIdempotencyOrderIndependence`) |
+| AC-803 one child fails or is retried while a sibling completes; reprocessing reuses the completed sibling and never duplicates it | `TestG8AC803FailedLaneRetryReusesCompletedSibling`: the dead-lettered lane's retry keeps its key and reaches acceptance with no duplicate stub task; the unchanged re-observation drops; the re-observed same generation refuses at 14 on the idempotency constraint (CON-009 pinned by `TestE12T2RetryIsolationForFanoutChildren`; the failure classification is the fakesink G2 suite) |
+| AC-804 a behavior-affecting destination edit yields a new destination revision and child idempotency identity and requires production acknowledgement | `TestG8AC804DestinationEditRequiresReacknowledgement`: the workstream edit moves both revisions, the new child key differs, submission pauses at 14 until `route enable` re-acknowledges, then the paused children submit (CON-010 posture pinned by `TestE12T2DestinationEditPausesSubmissionUntilReacknowledged`) |
+| AC-805 completed closes, partial creates bounded remaining work, blocked requires manual intervention, failed follows its budget | `TestG8AC805FourReceiptOutcomes`: completed closes the lane; partial creates exactly one same-lane follow-up for the remaining scope; blocked leaves the lane active with a drain submitting nothing, resolved by the operator; the first failure within budget schedules its follow-up and the second exhausts the budget into the UNCERT operator hold (the four-outcome detail is the E12-T3 suite) |
+| AC-806 acceptance or a terminal task status without a valid attributable receipt is never reported completed and the gap is actionable | `TestG8AC806AcceptanceWithoutReceiptIsActionable`: `events show` renders `completion_evidence: missing` with the next-step naming the dispatch and the aggregate status `evidence-gap`; the invalid-receipt half is `TestE12T3InvalidLatestReceiptKeepsEvidenceGap` |
+
+Stress and concurrency (TST-005/TST-013, CON-001 per lane, CON-007,
+FAN-003): `TestG8StressConcurrentArrivalsPerLane` races ten concurrent
+fan-out arrivals over a two-destination route — exactly one active child
+per lane, both lanes ending ACTIVE_DIRTY (no cross-lane blocking), every
+loser merged into its own lane's dirty generation, no (occurrence,
+destination) pair with two children, and exactly one external submission
+per lane winner through the fake sink with re-submission refusing before
+any invocation. The in-process race suite plus the cross-process g2
+coverage is the recorded process-level evidence: the crashbin-based
+`TestG2MultiProcessOneActiveRouteDispatch` proves simultaneous one-shot
+arrivals, and `TestG2AC207` interrupts the migration ledger between every
+pair of units — the loop runs to `MaxSchemaVersion` (14), so the v12,
+v13, and v14 units are each interrupted and healed by the existing test
+without duplication here.
+
+Migration, crash, race, and schema-example evidence (cited, not
+duplicated): migration v12/v13/v14 preservation and backfill are
+`TestE12T1MigrationV12PreservesHistoryAndAddsFanoutTables`,
+`TestE12T2MigrationV13BackfillsActiveLanes`, and
+`TestE12T3MigrationV14WidensStatusCheckAndPreservesRows` with the
+e10t1/e9val rewind arms re-applying each unit over its prior-era shape;
+the crash windows are the G2 suite (`TestG2AC201` through `TestG2AC207`);
+the race suite runs in `make verify` (`test-race`); and the work-receipt
+v2 schema and its three examples validate on every
+`make schema-validation` run.
+
+Isolated public-Hermes walkthrough (TST-007):
+`TestG8RealHermesTwoDestinationWalkthrough` runs one two-destination
+dispatch against a real installed Hermes on a disposable
+hard-deleted-afterwards board — two tasks under the two workstreams,
+receipts recorded, `events show` complete. It skips with the explicit
+environment-dependent evidence-gap message when no supported Hermes is
+installed or the create surface drifted from the frozen 0.19.1 flags;
+the gate's pass/fail never depends on it (every criterion is proven
+deterministically in this table).
 
 ## MUST-Closure Matrix (E8-T6, D-020) — supersedes the E7-T12 matrix
 

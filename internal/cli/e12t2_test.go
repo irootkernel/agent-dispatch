@@ -26,28 +26,12 @@ import (
 
 // e12t2TwoDestinationFixture writes the e4t3 fixture with a second
 // destination sharing the target and returns the config path and vault.
+// The surgery itself is the ONE shared twoDestinationFixture helper
+// (E12-T4 review round 1); this wrapper keeps the e12 call sites stable.
 func e12t2TwoDestinationFixture(t *testing.T) (string, string) {
 	t.Helper()
 	configPath, vault := e4t3Fixture(t)
-	raw, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	updated := string(raw)
-	start := strings.Index(updated, "    fanout_mode: all\n    destinations:\n")
-	end := strings.Index(updated, "\n    submission_retry:")
-	if start < 0 || end <= start {
-		t.Fatal("fixture no longer carries the single-destination block")
-	}
-	// Two lanes over the one shared target (FAN-011): the alpha lane keeps
-	// the fixture's behavior, the beta lane feeds the review workstream.
-	dest := "    fanout_mode: all\n    destinations:\n" +
-		"      - id: main\n        target: hermes-main\n        profile: wiki-maintainer\n        skills: [llm-wiki]\n        mutex_key: wiki-publish\n        workstream: main\n        execution_hints:\n          max_runtime: 30m\n          max_attempts: 2\n" +
-		"      - id: review\n        target: hermes-main\n        profile: wiki-maintainer\n        skills: [llm-wiki]\n        workstream: review\n        execution_hints:\n          max_runtime: 30m\n          max_attempts: 2"
-	updated = updated[:start] + dest + updated[end:]
-	if err := os.WriteFile(configPath, []byte(updated), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	twoDestinationFixture(t, configPath, "wiki-maintainer")
 	return configPath, vault
 }
 
@@ -374,23 +358,9 @@ func TestE12T2DestinationEditPausesSubmissionUntilReacknowledged(t *testing.T) {
 func e12t2ConditionedFixture(t *testing.T) (string, string) {
 	t.Helper()
 	configPath, vault := e4t3Fixture(t)
-	raw, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	updated := string(raw)
-	start := strings.Index(updated, "    fanout_mode: all\n    destinations:\n")
-	end := strings.Index(updated, "\n    submission_retry:")
-	if start < 0 || end <= start {
-		t.Fatal("fixture no longer carries the single-destination block")
-	}
-	dest := "    fanout_mode: all\n    destinations:\n" +
-		"      - id: alpha\n        target: hermes-main\n        profile: wiki-maintainer\n        skills: [llm-wiki]\n        workstream: indexing\n        execution_hints:\n          max_runtime: 30m\n          max_attempts: 2\n        conditions:\n          path_include: [\"alpha/**\"]\n" +
+	block := "      - id: alpha\n        target: hermes-main\n        profile: wiki-maintainer\n        skills: [llm-wiki]\n        workstream: indexing\n        execution_hints:\n          max_runtime: 30m\n          max_attempts: 2\n        conditions:\n          path_include: [\"alpha/**\"]\n" +
 		"      - id: beta\n        target: hermes-main\n        profile: wiki-maintainer\n        skills: [llm-wiki]\n        workstream: review\n        execution_hints:\n          max_runtime: 30m\n          max_attempts: 2\n        conditions:\n          path_include: [\"beta/**\"]"
-	updated = updated[:start] + dest + updated[end:]
-	if err := os.WriteFile(configPath, []byte(updated), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	twoDestinationBlockFixture(t, configPath, block)
 	return configPath, vault
 }
 

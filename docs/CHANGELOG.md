@@ -1,5 +1,42 @@
 # SOT Changelog
 
+## 1.1.12 - 2026-08-29
+
+E12-T4: the multi-destination and completion gate G8 closes with its
+executable AC-801 through AC-806 evidence suite (FAN-*, CON-001,
+CON-007 through CON-010, FBK-009 through FBK-012, TST-005/TST-007/
+TST-013):
+
+- `internal/cli/g8_test.go` drives every criterion through the real CLI
+  surface over the deterministic stub Hermes: one aggregate with two
+  profile-distinct Hermes tasks (AC-801), same-profile lanes with
+  distinct identities and DAT-014 keys (AC-802), the failed lane's retry
+  reusing the completed sibling with no duplicate task and the
+  re-observed same generation refusing on the idempotency constraint
+  (AC-803), the destination-edit pause until production
+  re-acknowledgement (AC-804), the four receipt outcomes end to end
+  including the blocked lane's drain-idle posture and the budget
+  exhaustion into the UNCERT operator hold (AC-805), and the
+  completion-evidence gap rendered actionable with the aggregate naming
+  it (AC-806);
+- the stress leg races ten concurrent fan-out arrivals over a
+  two-destination route: one active child per lane, no cross-lane
+  blocking, per-lane dirty generations, no duplicated (occurrence,
+  destination) child, and exactly one external submission per lane
+  winner (the cross-process leg stays the cited g2/crashbin coverage —
+  `TestG2AC207` interrupts every migration unit through v14);
+- the isolated real-Hermes walkthrough is skip-guarded
+  (TST-007): two tasks beneath one aggregate on a disposable
+  hard-deleted board, receipts recorded, `events show` complete — and
+  the gate never depends on it;
+- the stub Hermes create surface records the assignee beside each task
+  so the two-profile criterion is observable on the deterministic
+  fixture (test-support only; the frozen interface is unchanged);
+- `docs/VALIDATION.md` gains the G8 gate evidence section with the
+  per-criterion table, the stress/concurrency evidence, the cited
+  migration/crash/race/schema coverage, and the Hermes-walkthrough
+  posture.
+
 ## 1.1.11 - 2026-08-29
 
 E12-T3: work-receipt/v2, aggregate inspection, and completion evidence

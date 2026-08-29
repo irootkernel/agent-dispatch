@@ -57,19 +57,28 @@ case "$cmd" in
   create)
     title=$5
     key=""
+    assignee=""
     mode=""
     i=6
     while [ $i -le $# ]; do
       eval "a=\${$i}"
       if [ "$mode" = "key" ]; then key="$a"; mode=""; fi
+      if [ "$mode" = "assignee" ]; then assignee="$a"; mode=""; fi
       if [ "$a" = "--idempotency-key" ]; then mode="key"; fi
+      if [ "$a" = "--assignee" ]; then mode="assignee"; fi
       i=$((i+1))
     done
     if [ -n "$key" ] && [ -f "$DIR/key-$key" ]; then cat "$DIR/key-$key"; exit 0; fi
     n=$(cat "$DIR/count" 2>/dev/null || echo 0); n=$((n+1)); echo $n > "$DIR/count"
     id=$(printf 't_%08x' "$n")
+    # The argv-derived title and assignee are untrusted interpolation into
+    # a JSON document: backslash-escape the JSON string metacharacters
+    # first (the fixed members stay single-quoted literals like the tables
+    # above), so a quote or backslash in argv can never break the record.
+    jtitle=$(printf '%s' "$title" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    jassignee=$(printf '%s' "$assignee" | sed 's/\\/\\\\/g; s/"/\\"/g')
     cat > "$DIR/id-$id" <<JSON
-{"id":"$id","title":"$title","status":"ready","created_at":1787142146,"mutex_key":"wiki-publish","skills":["llm-wiki"]}
+{"id":"$id","title":"$jtitle","status":"ready","created_at":1787142146,"assignee":"$jassignee","mutex_key":"wiki-publish","skills":["llm-wiki"]}
 JSON
     if [ -n "$key" ]; then cp "$DIR/id-$id" "$DIR/key-$key"; fi
     cat "$DIR/id-$id"

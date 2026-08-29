@@ -13,11 +13,11 @@
 | Shipped release | v0.1.4 |
 | Planned SOT baseline | 1.1.0 ([D-025](../specs/decision-log.md)) |
 | Release target | v0.1.5 |
-| Current epic | E12 In Progress |
+| Current epic | E12 Completed (G8 evidenced); next E13 |
 | Current active task | None |
-| Next task | E12-T4 |
-| Completed tasks | 70 / 75 |
-| Planned tasks | 4 / 75 |
+| Next task | E13-T1 |
+| Completed tasks | 71 / 75 |
+| Planned tasks | 3 / 75 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -45,7 +45,7 @@
 | E9 | Deferred-Inventory Hardening | **Completed** | 9 | Deferred closure + review remediation + v0.1.4 |
 | E10 | Source and Reconciliation Integrity | **Completed** | 3 | G6 |
 | E11 | Hermes Preflight and Operator Setup | **Completed** | 4 | G7 |
-| E12 | Multi-Destination Lifecycle | **In Progress** | 4 | G8 |
+| E12 | Multi-Destination Lifecycle | **Completed** | 4 | G8 |
 | E13 | Notifications and v0.1.5 Release | **Planned** | 4 | G9 |
 
 ## 3. Task Status Index
@@ -121,8 +121,8 @@
 | 67 | E11-T4 | Completed | Discoverable CLI, guided setup, operator skill, and G7 |
 | 68 | E12-T1 | Completed | Aggregate event and destination child persistence |
 | 69 | E12-T2 | Completed | Per-destination lanes, conditions, fan-out, and retry isolation |
-| 70 | E12-T3 | In Progress | Work-receipt/v2, aggregate status, and completion evidence |
-| 71 | E12-T4 | Planned | Multi-destination and completion gate G8 |
+| 70 | E12-T3 | Completed | Work-receipt/v2, aggregate status, and completion evidence |
+| 71 | E12-T4 | Completed | Multi-destination and completion gate G8 |
 | 72 | E13-T1 | Planned | Notification event contract and transactional outbox |
 | 73 | E13-T2 | Planned | Webhook/log sinks, retry commands, and scheduling |
 | 74 | E13-T3 | Planned | Operator/worker skills and operational walkthrough |
@@ -3102,7 +3102,7 @@ surface only).
 
 ## E12-T4: Multi-Destination and Completion Gate G8
 
-**Status:** Planned
+**Status:** Completed
 **Design Gate impact:** Not required; this task validates the accepted design.
 
 ### Objective
@@ -3133,7 +3133,21 @@ E12-T3 Completed.
 
 ### Evidence
 
-None — Planned.
+The executable AC-801 through AC-806 gate suite
+(`internal/cli/g8_test.go`) passes: two-profile fan-out beneath one
+aggregate, same-profile distinct workstream identities, failed-lane
+retry reusing the completed sibling without duplication,
+destination-edit re-acknowledgement, the four receipt outcomes, and the
+actionable acceptance-without-receipt gap; the concurrent per-lane
+stress test observes no sibling duplication or cross-lane blocking
+(cross-process evidence cited from the G2 suite and the AC-207
+interrupted-upgrade loop through schema v14); the isolated public-Hermes
+walkthrough runs where a supported Hermes is available and is recorded
+as an explicit skip-guarded evidence gap on this host; the synchronized
+G8 evidence table sits in VALIDATION.md and `make verify` is green at
+the task commit. Round-two review residuals (stale AC-805 inline
+comments, stub-heredoc control-character escaping, cleanup-defer orphan
+note) are recorded as epic-validation hardening candidates.
 
 ---
 

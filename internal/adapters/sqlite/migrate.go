@@ -47,6 +47,7 @@ var Migrations = []Migration{
 	{Version: 13, Name: "destination-lane-state", SQL: schemaV13DestinationLaneState},
 	{Version: 14, Name: "work-receipt-v2-outcomes", SQL: schemaV14WorkReceiptV2Outcomes},
 	{Version: 15, Name: "merge-selection-evidence", SQL: schemaV15MergeSelectionEvidence},
+	{Version: 16, Name: "notification-events-attempts", SQL: schemaV16NotificationEventsAttempts},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
@@ -700,4 +701,47 @@ CREATE INDEX idx_work_receipts_route_revision ON work_receipts(route_revision);
 // follow-up filter falls back to the per-change evaluation for them.
 const schemaV15MergeSelectionEvidence = `
 ALTER TABLE change_batches ADD COLUMN selected_destinations_json TEXT;
+`
+
+// schemaV16NotificationEventsAttempts creates the durable notification
+// outbox of ADR-0019 (E13-T1, DUR-016, DAT-010, NTF-003/NTF-004):
+// notification_events holds one channel-neutral intent per logical
+// (event, optional destination, transition, sink, notification-policy
+// revision) identity — the deterministic ntf- id derived from exactly
+// that projection is the primary key, so a replayed or rerun transition
+// collapses onto its existing row instead of notifying twice (AC-902);
+// notification_attempts holds the independent delivery lifecycle as
+// separate durable records whose outcomes never rewrite the intent's
+// source state (NTF-005). Both tables are new: no legacy rows exist and
+// no other table references them, so the migration is create-only.
+const schemaV16NotificationEventsAttempts = `
+CREATE TABLE notification_events (
+	notification_id  TEXT PRIMARY KEY,
+	route_id         TEXT NOT NULL,
+	event            TEXT NOT NULL CHECK (event IN ('work_completed','work_failed','work_exhausted','delivery_unknown','quarantined','reconciliation_required','integration_drift','watchman_drift')),
+	destination_id   TEXT,
+	transition       TEXT NOT NULL,
+	sink_id          TEXT NOT NULL,
+	sink_type        TEXT NOT NULL CHECK (sink_type IN ('webhook','log')),
+	policy_revision  TEXT NOT NULL,
+	idempotency_key  TEXT NOT NULL UNIQUE,
+	payload_json     TEXT NOT NULL,
+	state            TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','delivered','refused')),
+	created_at       TEXT NOT NULL,
+	resolved_at      TEXT
+);
+CREATE INDEX idx_notification_events_route ON notification_events(route_id, created_at);
+CREATE INDEX idx_notification_events_state ON notification_events(state, created_at);
+CREATE TABLE notification_attempts (
+	attempt_id      TEXT PRIMARY KEY,
+	notification_id TEXT NOT NULL REFERENCES notification_events(notification_id),
+	attempt_number  INTEGER NOT NULL,
+	outcome         TEXT NOT NULL CHECK (outcome IN ('delivered','refused','ambiguous','retryable')),
+	error_code      TEXT,
+	response_digest TEXT,
+	started_at      TEXT NOT NULL,
+	completed_at    TEXT NOT NULL,
+	UNIQUE (notification_id, attempt_number)
+);
+CREATE INDEX idx_notification_attempts_notification ON notification_attempts(notification_id, attempt_number);
 `

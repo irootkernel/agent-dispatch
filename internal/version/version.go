@@ -30,8 +30,9 @@ const ConfigVersion = "1"
 // families (E12-T1); v13 re-keys coordination onto destination lanes
 // (E12-T2); v14 widens the work-receipt outcome vocabulary (E12-T3);
 // v15 records each merged batch's destination-selection evidence
-// (E12 epic validation).
-const SchemaRange = "1-15"
+// (E12 epic validation); v16 creates the durable notification outbox of
+// notification events and attempts (E13-T1, ADR-0019).
+const SchemaRange = "1-16"
 
 // AdapterVersions returns the pinned adapter implementation versions the
 // build carries. Each entry names the delivered surface and its verified

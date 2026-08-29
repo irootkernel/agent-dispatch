@@ -13,11 +13,11 @@
 | Shipped release | v0.1.4 |
 | Planned SOT baseline | 1.1.0 ([D-025](../specs/decision-log.md)) |
 | Release target | v0.1.5 |
-| Current epic | E12 Completed (G8 evidenced); next E13 |
+| Current epic | E13 In Progress |
 | Current active task | None |
-| Next task | E13-T1 |
-| Completed tasks | 71 / 75 |
-| Planned tasks | 4 / 75 |
+| Next task | E13-T2 |
+| Completed tasks | 72 / 75 |
+| Planned tasks | 3 / 75 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -46,7 +46,7 @@
 | E10 | Source and Reconciliation Integrity | **Completed** | 3 | G6 |
 | E11 | Hermes Preflight and Operator Setup | **Completed** | 4 | G7 |
 | E12 | Multi-Destination Lifecycle | **Completed** | 4 | G8 |
-| E13 | Notifications and v0.1.5 Release | **Planned** | 4 | G9 |
+| E13 | Notifications and v0.1.5 Release | **In Progress** | 4 | G9 |
 
 ## 3. Task Status Index
 
@@ -123,7 +123,7 @@
 | 69 | E12-T2 | Completed | Per-destination lanes, conditions, fan-out, and retry isolation |
 | 70 | E12-T3 | Completed | Work-receipt/v2, aggregate status, and completion evidence |
 | 71 | E12-T4 | Completed | Multi-destination and completion gate G8 |
-| 72 | E13-T1 | Planned | Notification event contract and transactional outbox |
+| 72 | E13-T1 | Completed | Notification event contract and transactional outbox |
 | 73 | E13-T2 | Planned | Webhook/log sinks, retry commands, and scheduling |
 | 74 | E13-T3 | Planned | Operator/worker skills and operational walkthrough |
 | 75 | E13-T4 | Planned | Documentation truth, release proof, and v0.1.5 |
@@ -3166,13 +3166,13 @@ condition it runs under.
 
 # E13: Notifications and v0.1.5 Release
 
-**Epic status:** Planned
+**Epic status:** In Progress
 **Purpose:** Complete operator-visible notification delivery, distributable skills, and release proof.
 **Gate:** G9
 
 ## E13-T1: Notification Event Contract and Transactional Outbox
 
-**Status:** Planned
+**Status:** Completed
 **Design Gate impact:** Not required; ADR-0019 is the approved design.
 
 ### Objective
@@ -3203,7 +3203,32 @@ E12-T4 Completed.
 
 ### Evidence
 
-None — Planned.
+Completed 2026-08-30. SQLite migration v16 creates the durable outbox
+(`notification_events`, `notification_attempts`): the notification
+identity is the deterministic five-component projection (event, optional
+destination, transition occurrence, sink, notification-policy revision —
+NTF-003), so the unique key collapses a replayed transition or aggregate
+rerun onto its existing row (AC-902 shape). The reportable transitions
+enqueue inside their owning transactions (DUR-016): lane completions map
+onto work_completed/work_failed/work_exhausted by the resulting lane
+state, the expired-lease recovery and a recorded unknown attempt enqueue
+delivery_unknown, the quarantine hold enqueues quarantined, and every
+pending-reconcile appearance enqueues reconciliation_required exactly
+when the route was not already pending (OPS-013). The policy resolver is
+injected from the loaded configuration and nil-disabled (NTF-001); the
+default event set applies when a sink exists and no event list is
+declared (NTF-002); the notification-policy revision digests exactly the
+effective event set and sink identity references. Attempts are separate
+durable records whose outcomes never rewrite dispatch, lane, receipt, or
+work state (NTF-005); resolved notification evidence prunes past
+retention while pending evidence stays retained and inspectable
+(NTF-004). The `notification-event/v1` and `notification-attempt/v1`
+schemas and examples are validated (`e13t1_test.go` in sqlite, config,
+and cli: transactional creation, per-sink fan-out, dedup, attempt
+lifecycle and source-state immutability, emission points, referential
+integrity, v15→v16 upgrade, pruning, and an end-to-end `work complete`
+walkthrough with a hostile note body provably absent from the payload).
+`make verify` green at SOT 1.1.14.
 
 ## E13-T2: Notification Sinks, Retry Commands, and Scheduling
 

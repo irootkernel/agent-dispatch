@@ -39,6 +39,8 @@ The implementation must verify the resulting journal mode and fail `doctor` if t
 | `path_facts` | Last known digest/existence by resource path | unique resource ID + path |
 | `work_receipts` | Hermes companion provenance with the v2 four-outcome vocabulary (E12-T3: begun/completed/partially_completed/blocked/failed plus the partial scopes and the blocked manual reason) | unique receipt ID; indexed dispatch/run |
 | `quarantine_items` | Operator-visible holds | unique quarantine ID |
+| `notification_events` | Durable notification intents of the transactional outbox (E13-T1, ADR-0019): one channel-neutral record per five-component dedup identity (event, optional destination, transition occurrence, sink, notification-policy revision) | unique notification ID (the deterministic dedup derivation); unique idempotency key; indexed route and state |
+| `notification_attempts` | Independent sink delivery attempts whose outcomes never rewrite the intent's source state (E13-T1) | unique attempt ID; unique notification ID + attempt number |
 | `state_transitions` | Append-only audit transitions | unique transition ID |
 
 Since E12-T2 the single-active slot, the dirty generation, and the follow-up

@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agent-dispatch:schema:notification-event:v1",
+  "title": "Agent Dispatch Notification Event v1",
+  "description": "One channel-neutral notification intent of the durable outbox (E13-T1, ADR-0019, DUR-016, NTF-003). The identity derives deterministically from the event, optional destination, transition occurrence, sink, and notification-policy revision, so a replayed or rerun transition collapses onto the same record instead of notifying twice. The payload carries only safe identities, states, reason codes, and digests — never document contents, front matter, resolved secrets, or unredacted paths (SEC-011).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "notification_id",
+    "route_id",
+    "event",
+    "transition",
+    "sink_id",
+    "notification_policy_revision",
+    "created_at",
+    "source"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "agent-dispatch.notification-event/v1"
+    },
+    "notification_id": {
+      "type": "string",
+      "pattern": "^ntf-[0-9a-f]{64}$"
+    },
+    "route_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event": {
+      "enum": [
+        "work_completed",
+        "work_failed",
+        "work_exhausted",
+        "delivery_unknown",
+        "quarantined",
+        "reconciliation_required",
+        "integration_drift",
+        "watchman_drift"
+      ]
+    },
+    "destination_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,63}$"
+    },
+    "transition": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sink_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,63}$"
+    },
+    "notification_policy_revision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "maxProperties": 12,
+      "description": "Bounded safe source fields: identities, states, and reason codes of the reportable transition."
+    }
+  }
+}

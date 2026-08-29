@@ -56,7 +56,39 @@ func openStateStore(configPath string) (*sqlite.Store, error) {
 		s.Close()
 		return nil, err
 	}
+	// The loaded configuration is the notification policy of exactly this
+	// command run (E13-T1, ADR-0019): transition transactions inside the
+	// store resolve their route's effective policy through it, so a
+	// reportable transition commits its intent under the policy the
+	// operator sees (NTF-001/NTF-003).
+	s.SetNotificationPolicy(notificationPolicyResolver(cfg))
 	return s, nil
+}
+
+// notificationPolicyResolver builds the per-route effective notification
+// policy resolver from the loaded configuration (E13-T1): nil for an
+// unknown route, a disabled route, or an invalid declaration — the
+// semantic validator owns surfacing the declaration error, and the
+// transition path never notifies under a policy it cannot prove.
+func notificationPolicyResolver(cfg *config.Config) func(routeID string) *ports.NotificationPolicy {
+	return func(routeID string) *ports.NotificationPolicy {
+		route, ok := cfg.Routes[routeID]
+		if !ok {
+			return nil
+		}
+		events, err := config.EffectiveNotificationEvents(route)
+		if err != nil || len(events) == 0 {
+			return nil
+		}
+		sinks := make([]ports.NotificationSinkRef, 0, len(route.Notifications.Sinks))
+		for _, sink := range route.Notifications.Sinks {
+			sinks = append(sinks, ports.NotificationSinkRef{ID: sink.ID, Type: sink.Type})
+		}
+		if len(sinks) == 0 {
+			return nil
+		}
+		return &ports.NotificationPolicy{Events: events, Sinks: sinks, Revision: config.NotificationPolicyRevision(route)}
+	}
 }
 
 // openUnmigratedStore opens the SQLite store without applying

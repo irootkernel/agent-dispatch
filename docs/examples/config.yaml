@@ -91,6 +91,9 @@ routes:
           max_attempts: 2
 
     # Notifications stay disabled while no sink is configured (NTF-001).
+    # With a sink present, an omitted or empty events list selects the
+    # NTF-002 default set (E13-T1); declared names must come from the
+    # closed vocabulary.
     notifications:
       events:
         - work_completed

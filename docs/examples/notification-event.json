@@ -1,0 +1,18 @@
+{
+  "schema_version": "agent-dispatch.notification-event/v1",
+  "notification_id": "ntf-ff12f84f87c3053900c9834cc292c4bd0971fbd28f93001d9b0ca6836ee8f799",
+  "route_id": "wiki-maintenance",
+  "event": "work_completed",
+  "destination_id": "main",
+  "transition": "dispatch:019c2234-9abc-7def-8901-234567890abc:IDLE",
+  "sink_id": "ops-log",
+  "notification_policy_revision": "b7f0e2c4a1d38967520fbe4c6a9b8d1e3f5a7c2d4e6f8a0b2c4d6e8f0a2b4c6d",
+  "created_at": "2026-08-30T09:30:12.482Z",
+  "source": {
+    "dispatch_id": "019c2234-9abc-7def-8901-234567890abc",
+    "failed": "false",
+    "reason": "work_completed_no_dirty_generation",
+    "receipt_ref": "rcpt-019c2234",
+    "route_state": "IDLE"
+  }
+}

@@ -1,5 +1,74 @@
 # SOT Changelog
 
+## 1.1.14 - 2026-08-30
+
+E13-T1: the notification event contract and transactional outbox land
+(ADR-0019, DUR-016, DAT-010, NTF-001 through NTF-005, NTF-007, OPS-013):
+
+- SQLite migration v16 (`notification-events-attempts`) creates the
+  durable outbox: `notification_events` holds one channel-neutral intent
+  per logical (event, optional destination, transition occurrence, sink,
+  notification-policy revision) identity — the deterministic `ntf-` id
+  IS that five-component projection, so the unique key collapses a
+  replayed transition, an aggregate rerun, or a crash-recovery
+  re-evaluation onto its existing row instead of notifying twice
+  (NTF-003, AC-902) — and `notification_attempts` holds the independent
+  delivery lifecycle whose ambiguous/retryable outcomes leave the
+  notification pending under its stable `ntfidem-` idempotency key while
+  definite outcomes resolve it (NTF-004/NTF-007); nothing in the
+  notification tables can rewrite dispatch, lane, receipt, or work state
+  (NTF-005);
+- the reportable transitions enqueue inside their owning transactions
+  (DUR-016): a lane completion maps onto work_completed / work_failed /
+  work_exhausted by its resulting lane state; the expired-lease recovery
+  and a recorded unknown attempt enqueue delivery_unknown; the quarantine
+  hold enqueues quarantined; and every pending-reconcile appearance —
+  reconcile classification, merge-into-idle, quarantine release, and the
+  uncertain resolution that found work — enqueues reconciliation_required
+  exactly when the route was not already pending (OPS-013), with the
+  occurrence discriminator keeping replays deduplicated while a genuinely
+  new generation notifies again;
+- the policy resolver is injectable and nil-disabled (NTF-001): the CLI
+  installs it from the loaded configuration so a transition commits its
+  intents under exactly the policy the operator sees; doctor, read-only,
+  and test stores stay inert; a store-level event filter (the effective
+  event set) is enforced per sink before any insert;
+- the default event policy ships (NTF-002): with a sink present, an
+  omitted or empty `events` list selects the seven defaults (work
+  completed, exhausted failure, unknown delivery, quarantine,
+  reconciliation required, integration drift, Watchman drift;
+  work_failed stays configurable but non-default); the config schema and
+  semantic validation accept the omission, and the notification-policy
+  revision digests exactly the effective event set plus sink
+  identity/kind references — endpoints and authentication references are
+  outside the projection, so repointing a sink never re-identifies its
+  notifications (SEC-012);
+- the `agent-dispatch.notification-event/v1` and
+  `agent-dispatch.notification-attempt/v1` record families become
+  executable schemas and examples (canonical-record-contracts §10) with
+  content-derived example identities; resolved notification evidence
+  prunes past retention with its attempts while pending evidence stays
+  retained and inspectable (NTF-004), carried as a new maintenance-prune
+  class on the resolved-quarantine horizon;
+- coverage: store-level transactional creation, per-sink fan-out,
+  five-component identity, replay/rerun dedup, attempt lifecycle and
+  source-state immutability, delivery-unknown/quarantine/reconciliation
+  emission points with once-per-appearance semantics, referential
+  integrity (the enforced FK refuses orphan attempts), v15→v16 upgrade,
+  disabled-store silence, and pruning — plus the config-level effective
+  policy/revision suite and one end-to-end CLI walkthrough where a real
+  `work complete` commits its intents through the full stack with a
+  hostile note body provably absent from the payload (SEC-011);
+- review round 1 hardening: the payload projection's safety is enforced
+  at the enqueue boundary (at most 12 bounded, control-character-free
+  source values; a violation fails the owning transaction loudly instead
+  of leaking), a route-lookup error during the unknown transition now
+  fails the transaction instead of silently dropping the notification,
+  and a late terminal attempt after resolution records as evidence
+  without rewriting the first resolution; the persistence architecture
+  table inventory and the attempt contract's purpose row are
+  synchronized with the shipped v16 surface.
+
 ## 1.1.13 - 2026-08-29
 
 E12 epic validation: the reconciled member-task review residuals are

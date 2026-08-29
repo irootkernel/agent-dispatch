@@ -196,8 +196,7 @@ func validateConditions(where string, c *Conditions) error {
 }
 
 // notificationEventVocabulary is the closed v0.1.5 event set (NTF-002):
-// the names cover every class the defaults must reach. Delivery arrives
-// with E13; v0.1.5 validates the declared policy only.
+// the names cover every class the defaults must reach.
 var notificationEventVocabulary = map[string]bool{
 	"work_completed":          true,
 	"work_failed":             true,
@@ -210,9 +209,11 @@ var notificationEventVocabulary = map[string]bool{
 }
 
 // validateNotifications enforces the declared per-route notification
-// policy (NTF-001, §14): a closed event vocabulary, unique sink IDs, and
-// the webhook sink's https endpoint with its authentication shape. A
-// notifications block without sinks is valid and disabled.
+// policy (NTF-001/NTF-002, §14): a closed event vocabulary, unique sink
+// IDs, and the webhook sink's https endpoint with its authentication
+// shape. A notifications block without sinks is valid and disabled; an
+// empty event list with at least one sink is valid and selects the
+// NTF-002 default event set at evaluation time (E13-T1).
 func validateNotifications(cfg *Config) []error {
 	var errs []error
 	for routeID, route := range cfg.Routes {
@@ -220,9 +221,6 @@ func validateNotifications(cfg *Config) []error {
 			continue
 		}
 		n := route.Notifications
-		if len(n.Events) == 0 {
-			errs = append(errs, fmt.Errorf("route %q notifications.events must declare at least one event (omit the notifications block when disabled)", routeID))
-		}
 		for _, e := range n.Events {
 			if !notificationEventVocabulary[e] {
 				errs = append(errs, fmt.Errorf("route %q notifications event %q is outside the closed v0.1.5 vocabulary", routeID, e))

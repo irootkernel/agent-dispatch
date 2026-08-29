@@ -365,6 +365,23 @@ func (s *Store) CompleteAttempt(ctx context.Context, res ports.AttemptResult) er
 		fmt.Sprintf(`{"reason":%q,"attempt_id":%q,"outcome":%q}`, res.Transition.Reason, res.AttemptID, res.Outcome)); err != nil {
 		return err
 	}
+	// A recorded unknown outcome is a reportable transition: its
+	// delivery_unknown intent joins this transaction (DUR-016, E13-T1).
+	if res.Transition.To == records.IntentUnknown {
+		destinationID, destErr := s.destinationOfDispatchTx(tx, res.DispatchID)
+		if destErr != nil {
+			return destErr
+		}
+		routeID, routeErr := s.routeIDOfDispatchTx(tx, res.DispatchID)
+		if routeErr != nil {
+			return routeErr
+		}
+		if err := s.enqueueNotificationTx(tx, routeID, records.EventDeliveryUnknown,
+			"dispatch:"+res.DispatchID+":unknown:attempt:"+res.AttemptID, destinationID,
+			map[string]string{"dispatch_id": res.DispatchID, "attempt_id": res.AttemptID, "reason": string(res.Transition.Reason), "error_code": res.ErrorCode}, completedAt); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
 }
 
@@ -477,7 +494,58 @@ func (s *Store) recoverOne(ctx context.Context, r ports.RecoveredLease, now stri
 		now, fmt.Sprintf(`{"reason":%q,"attempt_id":%q,"recovered_from_owner":%q,"lease_expired":true}`, state.ReasonAmbiguousOutcome, attemptID, r.Owner)); err != nil {
 		return "", err
 	}
+	// The submitting -> unknown edge is a reportable transition: its
+	// delivery_unknown intent joins this transaction (DUR-016, E13-T1),
+	// scoped to the dispatch's lane destination when one is recorded.
+	recoveryOccurrence := "expired"
+	if attemptID != "" {
+		recoveryOccurrence = "attempt:" + attemptID
+	}
+	destinationID, destErr := s.destinationOfDispatchTx(tx, r.DispatchID)
+	if destErr != nil {
+		return "", destErr
+	}
+	routeID, routeErr := s.routeIDOfDispatchTx(tx, r.DispatchID)
+	if routeErr != nil {
+		return "", routeErr
+	}
+	if err := s.enqueueNotificationTx(tx, routeID, records.EventDeliveryUnknown,
+		"dispatch:"+r.DispatchID+":unknown:"+recoveryOccurrence, destinationID,
+		map[string]string{"dispatch_id": r.DispatchID, "reason": string(state.ReasonAmbiguousOutcome), "recovered_from_owner": r.Owner, "lease_expired": "true"}, now); err != nil {
+		return "", err
+	}
 	return attemptID, tx.Commit()
+}
+
+// routeIDOfDispatchTx reads one dispatch's route inside a transaction
+// (E13-T1 review round 1, F004/F005: a genuine read error fails the
+// owning transaction instead of silently dropping the notification; an
+// absent row reads empty, which the enqueue treats as no policy).
+func (s *Store) routeIDOfDispatchTx(tx *sql.Tx, dispatchID string) (string, error) {
+	var routeID string
+	err := tx.QueryRow(`SELECT route_id FROM dispatch_intents WHERE dispatch_id = ?`, dispatchID).Scan(&routeID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return routeID, nil
+}
+
+// destinationOfDispatchTx reads the dispatch's destination lane when a
+// child row records one; pre-cutover legacy work returns the empty
+// destination (the notification is route-scoped).
+func (s *Store) destinationOfDispatchTx(tx *sql.Tx, dispatchID string) (string, error) {
+	var destinationID sql.NullString
+	err := tx.QueryRow(`SELECT destination_id FROM child_dispatches WHERE dispatch_id = ?`, dispatchID).Scan(&destinationID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return destinationID.String, nil
 }
 
 // appendValidatedTransition re-checks the domain guards and appends the

@@ -106,20 +106,22 @@ type PruneCutoffs struct {
 	Attempts           string `json:"attempts"`
 	CompletedReceipts  string `json:"completed_receipts"`
 	ResolvedQuarantine string `json:"resolved_quarantine"`
+	Notifications      string `json:"notifications"`
 }
 
 // PruneCounts reports the per-class prune counts of one plan or
 // execution.
 type PruneCounts struct {
-	Attempts     int64 `json:"attempts"`
-	Receipts     int64 `json:"receipts"`
-	WorkReceipts int64 `json:"work_receipts"`
-	Intents      int64 `json:"intents"`
-	Decisions    int64 `json:"decisions"`
-	Batches      int64 `json:"batches"`
-	Observations int64 `json:"observations"`
-	PathFacts    int64 `json:"path_facts"`
-	Quarantine   int64 `json:"quarantine"`
+	Attempts      int64 `json:"attempts"`
+	Receipts      int64 `json:"receipts"`
+	WorkReceipts  int64 `json:"work_receipts"`
+	Intents       int64 `json:"intents"`
+	Decisions     int64 `json:"decisions"`
+	Batches       int64 `json:"batches"`
+	Observations  int64 `json:"observations"`
+	PathFacts     int64 `json:"path_facts"`
+	Quarantine    int64 `json:"quarantine"`
+	Notifications int64 `json:"notifications"`
 }
 
 // PrunePlan is the dry-run result: per-class counts plus the bounded
@@ -237,6 +239,9 @@ func (s *Store) planRemaining(ctx context.Context, plan *PrunePlan, terminal str
 	if err := s.QueryRowContext(ctx, `SELECT COUNT(*) FROM quarantine_items WHERE state IN ('released','discarded','superseded') AND resolved_at IS NOT NULL AND resolved_at < ?`, c.ResolvedQuarantine).Scan(&plan.Counts.Quarantine); err != nil {
 		return fmt.Errorf("planning quarantine prune: %w", err)
 	}
+	if err := s.QueryRowContext(ctx, `SELECT COUNT(*) FROM notification_events WHERE state IN ('delivered','refused') AND resolved_at IS NOT NULL AND resolved_at < ?`, c.Notifications).Scan(&plan.Counts.Notifications); err != nil {
+		return fmt.Errorf("planning notification prune: %w", err)
+	}
 	return nil
 }
 
@@ -344,6 +349,19 @@ func (s *Store) ExecutePrune(ctx context.Context, cutoffs PruneCutoffs, actor, r
 	}
 	if counts.Quarantine, err = exec("quarantine",
 		`DELETE FROM quarantine_items WHERE state IN ('released','discarded','superseded') AND resolved_at IS NOT NULL AND resolved_at < ?`, c.ResolvedQuarantine); err != nil {
+		return counts, err
+	}
+	// Resolved notifications past retention prune with their attempts
+	// (E13-T1, NTF-004: pending — unresolved — notification evidence is
+	// retained and never pruned); attempts delete first so the enforced
+	// foreign key never blocks the intent delete.
+	if _, err := exec("notification attempts",
+		`DELETE FROM notification_attempts WHERE notification_id IN (
+			SELECT notification_id FROM notification_events WHERE state IN ('delivered','refused') AND resolved_at IS NOT NULL AND resolved_at < ?)`, c.Notifications); err != nil {
+		return counts, err
+	}
+	if counts.Notifications, err = exec("notifications",
+		`DELETE FROM notification_events WHERE state IN ('delivered','refused') AND resolved_at IS NOT NULL AND resolved_at < ?`, c.Notifications); err != nil {
 		return counts, err
 	}
 	detail, _ := json.Marshal(map[string]any{"actor": actor, "reason": reason, "cutoffs": cutoffs, "counts": counts})

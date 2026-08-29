@@ -199,6 +199,10 @@ func runMaintenancePrune(command string, args []string, stdout, stderr io.Writer
 		Attempts:           dispatch.Timestamp(now.Add(-policy.Attempts)),
 		CompletedReceipts:  dispatch.Timestamp(now.Add(-policy.CompletedReceipts)),
 		ResolvedQuarantine: dispatch.Timestamp(now.Add(-policy.ResolvedQuarantine)),
+		// Resolved notification evidence shares the resolved-quarantine
+		// horizon (E13-T1, NTF-004): both are operator-facing resolution
+		// records whose unresolved forms stay retained.
+		Notifications: dispatch.Timestamp(now.Add(-policy.ResolvedQuarantine)),
 	}
 	plan, err := store.PlanPrune(ctx, cutoffs)
 	if err != nil {

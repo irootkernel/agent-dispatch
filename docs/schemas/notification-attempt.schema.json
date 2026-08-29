@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agent-dispatch:schema:notification-attempt:v1",
+  "title": "Agent Dispatch Notification Attempt v1",
+  "description": "One bounded sink delivery attempt over a notification intent (E13-T1, NTF-004/NTF-007, DAT-010). Attempts are separate durable records whose outcomes never rewrite the intent's source state (NTF-005): a definite success or refusal resolves the notification, an ambiguous or retryable outcome leaves it pending for the next retry under the same stable idempotency identity.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "attempt_id",
+    "notification_id",
+    "attempt_number",
+    "outcome",
+    "started_at",
+    "completed_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "agent-dispatch.notification-attempt/v1"
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^ntfa-[0-9a-f]{64}$"
+    },
+    "notification_id": {
+      "type": "string",
+      "pattern": "^ntf-[0-9a-f]{64}$"
+    },
+    "attempt_number": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "outcome": {
+      "enum": [
+        "delivered",
+        "refused",
+        "ambiguous",
+        "retryable"
+      ]
+    },
+    "error_code": {
+      "type": "string",
+      "minLength": 1
+    },
+    "response_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

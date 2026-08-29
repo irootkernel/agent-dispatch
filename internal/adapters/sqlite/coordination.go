@@ -352,6 +352,13 @@ func (s *Store) mergeLanesTx(tx *sql.Tx, routeID string, selectedDestinations []
 		}
 	}
 	if idleEmpty {
+		// The pending-generation appearance is reportable: the intent
+		// joins this transaction before the flag is set (E13-T1,
+		// OPS-013), firing only when the route was not already pending.
+		if err := s.notifyPendingReconcileTx(tx, routeID, "merge:"+batchID,
+			map[string]string{"batch_id": batchID, "actor": actor, "origin": "merge"}, now); err != nil {
+			return 0, false, err
+		}
 		if _, err := tx.Exec(`UPDATE route_runtime_state SET pending_reconcile = 1 WHERE route_id = ?`, routeID); err != nil {
 			return 0, false, err
 		}
@@ -553,12 +560,32 @@ func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.Acti
 	}
 	evidence := state.RouteEvidence{Actor: req.Actor, ReceiptRef: req.ReceiptRef, FollowupGeneration: req.FollowupGeneration}
 	transitionCtx := auditJSON("reason", reason, "dispatch_id", req.DispatchID, "dirty_generation", snap.DirtyGeneration, "failed", req.Failed, "destination_id", lane)
+	// The completion's lane transition is reportable: its notification
+	// intent joins this transaction (DUR-016, E13-T1, ADR-0019) with the
+	// completing dispatch as the transition occurrence, so a replay or
+	// rerun collapses onto the same notification identity (AC-902).
+	notifyWork := func() error {
+		return s.enqueueNotificationTx(tx, routeID, notificationEventOfWork(to, req.Failed),
+			"dispatch:"+req.DispatchID+":"+string(to), lane,
+			map[string]string{
+				"dispatch_id":    req.DispatchID,
+				"destination_id": lane,
+				"reason":         string(reason),
+				"route_state":    string(to),
+				"receipt_ref":    req.ReceiptRef,
+				"failed":         fmt.Sprintf("%v", req.Failed),
+				"followup":       fmt.Sprintf("%v", out.FollowupDispatchID != ""),
+			}, now)
+	}
 	if to == state.RouteUncertain {
 		// Uncertainty is a route-level hold (E12-T2): it blocks every lane
 		// and its resolution stays route-keyed. The held lane takes its own
 		// audited UNCERTAIN transition (retaining its slot and dirty
 		// generation) and the route row carries the fence copy.
 		if err := s.routeUncertainHoldTx(tx, snap, lane, reason, evidence, now, transitionCtx); err != nil {
+			return out, err
+		}
+		if err := notifyWork(); err != nil {
 			return out, err
 		}
 		out.RouteTo = to
@@ -622,6 +649,9 @@ func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.Acti
 			}
 			out.FollowupDispatchID = req.FollowupRequest.DispatchID
 		}
+	}
+	if err := notifyWork(); err != nil {
+		return out, err
 	}
 	out.RouteTo = to
 	return out, nil

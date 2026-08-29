@@ -441,13 +441,14 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "events",
         "sinks"
       ],
       "properties": {
         "events": {
-          "type": "array",
-          "minItems": 1,
+          "type": [
+            "array",
+            "null"
+          ],
           "uniqueItems": true,
           "items": {
             "enum": [

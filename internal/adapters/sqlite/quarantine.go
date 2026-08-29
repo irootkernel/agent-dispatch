@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 	"github.com/irootkernel/agent-dispatch/internal/domain/state"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
@@ -44,6 +45,13 @@ func (s *Store) CommitQuarantineLineage(ctx context.Context, lin ports.Lineage, 
 	}
 	if err := s.AppendTransition(tx, item.QuarantineID+":held", "quarantine", item.QuarantineID, "", "held", item.CreatedAt,
 		auditJSON("reason_codes", item.ReasonCodes, "decision_id", item.DecisionID, "batch_id", item.BatchID)); err != nil {
+		return err
+	}
+	// The hold is a reportable transition: its quarantined intent joins
+	// this transaction (DUR-016, E13-T1).
+	if err := s.enqueueNotificationTx(tx, lin.Decision.RouteID, records.EventQuarantined,
+		"quarantine:"+item.QuarantineID+":held", "",
+		map[string]string{"quarantine_id": item.QuarantineID, "decision_id": item.DecisionID, "batch_id": item.BatchID, "state": "held"}, item.CreatedAt); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -85,6 +93,12 @@ func (s *Store) CommitReconcileLineage(ctx context.Context, lin ports.Lineage, s
 		return err
 	}
 	if err := s.SaveDecision(tx, portsDecision(lin.Decision)); err != nil {
+		return err
+	}
+	// The pending-generation appearance is reportable: the intent joins
+	// this transaction before the flag is set (E13-T1, OPS-013/SRC-005).
+	if err := s.notifyPendingReconcileTx(tx, lin.Decision.RouteID, "reconcile-lineage:"+lin.Decision.DecisionID,
+		map[string]string{"decision_id": lin.Decision.DecisionID, "origin": "reconcile_classification"}, lin.Decision.CreatedAt); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`UPDATE route_runtime_state SET pending_reconcile = 1,
@@ -257,6 +271,12 @@ func (s *Store) resolveQuarantine(ctx context.Context, quarantineID, action, act
 			now, actor, rec.DecisionID); err != nil {
 			return ports.QuarantineRecord{}, err
 		}
+		// The release's pending-generation appearance is reportable: the
+		// intent joins this transaction before the flag is set (E13-T1).
+		if err := s.notifyPendingReconcileTx(tx, routeID, "quarantine-release:"+quarantineID,
+			map[string]string{"quarantine_id": quarantineID, "replacement_decision_id": replacementID, "actor": actor, "origin": "quarantine_release"}, now); err != nil {
+			return ports.QuarantineRecord{}, err
+		}
 		if _, err := tx.Exec(`UPDATE route_runtime_state SET pending_reconcile = 1 WHERE route_id = ?`, routeID); err != nil {
 			return ports.QuarantineRecord{}, err
 		}
@@ -324,6 +344,15 @@ func (s *Store) ResolveUncertainReconciliation(ctx context.Context, routeID stri
 	if intent != nil {
 		pendingAfter = 1
 	}
+	// The resolution's own pending-generation appearance — work was found
+	// and a latest-state intent carries it — is reportable; the intent
+	// joins this transaction before the flag is written (E13-T1).
+	if pendingAfter == 1 {
+		if err := s.notifyPendingReconcileTx(tx, routeID, "uncertain-resolved:"+snap.ActiveDispatchID,
+			map[string]string{"dispatch_id": snap.ActiveDispatchID, "origin": "uncertain_resolution", "actor": actor}, now); err != nil {
+			return err
+		}
+	}
 	// The held lane lands through its own guarded, audited transitions
 	// (E12-T2, review round 1: no raw lane writes beside the audited route
 	// transition) — UNCERTAIN -> FOLLOWUP_READY, plus the follow-up-dropped
@@ -359,13 +388,24 @@ func (s *Store) ResolveUncertainReconciliation(ctx context.Context, routeID stri
 	return tx.Commit()
 }
 
-// MarkPendingReconcile idempotently marks the pending generation.
+// MarkPendingReconcile idempotently marks the pending generation. The
+// appearance of the flag on a route that was not already pending is a
+// reportable transition: its intent joins this transaction before the
+// flag is set (E13-T1, OPS-013).
 func (s *Store) MarkPendingReconcile(ctx context.Context, routeID, sourcePosition, now string) error {
 	tx, err := s.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	occurrence := sourcePosition
+	if occurrence == "" {
+		occurrence = "mark"
+	}
+	if err := s.notifyPendingReconcileTx(tx, routeID, "reconcile:"+occurrence,
+		map[string]string{"source_position": sourcePosition, "origin": "explicit_mark"}, now); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(`UPDATE route_runtime_state SET pending_reconcile = 1,
 		last_source_position = COALESCE(?, last_source_position), last_reconciled_at = ? WHERE route_id = ?`,
 		nullString(sourcePosition), now, routeID); err != nil {

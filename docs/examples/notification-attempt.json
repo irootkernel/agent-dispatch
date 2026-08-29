@@ -1,0 +1,11 @@
+{
+  "schema_version": "agent-dispatch.notification-attempt/v1",
+  "attempt_id": "ntfa-6a260bcbe79b28cdd0c5b249c9bdc2eb364205e270765d8a93071ae7350a4acd",
+  "notification_id": "ntf-ff12f84f87c3053900c9834cc292c4bd0971fbd28f93001d9b0ca6836ee8f799",
+  "attempt_number": 1,
+  "outcome": "ambiguous",
+  "error_code": "webhook_timeout",
+  "response_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "started_at": "2026-08-30T09:30:13.100Z",
+  "completed_at": "2026-08-30T09:30:16.050Z"
+}

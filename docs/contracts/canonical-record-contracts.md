@@ -163,7 +163,7 @@ Do not fingerprint arbitrary marshaled domain structs because adding a field cou
 | `agent-dispatch.work-receipt/v2` | Completed, partial, blocked, or failed bounded worker evidence |
 | `agent-dispatch.hermes-capabilities/v2` | Executable identity, version, command/shape evidence, profiles, and required skills |
 | `agent-dispatch.notification-event/v1` | Channel-neutral safe transition payload |
-| `agent-dispatch.notification-attempt/v1` | Sink attempt, outcome, retry schedule, and stable idempotency identity |
+| `agent-dispatch.notification-attempt/v1` | Sink attempt and outcome under the stable idempotency identity (retry scheduling arrives with E13-T2 delivery) |
 
 Aggregate event identity is independently generated and never substitutes for
 content fingerprint. Child identity is independently generated; its
@@ -177,6 +177,15 @@ These record contracts become executable schemas and examples only in their
 owning E11-E13 tasks. The `aggregate-event/v1`, `destination-revision/v1`,
 and `child-dispatch/v1` families landed with E12-T1 (migration v12:
 `aggregate_events`, `destination_revisions`, `child_dispatches`; the child
-idempotency key is the DAT-014 projection above). The remaining families
+idempotency key is the DAT-014 projection above). The
+`notification-event/v1` and `notification-attempt/v1` families landed with
+E13-T1 (migration v16: `notification_events`, `notification_attempts`;
+ADR-0019): the notification identity derives deterministically from the
+event, optional destination, transition occurrence, sink, and
+notification-policy revision (NTF-003), so a replayed or rerun transition
+collapses onto its existing record (AC-902); attempts are separate durable
+records whose outcomes never rewrite the intent's source state (NTF-005),
+and resolved notification evidence prunes past retention while pending
+evidence stays retained and inspectable (NTF-004). The remaining families
 are still planned and the checked-in JSON schemas for them describe the
 shipped v0.1.4 wire surface until their owning tasks implement them.

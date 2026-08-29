@@ -333,6 +333,18 @@ a unique non-empty list; `fanout_mode` accepts only `all`. Condition keys are a
 closed vocabulary. Values within a key use OR and present keys use AND.
 Destination map order is non-semantic and canonicalization sorts by ID.
 
+The notification policy (NTF-001/NTF-002, E13-T1) is disabled when the block
+is absent or declares no sink. The `events` list is optional: when a sink
+exists and no event list is declared — omitted or empty — the default event
+set applies (work completed, exhausted failure, unknown delivery, quarantine,
+reconciliation required, integration drift, and Watchman drift; `work_failed`
+is configurable but not a default). Declared names must come from the closed
+vocabulary. The notification-policy revision a notification's dedup identity
+carries (NTF-003) digests exactly the effective event set and sink
+identity/kind references — never endpoints or authentication references, so
+repointing a sink does not re-identify notifications the previous policy
+already created.
+
 The route revision includes the normalized source and pattern policy, sorted
 destination set and each destination revision, fan-out conditions, runtime and
 retry hints, notification policy and sink references, plus every previously

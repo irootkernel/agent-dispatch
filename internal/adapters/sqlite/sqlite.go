@@ -4,6 +4,11 @@
 // (OPS-009), repositories for the canonical records (DAT-007, DAT-008),
 // and the append-only state transition history (DUR-011). No external
 // side-effect code ever runs inside a transaction (ADR-0005, DUR-001).
+// Since E13-T1 the store also owns the durable notification outbox of
+// ADR-0019: reportable transitions enqueue notification intents inside
+// their own transactions through the injectable per-route policy
+// resolver, and delivery attempts land as separate records that never
+// rewrite the transitioned state (NTF-005).
 package sqlite
 
 import (
@@ -132,6 +137,12 @@ type Store struct {
 	*sql.DB
 	path       string
 	migrations []Migration
+	// notificationPolicy resolves one route's effective notification
+	// policy inside transition transactions (E13-T1, ADR-0019); nil
+	// disables notification creation (NTF-001). Installed by the CLI
+	// from the loaded configuration; never mutated concurrently because
+	// a store is opened, used, and closed by one command run.
+	notificationPolicy func(routeID string) *ports.NotificationPolicy
 }
 
 // Path is the absolute database file path.

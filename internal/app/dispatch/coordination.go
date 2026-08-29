@@ -76,7 +76,13 @@ func laneOfLineage(lin ports.Lineage) string {
 // (never a second active dispatch on the lane, CON-001/CON-007).
 func (c *Coordinator) Arrival(ctx context.Context, lin ports.Lineage) (merged bool, err error) {
 	result, err := c.arrivalOne(ctx, lin)
-	return result.DispatchID == "", err
+	if err != nil {
+		// A failed arrival is never a merge — including the path where the
+		// dispatch is durable but its activation failed, which must not
+		// read as completed merge work to a caller consulting the flag.
+		return false, err
+	}
+	return result.DispatchID == "", nil
 }
 
 // FanoutOutcome reports the per-destination outcome of one fan-out arrival

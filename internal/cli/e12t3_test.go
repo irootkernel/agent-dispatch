@@ -106,10 +106,22 @@ func TestE12T3EventsShowProjectsChildrenAndEvidenceGap(t *testing.T) {
 	if sibling == nil || sibling["completion_evidence"] != "not-applicable" {
 		t.Fatalf("the not-yet-accepted sibling is not an evidence gap: %v", sibling)
 	}
-	// The selection summary with its closed reasons rides along.
-	selections := jsonToText(t, res["selections"])
-	if !strings.Contains(selections, "main") || !strings.Contains(selections, "review") {
-		t.Fatalf("the selection summary must name both lanes: %v", selections)
+	// The selection summary rides along as the structured array it was
+	// stored as (E12 cold validation round 1: never an escaped JSON
+	// string inside the JSON envelope).
+	selectionRows, ok := res["selections"].([]any)
+	if !ok || len(selectionRows) != 2 {
+		t.Fatalf("the selection summary must render as a structured array of both lanes: %v", res["selections"])
+	}
+	named := map[string]bool{}
+	for _, rawSel := range selectionRows {
+		selRow, _ := rawSel.(map[string]any)
+		if id, _ := selRow["destination_id"].(string); id != "" {
+			named[id] = true
+		}
+	}
+	if len(named) != 2 {
+		t.Fatalf("the selection summary must name both lanes: %v", selectionRows)
 	}
 }
 
@@ -308,17 +320,6 @@ func TestE12T3StatusCarriesLaneSummaries(t *testing.T) {
 	if byDestination["main"]["lane_state"] != "ACTIVE_CLEAN" || byDestination["review"]["lane_state"] != "ACTIVE_CLEAN" {
 		t.Fatalf("both lanes are active after the fan-out: %v", lanes)
 	}
-}
-
-// jsonToText renders one envelope member deterministically for substring
-// assertions.
-func jsonToText(t *testing.T, v any) string {
-	t.Helper()
-	raw, err := json.Marshal(v)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(raw)
 }
 
 // e12t3WriteDoc writes one JSON document and returns its path.
@@ -638,11 +639,19 @@ func TestE12T3InvalidLatestReceiptKeepsEvidenceGap(t *testing.T) {
 		t.Fatalf("an invalid latest receipt keeps the aggregate at evidence-gap: %v", res["aggregate_status"])
 	}
 	children, _ := res["children"].([]any)
+	found := false
 	for _, raw := range children {
 		child, _ := raw.(map[string]any)
-		if child["dispatch_id"] == mainChild && child["completion_evidence"] != "missing" {
+		if child["dispatch_id"] != mainChild {
+			continue
+		}
+		found = true
+		if child["completion_evidence"] != "missing" {
 			t.Fatalf("the accepted child with an invalid latest receipt must render the gap: %v", child)
 		}
+	}
+	if !found {
+		t.Fatalf("the accepted child %s must appear beneath the aggregate (%d children)", mainChild, len(children))
 	}
 }
 
@@ -683,11 +692,13 @@ func TestE12T3BlockedResolutionCompletesLane(t *testing.T) {
 	}
 	res := decodeEnvelope(t, &out)
 	children, _ := res["children"].([]any)
+	found := false
 	for _, raw := range children {
 		child, _ := raw.(map[string]any)
 		if child["dispatch_id"] != mainChild {
 			continue
 		}
+		found = true
 		if child["completion_evidence"] != "present" {
 			t.Fatalf("the resolved child must render present after its completed receipt: %v", child)
 		}
@@ -695,6 +706,9 @@ func TestE12T3BlockedResolutionCompletesLane(t *testing.T) {
 		if receipt["status"] != "completed" {
 			t.Fatalf("the LATEST receipt must drive the projection: %v", receipt)
 		}
+	}
+	if !found {
+		t.Fatalf("the resolved child %s must appear beneath the aggregate (%d children)", mainChild, len(children))
 	}
 }
 
@@ -763,5 +777,84 @@ func TestE12T3BlockedManifestRejected(t *testing.T) {
 	if code := Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", mainChild, "--run-id", "run-blocked-manifest",
 		"--manifest", manifest, "--remaining-manifest", manifest}, &out, &errb); code != 2 {
 		t.Fatalf("--remaining-manifest beside completed must be a usage error at 2, got %d: %s", code, errb.String())
+	}
+}
+
+// TestE12ValidationEventsShowMixedClassPrecedence pins the aggregate
+// status precedence over MIXED sibling classes (E12 cold validation
+// round 1): the documented ordering (evidence-gap > manual-intervention
+// > failed > in-progress > completed) is applied order-independently,
+// not only one class at a time.
+func TestE12ValidationEventsShowMixedClassPrecedence(t *testing.T) {
+	configPath, _, mainChild, reviewChild := e12t3DispatchBothLanes(t)
+	var out, errb bytes.Buffer
+	// main lane: accepted with an INVALID begun receipt (the gap class).
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", mainChild, "--run-id", "run-mix-gap"}, &out, &errb); code != 0 {
+		t.Fatalf("work begin: %s", errb.String())
+	}
+	// review lane: blocked (the manual-intervention class).
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", reviewChild, "--run-id", "run-mix-block"}, &out, &errb); code != 0 {
+		t.Fatalf("work begin (review): %s", errb.String())
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", reviewChild, "--run-id", "run-mix-block",
+		"--status", "blocked", "--manual-reason", "policy holds"}, &out, &errb); code != 0 {
+		t.Fatalf("blocked (review): %s", errb.String())
+	}
+	store := e5t1Store(t, configPath)
+	if _, err := store.Exec(`UPDATE work_receipts SET validation_state = 'invalid', validation_reasons_json = '["seeded invalid evidence"]'
+		WHERE dispatch_id = ? AND run_id = 'run-mix-gap'`, mainChild); err != nil {
+		t.Fatal(err)
+	}
+	aggregateID := e12t3AggregateOf(t, configPath)
+	show := func() map[string]any {
+		out.Reset()
+		errb.Reset()
+		if code := Run([]string{"events", "show", "--config", configPath, aggregateID}, &out, &errb); code != 0 {
+			t.Fatalf("events show: %s", errb.String())
+		}
+		return decodeEnvelope(t, &out)
+	}
+	if res := show(); res["aggregate_status"] != "evidence-gap" {
+		t.Fatalf("the evidence gap must outrank the sibling's manual intervention: %v", res["aggregate_status"])
+	}
+	// The gap heals into a VALID begun receipt (in-progress): the blocked
+	// sibling's manual intervention now drives the aggregate.
+	if _, err := store.Exec(`UPDATE work_receipts SET validation_state = 'valid', validation_reasons_json = '[]'
+		WHERE dispatch_id = ? AND run_id = 'run-mix-gap'`, mainChild); err != nil {
+		t.Fatal(err)
+	}
+	store.Close()
+	if res := show(); res["aggregate_status"] != "manual-intervention" {
+		t.Fatalf("manual intervention must outrank the sibling's in-progress run: %v", res["aggregate_status"])
+	}
+
+	// A fresh occurrence: a failed lane beside an in-progress sibling
+	// aggregates failed (failed > in-progress).
+	configPath2, _, mainChild2, reviewChild2 := e12t3DispatchBothLanes(t)
+	if code := Run([]string{"work", "begin", "--config", configPath2, "--dispatch-id", mainChild2, "--run-id", "run-mix-fail"}, &out, &errb); code != 0 {
+		t.Fatalf("work begin (fresh main): %s", errb.String())
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"work", "fail", "--config", configPath2, "--dispatch-id", mainChild2, "--run-id", "run-mix-fail", "--failure-code", "agent_error"}, &out, &errb); code != 0 {
+		t.Fatalf("work fail (fresh main): %s", errb.String())
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"work", "begin", "--config", configPath2, "--dispatch-id", reviewChild2, "--run-id", "run-mix-run"}, &out, &errb); code != 0 {
+		t.Fatalf("work begin (fresh review): %s", errb.String())
+	}
+	aggregateID2 := e12t3AggregateOf(t, configPath2)
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"events", "show", "--config", configPath2, aggregateID2}, &out, &errb); code != 0 {
+		t.Fatalf("events show (fresh): %s", errb.String())
+	}
+	if res := decodeEnvelope(t, &out); res["aggregate_status"] != "failed" {
+		t.Fatalf("the failed lane must outrank the sibling's in-progress run: %v", res["aggregate_status"])
 	}
 }

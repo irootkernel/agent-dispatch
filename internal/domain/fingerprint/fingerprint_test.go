@@ -109,6 +109,29 @@ func TestIdempotencyKeyProperties(t *testing.T) {
 	if key3 == key1 {
 		t.Fatal("rerun generation must change the idempotency key")
 	}
+	// Every bound projection member changes the key on its own axis
+	// (E12 cold validation): destination identity and revision (two
+	// destinations under one aggregate can never collide, and a
+	// behavior-affecting edit never reuses the key), the workstream, the
+	// route revision, and the empty-vs-set target-scope binding.
+	base := idemInput(fp.String(), 3)
+	for name, mutate := range map[string]func(*records.ChildIdempotencyKeyInput){
+		"destination id":       func(in *records.ChildIdempotencyKeyInput) { in.DestinationID = "wiki-secondary" },
+		"destination revision": func(in *records.ChildIdempotencyKeyInput) { in.DestinationRevision = "dst-def" },
+		"workstream":           func(in *records.ChildIdempotencyKeyInput) { in.Workstream = "backlinks" },
+		"route revision":       func(in *records.ChildIdempotencyKeyInput) { in.RouteRevision = "rev-xyz" },
+		"empty target scope":   func(in *records.ChildIdempotencyKeyInput) { in.TargetScope = "" },
+	} {
+		varied := base
+		mutate(&varied)
+		keyVaried, err := ChildIdempotency(varied)
+		if err != nil {
+			t.Fatalf("axis %s must derive: %v", name, err)
+		}
+		if keyVaried == key1 {
+			t.Fatalf("axis %s must change the idempotency key", name)
+		}
+	}
 }
 
 func TestIdempotencyKeyGolden(t *testing.T) {

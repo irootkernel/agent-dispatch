@@ -714,3 +714,26 @@ func TestEpicValidationFilterFailClosedArms(t *testing.T) {
 		t.Fatalf("an unparseable stored operation must fail closed: %v", err)
 	}
 }
+
+// TestE12ValidationOversizedManifestReportsSizeOnce pins the manifest
+// size bound's message contract (E12 cold validation round 1): an
+// oversized change set states the limit fact exactly once, never in both
+// the manifest-level and the shared per-entry wording.
+func TestE12ValidationOversizedManifestReportsSizeOnce(t *testing.T) {
+	_, svc, dispatchID := openReceiptStore(t)
+	entries := make([]string, MaxChanges+1)
+	for i := range entries {
+		entries[i] = fmt.Sprintf(`{"path":"Notes/file-%06d.md"}`, i)
+	}
+	raw := "[" + strings.Join(entries, ",") + "]"
+	_, _, _, reasons := svc.validateManifest(raw, dispatchID, "run-size", "vault-main", "")
+	limitMentions := 0
+	for _, reason := range reasons {
+		if strings.Contains(reason, "limit") {
+			limitMentions++
+		}
+	}
+	if limitMentions != 1 {
+		t.Fatalf("an oversized manifest must state the size bound exactly once, got %d: %v", limitMentions, reasons)
+	}
+}

@@ -542,10 +542,31 @@ func TestE12T2LaneScopedFollowupManifest(t *testing.T) {
 	}
 	// Bursts while both lanes are active: an alpha-only change (merges only
 	// the alpha lane) followed by a beta-only change (merges only beta).
+	// The alpha burst's envelope and stderr note are asserted directly
+	// (E12 cold validation round 1): the merged lane, its dirty
+	// generation, and the operator note are contract, not side effect.
 	os.WriteFile(filepath.Join(vault, "alpha", "x.md"), []byte("alpha later"), 0o644)
+	mergeOut, mergeErr := &bytes.Buffer{}, &bytes.Buffer{}
 	withStdin(t, `[{"name":"alpha/x.md","exists":true,"new":true,"size":11,"type":"f"}]`, func() {
-		Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman", "--no-submit"}, &bytes.Buffer{}, &bytes.Buffer{})
+		Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman", "--no-submit"}, mergeOut, mergeErr)
 	})
+	mergeRes := decodeEnvelope(t, mergeOut)
+	if mergeRes["disposition"] != "merge_pending" {
+		t.Fatalf("the alpha-only burst merges its lane: %v", mergeRes)
+	}
+	mergedLanes, _ := mergeRes["merged_lanes"].([]any)
+	if len(mergedLanes) != 1 {
+		t.Fatalf("exactly the alpha lane merges: %v", mergedLanes)
+	}
+	mergedLane, _ := mergedLanes[0].(map[string]any)
+	if mergedLane["destination_id"] != "alpha" || mergedLane["dirty_generation"] != float64(1) {
+		t.Fatalf("the merged lane names its destination and dirty generation: %v", mergedLane)
+	}
+	// The all-merged path keeps the legacy clean-stderr contract the E8/G4
+	// suites pin; only the mixed activate+merge path prints the note.
+	if mergeErr.String() != "" {
+		t.Fatalf("the all-merged burst must keep stderr clean: %q", mergeErr.String())
+	}
 	os.WriteFile(filepath.Join(vault, "beta", "y.md"), []byte("beta later"), 0o644)
 	withStdin(t, `[{"name":"beta/y.md","exists":true,"new":true,"size":10,"type":"f"}]`, func() {
 		Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman", "--no-submit"}, &bytes.Buffer{}, &bytes.Buffer{})

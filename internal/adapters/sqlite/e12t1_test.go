@@ -424,12 +424,24 @@ func TestE12T1ChildIdempotencyOrderIndependence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	keyB, err := childKeyForTest(base)
+	// Determinism is pinned through a RECONSTRUCTED input, not the same
+	// struct twice: the key derivation must address the identical key from
+	// the serialized-and-parsed shape the store rebuilds from persisted
+	// rows (field-tag and serialization stability).
+	encoded, err := json.Marshal(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rebuilt records.ChildIdempotencyKeyInput
+	if err := json.Unmarshal(encoded, &rebuilt); err != nil {
+		t.Fatal(err)
+	}
+	keyB, err := childKeyForTest(rebuilt)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if keyA != keyB {
-		t.Fatalf("identical projections must yield identical keys: %s vs %s", keyA, keyB)
+		t.Fatalf("a reconstructed input must yield the identical key: %s vs %s", keyA, keyB)
 	}
 	// A second destination (the repeated-profile, distinct-workstream
 	// shape of AC-802) never collides with the first.

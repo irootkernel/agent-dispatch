@@ -1176,9 +1176,9 @@ func (s *Service) validateManifest(raw, dispatchID, runID, resourceID, externalR
 			entries = *parsed.Changes
 		}
 	}
-	if len(entries) > MaxChanges {
-		reasons = append(reasons, fmt.Sprintf("manifest carries %d changes (limit %d)", len(entries), MaxChanges))
-	}
+	// The size bound lives in validateChangeEntries alone so an oversized
+	// set reports the fact exactly once (it fires for the manifest and the
+	// v2 outcome scopes alike).
 	reasons = append(reasons, s.validateChangeEntries(entries)...)
 	if doc.IsV2 {
 		// The v2 outcome scopes validate under the same per-entry rules

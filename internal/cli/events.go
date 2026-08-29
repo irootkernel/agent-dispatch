@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 
@@ -74,6 +75,14 @@ func runEventsShow(command string, args []string, stdout, stderr io.Writer) int 
 			status = worstAggregateStatus(status, "in-progress")
 		}
 	}
+	// The selection summary renders as the structured array it was stored
+	// as (saveFanoutTx marshals canonically ordered selection rows), never
+	// as an escaped JSON string inside the JSON envelope — the read-model
+	// convention `dispatches list` already follows for `request`.
+	var selections []records.DestinationSelection
+	if err := json.Unmarshal([]byte(agg.SelectionJSON), &selections); err != nil {
+		return planErr(stderr, command, "sqlite_query_failed", "storage", "aggregate selection summary is unreadable: "+err.Error(), 20)
+	}
 	return writeEnvelope(stdout, command, map[string]any{
 		"aggregate_id":        agg.AggregateID,
 		"decision_id":         agg.DecisionID,
@@ -82,7 +91,7 @@ func runEventsShow(command string, args []string, stdout, stderr io.Writer) int 
 		"origin":              agg.Origin,
 		"generation":          agg.Generation,
 		"content_fingerprint": agg.ContentFingerprint,
-		"selections":          agg.SelectionJSON,
+		"selections":          selections,
 		"created_at":          agg.CreatedAt,
 		"aggregate_status":    status,
 		"children":            rendered,

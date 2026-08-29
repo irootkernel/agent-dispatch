@@ -36,6 +36,7 @@ agent-dispatch route list|show|plan|enable|disable|stale|preflight|set-profile|s
 agent-dispatch watchman install|status|remove|test
 agent-dispatch dispatch
 agent-dispatch dispatches list|show|retry|reprocess|rerun|discard|refresh|drain
+agent-dispatch events show
 agent-dispatch receipts list|show
 agent-dispatch work begin|complete|fail
 agent-dispatch quarantine list|show|release|discard
@@ -161,7 +162,16 @@ destination revision that is not the content address of its projection
 bytes, or a child referencing a destination revision with no durable
 row (`ErrInvalidFanoutRecord`) — a producer/configuration defect that is
 never lane-isolated and never retryable, so even when sibling lanes
-succeeded the command fails at exit 3 naming the record.
+succeeded the command fails at exit 3 naming the record. A
+non-configuration lane failure beside a delivered sibling is exit 0 BY
+CONTRACT (E12 cold validation round 1): the occurrence is partially
+durable — the delivered lanes proceed and the failed lane's burst rides
+`failed_lanes`, its stderr warning, and the lane's own
+retry/dead-letter/reconcile resolution, never a replay of the occurrence
+— whereas every selected lane failing is the command-level error the
+coordinator returns (unlike `reconcile`, whose operator-driven repair
+exits non-zero on any undelivered sibling because nothing else will
+surface it).
 
 ## 6. Dispatch Inspection and Actions
 
@@ -343,8 +353,11 @@ agent-dispatch route set-skills <route>:<destination> <skill>...
 ```
 
 `events show <aggregate-id>` lands with E12-T3 (CLI-013): it renders one
-occurrence's aggregate — the selection summary with its closed reasons,
-origin, generation, and content fingerprint — every child beneath it with
+occurrence's aggregate — the selection summary as a structured
+`selections` array (one `{destination_id, destination_revision,
+workstream, reason}` row per selected destination with its closed
+reason, never an escaped JSON string inside the envelope), origin,
+generation, and content fingerprint — every child beneath it with
 separate destination, intent-state, acceptance, execution-projection,
 work-receipt (status + validity), retry, and completion-evidence
 projections, and the aggregate status as the worst child class

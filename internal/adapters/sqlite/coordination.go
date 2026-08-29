@@ -778,8 +778,14 @@ func (s *Store) EligibleForStale(ctx context.Context, routeID string, bound time
 	default:
 		if age < int64(bound) {
 			var id string
-			_ = s.QueryRowContext(ctx, `SELECT active_dispatch_id FROM destination_lane_state
-				WHERE route_id = ? AND active_dispatch_id IS NOT NULL ORDER BY destination_id LIMIT 1`, routeID).Scan(&id)
+			// Name the dispatch the age was measured against: the OLDEST
+			// lane holder (created_at first, destination order only as the
+			// deterministic tiebreak), never a younger sibling that merely
+			// sorts first in destination order.
+			_ = s.QueryRowContext(ctx, `SELECT l.active_dispatch_id FROM destination_lane_state l
+				JOIN dispatch_intents i ON i.route_id = l.route_id AND i.dispatch_id = l.active_dispatch_id
+				WHERE l.route_id = ? AND l.active_dispatch_id IS NOT NULL
+				ORDER BY i.created_at, l.destination_id LIMIT 1`, routeID).Scan(&id)
 			return false, fmt.Sprintf("active dispatch %s is inside the active_stale_after bound; live work is not stale", id), nil
 		}
 		return true, "", nil
@@ -864,11 +870,14 @@ func (s *Store) MarkRouteStaleWithReason(ctx context.Context, routeID, actor, re
 		return err
 	}
 	defer tx.Rollback()
-	// The first lane holding an active dispatch (destination order is the
-	// deterministic choice) is the stale evidence.
-	rows, err := tx.Query(`SELECT destination_id FROM destination_lane_state
-		WHERE route_id = ? AND lane_state IN ('ACTIVE_CLEAN','ACTIVE_DIRTY') AND active_dispatch_id IS NOT NULL
-		ORDER BY destination_id LIMIT 1`, routeID)
+	// The lane holding the OLDEST active dispatch is the stale evidence
+	// (created_at first; destination order is only the deterministic
+	// tiebreak), so the audited dispatch is the one whose age made the
+	// route stale.
+	rows, err := tx.Query(`SELECT l.destination_id FROM destination_lane_state l
+		JOIN dispatch_intents i ON i.route_id = l.route_id AND i.dispatch_id = l.active_dispatch_id
+		WHERE l.route_id = ? AND l.lane_state IN ('ACTIVE_CLEAN','ACTIVE_DIRTY') AND l.active_dispatch_id IS NOT NULL
+		ORDER BY i.created_at, l.destination_id LIMIT 1`, routeID)
 	if err != nil {
 		return err
 	}

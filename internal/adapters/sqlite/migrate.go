@@ -624,6 +624,28 @@ CREATE INDEX idx_child_dispatches_lane ON child_dispatches(route_id, destination
 // belongs to (the child row's destination, else the synthetic '__legacy__'
 // lane of ADR-0016), and routes without an active dispatch keep no lane row
 // — lanes materialize lazily on their first write.
+const schemaV13DestinationLaneState = `
+CREATE TABLE destination_lane_state (
+    route_id          TEXT NOT NULL REFERENCES routes(route_id),
+    destination_id    TEXT NOT NULL,
+    lane_state        TEXT NOT NULL CHECK (lane_state IN ('IDLE','ACTIVE_CLEAN','ACTIVE_DIRTY','FOLLOWUP_READY','UNCERTAIN','QUARANTINED')),
+    active_dispatch_id TEXT REFERENCES dispatch_intents(dispatch_id),
+    active_generation INTEGER NOT NULL DEFAULT 0,
+    dirty_generation  INTEGER NOT NULL DEFAULT 0,
+    dirty_since       TEXT,
+    failure_budget    INTEGER NOT NULL DEFAULT 0,
+    version           INTEGER NOT NULL DEFAULT 0 CHECK (version >= 0),
+    PRIMARY KEY (route_id, destination_id)
+);
+INSERT INTO destination_lane_state
+    (route_id, destination_id, lane_state, active_dispatch_id, active_generation, dirty_generation, dirty_since, version)
+SELECT route_id,
+    COALESCE((SELECT c.destination_id FROM child_dispatches c WHERE c.dispatch_id = route_runtime_state.active_dispatch_id), '__legacy__'),
+    route_state, active_dispatch_id, active_generation, dirty_generation, dirty_since, version
+FROM route_runtime_state
+WHERE active_dispatch_id IS NOT NULL;
+`
+
 // schemaV14WorkReceiptV2Outcomes widens the work-receipt outcome vocabulary
 // (E12-T3, FBK-009/FBK-010/FBK-011): the status CHECK gains
 // partially_completed and blocked, and the v2 record members — the partial
@@ -678,26 +700,4 @@ CREATE INDEX idx_work_receipts_route_revision ON work_receipts(route_revision);
 // follow-up filter falls back to the per-change evaluation for them.
 const schemaV15MergeSelectionEvidence = `
 ALTER TABLE change_batches ADD COLUMN selected_destinations_json TEXT;
-`
-
-const schemaV13DestinationLaneState = `
-CREATE TABLE destination_lane_state (
-    route_id          TEXT NOT NULL REFERENCES routes(route_id),
-    destination_id    TEXT NOT NULL,
-    lane_state        TEXT NOT NULL CHECK (lane_state IN ('IDLE','ACTIVE_CLEAN','ACTIVE_DIRTY','FOLLOWUP_READY','UNCERTAIN','QUARANTINED')),
-    active_dispatch_id TEXT REFERENCES dispatch_intents(dispatch_id),
-    active_generation INTEGER NOT NULL DEFAULT 0,
-    dirty_generation  INTEGER NOT NULL DEFAULT 0,
-    dirty_since       TEXT,
-    failure_budget    INTEGER NOT NULL DEFAULT 0,
-    version           INTEGER NOT NULL DEFAULT 0 CHECK (version >= 0),
-    PRIMARY KEY (route_id, destination_id)
-);
-INSERT INTO destination_lane_state
-    (route_id, destination_id, lane_state, active_dispatch_id, active_generation, dirty_generation, dirty_since, version)
-SELECT route_id,
-    COALESCE((SELECT c.destination_id FROM child_dispatches c WHERE c.dispatch_id = route_runtime_state.active_dispatch_id), '__legacy__'),
-    route_state, active_dispatch_id, active_generation, dirty_generation, dirty_since, version
-FROM route_runtime_state
-WHERE active_dispatch_id IS NOT NULL;
 `

@@ -115,6 +115,13 @@ func (s *Store) saveFanoutTx(tx *sql.Tx, i IntentRecord) error {
 	var revisionRow int
 	if err := txOrDB(tx, s.DB).QueryRow(`SELECT 1 FROM destination_revisions WHERE route_id = ? AND destination_id = ? AND revision = ?`,
 		i.RouteID, f.DestinationID, f.DestinationRevision).Scan(&revisionRow); err != nil {
+		// Only the absent row is the validation failure: a transient store
+		// fault must keep its storage class (the epic's own sibling-commit
+		// invariant — a storage fault is storage, never a replayed
+		// configuration conflict).
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
 		return fmt.Errorf("child %s references destination %q revision %q with no durable record (persist the referenced revision beside the fanout; validation failure): %w",
 			i.DispatchID, f.DestinationID, f.DestinationRevision, ports.ErrInvalidFanoutRecord)
 	}

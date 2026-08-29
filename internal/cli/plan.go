@@ -322,7 +322,10 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	if outcome.merged {
 		// Another dispatch holds every selected lane: the burst merged
 		// into the lanes' durable dirty generations (CON-002, CON-008,
-		// FBK-001).
+		// FBK-001). The envelope carries the merged lanes; stderr stays
+		// quiet on this all-merged path by the legacy clean-stderr
+		// contract the E8/G4 suites pin (the mixed activate+merge path
+		// below prints the per-lane note).
 		return writeEnvelope(stdout, command, map[string]any{
 			"route_id": artifacts.opts.routeID, "disposition": "merge_pending",
 			"dirty_generation": outcome.dirty, "submitted": false,

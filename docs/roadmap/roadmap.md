@@ -17,7 +17,7 @@
 | Current active task | None |
 | Next task | E13-T1 |
 | Completed tasks | 71 / 75 |
-| Planned tasks | 3 / 75 |
+| Planned tasks | 4 / 75 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -2955,7 +2955,7 @@ E11-T3 Completed.
 
 # E12: Multi-Destination Lifecycle
 
-**Epic status:** Planned
+**Epic status:** Completed
 **Purpose:** Turn one normalized event into independently durable destination work while retaining latest-state bounds.
 **Gate:** G8
 
@@ -3098,11 +3098,15 @@ projections and the actionable completion-evidence gap, status lane
 summaries, and the worker task contract updates are pinned by
 `internal/adapters/sqlite/e12t3_test.go`,
 `internal/app/workreceipt/e12t3_test.go`, and `internal/cli/e12t3_test.go`;
-`make verify` green at the task commit. Known bounded residuals recorded
-for the epic validation: digest-less remaining-scope entries classify as
+`make verify` green at the task commit. The two residuals recorded for
+the epic validation — digest-less remaining-scope entries classifying as
 deletions in the follow-up projection, and the document-vs-flag scope
-conflict comparison is order/pointer-sensitive (both partial-outcome
-surface only).
+conflict comparing struct order — are remediated by the E12
+epic-validation hardening batch (CHANGELOG 1.1.13): a digest-less entry
+now classifies conservatively as a modification (deletion evidence
+demands the exact before-present/after-absent pair), and the scope
+comparison canonicalizes by value over a sorted order (both
+partial-outcome surfaces only).
 
 ## E12-T4: Multi-Destination and Completion Gate G8
 
@@ -3149,9 +3153,14 @@ interrupted-upgrade loop through schema v14); the isolated public-Hermes
 walkthrough runs where a supported Hermes is available and is recorded
 as an explicit skip-guarded evidence gap on this host; the synchronized
 G8 evidence table sits in VALIDATION.md and `make verify` is green at
-the task commit. Round-two review residuals (stale AC-805 inline
-comments, stub-heredoc control-character escaping, cleanup-defer orphan
-note) are recorded as epic-validation hardening candidates.
+the task commit. The round-two review residuals recorded as
+epic-validation hardening candidates — the stale AC-805 inline comments,
+the stub-heredoc control-character escaping, and the cleanup-defer
+orphan note — are remediated by the E12 epic-validation hardening batch
+(CHANGELOG 1.1.13): the gate suite's budget docstrings state the
+corrected semantics, the stub escapes control characters before the
+heredoc interpolation, and the cleanup defer names the redirected-HOME
+condition it runs under.
 
 ---
 

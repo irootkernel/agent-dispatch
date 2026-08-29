@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -166,5 +167,29 @@ func TestE12T2AllLanesFailedReturnsError(t *testing.T) {
 	}
 	if len(outcome.Failed) == 0 {
 		t.Fatalf("the per-lane failures must be recorded even on the all-failed return: %+v", outcome)
+	}
+}
+
+// TestE12ValidationArrivalNeverReportsMergedOnError pins the Arrival
+// flag's error contract (E12 cold validation round 1): a failed arrival
+// keeps merged false — the flag must never read as completed merge work
+// beside an error, including the store-boundary validation refusal.
+func TestE12ValidationArrivalNeverReportsMergedOnError(t *testing.T) {
+	s := openCoordStore(t)
+	c := newCoordinator(s)
+	lin := e12t2WithLane(coordLineage(t, 100, "dispatch"), "wiki-primary")
+	// A dangling destination reference refuses at the store boundary
+	// (neither supplied beside the fanout nor already durable).
+	lin.Intent.Fanout.DestinationRevision = "dst-" + strings.Repeat("f", 64)
+	lin.Intent.Fanout.Revisions = nil
+	merged, err := c.Arrival(context.Background(), lin)
+	if err == nil {
+		t.Fatal("the dangling reference must refuse the arrival")
+	}
+	if merged {
+		t.Fatal("a failed arrival must never report the occurrence merged")
+	}
+	if !errors.Is(err, ports.ErrInvalidFanoutRecord) {
+		t.Fatalf("the refusal must keep its invalid-record class: %v", err)
 	}
 }

@@ -1323,6 +1323,23 @@ func TestEpicValidationReconcileRetryAfterPartialFailure(t *testing.T) {
 	if entry["destination_id"] != "review" || entry["committed"] != false || note == "" {
 		t.Fatalf("the retry reports the committed lane as the slot-held skip: %v", entry)
 	}
+	// The skip warning rides the envelope's warnings member too (E12 cold
+	// validation round 1): a regression that silently drops it must fail.
+	var outer struct {
+		Warnings []string `json:"warnings"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &outer); err != nil {
+		t.Fatalf("decode outer envelope: %v", err)
+	}
+	warned := false
+	for _, text := range outer.Warnings {
+		if strings.Contains(text, "reconcile sibling lane review skipped") {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Fatalf("the slot-held skip must warn on the envelope: %v", outer.Warnings)
+	}
 	// Nothing new committed for the retrying lane and no duplicate exists:
 	// the earlier child IS that lane's reconciliation.
 	var reviewChildren, mainChildren int

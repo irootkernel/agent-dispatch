@@ -252,9 +252,9 @@ any invocation. The in-process race suite plus the cross-process g2
 coverage is the recorded process-level evidence: the crashbin-based
 `TestG2MultiProcessOneActiveRouteDispatch` proves simultaneous one-shot
 arrivals, and `TestG2AC207` interrupts the migration ledger between every
-pair of units — the loop runs to `MaxSchemaVersion` (14), so the v12,
-v13, and v14 units are each interrupted and healed by the existing test
-without duplication here.
+pair of units — the loop runs to `MaxSchemaVersion` (15), so the v12,
+v13, v14, and v15 units are each interrupted and healed by the existing
+test without duplication here.
 
 Migration, crash, race, and schema-example evidence (cited, not
 duplicated): migration v12/v13/v14/v15 preservation and backfill are

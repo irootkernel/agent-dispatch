@@ -370,9 +370,33 @@ renders `present`; a never-accepted child renders `not-applicable`. A
 valid BEGUN receipt classifies the aggregate in-progress, not
 evidence-gap — the run is known-busy work, and the gap class stays for
 accepted work with no (or an invalid) receipt to trust, E12 epic
-whole-review round 1). `notifications test|list|retry|drain` remain E13 work and
-are not part of the shipped surface; an invocation today is
-`command_unknown` at exit 2.
+whole-review round 1). `notifications test|list|retry|drain` land with
+E13-T2 (CLI-013): `test --route <id> --sink <id>` delivers one
+transport-level probe of the declared sink — the payload is the
+notification-event/v1 envelope with the dedicated `test` event value
+(outside the stored vocabulary by design), its stable idempotency
+identity derives from the (route, sink) pair so repeated probes
+deduplicate at the endpoint, and nothing is stored: no notification
+intent, no source event, no Hermes task (NTF-008); `list` renders the
+durable intents with `--route`, `--state`, `--sink`, and `--limit`
+filters plus each row's attempt count and last outcome (NTF-004);
+`retry <notification-id>` re-arms one refused notification — the
+operator's explicit decision — and performs one attempt under the
+notification's stable idempotency identity, refusing a delivered
+notification at exit 4 (NTF-007); `drain` first evaluates the configured
+drift classes per notification-enabled route (the missing or changed
+Watchman binding enqueues `watchman_drift`, the capability, profile, and
+skill findings enqueue `integration_drift`, each exactly once per drift
+appearance through the finding-digest occurrence; the reconciliation
+class stays with the pending-reconcile transitions) and then performs
+one bounded attempt per pending notification, oldest first, bounded by
+`--limit`. Delivery outcomes are data, never exit codes: an ambiguous or
+retryable outcome stays pending for the next pass, and no delivery
+outcome ever mutates dispatch, receipt, or work state (NTF-005); the log
+sink emits its structured payload lines on stderr so stdout keeps the
+one-envelope contract. `status` projects the notification by-state
+counts and warns on pending delivery work (observability-and-operations
+§10).
 
 Every root and group parser accepts `-h` and `--help`. Help states required
 flags, defaults, output modes, exit codes, side effects, production approval,

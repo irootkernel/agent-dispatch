@@ -195,11 +195,19 @@ func TestScheduleExamplesInvokeVerifiedCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(plist), "<string>--submit</string>") {
+	if !strings.Contains(string(plist), "--submit") {
 		t.Fatalf("the launchd invocation must carry --submit")
 	}
 	if !strings.Contains(string(plist), "reconcile") || !strings.Contains(string(plist), "scheduled") {
 		t.Fatalf("schedule artifact does not invoke the scheduled reconciliation: %.80s", plist)
+	}
+	// The E13-T2 one-shot schedule integration chains the notification
+	// drain after the reconciliation pass inside the one shell recipe:
+	// bounded delivery, never a daemon, and never blocking the schedule
+	// (the drain's ambiguous/retryable remainder exits 0 for the next
+	// pass).
+	if !strings.Contains(string(plist), "notifications drain") {
+		t.Fatalf("the launchd recipe must chain the notification drain (E13-T2)")
 	}
 	if strings.Contains(string(plist), "/tmp") {
 		t.Fatalf("launchd plist must not log to fixed /tmp paths")

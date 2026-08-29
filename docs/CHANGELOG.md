@@ -1,5 +1,60 @@
 # SOT Changelog
 
+## 1.1.15 - 2026-08-30
+
+E13-T2: notification sinks, retry commands, and scheduling land
+(NTF-004 through NTF-009, CLI-013, SEC-011 through SEC-013, TST-014,
+OPS-013):
+
+- the structured log sink emits each stored notification-event/v1
+  payload as one JSON line on the operator's stderr — stdout keeps the
+  one-envelope contract (CLI-001/002) and the structured log stream
+  owns the delivery lines (OPS-001 posture); the authenticated HTTPS
+  webhook sink (internal/adapters/notificationsink) reuses the strict
+  transport posture of the hermes-webhook target: https-only endpoints
+  without embedded userinfo, the secret resolved only at send time and
+  redacted from every captured diagnostic, a dedicated idempotency
+  header no authentication or transport header can collide with,
+  redirects surfaced as definite routing refusals (never followed, no
+  ambient proxy), bounded payload, response capture, and execution
+  time (SEC-011 through SEC-013); the four-way outcome contract maps
+  2xx delivered, the definite-refusal statuses refused, throttling and
+  server failures retryable, and non-dial transport failures ambiguous
+  — at-least-once under the stable ntfidem- identity (NTF-006/NTF-007);
+- `notifications test|list|retry|drain` ship (CLI-013): the probe
+  delivers the notification-event/v1 envelope with the dedicated
+  `test` event value and a stable per-(route, sink) idempotency
+  identity, storing nothing and touching no source event or Hermes
+  task (NTF-008); the listing joins each intent's attempt count and
+  last outcome (NTF-004); the explicit retry re-arms one refused
+  notification and refuses a delivered one at exit 4; and the drain
+  first evaluates the configured drift classes per
+  notification-enabled route — the missing or changed Watchman binding
+  enqueues watchman_drift and the capability, profile, and skill
+  findings enqueue integration_drift, each exactly once per drift
+  appearance through the finding-digest occurrence (OPS-013, AC-901) —
+  then performs one bounded attempt per pending notification, oldest
+  first, with delivery outcomes as data and never exit codes (NTF-005
+  posture);
+- `status` projects the notification by-state counts and warns on
+  pending delivery work with the drain command (observability-and-
+  operations §10); the launchd schedule example chains
+  `notifications drain` after the scheduled reconciliation inside its
+  one shell recipe (the E13-T2 one-shot schedule integration), and the
+  schedule test pins both legs;
+- coverage (TST-014): the sink adapters classify every status class,
+  redact an echoed credential from every diagnostic, keep the stable
+  idempotency header identical across retries, and fail closed on
+  plain-http endpoints, embedded userinfo, missing secret references,
+  and colliding headers; the CLI suite proves end to end that the
+  probe creates nothing, the drain delivers the log sink while the
+  stalling endpoint classifies ambiguous and stays pending, the
+  recovered retry presents the same key per notification, the refused
+  notification re-arms and delivers through the explicit retry, the
+  two sinks resolve independently, a persisting drift never
+  re-notifies, and no payload, attempt diagnostic, or ordinary output
+  retains the resolved secret or the vault's note body.
+
 ## 1.1.14 - 2026-08-30
 
 E13-T1: the notification event contract and transactional outbox land

@@ -40,7 +40,8 @@ type NotificationPolicy struct {
 
 // NotificationEventRecord is one durable notification intent as stored:
 // the channel-neutral payload is the notification-event/v1 projection;
-// the CLI owns all presentation rendering.
+// the CLI owns all presentation JSON. The attempt projection is the
+// read-model join the list surface renders.
 type NotificationEventRecord struct {
 	NotificationID string
 	RouteID        string
@@ -55,6 +56,10 @@ type NotificationEventRecord struct {
 	IdempotencyKey string
 	CreatedAt      string
 	ResolvedAt     string
+	// AttemptCount and LastOutcome join the attempt projection for the
+	// listing surface (zero and empty when no attempt ran yet).
+	AttemptCount int
+	LastOutcome  records.NotificationAttemptOutcome
 }
 
 // NotificationAttemptInput records one sink delivery attempt (NTF-004,
@@ -111,4 +116,45 @@ type NotificationStore interface {
 	// CountNotificationsByState aggregates notification counts by state
 	// for the status surface.
 	CountNotificationsByState(ctx context.Context) (map[string]int64, error)
+	// EnqueueRouteNotification creates the notification intents of one
+	// route-scoped reportable transition that has no owning store method
+	// (E13-T2: the drift evaluation pass): the same transactional
+	// enqueue, dedup identity, and effective-policy filter the store's
+	// internal transitions use (OPS-013). The returned count is the
+	// number of sink intents the pass created — zero means the effective
+	// policy filtered the event, which the caller must report honestly.
+	EnqueueRouteNotification(ctx context.Context, routeID string, event records.NotificationEventKind, transition, destinationID string, source map[string]string, now string) (int, error)
+	// RetryNotification re-arms one refused notification for delivery
+	// (the explicit operator retry): the stable idempotency identity is
+	// untouched and a delivered notification never re-arms (NTF-007).
+	RetryNotification(ctx context.Context, notificationID string) error
+	// PendingNotifications returns the pending delivery work, oldest
+	// first, bounded (the drain surface).
+	PendingNotifications(ctx context.Context, limit int) ([]NotificationEventRecord, error)
+}
+
+// NotificationDelivery is one pending notification bound for one sink:
+// the channel-neutral payload is the notification-event/v1 projection
+// exactly as stored; the idempotency key is the notification's stable
+// delivery identity every attempt reuses (NTF-007).
+type NotificationDelivery struct {
+	NotificationID string
+	RouteID        string
+	Event          records.NotificationEventKind
+	DestinationID  string
+	SinkID         string
+	IdempotencyKey string
+	PayloadJSON    string
+}
+
+// NotificationSink is one channel-neutral notification sink adapter
+// (sink-adapter-contract §10, NTF-006): it consumes a
+// notification-event/v1 payload and returns a definite success, a
+// definite refusal, an ambiguous outcome, or a retryable pre-delivery
+// failure — and never mutates any state outside the notification
+// tables (NTF-005). Adding a future channel adapter requires no change
+// to dispatch or work-completion semantics (NTF-009).
+type NotificationSink interface {
+	// Deliver performs one bounded delivery attempt.
+	Deliver(ctx context.Context, in NotificationDelivery) NotificationAttemptInput
 }

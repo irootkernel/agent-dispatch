@@ -49,7 +49,7 @@ func (s *Store) CommitQuarantineLineage(ctx context.Context, lin ports.Lineage, 
 	}
 	// The hold is a reportable transition: its quarantined intent joins
 	// this transaction (DUR-016, E13-T1).
-	if err := s.enqueueNotificationTx(tx, lin.Decision.RouteID, records.EventQuarantined,
+	if _, err := s.enqueueNotificationTx(tx, lin.Decision.RouteID, records.EventQuarantined,
 		"quarantine:"+item.QuarantineID+":held", "",
 		map[string]string{"quarantine_id": item.QuarantineID, "decision_id": item.DecisionID, "batch_id": item.BatchID, "state": "held"}, item.CreatedAt); err != nil {
 		return err

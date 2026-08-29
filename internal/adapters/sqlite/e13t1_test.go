@@ -142,7 +142,7 @@ func TestE13T1DedupCollapsesRepeatedTransitionEvaluation(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := 0; i < 3; i++ {
-		if err := s.enqueueNotificationTx(tx, "wiki-maintenance", records.EventReconciliationRequired,
+		if _, err := s.enqueueNotificationTx(tx, "wiki-maintenance", records.EventReconciliationRequired,
 			"route:wiki-maintenance:pending_reconcile:mark", "",
 			map[string]string{"origin": "explicit_mark"}, "2026-08-30T02:00:00Z"); err != nil {
 			t.Fatal(err)
@@ -562,12 +562,12 @@ func TestE13T1PayloadBoundsFailClosed(t *testing.T) {
 	}
 	defer tx.Rollback()
 	tooLong := strings.Repeat("x", 257)
-	if err := s.enqueueNotificationTx(tx, "wiki-maintenance", records.EventReconciliationRequired,
+	if _, err := s.enqueueNotificationTx(tx, "wiki-maintenance", records.EventReconciliationRequired,
 		"route:wiki-maintenance:pending_reconcile:bound", "",
 		map[string]string{"blob": tooLong}, "2026-08-30T09:00:00Z"); err == nil {
 		t.Fatal("an over-long source value must fail closed")
 	}
-	if err := s.enqueueNotificationTx(tx, "wiki-maintenance", records.EventReconciliationRequired,
+	if _, err := s.enqueueNotificationTx(tx, "wiki-maintenance", records.EventReconciliationRequired,
 		"route:wiki-maintenance:pending_reconcile:bound", "",
 		map[string]string{"note": "line one\nline two"}, "2026-08-30T09:00:00Z"); err == nil {
 		t.Fatal("a control character must fail closed")
@@ -576,13 +576,13 @@ func TestE13T1PayloadBoundsFailClosed(t *testing.T) {
 	for i := 0; i < 13; i++ {
 		overMany[fmt.Sprintf("k%02d", i)] = "v"
 	}
-	if err := s.enqueueNotificationTx(tx, "wiki-maintenance", records.EventReconciliationRequired,
+	if _, err := s.enqueueNotificationTx(tx, "wiki-maintenance", records.EventReconciliationRequired,
 		"route:wiki-maintenance:pending_reconcile:bound", "",
 		overMany, "2026-08-30T09:00:00Z"); err == nil {
 		t.Fatal("an over-large source projection must fail closed")
 	}
 	// The bound itself stays generous enough for every real emission site.
-	if err := s.enqueueNotificationTx(tx, "wiki-maintenance", records.EventReconciliationRequired,
+	if _, err := s.enqueueNotificationTx(tx, "wiki-maintenance", records.EventReconciliationRequired,
 		"route:wiki-maintenance:pending_reconcile:bound", "",
 		map[string]string{"origin": "explicit_mark", "source_position": "pos"}, "2026-08-30T09:00:00Z"); err != nil {
 		t.Fatalf("a bounded projection must pass: %v", err)

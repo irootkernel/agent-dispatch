@@ -565,7 +565,7 @@ func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.Acti
 	// completing dispatch as the transition occurrence, so a replay or
 	// rerun collapses onto the same notification identity (AC-902).
 	notifyWork := func() error {
-		return s.enqueueNotificationTx(tx, routeID, notificationEventOfWork(to, req.Failed),
+		_, err := s.enqueueNotificationTx(tx, routeID, notificationEventOfWork(to, req.Failed),
 			"dispatch:"+req.DispatchID+":"+string(to), lane,
 			map[string]string{
 				"dispatch_id":    req.DispatchID,
@@ -576,6 +576,7 @@ func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.Acti
 				"failed":         fmt.Sprintf("%v", req.Failed),
 				"followup":       fmt.Sprintf("%v", out.FollowupDispatchID != ""),
 			}, now)
+		return err
 	}
 	if to == state.RouteUncertain {
 		// Uncertainty is a route-level hold (E12-T2): it blocks every lane

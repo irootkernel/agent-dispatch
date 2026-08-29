@@ -376,7 +376,7 @@ func (s *Store) CompleteAttempt(ctx context.Context, res ports.AttemptResult) er
 		if routeErr != nil {
 			return routeErr
 		}
-		if err := s.enqueueNotificationTx(tx, routeID, records.EventDeliveryUnknown,
+		if _, err := s.enqueueNotificationTx(tx, routeID, records.EventDeliveryUnknown,
 			"dispatch:"+res.DispatchID+":unknown:attempt:"+res.AttemptID, destinationID,
 			map[string]string{"dispatch_id": res.DispatchID, "attempt_id": res.AttemptID, "reason": string(res.Transition.Reason), "error_code": res.ErrorCode}, completedAt); err != nil {
 			return err
@@ -509,7 +509,7 @@ func (s *Store) recoverOne(ctx context.Context, r ports.RecoveredLease, now stri
 	if routeErr != nil {
 		return "", routeErr
 	}
-	if err := s.enqueueNotificationTx(tx, routeID, records.EventDeliveryUnknown,
+	if _, err := s.enqueueNotificationTx(tx, routeID, records.EventDeliveryUnknown,
 		"dispatch:"+r.DispatchID+":unknown:"+recoveryOccurrence, destinationID,
 		map[string]string{"dispatch_id": r.DispatchID, "reason": string(state.ReasonAmbiguousOutcome), "recovered_from_owner": r.Owner, "lease_expired": "true"}, now); err != nil {
 		return "", err

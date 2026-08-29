@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- E6-T3 launchd scheduled-reconciliation example (OPS-007).
+<!-- E6-T3 launchd scheduled-reconciliation example (OPS-007); the E13-T2
+     one-shot schedule integration chains the notification drain after
+     the reconciliation pass (NTF delivery is bounded and never blocks
+     reconciliation).
      Install for the current user:
        cp agent-dispatch-reconcile.launchd.plist ~/Library/LaunchAgents/xyz.rootkernel.agent-dispatch.reconcile.plist
        launchctl load ~/Library/LaunchAgents/xyz.rootkernel.agent-dispatch.reconcile.plist
@@ -10,22 +13,20 @@
      the production acknowledgement the route fails closed at exit 14
      until `route enable --acknowledge-production-gate` records it, and
      after it a route disabled in configuration (the YAML key) persists
-     its decisions and recovers without submitting. -->
+     its decisions and recovers without submitting. The chain is
+     conditional (&&): a failed scheduled reconciliation surfaces to
+     launchd instead of being masked by the drain's exit, and the drain
+     runs only after a healthy pass — its own exit 0 keeps the schedule
+     healthy even when deliveries stay pending for the next pass. -->
 <plist version="1.0">
 <dict>
     <key>Label</key>
     <string>xyz.rootkernel.agent-dispatch.reconcile</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/local/bin/agent-dispatch</string>
-        <string>reconcile</string>
-        <string>--route</string>
-        <string>wiki-maintenance</string>
-        <string>--reason</string>
-        <string>scheduled</string>
-        <string>--submit</string>
-        <string>--output</string>
-        <string>json</string>
+        <string>/bin/sh</string>
+        <string>-c</string>
+        <string>/usr/local/bin/agent-dispatch reconcile --route wiki-maintenance --reason scheduled --submit --output json &amp;&amp; /usr/local/bin/agent-dispatch notifications drain --output json</string>
     </array>
     <key>StartCalendarInterval</key>
     <dict>

@@ -1,0 +1,54 @@
+{
+  "schema": "aquarium.hardening-deferral-findings/v1",
+  "work_unit": {
+    "kind": "task",
+    "id": "E13-T2"
+  },
+  "target": {
+    "git_head": "d1ee8409c68b250aa4a0660a24f12b86596f541c",
+    "capture_kind": "dirty",
+    "content_sha256": "sha256:ec911666ed843ae806bf879bd1147721bed885c81b368e74b56ff603fb0568b3"
+  },
+  "review": {
+    "coverage_status": "complete",
+    "ci_decision": "pass",
+    "publication_status": "committed",
+    "structured_extraction_status": "structured"
+  },
+  "findings": [
+    {
+      "id": "F001",
+      "severity": "medium",
+      "disposition": "deferred-for-hardening",
+      "affected_paths": [
+        "docs/contracts/error-model.md",
+        "internal/cli/notifications.go"
+      ]
+    },
+    {
+      "id": "F002",
+      "severity": "low",
+      "disposition": "deferred-for-hardening",
+      "affected_paths": [
+        "docs/contracts/cli-spec.md"
+      ]
+    },
+    {
+      "id": "F003",
+      "severity": "low",
+      "disposition": "deferred-for-hardening",
+      "affected_paths": [
+        "internal/cli/notifications.go",
+        "docs/contracts/error-model.md"
+      ]
+    },
+    {
+      "id": "F004",
+      "severity": "low",
+      "disposition": "deferred-for-hardening",
+      "affected_paths": [
+        "docs/contracts/sink-adapter-contract.md"
+      ]
+    }
+  ]
+}

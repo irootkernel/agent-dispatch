@@ -15,9 +15,9 @@
 | Release target | v0.1.5 |
 | Current epic | E13 In Progress |
 | Current active task | None |
-| Next task | E13-T2 |
-| Completed tasks | 72 / 75 |
-| Planned tasks | 3 / 75 |
+| Next task | E13-T3 |
+| Completed tasks | 73 / 75 |
+| Planned tasks | 2 / 75 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -124,7 +124,7 @@
 | 70 | E12-T3 | Completed | Work-receipt/v2, aggregate status, and completion evidence |
 | 71 | E12-T4 | Completed | Multi-destination and completion gate G8 |
 | 72 | E13-T1 | Completed | Notification event contract and transactional outbox |
-| 73 | E13-T2 | Planned | Webhook/log sinks, retry commands, and scheduling |
+| 73 | E13-T2 | Completed | Webhook/log sinks, retry commands, and scheduling |
 | 74 | E13-T3 | Planned | Operator/worker skills and operational walkthrough |
 | 75 | E13-T4 | Planned | Documentation truth, release proof, and v0.1.5 |
 
@@ -3232,7 +3232,7 @@ walkthrough with a hostile note body provably absent from the payload).
 
 ## E13-T2: Notification Sinks, Retry Commands, and Scheduling
 
-**Status:** Planned
+**Status:** Completed
 **Design Gate impact:** Not required; the sink and security contracts own the behavior.
 
 ### Objective
@@ -3263,7 +3263,33 @@ E13-T1 Completed.
 
 ### Evidence
 
-None — Planned.
+Completed 2026-08-30. The structured log sink emits each stored
+notification-event/v1 payload as one JSON line on stderr (stdout keeps
+the one-envelope contract) and the authenticated HTTPS webhook sink
+(internal/adapters/notificationsink) enforces the strict transport
+posture: https-only endpoints, send-time secret resolution with
+redaction from every diagnostic, a dedicated collision-free idempotency
+header carrying the stable ntfidem- identity on every attempt, redirects
+as definite routing refusals, no ambient proxy, and bounded
+payload/response/time (SEC-011..013, NTF-006/NTF-007). The
+`notifications test|list|retry|drain` surface ships (CLI-013): the
+probe stores nothing and touches no source event or Hermes task
+(NTF-008), the listing joins the attempt projection (NTF-004), the
+explicit retry re-arms a refused notification and refuses a delivered
+one at exit 4, and the drain evaluates the configured drift classes per
+notification-enabled route (watchman drift and the integration classes
+enqueue exactly once per appearance through the finding-digest
+occurrence, OPS-013) before one bounded attempt per pending
+notification with outcomes as data. `status` projects the notification
+by-state counts with a pending-delivery warning; the launchd schedule
+example chains the drain after the scheduled reconciliation. Coverage
+(e13t2_test.go in notificationsink and cli): every status class, secret
+redaction, stable keys across retries, fail-closed construction, the
+probe's nothing-created posture, ambiguous-then-delivered retry with
+identical keys, refused re-arm through the explicit retry, sink
+isolation, drift deduplication, and secret/content absence from
+payloads, diagnostics, and ordinary output. `make verify` green at SOT
+1.1.15.
 
 ## E13-T3: Operator and Worker Skills and Operational Walkthrough
 

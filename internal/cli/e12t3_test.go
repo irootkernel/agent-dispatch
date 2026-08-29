@@ -833,8 +833,13 @@ func TestE12ValidationEventsShowMixedClassPrecedence(t *testing.T) {
 	}
 
 	// A fresh occurrence: a failed lane beside an in-progress sibling
-	// aggregates failed (failed > in-progress).
+	// aggregates failed (failed > in-progress). The aggregate id is
+	// resolved BEFORE the receipts: `work fail` on a route with retry
+	// budget schedules the same-lane retry follow-up as a NEW occurrence,
+	// and resolving "the newest child" after that would race between the
+	// original and the follow-up aggregate (E13-T2 round-1 flake fix).
 	configPath2, _, mainChild2, reviewChild2 := e12t3DispatchBothLanes(t)
+	aggregateID2 := e12t3AggregateOf(t, configPath2)
 	if code := Run([]string{"work", "begin", "--config", configPath2, "--dispatch-id", mainChild2, "--run-id", "run-mix-fail"}, &out, &errb); code != 0 {
 		t.Fatalf("work begin (fresh main): %s", errb.String())
 	}
@@ -848,7 +853,6 @@ func TestE12ValidationEventsShowMixedClassPrecedence(t *testing.T) {
 	if code := Run([]string{"work", "begin", "--config", configPath2, "--dispatch-id", reviewChild2, "--run-id", "run-mix-run"}, &out, &errb); code != 0 {
 		t.Fatalf("work begin (fresh review): %s", errb.String())
 	}
-	aggregateID2 := e12t3AggregateOf(t, configPath2)
 	out.Reset()
 	errb.Reset()
 	if code := Run([]string{"events", "show", "--config", configPath2, aggregateID2}, &out, &errb); code != 0 {

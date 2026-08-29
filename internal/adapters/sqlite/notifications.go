@@ -78,42 +78,47 @@ func (s *Store) SetNotificationPolicy(resolve func(routeID string) *ports.Notifi
 // bounded, channel-neutral payload projection: safe identities, states,
 // and reason codes only — document contents, front matter, resolved
 // secrets, and unredacted paths never enter it (SEC-011).
-func (s *Store) enqueueNotificationTx(tx *sql.Tx, routeID string, event records.NotificationEventKind, transition, destinationID string, source map[string]string, now string) error {
+func (s *Store) enqueueNotificationTx(tx *sql.Tx, routeID string, event records.NotificationEventKind, transition, destinationID string, source map[string]string, now string) (int, error) {
 	if s.notificationPolicy == nil {
-		return nil
+		return 0, nil
 	}
 	policy := s.notificationPolicy(routeID)
 	if policy == nil || len(policy.Sinks) == 0 || policy.Revision == "" {
-		return nil
+		return 0, nil
 	}
 	if !records.NotificationEventKinds(policy.Events).Contains(event) {
-		return nil
+		return 0, nil
 	}
 	// The payload projection is enforced before any sink write: an
 	// unbounded or unsafe source value fails the owning transaction
 	// instead of leaking into a notification (SEC-011, review round 1).
 	if err := validateNotificationSource(source); err != nil {
-		return fmt.Errorf("route %s event %s: %w", routeID, event, err)
+		return 0, fmt.Errorf("route %s event %s: %w", routeID, event, err)
 	}
 	sinks := make([]ports.NotificationSinkRef, len(policy.Sinks))
 	copy(sinks, policy.Sinks)
 	sort.Slice(sinks, func(i, j int) bool { return sinks[i].ID < sinks[j].ID })
 	now = normalizeTimestamp(now)
+	created := 0
 	for _, sink := range sinks {
 		notificationID := records.NotificationID(event, destinationID, transition, sink.ID, policy.Revision)
 		payload, err := notificationPayloadJSON(notificationID, routeID, event, destinationID, transition, sink.ID, policy.Revision, source, now)
 		if err != nil {
-			return err
+			return 0, err
 		}
-		if _, err := tx.Exec(`INSERT OR IGNORE INTO notification_events
+		res, err := tx.Exec(`INSERT OR IGNORE INTO notification_events
 			(notification_id, route_id, event, destination_id, transition, sink_id, sink_type, policy_revision, idempotency_key, payload_json, state, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
 			notificationID, routeID, string(event), nullString(destinationID), transition, sink.ID, sink.Type, policy.Revision,
-			records.NotificationIdempotencyKey(notificationID), payload, now); err != nil {
-			return err
+			records.NotificationIdempotencyKey(notificationID), payload, now)
+		if err != nil {
+			return 0, err
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			created++
 		}
 	}
-	return nil
+	return created, nil
 }
 
 // notificationPayloadJSON renders the notification-event/v1 projection
@@ -179,7 +184,8 @@ func (s *Store) notifyPendingReconcileTx(tx *sql.Tx, routeID, occurrence string,
 	if pending != 0 {
 		return nil
 	}
-	return s.enqueueNotificationTx(tx, routeID, records.EventReconciliationRequired, "route:"+routeID+":pending_reconcile:"+occurrence, "", source, now)
+	_, err := s.enqueueNotificationTx(tx, routeID, records.EventReconciliationRequired, "route:"+routeID+":pending_reconcile:"+occurrence, "", source, now)
+	return err
 }
 
 // notificationEventOfWork maps one completion's lane transition onto its
@@ -198,37 +204,124 @@ func notificationEventOfWork(to state.RouteState, failed bool) records.Notificat
 	return records.EventWorkCompleted
 }
 
+// EnqueueRouteNotification creates the notification intents of one
+// route-scoped reportable transition that has no owning store method —
+// the E13-T2 drift evaluation pass: one transaction around the shared
+// enqueue, so a drift appearance commits its intents atomically under
+// the effective policy (OPS-013) exactly like the store's internal
+// transitions (DUR-016 posture).
+func (s *Store) EnqueueRouteNotification(ctx context.Context, routeID string, event records.NotificationEventKind, transition, destinationID string, source map[string]string, now string) (int, error) {
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	created, err := s.enqueueNotificationTx(tx, routeID, event, transition, destinationID, source, now)
+	if err != nil {
+		return 0, err
+	}
+	return created, tx.Commit()
+}
+
+// RetryNotification re-arms one refused notification for delivery (the
+// explicit operator retry of CLI-013): only a refused notification
+// re-arms — a delivered success never re-sends (the endpoint already
+// holds the idempotency key) and a pending notification needs no
+// re-arm. The stable idempotency identity is untouched, so the retried
+// delivery presents the same key the endpoint deduplicated before
+// (NTF-007); nothing outside the notification tables changes (NTF-005).
+func (s *Store) RetryNotification(ctx context.Context, notificationID string) error {
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var state string
+	if err := tx.QueryRow(`SELECT state FROM notification_events WHERE notification_id = ?`, notificationID).Scan(&state); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: %s", ports.ErrNotificationNotFound, notificationID)
+		}
+		return err
+	}
+	switch records.NotificationState(state) {
+	case records.NotificationDelivered:
+		return fmt.Errorf("%w: %s is already delivered", ports.ErrStateNotEligible, notificationID)
+	case records.NotificationPending:
+		return nil // already armed
+	case records.NotificationRefused:
+		if _, err := tx.Exec(`UPDATE notification_events SET state = 'pending', resolved_at = NULL WHERE notification_id = ? AND state = 'refused'`, notificationID); err != nil {
+			return err
+		}
+		return tx.Commit()
+	default:
+		return fmt.Errorf("unknown notification state %q", state)
+	}
+}
+
+// PendingNotifications returns the pending delivery work, oldest
+// first, bounded (the drain surface).
+func (s *Store) PendingNotifications(ctx context.Context, limit int) ([]ports.NotificationEventRecord, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	rows, err := s.QueryContext(ctx, `SELECT e.notification_id, e.route_id, e.event, e.destination_id, e.transition, e.sink_id, e.sink_type, e.policy_revision, e.payload_json, e.state, e.idempotency_key, e.created_at, e.resolved_at,
+		COALESCE(c.attempts, 0), COALESCE(last.outcome, '')`+notificationAttemptJoinSQL+` WHERE e.state = 'pending' ORDER BY e.created_at, e.notification_id LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ports.NotificationEventRecord
+	for rows.Next() {
+		rec, err := scanNotificationEvent(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	return out, rows.Err()
+}
+
+// notificationAttemptJoinSQL is the shared attempt projection of the
+// listing surfaces: each intent's attempt count and the outcome of its
+// latest attempt (E13-T2).
+const notificationAttemptJoinSQL = `
+		FROM notification_events e
+		LEFT JOIN (SELECT notification_id, COUNT(*) AS attempts, MAX(attempt_number) AS last_number
+			FROM notification_attempts GROUP BY notification_id) c ON c.notification_id = e.notification_id
+		LEFT JOIN notification_attempts last ON last.notification_id = e.notification_id AND last.attempt_number = c.last_number`
+
 // ListNotifications returns notifications matching the filter, newest
-// first (NTF-004: every intent and outcome stays inspectable).
+// first, with the attempt projection joined (NTF-004: every intent and
+// outcome stays inspectable).
 func (s *Store) ListNotifications(ctx context.Context, filter ports.NotificationFilter) ([]ports.NotificationEventRecord, error) {
 	limit := filter.Limit
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	query := `SELECT notification_id, route_id, event, destination_id, transition, sink_id, sink_type, policy_revision, payload_json, state, idempotency_key, created_at, resolved_at
-		FROM notification_events`
+	query := `SELECT e.notification_id, e.route_id, e.event, e.destination_id, e.transition, e.sink_id, e.sink_type, e.policy_revision, e.payload_json, e.state, e.idempotency_key, e.created_at, e.resolved_at,
+		COALESCE(c.attempts, 0), COALESCE(last.outcome, '')` + notificationAttemptJoinSQL
 	conds := []string{}
 	args := []any{}
 	if filter.RouteID != "" {
-		conds = append(conds, "route_id = ?")
+		conds = append(conds, "e.route_id = ?")
 		args = append(args, filter.RouteID)
 	}
 	if filter.State != "" {
-		conds = append(conds, "state = ?")
+		conds = append(conds, "e.state = ?")
 		args = append(args, filter.State)
 	}
 	if filter.SinkID != "" {
-		conds = append(conds, "sink_id = ?")
+		conds = append(conds, "e.sink_id = ?")
 		args = append(args, filter.SinkID)
 	}
 	if filter.Event != "" {
-		conds = append(conds, "event = ?")
+		conds = append(conds, "e.event = ?")
 		args = append(args, string(filter.Event))
 	}
 	if len(conds) > 0 {
 		query += " WHERE " + strings.Join(conds, " AND ")
 	}
-	query += " ORDER BY created_at DESC, notification_id LIMIT ?"
+	query += " ORDER BY e.created_at DESC, e.notification_id LIMIT ?"
 	args = append(args, limit)
 	rows, err := s.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -371,7 +464,8 @@ func scanNotificationEvent(rows *sql.Rows) (ports.NotificationEventRecord, error
 	var rec ports.NotificationEventRecord
 	var destinationID, resolvedAt sql.NullString
 	if err := rows.Scan(&rec.NotificationID, &rec.RouteID, &rec.Event, &destinationID, &rec.Transition, &rec.SinkID, &rec.SinkType,
-		&rec.PolicyRevision, &rec.PayloadJSON, &rec.State, &rec.IdempotencyKey, &rec.CreatedAt, &resolvedAt); err != nil {
+		&rec.PolicyRevision, &rec.PayloadJSON, &rec.State, &rec.IdempotencyKey, &rec.CreatedAt, &resolvedAt,
+		&rec.AttemptCount, &rec.LastOutcome); err != nil {
 		return ports.NotificationEventRecord{}, err
 	}
 	rec.DestinationID, rec.ResolvedAt = destinationID.String, resolvedAt.String

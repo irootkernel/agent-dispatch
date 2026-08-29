@@ -63,6 +63,16 @@ func runStatus(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return planErr(stderr, command, "sqlite_query_failed", "storage", err.Error(), 20)
 	}
+	// Notification delivery posture (E13-T2, observability-and-operations
+	// §10): the by-state counts project the outbox; pending delivery
+	// work is the operator-visible retry surface.
+	notificationCounts, err := closer.CountNotificationsByState(ctx)
+	if err != nil {
+		return planErr(stderr, command, "sqlite_query_failed", "storage", err.Error(), 20)
+	}
+	if notificationCounts == nil {
+		notificationCounts = map[string]int64{}
+	}
 
 	routeRows := make([]map[string]any, 0, len(routes))
 	warnings := []string{}
@@ -102,6 +112,9 @@ func runStatus(args []string, stdout, stderr io.Writer) int {
 	if quarantine["held"] > 0 {
 		warnings = append(warnings, fmt.Sprintf("%d quarantine items are held", quarantine["held"]))
 	}
+	if notificationCounts["pending"] > 0 {
+		warnings = append(warnings, fmt.Sprintf("%d notifications are pending delivery: run 'agent-dispatch notifications drain'", notificationCounts["pending"]))
+	}
 	return writeEnvelopeWithWarnings(stdout, command, map[string]any{
 		"routes":            routeRows,
 		"queues":            intents,
@@ -109,6 +122,7 @@ func runStatus(args []string, stdout, stderr io.Writer) int {
 		"oldest_unresolved": nilIfEmpty(oldestUnresolved),
 		"database_bytes":    dbBytes,
 		"targets":           targetCapabilitySummary(cfg),
+		"notifications":     notificationCounts,
 		// OPS-013: the five drift classes — capability, profile, skill,
 		// watchman, reconciliation — surfaced per route; each is also an
 		// eligible notification target once E13 delivers sinks.

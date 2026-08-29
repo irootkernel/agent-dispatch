@@ -242,6 +242,31 @@ Example:
   agent-dispatch events show <aggregate-id>
 
 Next safe command: agent-dispatch receipts list --kind work`,
+	"notifications": `notifications — the notification delivery surface
+
+Usage: agent-dispatch notifications <test|list|retry|drain> [flags]
+
+Flags: --config; test takes --route and --sink; list takes --route,
+--state, --sink, and --limit; retry takes one notification ID; drain
+takes --limit.
+
+Exit codes: 0; 2 usage; 3 configuration; 4 not found (retry only);
+20 storage. Delivery outcomes are data, never exit codes.
+
+Side effects: test delivers one transport-level probe (nothing stored,
+no source event, no Hermes task — NTF-008); list is read-only; retry
+re-arms one refused notification and performs one attempt under its
+stable idempotency identity; drain evaluates the configured drift
+classes per route (integration and Watchman drift enqueue their
+intents exactly once per appearance), then performs one bounded
+delivery attempt per pending notification — ambiguous and retryable
+outcomes stay pending for the next pass (NTF-007), and no delivery
+outcome ever changes dispatch or work state (NTF-005).
+
+Example:
+  agent-dispatch notifications drain --config <path>
+
+Next safe command: agent-dispatch notifications list --state pending`,
 	"work": `work — the Hermes companion receipt surface
 
 Usage: agent-dispatch work <begin|complete|fail> [flags]

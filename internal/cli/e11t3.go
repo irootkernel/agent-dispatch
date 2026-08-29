@@ -472,6 +472,94 @@ func boundedAlternatives(alts []string) []string {
 	return append(capped, fmt.Sprintf("(+%d more)", len(alts)-alternativesBound))
 }
 
+// driftFinding is one OPS-013 drift observation of one route: the
+// class vocabulary of the status projection and the notification drift
+// evaluation (E13-T2). Key is the finding's STABLE machine identity —
+// the identifiers of the drifted things, never presentation text — so
+// the notification occurrence digest stays stable across wording
+// changes while a genuinely changed drift identity re-notifies; Detail
+// is the human projection.
+type driftFinding struct {
+	Class  string // reconciliation|watchman|capability|profile|skill
+	Key    string
+	Detail string
+}
+
+// routeDriftFindings computes one route's drift findings (bounded,
+// read-only; nothing here heals, submits, or blocks). The capability,
+// profile, and skill classes evaluate the canonically-first certified
+// destination against the cached probe evidence — an unscoped record
+// (a bare `hermes probe`) cannot answer profile-scoped questions, and
+// comparing against its inventory would fabricate drift.
+func routeDriftFindings(ctx context.Context, cfg *config.Config, store *sqlite.Store, routeID string, route config.Route) []driftFinding {
+	var findings []driftFinding
+	// The route state loads once per route: the reconciliation and
+	// capability classes read the same snapshot.
+	snap, snapErr := store.LoadRouteState(ctx, routeID)
+
+	// Reconciliation drift: a pending generation.
+	if snapErr == nil && snap.PendingReconcile {
+		findings = append(findings, driftFinding{Class: "reconciliation", Key: "pending", Detail: "a reconciliation generation is pending"})
+	}
+
+	// Watchman drift: the persisted managed binding's trigger differs
+	// from the configured one, or no binding exists while the route is
+	// enabled.
+	if binding, err := store.LoadWatchBinding(ctx, routeID); err == nil {
+		if binding.TriggerName != route.Source.TriggerName {
+			findings = append(findings, driftFinding{Class: "watchman",
+				Key:    "trigger:" + binding.TriggerName + "!=" + route.Source.TriggerName,
+				Detail: fmt.Sprintf("persisted trigger %q differs from the configured %q", binding.TriggerName, route.Source.TriggerName)})
+		}
+	} else if errors.Is(err, sqlite.ErrWatchBindingNotFound) && route.Enabled {
+		findings = append(findings, driftFinding{Class: "watchman",
+			Key:    "binding-missing",
+			Detail: "no persisted Watchman binding; run 'agent-dispatch watchman install --route " + routeID + "'"})
+	}
+
+	for _, dest := range route.SortedDestinations() {
+		resolved, ok := cfg.ResolveTarget(dest.Target)
+		if !ok || resolved.Hermes == nil {
+			continue
+		}
+		t := resolved.Hermes
+		record, rerr := hermeskanban.LoadCapabilityRecord(capabilityCachePath(dest.Target))
+		if snapErr == nil && snap.CapabilityFingerprint != "" {
+			digest, derr := hermeskanban.ExecutableDigest(t.Executable)
+			switch {
+			case derr != nil:
+				findings = append(findings, driftFinding{Class: "capability", Key: "digest:" + dest.Target + ":unverifiable",
+					Detail: "the executable identity could not be verified: " + derr.Error()})
+			case rerr != nil:
+				findings = append(findings, driftFinding{Class: "capability", Key: "evidence:" + dest.Target + ":missing",
+					Detail: "no capability evidence is cached; run 'agent-dispatch hermes probe --target " + dest.Target + "'"})
+			default:
+				if reason := record.StaleReasonForProfile(t.Executable, digest, "", dest.Profile); reason != "" {
+					findings = append(findings, driftFinding{Class: "capability", Key: "stale:" + dest.Target + ":" + dest.Profile,
+						Detail: reason})
+				}
+			}
+		}
+		if rerr == nil {
+			switch {
+			case record.Profile == dest.Profile:
+				for _, want := range dest.Skills {
+					if !containsString(record.EnabledSkillNames(), want) {
+						findings = append(findings, driftFinding{Class: "skill", Key: "skill:" + dest.ID + ":" + want,
+							Detail: fmt.Sprintf("destination %q requires skill %q that the cached profile evidence does not list as enabled", dest.ID, want)})
+						break
+					}
+				}
+			case record.Profile != "":
+				findings = append(findings, driftFinding{Class: "profile", Key: "profile:" + dest.ID + ":" + record.Profile + "!=" + dest.Profile,
+					Detail: fmt.Sprintf("cached evidence covers profile %q, destination %q uses %q; run 'agent-dispatch hermes capabilities --target %s --profile %s'", record.Profile, dest.ID, dest.Profile, dest.Target, dest.Profile)})
+			}
+		}
+		break // one certified destination pre-E12; E12 widens this
+	}
+	return findings
+}
+
 // routeDriftSummary reports the five OPS-013 drift classes per route —
 // capability, profile, skill, watchman, and reconciliation — as an
 // observational projection for the status command. Every check is
@@ -479,72 +567,12 @@ func boundedAlternatives(alts []string) []string {
 func routeDriftSummary(ctx context.Context, cfg *config.Config, store *sqlite.Store) []map[string]any {
 	out := []map[string]any{}
 	for _, routeID := range cfg.SortedRouteIDs() {
-		route := cfg.Routes[routeID]
 		entry := map[string]any{"route_id": routeID, "drift": map[string]any{}}
 		drift := entry["drift"].(map[string]any)
-
-		// The route state loads once per route: the reconciliation and
-		// capability classes read the same snapshot.
-		snap, snapErr := store.LoadRouteState(ctx, routeID)
-
-		// Reconciliation drift: a pending generation or a stale
-		// last-reconciled window.
-		if snapErr == nil && snap.PendingReconcile {
-			drift["reconciliation"] = "a reconciliation generation is pending"
-		}
-
-		// Watchman drift: the persisted managed binding's trigger
-		// differs from the configured one, or no binding exists while
-		// the route is enabled.
-		if binding, err := store.LoadWatchBinding(ctx, routeID); err == nil {
-			if binding.TriggerName != route.Source.TriggerName {
-				drift["watchman"] = fmt.Sprintf("persisted trigger %q differs from the configured %q", binding.TriggerName, route.Source.TriggerName)
+		for _, finding := range routeDriftFindings(ctx, cfg, store, routeID, cfg.Routes[routeID]) {
+			if _, present := drift[finding.Class]; !present {
+				drift[finding.Class] = finding.Detail
 			}
-		} else if errors.Is(err, sqlite.ErrWatchBindingNotFound) && route.Enabled {
-			drift["watchman"] = "no persisted Watchman binding; run 'agent-dispatch watchman install --route " + routeID + "'"
-		}
-
-		// Capability, profile, and skill drift against the cached probe
-		// evidence: observational, bounded, offline where the evidence
-		// is absent. The capability record loads once per destination,
-		// and the profile/skill classes read it only when its scope
-		// answers profile-scoped questions — an unscoped record (a bare
-		// `hermes probe`) cannot, and comparing against its inventory
-		// would fabricate drift.
-		for _, dest := range route.SortedDestinations() {
-			resolved, ok := cfg.ResolveTarget(dest.Target)
-			if !ok || resolved.Hermes == nil {
-				continue
-			}
-			t := resolved.Hermes
-			record, rerr := hermeskanban.LoadCapabilityRecord(capabilityCachePath(dest.Target))
-			if snapErr == nil && snap.CapabilityFingerprint != "" {
-				digest, derr := hermeskanban.ExecutableDigest(t.Executable)
-				switch {
-				case derr != nil:
-					drift["capability"] = "the executable identity could not be verified: " + derr.Error()
-				case rerr != nil:
-					drift["capability"] = "no capability evidence is cached; run 'agent-dispatch hermes probe --target " + dest.Target + "'"
-				default:
-					if reason := record.StaleReasonForProfile(t.Executable, digest, "", dest.Profile); reason != "" {
-						drift["capability"] = reason
-					}
-				}
-			}
-			if rerr == nil {
-				switch {
-				case record.Profile == dest.Profile:
-					for _, want := range dest.Skills {
-						if !containsString(record.EnabledSkillNames(), want) {
-							drift["skill"] = fmt.Sprintf("destination %q requires skill %q that the cached profile evidence does not list as enabled", dest.ID, want)
-							break
-						}
-					}
-				case record.Profile != "":
-					drift["profile"] = fmt.Sprintf("cached evidence covers profile %q, destination %q uses %q; run 'agent-dispatch hermes capabilities --target %s --profile %s'", record.Profile, dest.ID, dest.Profile, dest.Target, dest.Profile)
-				}
-			}
-			break // one certified destination pre-E12; E12 widens this
 		}
 		out = append(out, entry)
 	}

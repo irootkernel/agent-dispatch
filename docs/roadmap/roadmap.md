@@ -10,14 +10,14 @@
 
 | Field | Value |
 |---|---|
-| Shipped release | v0.1.4 |
+| Shipped release | v0.1.4 (v0.1.5 is the local release candidate, not pushed) |
 | Planned SOT baseline | 1.1.0 ([D-025](../specs/decision-log.md)) |
-| Release target | v0.1.5 |
-| Current epic | E13 In Progress |
+| Release target | v0.1.5 (local candidate complete) |
+| Current epic | E13 Completed (G9 evidenced); roadmap complete |
 | Current active task | None |
-| Next task | E13-T4 |
-| Completed tasks | 74 / 75 |
-| Planned tasks | 1 / 75 |
+| Next task | None (75/75) |
+| Completed tasks | 75 / 75 |
+| Planned tasks | 0 / 75 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -46,7 +46,7 @@
 | E10 | Source and Reconciliation Integrity | **Completed** | 3 | G6 |
 | E11 | Hermes Preflight and Operator Setup | **Completed** | 4 | G7 |
 | E12 | Multi-Destination Lifecycle | **Completed** | 4 | G8 |
-| E13 | Notifications and v0.1.5 Release | **In Progress** | 4 | G9 |
+| E13 | Notifications and v0.1.5 Release | **Completed** | 4 | G9 |
 
 ## 3. Task Status Index
 
@@ -126,7 +126,7 @@
 | 72 | E13-T1 | Completed | Notification event contract and transactional outbox |
 | 73 | E13-T2 | Completed | Webhook/log sinks, retry commands, and scheduling |
 | 74 | E13-T3 | Completed | Operator/worker skills and operational walkthrough |
-| 75 | E13-T4 | Planned | Documentation truth, release proof, and v0.1.5 |
+| 75 | E13-T4 | Completed | Documentation truth, release proof, and v0.1.5 |
 
 ---
 
@@ -3166,7 +3166,7 @@ condition it runs under.
 
 # E13: Notifications and v0.1.5 Release
 
-**Epic status:** In Progress
+**Epic status:** Completed
 **Purpose:** Complete operator-visible notification delivery, distributable skills, and release proof.
 **Gate:** G9
 
@@ -3350,7 +3350,7 @@ surface drifts from the frozen 0.19.1 flags. `make verify` green at SOT
 
 ## E13-T4: Documentation Truth, Release Proof, and v0.1.5
 
-**Status:** Planned
+**Status:** Completed
 **Design Gate impact:** Not required; this task is the release closeout.
 
 ### Objective
@@ -3383,7 +3383,22 @@ E13-T3 Completed.
 
 ### Evidence
 
-None — Planned.
+Completed 2026-08-30. The G6-G9 acceptance matrix is complete: the G9
+rows in VALIDATION.md carry their executable evidence (the E13-T1
+outbox suite, the E13-T2 sink and CLI suites, and the E13-T3 G9
+walkthrough), the G6-G8 rows stand as verified history, and the
+traceability matrix is regenerated at 75 tasks. Every status surface
+agrees at 75/75: README SOT 1.1.17 with the v0.1.5 local-candidate
+posture, VALIDATION with its G9 and release-proof sections, CHANGELOG
+1.1.17, the closed v0.1.5 release-checklist addendum, the v0.1.5
+release notes, and this roadmap. Two consecutive
+`make release VERSION=v0.1.5` builds from the release commit are
+byte-identical with `dist/SHA256SUMS` recording the artifact digest;
+the local `v0.1.5` tag names the final tree. No push, no hosted
+release, and no production activation occurred, and no Hermes source
+or private state was touched: the handoff is the local candidate with
+VALIDATION.md as its evidence, for the operator's own hermes-side
+verification before any publication.
 
 ---
 

@@ -1,0 +1,28 @@
+{
+  "schema": "aquarium.hardening-deferral-findings/v1",
+  "work_unit": {
+    "kind": "task",
+    "id": "E13-T4"
+  },
+  "target": {
+    "git_head": "eeb7158dde7910b6159b261dad404ac5ab217b39",
+    "capture_kind": "dirty",
+    "content_sha256": "sha256:f94997c08fd6bf5431a263b6f675e5f1fb779d0e0b4edab79784f354059d96ee"
+  },
+  "review": {
+    "coverage_status": "complete",
+    "ci_decision": "pass",
+    "publication_status": "committed",
+    "structured_extraction_status": "structured"
+  },
+  "findings": [
+    {
+      "id": "F001",
+      "severity": "low",
+      "disposition": "deferred-for-hardening",
+      "affected_paths": [
+        "internal/cli/g9_test.go"
+      ]
+    }
+  ]
+}

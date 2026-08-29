@@ -1,7 +1,7 @@
 # SOT Package Validation
 
-> **Validated:** 2026-08-29 (E12 delivers gate G8; implementation gate G9 remains Planned)
-> **Package target:** Agent Dispatch SOT 1.1.13 / implementation v0.1.5 (planned); v0.1.4 is shipped
+> **Validated:** 2026-08-30 (E13 delivers gate G9 and the v0.1.5 release proof; the roadmap is complete at 75/75)
+> **Package target:** Agent Dispatch SOT 1.1.17 / implementation v0.1.5 (local release candidate); v0.1.4 is the latest pushed release
 
 ## Completed Checks
 
@@ -48,10 +48,13 @@ All package checks are reachable from the repository root through the Makefile, 
 
 ## Checks Deferred to Implementation
 
-These checks cannot be completed by a design-only SOT package:
+Checks that could not be completed by the design-only SOT package are
+now delivered and evidenced below: gates G6 through G9 with AC-601
+through AC-605, AC-701 through AC-706, AC-801 through AC-806, and
+AC-901 through AC-906 (E10, E11, E12, E13), and the v0.1.5 executable
+config/record schemas, examples, packaged skills, database migrations,
+code, release notes, artifacts, and local tag. Still deferred:
 
-- gate G9 and AC-901 through AC-906; their task owner is E13 and no executable evidence is claimed for them yet (gates G6 through G8 with AC-601 through AC-605, AC-701 through AC-706, and AC-801 through AC-806 are delivered by E10, E11, and E12 and evidenced below);
-- the v0.1.5 executable config/record schemas, examples, packaged skills, database migrations, code, release notes, artifacts, and tag;
 
 - automated cross-reference/filename integrity and roadmap-prose consistency assertions for the docs package (currently covered by the manual checks above), deferred to a future internal task;
 - managed Watchman trigger lifecycle implementation and verification against the frozen fixture baseline, assigned to E2-T5;
@@ -279,6 +282,53 @@ environment-dependent evidence-gap message when no supported Hermes is
 installed or the create surface drifted from the frozen 0.19.1 flags;
 the gate's pass/fail never depends on it (every criterion is proven
 deterministically in this table).
+
+## Gate G9: Notifications and v0.1.5 Release (E13)
+
+Every notification criterion drives the real CLI surface over the
+deterministic stub Hermes with both sinks wired to a loopback HTTPS
+capture; the outbox's transactional and dedup semantics are the E13-T1
+store suite cited per criterion, and the isolated real-Hermes
+walkthrough is the skip-guarded TST-007 leg recorded below the table.
+
+| Criterion | Evidence |
+|---|---|
+| AC-901 configured default events create one notification intent per sink on each reportable transition | `TestE13T1CompletionCreatesPerSinkIntentsTransactionally` (work outcomes), `TestE13T1DeliveryUnknownQuarantineAndReconciliationTransitions` (unknown, quarantine, the pending-reconciliation appearance), and `TestE13T2SinkIsolationAndDriftEvaluation` (the drain's integration and Watchman drift evaluation); the default set itself is `TestE13T1EffectiveEventsDefaultWhenOmitted` |
+| AC-902 a repeated transition or aggregate rerun cannot create a second logical notification | `TestE13T1DedupCollapsesRepeatedTransitionEvaluation` — the five-component identity (event, optional destination, transition occurrence, sink, notification-policy revision) is the primary key, so the re-evaluated occurrence collapses; the drain's second pass adds no drift notification |
+| AC-903 webhook timeout or malformed response keeps attempts visible, reuses the stable idempotency key, and changes no dispatch or work state | `TestE13T2AmbiguousRetryKeepsStableKeyAndRefusedRetryRearms` — the stalled endpoint classifies ambiguous and stays pending, the recovered retry presents the identical header per notification, and `TestE13T1AttemptLifecycleNeverRewritesSourceState` proves the dispatch, lane, and receipt state byte-identical across outcomes |
+| AC-904 hostile paths, note contents, and resolved credentials never enter a payload or ordinary log | `TestE13T2PayloadAndLogsStaySecretFree` and the G9 walkthrough's payload scan — the projection is bounded and control-character-free at the enqueue boundary (`TestE13T1PayloadBoundsFailClosed`), the adapter redacts the secret and the endpoint URL from every diagnostic, and the CLI suite asserts no token or note body in any payload, attempt field, or ordinary output |
+| AC-905 the disposable two-destination walkthrough demonstrates detection through the completion receipt and the configured notification without touching production state or Hermes source | `TestG9AC905IsolatedTwoDestinationNotificationWalkthrough` — one vault change fans out to both lanes, both runs complete through the work-receipt surface, the drain delivers both completions to both sinks with the captured payloads proven safe, and `events show` closes the aggregate; the lifecycle walkthrough (`TestG9AC905FailureDiagnosisDisableRemovalRetryRollback`) covers failure diagnosis, the explicit notification retry, disable, managed-trigger removal with history preserved, and the quiesced rollback posture; the skills packaging (`TestG9SkillsVersionedValidatedAndInstallable`) pins the versioned guidance and the documented public install |
+| AC-906 the v0.1.5 candidate passes make verify and two release builds with reconciled gates, byte-identical darwin/arm64 artifacts, checksums, and versioned skills | `make verify` green (format, vet, staticcheck, import direction, unit and race, manifest, schema/example, traceability, schedule) at SOT 1.1.17; the G6-G9 rows above and in this file carry their executable evidence; two consecutive `make release VERSION=v0.1.5` builds from the release commit are byte-identical with `dist/SHA256SUMS` recording the artifact digests; both skills carry their versions in the manifest-covered package |
+
+Outbox durability and retention (cited, not duplicated): the
+transactional enqueue, attempt lifecycle, referential integrity, v16
+migration, and the resolved-only pruning of notification evidence are
+the E13-T1 store suite; the sink transport contracts (status
+classification, fail-closed construction, redaction, stable keys) are
+the notificationsink suite; the operator surface (probe creates
+nothing, list/retry/drain exits, sink isolation, defective-declaration
+isolation, drift evaluation) is the E13-T2 CLI suite.
+
+Isolated public-Hermes walkthrough (TST-007):
+`TestG9RealHermesNotificationWalkthrough` runs the two-destination loop
+against a real installed Hermes on a disposable hard-deleted-afterwards
+board with a real Watchman binding on the disposable vault, through
+the completion receipts to the delivered webhook notifications, and
+removes the managed trigger afterwards. It skips with the explicit
+environment-dependent evidence-gap message when no supported Hermes is
+installed or the create surface drifted from the frozen 0.19.1 flags;
+the gate's pass/fail never depends on it (every criterion is proven
+deterministically in this table).
+
+Release proof (TST-009/TST-014, D-025): the G0-G8 gates' rows above
+are unchanged history; G6 through G9 carry their executable evidence
+in this file. `make verify` (including the race suite) passed on
+darwin/arm64 on 2026-08-30; the two consecutive
+`make release VERSION=v0.1.5` builds from the release commit are
+byte-identical, `dist/SHA256SUMS` records the artifact digest, and the
+local `v0.1.5` tag names the final tree. No push, no hosted release,
+and no production activation is part of this release proof: the
+handoff is the local candidate with this file as its evidence.
 
 ## MUST-Closure Matrix (E8-T6, D-020) — supersedes the E7-T12 matrix
 

@@ -29,6 +29,12 @@ import (
 // g9NotificationFixture builds the shared two-destination fixture
 // with both notification sinks wired to the loopback capture endpoint
 // (the E13-T2 scaffolding, parameterized for the walkthrough's token).
+// homePathOf reports the test process HOME for the hostile-path scan.
+func homePathOf(t *testing.T) string {
+	t.Helper()
+	return os.Getenv("HOME")
+}
+
 func g9NotificationFixture(t *testing.T) (string, string, *e13t2WebhookFixture) {
 	t.Helper()
 	f := newNotificationWebhookFixture(t, "G9_NOTIFICATION_TOKEN", "g9-walkthrough-token", 2*time.Second)
@@ -104,6 +110,11 @@ func TestG9AC905IsolatedTwoDestinationNotificationWalkthrough(t *testing.T) {
 		}
 		if strings.Contains(payload, "ac-905 walkthrough note") || strings.Contains(payload, "g9-walkthrough-token") {
 			t.Fatalf("the notification must carry no note body or credential: %s", payload)
+		}
+		// The hostile-paths leg of AC-904: no absolute or vault path of
+		// the walkthrough environment enters the channel-neutral payload.
+		if strings.Contains(payload, vault) || strings.Contains(payload, configPath) || strings.Contains(payload, homePathOf(t)) {
+			t.Fatalf("the notification must carry no hostile path: %s", payload)
 		}
 	}
 	if completions != 2 {

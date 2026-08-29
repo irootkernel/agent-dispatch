@@ -85,14 +85,22 @@
 The checked items above are v0.1.4 release history. E13-T4 may check the items
 below only after G6 through G9 carry executable evidence:
 
-- [ ] Effective nested Watchman binding and complete managed-trigger removal.
-- [ ] Reconciliation fence and bounded-growing-file evidence.
-- [ ] Frozen real Hermes 0.19.1 plus installed newer-version probe evidence,
-      with no Hermes source/private-state modification.
-- [ ] Destination config/schema migration, multi-profile/workstream fan-out,
-      independent retry, and work-receipt/v2 evidence.
-- [ ] Notification outbox, webhook/log sinks, dedup, retry, and redaction.
-- [ ] Versioned operator and worker skills plus isolated operational walkthrough.
-- [ ] SOT/roadmap/VALIDATION/release-note truth synchronized at 75/75.
-- [ ] Two byte-identical darwin/arm64 builds and local v0.1.5 tag; no push or
-      production activation.
+- [x] Effective nested Watchman binding and complete managed-trigger removal
+      (E10-T2/E10-T3, G6 rows in VALIDATION.md).
+- [x] Reconciliation fence and bounded-growing-file evidence (E10-T1/E10-T3,
+      G6 rows in VALIDATION.md).
+- [x] Frozen real Hermes 0.19.1 plus installed newer-version probe evidence,
+      with no Hermes source/private-state modification (E11-T2, TST-012;
+      the G8/G9 real legs skip-guarded under TST-007).
+- [x] Destination config/schema migration, multi-profile/workstream fan-out,
+      independent retry, and work-receipt/v2 evidence (E11-T1, E12-T1..T4,
+      G7/G8 rows in VALIDATION.md).
+- [x] Notification outbox, webhook/log sinks, dedup, retry, and redaction
+      (E13-T1/E13-T2, G9 rows in VALIDATION.md).
+- [x] Versioned operator and worker skills plus isolated operational
+      walkthrough (E13-T3, operator 2.0.0 / worker 1.2.0).
+- [x] SOT/roadmap/VALIDATION/release-note truth synchronized at 75/75
+      (this release; SOT 1.1.17).
+- [x] Two byte-identical darwin/arm64 builds and local v0.1.5 tag; no push or
+      production activation (the E13-T4 release proof; the tag names the
+      final tree).

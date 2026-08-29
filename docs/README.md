@@ -1,8 +1,8 @@
 # Agent Dispatch Documentation
 
 > **Documentation profile:** Single delivery scope with an adopted legacy roadmap identity contract
-> **SOT version:** 1.1.16
-> **Implementation target:** Agent Dispatch v0.1.5 (approved plan); v0.1.4 remains the latest shipped release
+> **SOT version:** 1.1.17
+> **Implementation target:** Agent Dispatch v0.1.5 (local release candidate); v0.1.4 remains the latest pushed release
 > **Document status:** Approved planned baseline
 > **Language:** English
 
@@ -77,10 +77,13 @@ lifecycle, bounded completion evidence, durable notifications, and release
 proof. The feature-to-authority map is in [`specs/README.md`](specs/README.md),
 and the only execution/status authority is [`roadmap/roadmap.md`](roadmap/roadmap.md).
 
-Gates G6 through G9 have no executable evidence yet. Checked-in schemas,
-examples, packaged skills, runtime code, release notes, and artifacts continue
-to describe v0.1.4 until their owning roadmap tasks implement and verify the
-new contracts.
+Gates G6 through G9 carry their executable evidence: the G6 through G8
+rows live in [`VALIDATION.md`](VALIDATION.md) with their E10-E12 suites, and
+G9 (notifications and the release proof) closed with E13 on 2026-08-30 —
+the notification outbox, sinks, retry and drain surface, skills, and the
+two byte-identical `make release VERSION=v0.1.5` builds recorded there.
+v0.1.5 is the local release candidate; v0.1.4 remains the latest pushed
+release until the operator publishes the candidate.
 
 ## Repository-Native Checks
 

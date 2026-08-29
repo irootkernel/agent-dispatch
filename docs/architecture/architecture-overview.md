@@ -177,5 +177,8 @@ Watchman binding and resource fence before planning, an aggregate-event layer
 with independent destination lanes after planning, public-interface Hermes
 preflight before activation, and a notification outbox after state transitions.
 The full target diagram and invariants are in
-`multi-destination-operational-loop.md`. E10 through E13 own implementation;
-no G6-G9 behavior is claimed as delivered by this architecture update.
+`multi-destination-operational-loop.md`. E10 through E13 delivered the
+implementation: the G6-G9 gates carry their executable evidence in
+`docs/VALIDATION.md`, and the runtime now includes the aggregate-event
+layer, destination lanes, capability-driven preflight, and the
+transactional notification outbox this overview describes.

@@ -150,5 +150,7 @@ wiki`. The wizard writes only disabled v0.1.5 configuration and stops at the
 production gate. It may print public Hermes skill installation commands but
 does not modify Hermes or install a skill without a separate operator action.
 Legacy `dispatch` config is not accepted; regenerate it as `destinations[]`.
-The currently shipped installation commands remain authoritative for v0.1.4
-until G9 closes.
+The v0.1.5 installation and setup commands are shipped and evidenced
+(gate G9 closed 2026-08-30): `setup wiki`, `route preflight`, and the
+notification surface are current; the v0.1.4 commands remain valid
+history for the pushed v0.1.4 release.

@@ -1,5 +1,36 @@
 # SOT Changelog
 
+## 1.1.17 - 2026-08-30
+
+E13-T4: documentation truth, release proof, and the local v0.1.5
+candidate close the roadmap at 75/75:
+
+- VALIDATION.md gains its Gate G9 section — every AC-901 through
+  AC-906 criterion mapped to its executing test (the outbox
+  transactional/dedup/retention suite, the sink transport and CLI
+  suites, the G9 walkthrough and lifecycle coverage, and the skills
+  packaging proof) — plus the release-proof record: make verify green
+  on darwin/arm64, two byte-identical `make release VERSION=v0.1.5`
+  builds with SHA256SUMS, and the explicit no-push, no-production, no-
+  Hermes-change handoff;
+- the docs README baseline section records the now-evidenced G6-G9
+  gates and the v0.1.5 local-candidate posture; the release
+  checklist's v0.1.5 addendum closes all eight items against their
+  owning gates; RELEASE-NOTES-v0.1.5.md ships with the feature
+  summary, artifact record (the real darwin-arm64 artifact name), and
+  known state; and the roadmap records E13 Completed on the summary
+  row and the epic body with task 75/75, the final Current State
+  (75/75, no next task), and the local-tag handoff;
+- review round 1 hardening (nine findings, all verified valid and
+  fixed): VALIDATION's header, package-target line, and deferred list
+  stop declaring G9 Planned and SOT 1.1.13 beside the new evidence;
+  the release notes name the artifact the release target actually
+  produces and claim the candidate posture instead of post-publication
+  supersession; the architecture overview, the installation guide, and
+  the specs README drop their G9-pending qualifiers; and the AC-904
+  walkthrough leg asserts no absolute environment path enters a
+  notification payload beside the note-body and credential scans.
+
 ## 1.1.16 - 2026-08-30
 
 E13-T3: the operator and worker skills and the G9 operational

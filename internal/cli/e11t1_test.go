@@ -82,23 +82,9 @@ func TestE11T1EnableBlockedByUnresolvedLegacyWork(t *testing.T) {
 func TestE11T1MultiDestinationRouteExecutesLanes(t *testing.T) {
 	configPath, vault := e4t3Fixture(t)
 	setPlanEnv(t, vault, false)
-	raw, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	updated := string(raw)
-	start := strings.Index(updated, "    fanout_mode: all\n    destinations:\n")
-	end := strings.Index(updated, "\n    submission_retry:")
-	if start < 0 || end <= start {
-		t.Fatal("fixture no longer carries the single-destination block")
-	}
-	dest := "    fanout_mode: all\n    destinations:\n" +
-		"      - id: alpha\n        target: hermes-main\n        profile: wiki-maintainer\n        skills: [llm-wiki]\n        workstream: indexing\n        mutex_key: wiki-publish\n        execution_hints:\n          max_runtime: 30m\n          max_attempts: 2\n" +
-		"      - id: beta\n        target: hermes-main\n        profile: wiki-maintainer\n        skills: [llm-wiki]\n        workstream: review\n        execution_hints:\n          max_runtime: 30m\n          max_attempts: 2"
-	updated = updated[:start] + dest + updated[end:]
-	if err := os.WriteFile(configPath, []byte(updated), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	twoDestinationBlockFixture(t, configPath,
+		"      - id: alpha\n        target: hermes-main\n        profile: wiki-maintainer\n        skills: [llm-wiki]\n        workstream: indexing\n        mutex_key: wiki-publish\n        execution_hints:\n          max_runtime: 30m\n          max_attempts: 2\n"+
+			"      - id: beta\n        target: hermes-main\n        profile: wiki-maintainer\n        skills: [llm-wiki]\n        workstream: review\n        execution_hints:\n          max_runtime: 30m\n          max_attempts: 2")
 
 	cfg, err := config.Load(configPath)
 	if err != nil {

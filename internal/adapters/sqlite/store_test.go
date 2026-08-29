@@ -347,7 +347,9 @@ func TestDecisionRequiresExactlyOneLineage(t *testing.T) {
 	withBatch := base
 	withBatch.DecisionID = "decision-b1"
 	seedObservation(t, s)
-	if err := s.SaveBatch(nil, "batch-1", "wiki-maintenance", "route-rev-1", "vault-main", now(), "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", []string{"0192e6c6-4d7f-7abc-8def-012345678901"}); err != nil {
+	if err := s.SaveBatch(nil, BatchRecord{BatchID: "batch-1", RouteID: "wiki-maintenance", RouteRevision: "route-rev-1",
+		ResourceID: "vault-main", CreatedAt: now(), ContentFingerprint: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		ObservationIDs: []string{"0192e6c6-4d7f-7abc-8def-012345678901"}}); err != nil {
 		t.Fatalf("save batch: %v", err)
 	}
 	withBatch.BatchID = "batch-1"
@@ -421,7 +423,9 @@ func seedObservation(t *testing.T, s *Store) {
 func seedIntentChain(t *testing.T, s *Store, dispatchID string) {
 	t.Helper()
 	seedObservation(t, s)
-	if err := s.SaveBatch(nil, "batch-1", "wiki-maintenance", "route-rev-1", "vault-main", now(), "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", []string{"0192e6c6-4d7f-7abc-8def-012345678901"}); err != nil {
+	if err := s.SaveBatch(nil, BatchRecord{BatchID: "batch-1", RouteID: "wiki-maintenance", RouteRevision: "route-rev-1",
+		ResourceID: "vault-main", CreatedAt: now(), ContentFingerprint: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		ObservationIDs: []string{"0192e6c6-4d7f-7abc-8def-012345678901"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SaveDecision(nil, DecisionRecord{DecisionID: "decision-1", BatchID: "batch-1", RouteID: "wiki-maintenance",
@@ -452,7 +456,9 @@ var now = func() string { return "2026-08-20T00:00:00Z" }
 func TestIntentReservationAtomicInTransaction(t *testing.T) {
 	s := openTestStore(t)
 	seedObservation(t, s)
-	if err := s.SaveBatch(nil, "batch-1", "wiki-maintenance", "route-rev-1", "vault-main", now(), "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", []string{"0192e6c6-4d7f-7abc-8def-012345678901"}); err != nil {
+	if err := s.SaveBatch(nil, BatchRecord{BatchID: "batch-1", RouteID: "wiki-maintenance", RouteRevision: "route-rev-1",
+		ResourceID: "vault-main", CreatedAt: now(), ContentFingerprint: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		ObservationIDs: []string{"0192e6c6-4d7f-7abc-8def-012345678901"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SaveDecision(nil, DecisionRecord{DecisionID: "decision-1", BatchID: "batch-1", RouteID: "wiki-maintenance", RouteRevision: "route-rev-1", PolicyRevision: "policy-rev-1", Disposition: "dispatch", Classification: "normal", CreatedAt: now(), Actor: "system"}); err != nil {
@@ -682,7 +688,9 @@ func TestSourceEventKeyUniquePerSource(t *testing.T) {
 func seedIntentChainWithoutRouteState(t *testing.T, s *Store) {
 	t.Helper()
 	seedObservation(t, s)
-	if err := s.SaveBatch(nil, "batch-1", "wiki-maintenance", "route-rev-1", "vault-main", now(), "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", []string{"0192e6c6-4d7f-7abc-8def-012345678901"}); err != nil {
+	if err := s.SaveBatch(nil, BatchRecord{BatchID: "batch-1", RouteID: "wiki-maintenance", RouteRevision: "route-rev-1",
+		ResourceID: "vault-main", CreatedAt: now(), ContentFingerprint: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		ObservationIDs: []string{"0192e6c6-4d7f-7abc-8def-012345678901"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SaveDecision(nil, DecisionRecord{DecisionID: "decision-1", BatchID: "batch-1", RouteID: "wiki-maintenance", RouteRevision: "route-rev-1", PolicyRevision: "policy-rev-1", Disposition: "dispatch", Classification: "normal", CreatedAt: now(), Actor: "system"}); err != nil {
@@ -1135,7 +1143,7 @@ func TestCommitMergePendingIdleEmptySlotRecordsPendingReconcile(t *testing.T) {
 	// openTestStore seeds the route with an IDLE, empty-slot runtime row.
 	s := openTestStore(t)
 	lin := mergeLineage("batch-idle", "decision-idle", now())
-	dirty, err := s.CommitMergePending(context.Background(), lin, nil, "watchman", now())
+	dirty, err := s.CommitMergePending(context.Background(), lin, nil, nil, "watchman", now())
 	if err != nil {
 		t.Fatalf("idle empty-slot merge: %v", err)
 	}

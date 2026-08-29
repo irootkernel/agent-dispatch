@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/state"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
@@ -148,6 +149,9 @@ func TestE12T3PartialAndBlockedReceiptsPersist(t *testing.T) {
 					DestinationID: "wiki-primary", DestinationRevision: e12t1Revision,
 					Workstream: "maintenance", Reason: "followup:dispatch-v2outcomes",
 				}},
+				Revisions: []ports.DestinationRevisionInput{{
+					DestinationID: "wiki-primary", Revision: e12t1Revision, ProjectionJSON: e12t1Projection,
+				}},
 			},
 		},
 	}); err != nil {
@@ -273,5 +277,73 @@ func TestE12T3AggregateChildrenAndLaneRows(t *testing.T) {
 	lanes, err := s.ListRouteLanes(ctx, "wiki-maintenance")
 	if err != nil || len(lanes) != 1 || lanes[0].DestinationID != "wiki-primary" || lanes[0].DirtyGeneration != 2 {
 		t.Fatalf("the lane summary must read the coordination row: %+v %v", lanes, err)
+	}
+}
+
+// TestEpicValidationLaneAggregationPrecedence pins the aggregation
+// precedence (E12 epic validation, testing gap): an ACTIVE lane wins
+// over a FOLLOWUP_READY sibling, the reported active dispatch is the
+// first holder in destination order, and ListRoutes agrees with
+// LoadRouteState exactly.
+func TestEpicValidationLaneAggregationPrecedence(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	// Two lanes: primary ACTIVE_CLEAN holding work, secondary
+	// FOLLOWUP_READY holding a reservation.
+	if err := s.CommitLineage(ctx, e12t2LaneLineage("dispatch-agg-a", "decision-agg-a", "batch-agg-a", "wiki-primary")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ActivateDispatch(ctx, "dispatch-agg-a", "test", "2026-08-29T01:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	second := e12t2LaneLineage("dispatch-agg-b", "decision-agg-b", "batch-agg-b", "wiki-secondary")
+	if err := s.CommitLineage(ctx, second); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ActivateDispatch(ctx, "dispatch-agg-b", "test", "2026-08-29T01:00:30Z"); err != nil {
+		t.Fatal(err)
+	}
+	// Bring the secondary to FOLLOWUP_READY through its own completion.
+	if _, err := s.CompleteActive(ctx, ports.ActiveCompletion{
+		RouteID: "wiki-maintenance", DispatchID: "dispatch-agg-b",
+		ReceiptRef: "rcpt-agg-b", Actor: "test", Now: "2026-08-29T01:01:00Z",
+		FollowupRequest: &ports.IntentInput{
+			DispatchID: "dispatch-agg-b-followup", DecisionID: "dec-agg-b-followup", RouteID: "wiki-maintenance",
+			RouteRevision: "route-rev-1", TargetID: "hermes-kanban-main", TargetType: "hermes_kanban",
+			TargetScope: "board-main", ResourceID: "vault-main", Generation: 2,
+			IdempotencyKey:     "agent-dispatch:v2:sha256:" + repeat("e", 64),
+			ContentFingerprint: "sha256:" + repeat("c", 64), ManifestDigest: "sha256:" + repeat("f", 64),
+			RequestVersion: "agent-dispatch.hermes-task/v1", RequestJSON: "{}",
+			CreatedAt: "2026-08-29T01:01:00Z",
+			Fanout: &ports.FanoutInput{
+				AggregateID: "agg-agg-b-followup", Origin: "followup",
+				DestinationID: "wiki-secondary", DestinationRevision: e12t2LaneRevision("wiki-secondary"), Workstream: "ws-wiki-secondary",
+				Selections: []records.DestinationSelection{{
+					DestinationID: "wiki-secondary", DestinationRevision: e12t2LaneRevision("wiki-secondary"),
+					Workstream: "ws-wiki-secondary", Reason: "followup:dispatch-agg-b",
+				}},
+				Revisions: []ports.DestinationRevisionInput{{
+					DestinationID: "wiki-secondary", Revision: e12t2LaneRevision("wiki-secondary"), ProjectionJSON: e12t2LaneProjection("wiki-secondary"),
+				}},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("complete the secondary lane: %v", err)
+	}
+	// ACTIVE beats FOLLOWUP_READY in the aggregated snapshot.
+	snap, err := s.LoadRouteState(ctx, "wiki-maintenance")
+	if err != nil || snap.State != state.RouteActiveClean {
+		t.Fatalf("an ACTIVE lane must dominate a FOLLOWUP_READY sibling: %s %v", snap.State, err)
+	}
+	if snap.ActiveDispatchID != "dispatch-agg-a" {
+		t.Fatalf("the first holder in destination order must win: %q", snap.ActiveDispatchID)
+	}
+	// ListRoutes agrees with LoadRouteState exactly.
+	rows, err := s.ListRoutes(ctx)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("one route row: %v", rows)
+	}
+	if rows[0].RouteState != string(snap.State) || rows[0].ActiveDispatchID != snap.ActiveDispatchID || rows[0].DirtyGeneration != snap.DirtyGeneration {
+		t.Fatalf("ListRoutes must agree with LoadRouteState: %+v vs %+v", rows[0], snap)
 	}
 }

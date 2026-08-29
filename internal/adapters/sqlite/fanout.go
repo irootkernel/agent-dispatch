@@ -84,11 +84,39 @@ func (s *Store) saveFanoutTx(tx *sql.Tx, i IntentRecord) error {
 		}
 	}
 	for _, rev := range f.Revisions {
+		// Store-boundary verification (E12 epic validation, DAT-010): a
+		// destination-revision record is content-addressed — the revision
+		// must equal the canonical derivation "dst-"+hex(sha256(projection
+		// bytes)) in records.RevisionOfProjection, the SAME function the
+		// config-level computation uses (E12 epic whole-review round 1). A
+		// mismatch is a producer defect, and persisting it would plant a row
+		// whose revision can never be re-derived from its bytes: reject as a
+		// NON-RETRYABLE validation failure (E12 epic whole-review round 2) —
+		// the data is wrong, not racy, so the operator fixes the input
+		// instead of retrying.
+		if want := records.RevisionOfProjection(rev.ProjectionJSON); rev.Revision != want {
+			return fmt.Errorf("destination %q revision %q is not the content address of its projection bytes (validation failure, want %s): %w",
+				rev.DestinationID, rev.Revision, want, ports.ErrInvalidFanoutRecord)
+		}
 		if _, err := execOn(tx, s.DB, `INSERT INTO destination_revisions (route_id, destination_id, revision, projection_json, created_at)
 			VALUES (?,?,?,?,?) ON CONFLICT (route_id, destination_id, revision) DO NOTHING`,
 			i.RouteID, rev.DestinationID, rev.Revision, rev.ProjectionJSON, i.CreatedAt); err != nil {
 			return err
 		}
+	}
+	// The child's destination revision must be a row that exists (E12 epic
+	// validation): inserted in THIS transaction's revisions above or
+	// persisted previously — a dangling reference would make the stored
+	// child unverifiable forever after. Derived work (follow-ups, reruns,
+	// rebuilds) references revisions earlier arrivals persisted and omits
+	// them from Revisions, so the row must already exist for those. Like
+	// the content-address check this is a validation failure, never a
+	// retryable conflict (E12 epic whole-review round 2).
+	var revisionRow int
+	if err := txOrDB(tx, s.DB).QueryRow(`SELECT 1 FROM destination_revisions WHERE route_id = ? AND destination_id = ? AND revision = ?`,
+		i.RouteID, f.DestinationID, f.DestinationRevision).Scan(&revisionRow); err != nil {
+		return fmt.Errorf("child %s references destination %q revision %q with no durable record (persist the referenced revision beside the fanout; validation failure): %w",
+			i.DispatchID, f.DestinationID, f.DestinationRevision, ports.ErrInvalidFanoutRecord)
 	}
 	if _, err := execOn(tx, s.DB, `INSERT INTO child_dispatches
 		(child_id, aggregate_id, dispatch_id, route_id, destination_id, destination_revision, workstream, idempotency_key, schema_version, created_at)
@@ -173,6 +201,13 @@ func (s *Store) LoadChildDispatch(ctx context.Context, dispatchID string) (Child
 // aggregate event (E12-T3, CLI-013/DAT-011): the destination lane, the
 // intent's submit state, the latest acceptance and execution-projection
 // receipts, and the latest work receipt with its validity.
+//
+// Read-model convention (E12 epic validation, recorded as settled): this
+// struct is a PLAIN ROW PROJECTION — every member is a durable column
+// value (WorkReceiptValid is the row's validation_state, a stored fact,
+// never a presentation decision), and the CLI's events.go owns all
+// projection semantics (completion_evidence, aggregate_status, JSON
+// shapes). No presentation JSON is serialized in the store read models.
 type AggregateChildRow struct {
 	DispatchID          string
 	DestinationID       string

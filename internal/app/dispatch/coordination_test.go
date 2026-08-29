@@ -44,6 +44,18 @@ func openCoordStore(t *testing.T) *sqlite.Store {
 	return s
 }
 
+// testLaneProjection/testLaneRevision are a real content-addressed pair
+// for the wiki-primary test lane (E12 epic validation: the store verifies
+// every persisted destination revision is the content address of its
+// projection bytes and that child references have durable rows, so test
+// fixtures carry honest pairs instead of synthetic strings).
+const testLaneProjection = `{"id":"wiki-primary","workstream":"maintenance","test":true}`
+
+// testLaneRevision derives through the ONE canonical derivation
+// (records.RevisionOfProjection, E12 epic whole-review round 1) — the same
+// function the store boundary verifies against.
+var testLaneRevision = records.RevisionOfProjection(testLaneProjection)
+
 // coordLineage builds one arriving lineage with unique batch identity.
 func coordLineage(t *testing.T, n int, disposition string) ports.Lineage {
 	t.Helper()
@@ -76,7 +88,7 @@ func intentForN(t *testing.T, n int) ports.IntentInput {
 		Route:      ports.TaskRouteRef{ID: "wiki", Revision: "route-rev-1"},
 		Resource:   ports.TaskResource{ID: "vault-main", Workspace: "dir:/srv/vault"},
 		TargetID:   "hermes-kanban-main", Generation: 1,
-		Destination: ports.TaskDestinationRef{ID: "wiki-primary", Revision: "dst-rev-1", Workstream: "maintenance"},
+		Destination: ports.TaskDestinationRef{ID: "wiki-primary", Revision: testLaneRevision, Workstream: "maintenance"},
 		Fingerprint: records.Digest(fmt.Sprintf("sha256:%064d", n)),
 		Changes: []records.ChangeItem{{
 			Path: fmt.Sprintf("Inbox/n%d.md", n), Operation: records.OpCreate, FileType: records.FileRegular,
@@ -100,9 +112,12 @@ func intentForN(t *testing.T, n int) ports.IntentInput {
 		RequestJSON: requestJSON, CreatedAt: "2026-08-20T01:00:00Z",
 		Fanout: &ports.FanoutInput{
 			AggregateID: fmt.Sprintf("agg-%d", n), Origin: string(records.OriginArrival),
-			DestinationID: "wiki-primary", DestinationRevision: "dst-rev-1", Workstream: "maintenance",
+			DestinationID: "wiki-primary", DestinationRevision: testLaneRevision, Workstream: "maintenance",
 			Selections: []records.DestinationSelection{{
-				DestinationID: "wiki-primary", DestinationRevision: "dst-rev-1", Workstream: "maintenance", Reason: "fanout_mode:all",
+				DestinationID: "wiki-primary", DestinationRevision: testLaneRevision, Workstream: "maintenance", Reason: "fanout_mode:all",
+			}},
+			Revisions: []ports.DestinationRevisionInput{{
+				DestinationID: "wiki-primary", Revision: testLaneRevision, ProjectionJSON: testLaneProjection,
 			}},
 		},
 	}
@@ -110,6 +125,58 @@ func intentForN(t *testing.T, n int) ports.IntentInput {
 
 func newCoordinator(s *sqlite.Store) *Coordinator {
 	return &Coordinator{Store: s, Now: func() string { return "2026-08-20T01:00:00Z" }, Actor: "coordinator"}
+}
+
+// TestArrivalFanoutKeepsTypedFailureForNonLaneIsolatedClasses pins the
+// round-3 residual: a fan-out where one lane MERGES while another hits
+// the invalid-record store-boundary validation still returns overall
+// success (the merge is durable) but keeps the LIVE typed error on the
+// failed lane — the bounded text alone could never classify the
+// configuration-broken-for-every-lane case the CLI must fail at exit 3.
+func TestArrivalFanoutKeepsTypedFailureForNonLaneIsolatedClasses(t *testing.T) {
+	s := openCoordStore(t)
+	ctx := context.Background()
+	// The held lane: wiki-primary holds active work, so the occurrence's
+	// first lineage merges.
+	held := coordLineage(t, 1, "dispatch")
+	if err := s.CommitLineage(ctx, held); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ActivateDispatch(ctx, held.Intent.DispatchID, "test", "2026-08-20T01:00:01Z"); err != nil {
+		t.Fatal(err)
+	}
+	// The sibling lineage shares the occurrence's decision (the first
+	// committer persists the shared prefix) and carries a revision pair
+	// that is NOT the content address of its projection bytes — the
+	// store-boundary validation rejects the child commit with
+	// ErrInvalidFanoutRecord.
+	first := coordLineage(t, 3, "dispatch")
+	bad := coordLineage(t, 2, "dispatch")
+	bad.Decision = first.Decision
+	bad.Intent.DecisionID = first.Decision.DecisionID
+	bad.Intent.Fanout.AggregateID = first.Intent.Fanout.AggregateID
+	bad.Intent.Fanout.DestinationID = "wiki-secondary"
+	bad.Intent.Fanout.DestinationRevision = "dst-not-the-content-address"
+	bad.Intent.Fanout.Selections = []records.DestinationSelection{{
+		DestinationID: "wiki-secondary", DestinationRevision: "dst-not-the-content-address",
+		Workstream: "maintenance", Reason: "fanout_mode:all",
+	}}
+	bad.Intent.Fanout.Revisions = []ports.DestinationRevisionInput{{
+		DestinationID: "wiki-secondary", Revision: "dst-not-the-content-address", ProjectionJSON: `{"id":"wiki-secondary"}`,
+	}}
+	outcome, err := newCoordinator(s).ArrivalFanout(ctx, []ports.Lineage{first, bad})
+	if err != nil {
+		t.Fatalf("the durable merge keeps the occurrence overall-successful: %v", err)
+	}
+	if len(outcome.Merged) != 1 || outcome.Merged[0].DestinationID != "wiki-primary" {
+		t.Fatalf("the held lane must merge: %+v", outcome)
+	}
+	if len(outcome.Failed) != 1 || outcome.Failed[0].DestinationID != "wiki-secondary" {
+		t.Fatalf("the invalid sibling must fail beside the merge: %+v", outcome)
+	}
+	if !errors.Is(outcome.Failed[0].Err, ports.ErrInvalidFanoutRecord) {
+		t.Fatalf("the failed lane keeps the LIVE typed error for command-level classification: %+v", outcome.Failed[0])
+	}
 }
 
 // TestConcurrentArrivalsCreateOneActiveDispatch proves simultaneous

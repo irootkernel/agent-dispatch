@@ -246,12 +246,15 @@ func routeTargetResolver(cfg *config.Config) func(routeID string) (string, strin
 // destination (FAN-012); a rerun or rebuild whose own lane is recoverable
 // never consults it.
 func routeDestinationResolver(cfg *config.Config) dispatch.DestinationLaneResolver {
-	return func(routeID string) (ports.TaskDestinationRef, string, bool) {
+	return func(routeID string) (ports.TaskDestinationRef, string, bool, string) {
 		lane, projection, err := firstCertifiedLane(cfg, routeID)
 		if err != nil {
-			return ports.TaskDestinationRef{}, "", false
+			// The bounded underlying cause rides the failure (E12 epic
+			// validation): the fail-closed error downstream names WHY the
+			// lane did not resolve, never a bare refusal.
+			return ports.TaskDestinationRef{}, "", false, err.Error()
 		}
-		return lane, projection, true
+		return lane, projection, true, ""
 	}
 }
 

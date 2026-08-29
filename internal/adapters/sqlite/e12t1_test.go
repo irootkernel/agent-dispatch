@@ -2,8 +2,6 @@ package sqlite
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -170,10 +168,10 @@ func TestE12T1ArrivalCreatesAggregateChildAndDestinationRevision(t *testing.T) {
 		t.Fatalf("destination revision must persist: %v", err)
 	}
 	// Self-verifying record (DAT-010/CON-010 posture): the stored bytes
-	// hash to the stored revision, exactly as the config-level pair
+	// address to the stored revision through the ONE canonical derivation
+	// (records.RevisionOfProjection), exactly as the config-level pair
 	// produced them.
-	sum := sha256.Sum256([]byte(projection))
-	if want := "dst-" + hex.EncodeToString(sum[:]); want != e12t1Revision {
+	if want := records.RevisionOfProjection(projection); want != e12t1Revision {
 		t.Fatalf("stored projection must address the stored revision: %s vs %s", want, e12t1Revision)
 	}
 	// The intent snapshot surfaces the child linkage (FAN-010 posture).
@@ -234,7 +232,7 @@ func TestE12T1FollowupCreatesNewAggregateAndChildPreservingLane(t *testing.T) {
 	// parent's destination lane (lane-keyed since E12-T2).
 	burst := lineage("dispatch-burst", "agent-dispatch:v2:sha256:"+repeat("f", 64))
 	burst.Decision.Disposition = "merge_pending"
-	if _, err := s.CommitMergePending(context.Background(), burst, []string{"wiki-primary"}, "test", "2026-08-29T02:00:00Z"); err != nil {
+	if _, err := s.CommitMergePending(context.Background(), burst, []string{"wiki-primary"}, []string{"wiki-primary"}, "test", "2026-08-29T02:00:00Z"); err != nil {
 		t.Fatal(err)
 	}
 	followupInput := ports.IntentInput{
@@ -313,9 +311,14 @@ func TestE12T1SelectionSummaryCanonicalOrder(t *testing.T) {
 	}
 }
 
-// e12t1EditedRevision is a second, distinct revision for the same
-// destination (the behavior-edit shape).
-const e12t1EditedRevision = "dst-0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f"
+// e12t1EditedProjection/e12t1EditedRevision are a second, distinct,
+// real content-addressed pair for the same destination (the behavior-edit
+// shape; E12 epic validation: the store verifies every persisted revision
+// is the content address of its bytes through the canonical
+// records.RevisionOfProjection).
+const e12t1EditedProjection = `{"id":"wiki-primary","target":"hermes-kanban-main","workstream":"edited"}`
+
+var e12t1EditedRevision = records.RevisionOfProjection(e12t1EditedProjection)
 
 // TestE12T1DestinationRevisionInsertIsIdempotent proves the
 // destination-revision record is content-addressed: re-referencing an
@@ -347,6 +350,7 @@ func TestE12T1DestinationRevisionInsertIsIdempotent(t *testing.T) {
 	third.Intent.Fanout.DestinationRevision = e12t1EditedRevision
 	third.Intent.Fanout.Selections[0].DestinationRevision = e12t1EditedRevision
 	third.Intent.Fanout.Revisions[0].Revision = e12t1EditedRevision
+	third.Intent.Fanout.Revisions[0].ProjectionJSON = e12t1EditedProjection
 	if err := s.CommitLineage(context.Background(), third); err != nil {
 		t.Fatalf("arrival under the edited revision: %v", err)
 	}

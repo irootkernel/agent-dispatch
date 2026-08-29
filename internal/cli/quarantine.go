@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -228,14 +229,50 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 		ResourceID: artifacts.resourceID, FileScope: artifacts.fileScope,
 		RouteRevision: artifacts.revision, PolicyRevision: policyRev,
 		MaxHash: artifacts.maxHash, Now: time.Now,
-		IntentBuilder: artifacts.reconcileIntentBuilder(),
+		// The builder commits the reconcile fan-out's sibling children
+		// DURABLY FIRST through the app-layer loop (E12 epic whole-review
+		// round 1): CLI wiring, app-layer policy.
+		IntentBuilder: artifacts.reconcileIntentBuilder(closer),
 	}
 	result, err := service.Run(requestCtx(), routeID, reason)
 	if err != nil {
-		return reconcileErr(stderr, command, err)
+		return reconcileErrWithSiblings(stderr, command, err, artifacts)
+	}
+	// The reconcile fan-out's sibling outcomes (committed inside the
+	// builder, before the first lane's transaction): a slot-held skip is a
+	// warning on stderr and in the envelope; a non-slot-held failure keeps
+	// nothing silent — the reconcile still delivers its first lane, but the
+	// occurrence is not fully durable and the command exits non-zero (E12
+	// epic whole-review round 1).
+	laneEntries, laneWarnings, laneFailure := artifacts.reconcileLaneOutcomes()
+	for _, warning := range laneWarnings {
+		fmt.Fprintf(stderr, "warning: %s\n", warning)
+	}
+	// siblingFailureOverlay writes the stable error line for a failed
+	// sibling commit and returns the mapped non-zero exit (the doctor
+	// posture: the result envelope ships on stdout, ok:false rides stderr).
+	siblingFailureOverlay := func() int {
+		if laneFailure == nil {
+			return 0
+		}
+		code, category, exit := classifyReconcileError(laneFailure.Err)
+		writeError(stderr, command, code, category,
+			fmt.Sprintf("the reconcile fan-out sibling on destination lane %s did not commit its child: %s",
+				laneFailure.DestinationID, dispatch.BoundLaneError(laneFailure.Err.Error())))
+		return exit
 	}
 	if !submit {
-		return writeEnvelope(stdout, command, result)
+		// The result renders exactly as before when no siblings exist (the
+		// single-lane shape); the fan-out adds the per-lane listing beside
+		// the result's own members, never rewrapping them.
+		merged, merr := flatResultWithLanes(result, laneEntries)
+		if merr != nil {
+			return planErr(stderr, command, "internal_unclassified", "internal", merr.Error(), 40)
+		}
+		if code := writeEnvelopeWithWarnings(stdout, command, merged, laneWarnings); code != 0 {
+			return code
+		}
+		return siblingFailureOverlay()
 	}
 	// --submit drives the scheduled delivery path (OPS-007): the
 	// reconciliation's own intent when one was created, then the route's
@@ -265,17 +302,34 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 		writeError(stderr, command, "sqlite_query_failed", "storage", rsErr.Error())
 		return 20
 	} else if rs.ActivationState != "enabled" {
-		warnings := []string{fmt.Sprintf("--submit skipped: route %s activation state is %q, not enabled", routeID, rs.ActivationState)}
-		return writeEnvelopeWithWarnings(stdout, command, result, warnings)
+		warnings := append([]string{fmt.Sprintf("--submit skipped: route %s activation state is %q, not enabled", routeID, rs.ActivationState)}, laneWarnings...)
+		merged, merr := flatResultWithLanes(result, laneEntries)
+		if merr != nil {
+			return planErr(stderr, command, "internal_unclassified", "internal", merr.Error(), 40)
+		}
+		if code := writeEnvelopeWithWarnings(stdout, command, merged, warnings); code != 0 {
+			return code
+		}
+		return siblingFailureOverlay()
 	}
 	// The YAML-key half of the two-key gate (E7-T6/M-2, epic audit
 	// round 1): the scheduled path refuses automatic submission while
 	// the configuration key is off, exactly like drain and dispatch.
 	if route, ok := artifacts.cfg.Routes[routeID]; ok && !route.Enabled {
-		warnings := []string{fmt.Sprintf("--submit skipped: route %q is disabled in configuration (routes.%s.enabled: false); nothing was submitted", routeID, routeID)}
-		return writeEnvelopeWithWarnings(stdout, command, result, warnings)
+		warnings := append([]string{fmt.Sprintf("--submit skipped: route %q is disabled in configuration (routes.%s.enabled: false); nothing was submitted", routeID, routeID)}, laneWarnings...)
+		merged, merr := flatResultWithLanes(result, laneEntries)
+		if merr != nil {
+			return planErr(stderr, command, "internal_unclassified", "internal", merr.Error(), 40)
+		}
+		if code := writeEnvelopeWithWarnings(stdout, command, merged, warnings); code != 0 {
+			return code
+		}
+		return siblingFailureOverlay()
 	}
 	envelope := map[string]any{"result": result, "submitted": false}
+	if len(laneEntries) > 0 {
+		envelope["reconcile_lanes"] = laneEntries
+	}
 	if result.ReconcileDispatch != "" {
 		report, err := rt.SubmitOnce(requestCtx(), result.ReconcileDispatch, "agent-dispatch-reconcile")
 		if err != nil {
@@ -295,32 +349,102 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 		return intentErr(stderr, command, err)
 	}
 	envelope["drained"] = map[string]any{"processed": drained.Processed, "skipped": drained.Skipped}
-	return writeEnvelope(stdout, command, envelope)
+	if code := writeEnvelopeWithWarnings(stdout, command, envelope, laneWarnings); code != 0 {
+		return code
+	}
+	return siblingFailureOverlay()
 }
 
-// reconcileErr maps one full-reconciliation failure onto the stable exit
-// codes (error-model): every lost-race arm — the eligibility refusal, a
-// generation/pending fence conflict, or a slot held by the resolution's
-// own reservation — is a state conflict (14); typed store failures are
-// storage (20); anything else from the service (enumeration, bugs) is
-// an internal-class defect, never a silent storage relabel.
-func reconcileErr(stderr io.Writer, command string, err error) int {
+// flatResultWithLanes renders the reconcile result envelope the no-submit
+// and skipped-submit paths always used — the FullResult's own members at
+// the TOP level (e9t4/e5t4 pin that shape) — with the sibling lane
+// listing merged in BESIDE them when one exists (E12 epic whole-review
+// round 1), never rewrapping the result.
+func flatResultWithLanes(result reconcile.FullResult, laneEntries []map[string]any) (map[string]any, error) {
+	if len(laneEntries) == 0 {
+		raw, err := json.Marshal(result)
+		if err != nil {
+			return nil, err
+		}
+		merged := map[string]any{}
+		if err := json.Unmarshal(raw, &merged); err != nil {
+			return nil, err
+		}
+		return merged, nil
+	}
+	raw, err := json.Marshal(result)
+	if err != nil {
+		return nil, err
+	}
+	merged := map[string]any{"reconcile_lanes": laneEntries}
+	if err := json.Unmarshal(raw, &merged); err != nil {
+		return nil, err
+	}
+	return merged, nil
+}
+
+// classifyReconcileError maps one reconciliation-path failure onto the
+// stable envelope classes and exit codes (error-model): every lost-race
+// arm — the eligibility refusal, a generation/pending fence conflict, or a
+// slot held by the resolution's own reservation — is a state conflict
+// (14); an invalid fanout record is a NON-RETRYABLE validation failure of
+// the invalid-configuration family (3 — the data is wrong, not racy, E12
+// epic whole-review round 2); typed store failures are storage (20);
+// anything else from the service (enumeration, bugs) is an internal-class
+// defect, never a silent storage relabel. The sibling exit-code policy
+// routes through the same classes (E12 epic whole-review round 1).
+func classifyReconcileError(err error) (code, category string, exit int) {
 	switch {
 	case errors.Is(err, ports.ErrStateNotEligible),
 		errors.Is(err, ports.ErrGenerationConflict),
 		errors.Is(err, ports.ErrRouteSlotHeld),
 		errors.Is(err, ports.ErrIdempotencyConflict):
-		writeError(stderr, command, "transition_invalid", "conflict", err.Error())
-		return 14
+		return "transition_invalid", "conflict", 14
+	case errors.Is(err, ports.ErrInvalidFanoutRecord):
+		return "config_invalid", "configuration", 3
 	default:
 		var storeErr *ports.StoreError
 		if errors.As(err, &storeErr) {
-			writeError(stderr, command, "sqlite_query_failed", "storage", storeErr.Err.Error())
-			return 20
+			return "sqlite_query_failed", "storage", 20
 		}
-		writeError(stderr, command, "internal_unclassified", "internal", err.Error())
-		return 40
+		return "internal_unclassified", "internal", 40
 	}
+}
+
+// reconcileErr writes the classified error envelope and returns its exit.
+func reconcileErr(stderr io.Writer, command string, err error) int {
+	code, category, exit := classifyReconcileError(err)
+	writeError(stderr, command, code, category, err.Error())
+	return exit
+}
+
+// reconcileErrWithSiblings renders one reconciliation failure WITHOUT
+// dropping the fan-out's sibling outcomes (E12 epic whole-review round 2):
+// the durable-first order commits the siblings BEFORE the first lane's
+// transaction, so a first-lane failure can leave COMMITTED siblings — and
+// a sibling may itself have failed — and both must reach the operator
+// beside the error, never silently. Slot-held skips warn on stderr, each
+// committed sibling gets its stderr note, and the lane listing rides the
+// error envelope's result slot.
+func reconcileErrWithSiblings(stderr io.Writer, command string, err error, artifacts *reconcileArtifacts) int {
+	entries, warnings, _ := artifacts.reconcileLaneOutcomes()
+	for _, warning := range warnings {
+		fmt.Fprintf(stderr, "warning: %s\n", warning)
+	}
+	code, category, exit := classifyReconcileError(err)
+	if len(entries) == 0 {
+		writeError(stderr, command, code, category, err.Error())
+		return exit
+	}
+	for _, entry := range entries {
+		if committed, _ := entry["committed"].(bool); committed {
+			fmt.Fprintf(stderr, "note: the reconcile sibling lane %v committed its child (dispatch %v) before this failure\n",
+				entry["destination_id"], entry["dispatch_id"])
+		}
+	}
+	writeErrorWithResult(stderr, command, code, category, err.Error(),
+		map[string]any{"reconcile_lanes": entries})
+	return exit
 }
 
 // wrapQuarantineReadError applies the typed wrap for the read path: the

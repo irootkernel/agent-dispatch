@@ -477,23 +477,16 @@ func TestE12T2DifferingTargetsRefused(t *testing.T) {
 	// A second hermes target beside the fixture's own.
 	marker := "routes:\n"
 	secondTarget := "  hermes-secondary:\n    board: agent-dispatch-test\n    minimum_version: 0.19.1\n    compatibility: capability_probe\n    executable: " + stubExeOf(t, configPath) + "\n    submit_timeout: 30s\n    lookup_timeout: 30s\n    environment_allowlist: [PATH, HOME]\n"
-	if i := strings.Index(updated, marker); i < 0 {
+	i := strings.Index(updated, marker)
+	if i < 0 {
 		t.Fatal("fixture no longer carries the routes block")
-	} else {
-		updated = updated[:i] + secondTarget + updated[i:]
 	}
-	start := strings.Index(updated, "    fanout_mode: all\n    destinations:\n")
-	end := strings.Index(updated, "\n    submission_retry:")
-	if start < 0 || end <= start {
-		t.Fatal("fixture no longer carries the single-destination block")
-	}
-	dest := "    fanout_mode: all\n    destinations:\n" +
-		"      - id: main\n        target: hermes-main\n        profile: wiki-maintainer\n        skills: [llm-wiki]\n        workstream: main\n        execution_hints:\n          max_runtime: 30m\n          max_attempts: 2\n" +
-		"      - id: review\n        target: hermes-secondary\n        profile: wiki-maintainer\n        skills: [llm-wiki]\n        workstream: review\n        execution_hints:\n          max_runtime: 30m\n          max_attempts: 2"
-	updated = updated[:start] + dest + updated[end:]
-	if err := os.WriteFile(configPath, []byte(updated), 0o600); err != nil {
+	if err := os.WriteFile(configPath, []byte(updated[:i]+secondTarget+updated[i:]), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	twoDestinationBlockFixture(t, configPath,
+		"      - id: main\n        target: hermes-main\n        profile: wiki-maintainer\n        skills: [llm-wiki]\n        workstream: main\n        execution_hints:\n          max_runtime: 30m\n          max_attempts: 2\n"+
+			"      - id: review\n        target: hermes-secondary\n        profile: wiki-maintainer\n        skills: [llm-wiki]\n        workstream: review\n        execution_hints:\n          max_runtime: 30m\n          max_attempts: 2")
 	setPlanEnv(t, vault, false)
 	var out, errb bytes.Buffer
 	withStdin(t, `[{"name":"Inbox/split.md","exists":true,"new":true,"size":5,"type":"f"}]`, func() {

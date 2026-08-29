@@ -52,7 +52,7 @@ func seedReadyIntent(t *testing.T, s *sqlite.Store, dispatchID string) {
 		Route:      ports.TaskRouteRef{ID: "wiki-maintenance", Revision: "route-rev-1"},
 		Resource:   ports.TaskResource{ID: "vault-main", Workspace: "dir:/srv/vault"},
 		TargetID:   "hermes-kanban-main", Generation: 1,
-		Destination: ports.TaskDestinationRef{ID: "wiki-primary", Revision: "dst-rev-1", Workstream: "maintenance"},
+		Destination: ports.TaskDestinationRef{ID: "wiki-primary", Revision: testLaneRevision, Workstream: "maintenance"},
 		Fingerprint: records.Digest("sha256:" + hex64('c')),
 		Changes: []records.ChangeItem{{
 			Path: "Inbox/n.md", Operation: records.OpModify, FileType: records.FileRegular,
@@ -71,9 +71,12 @@ func seedReadyIntent(t *testing.T, s *sqlite.Store, dispatchID string) {
 	// destinations[] contract the built request already carries).
 	lin.Intent.Fanout = &ports.FanoutInput{
 		AggregateID: "agg-" + dispatchID, Origin: string(records.OriginArrival),
-		DestinationID: "wiki-primary", DestinationRevision: "dst-rev-1", Workstream: "maintenance",
+		DestinationID: "wiki-primary", DestinationRevision: testLaneRevision, Workstream: "maintenance",
 		Selections: []records.DestinationSelection{{
-			DestinationID: "wiki-primary", DestinationRevision: "dst-rev-1", Workstream: "maintenance", Reason: "fanout_mode:all",
+			DestinationID: "wiki-primary", DestinationRevision: testLaneRevision, Workstream: "maintenance", Reason: "fanout_mode:all",
+		}},
+		Revisions: []ports.DestinationRevisionInput{{
+			DestinationID: "wiki-primary", Revision: testLaneRevision, ProjectionJSON: testLaneProjection,
 		}},
 	}
 	if err := s.CommitLineage(context.Background(), lin); err != nil {

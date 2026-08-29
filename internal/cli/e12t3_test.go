@@ -113,6 +113,55 @@ func TestE12T3EventsShowProjectsChildrenAndEvidenceGap(t *testing.T) {
 	}
 }
 
+// TestE12T3EventsShowBegunReceiptRunsInProgress pins the in-flight case of
+// the terminal-receipt rule (E12 epic whole-review round 1): an accepted
+// child with a VALID BEGUN receipt renders completion_evidence missing
+// with the actionable next step — never present, never completed — and the
+// aggregate classifies the occurrence in-progress, not evidence-gap (the
+// run is known-busy work, not an untrustworthy record).
+func TestE12T3EventsShowBegunReceiptRunsInProgress(t *testing.T) {
+	configPath, _, mainChild, _ := e12t3DispatchBothLanes(t)
+	var out, errb bytes.Buffer
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", mainChild, "--run-id", "run-in-flight"}, &out, &errb); code != 0 {
+		t.Fatalf("work begin: %s", errb.String())
+	}
+	aggregateID := e12t3AggregateOf(t, configPath)
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"events", "show", "--config", configPath, aggregateID}, &out, &errb); code != 0 {
+		t.Fatalf("events show: %s", errb.String())
+	}
+	res := decodeEnvelope(t, &out)
+	if res["aggregate_status"] != "in-progress" {
+		t.Fatalf("a valid begun receipt is a run in flight, not an evidence gap: %v", res["aggregate_status"])
+	}
+	children, _ := res["children"].([]any)
+	if len(children) != 2 {
+		t.Fatalf("both lanes' children must render: %d", len(children))
+	}
+	var begunChild map[string]any
+	for _, raw := range children {
+		child, _ := raw.(map[string]any)
+		if child["dispatch_id"] == mainChild {
+			begunChild = child
+		}
+	}
+	if begunChild == nil {
+		t.Fatalf("the begun child must render: %v", children)
+	}
+	if begunChild["completion_evidence"] != "missing" {
+		t.Fatalf("a begun receipt is not terminal evidence (never present, never completed): %v", begunChild["completion_evidence"])
+	}
+	nextStep, _ := begunChild["completion_evidence_next_step"].(string)
+	if !strings.Contains(nextStep, mainChild) {
+		t.Fatalf("the in-flight gap must carry the actionable next step: %q", nextStep)
+	}
+	receipt, _ := begunChild["work_receipt"].(map[string]any)
+	if receipt["status"] != "begun" || receipt["valid"] != true {
+		t.Fatalf("the begun receipt must project with its validity: %v", receipt)
+	}
+}
+
 // TestE12T3EventsShowBlockedNamesManualIntervention pins FBK-011 at the
 // inspection surface: a blocked child renders the manual-intervention
 // class and the aggregate names it, while the sibling lane is untouched.
@@ -414,6 +463,116 @@ func TestE12T3DocumentStatusConflictRejected(t *testing.T) {
 	}
 }
 
+// TestE12T3BlockedDocumentWithMatchingFlagReasonAccepted pins the guard
+// order (E12 epic whole-review round 1): --manual-reason validates against
+// the EFFECTIVE outcome — a blocked v2 DOCUMENT carrying its matching flag
+// reason is the legal doubled form, never the misleading rejection that
+// named the flag default the document already overrode.
+func TestE12T3BlockedDocumentWithMatchingFlagReasonAccepted(t *testing.T) {
+	configPath, _, mainChild, _ := e12t3DispatchBothLanes(t)
+	var out, errb bytes.Buffer
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", mainChild, "--run-id", "run-doc-flag"}, &out, &errb); code != 0 {
+		t.Fatalf("work begin: %s", errb.String())
+	}
+	doc := map[string]any{
+		"schema_version": "agent-dispatch.work-receipt/v2",
+		"dispatch_id":    mainChild,
+		"run_id":         "run-doc-flag",
+		"resource_id":    "vault-main",
+		"submitted_at":   "2026-08-29T05:25:00Z",
+		"status":         "blocked",
+		"changes":        []map[string]any{},
+		"manual_reason":  "documented operator blocker",
+		"failure_code":   nil,
+	}
+	manifest := e12t3WriteDoc(t, doc)
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", mainChild, "--run-id", "run-doc-flag",
+		"--manifest", manifest, "--manual-reason", "documented operator blocker"}, &out, &errb); code != 0 {
+		t.Fatalf("the doubled blocked form (document reason + matching flag reason) must accept: %s", errb.String())
+	}
+	res := decodeEnvelope(t, &out)
+	if res["status"] != "blocked" || res["manual_intervention"] != true {
+		t.Fatalf("the document's blocked outcome must route: %v", res)
+	}
+}
+
+// TestE12T3CompletedScopeMustSubsetDocumentChanges pins the scope
+// cross-check (E12 epic whole-review round 1): a v2 document whose
+// completed_scope names a path its own changes never report rejects with
+// the bounded error — the receipt may not claim completion evidence the
+// change set does not carry.
+func TestE12T3CompletedScopeMustSubsetDocumentChanges(t *testing.T) {
+	configPath, _, mainChild, _ := e12t3DispatchBothLanes(t)
+	var out, errb bytes.Buffer
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", mainChild, "--run-id", "run-scope"}, &out, &errb); code != 0 {
+		t.Fatalf("work begin: %s", errb.String())
+	}
+	doc := map[string]any{
+		"schema_version":  "agent-dispatch.work-receipt/v2",
+		"dispatch_id":     mainChild,
+		"run_id":          "run-scope",
+		"resource_id":     "vault-main",
+		"submitted_at":    "2026-08-29T05:35:00Z",
+		"status":          "completed",
+		"changes":         []map[string]any{{"path": "Indexes/done.md"}},
+		"completed_scope": []map[string]any{{"path": "Indexes/never-reported.md"}},
+		"failure_code":    nil,
+	}
+	manifest := e12t3WriteDoc(t, doc)
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", mainChild, "--run-id", "run-scope", "--manifest", manifest}, &out, &errb); code != 4 {
+		t.Fatalf("a completed scope outside the reported changes must reject at 4, got %d: %s", code, errb.String())
+	}
+	if !strings.Contains(errb.String(), "never-reported.md") || !strings.Contains(errb.String(), "subset of the reported changes") {
+		t.Fatalf("the rejection must name the unauditable path and the rule: %s", errb.String())
+	}
+	// The subset form itself stays valid: a scope naming only reported
+	// paths routes through the completed outcome.
+	doc["completed_scope"] = []map[string]any{{"path": "Indexes/done.md"}}
+	manifest = e12t3WriteDoc(t, doc)
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", mainChild, "--run-id", "run-scope", "--manifest", manifest}, &out, &errb); code != 0 {
+		t.Fatalf("a completed scope subset of the changes must accept: %s", errb.String())
+	}
+}
+
+// TestE12T3DocumentManualReasonBesideNonBlockedRejected pins the document
+// form of the manual-reason guard (E12 epic whole-review round 2): a v2
+// document carrying manual_reason beside a completed (or partially
+// completed) outcome rejects naming the effective status — the reason is
+// never silently discarded.
+func TestE12T3DocumentManualReasonBesideNonBlockedRejected(t *testing.T) {
+	configPath, _, mainChild, _ := e12t3DispatchBothLanes(t)
+	var out, errb bytes.Buffer
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", mainChild, "--run-id", "run-doc-reason"}, &out, &errb); code != 0 {
+		t.Fatalf("work begin: %s", errb.String())
+	}
+	doc := map[string]any{
+		"schema_version": "agent-dispatch.work-receipt/v2",
+		"dispatch_id":    mainChild,
+		"run_id":         "run-doc-reason",
+		"resource_id":    "vault-main",
+		"submitted_at":   "2026-08-29T05:40:00Z",
+		"status":         "completed",
+		"changes":        []map[string]any{{"path": "Indexes/done.md"}},
+		"manual_reason":  "a reason with no outcome to belong to",
+		"failure_code":   nil,
+	}
+	manifest := e12t3WriteDoc(t, doc)
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", mainChild, "--run-id", "run-doc-reason", "--manifest", manifest}, &out, &errb); code != 4 {
+		t.Fatalf("a document manual_reason beside a non-blocked outcome must reject at 4, got %d: %s", code, errb.String())
+	}
+	if !strings.Contains(errb.String(), "manual_reason belongs to the blocked outcome only") || !strings.Contains(errb.String(), "completed") {
+		t.Fatalf("the rejection must name the rule and the effective status: %s", errb.String())
+	}
+}
+
 // TestE12T3UnknownDocumentVersionRejected pins the version boundary
 // (review round 1, testing finding): a document whose schema_version is
 // a genuinely unknown future version rejects on the version alone — the
@@ -594,7 +753,7 @@ func TestE12T3BlockedManifestRejected(t *testing.T) {
 		"--status", "blocked", "--manual-reason", "policy", "--manifest", manifest}, &out, &errb); code != 4 {
 		t.Fatalf("a bare-array manifest beside blocked must reject at 4, got %d: %s", code, errb.String())
 	}
-	if !strings.Contains(errb.String(), "takes --manual-reason only") {
+	if !strings.Contains(errb.String(), "blocked receipt takes") {
 		t.Fatalf("the rejection must tell the operator blocked takes the manual reason: %s", errb.String())
 	}
 	// The lenient discard is gone too: --remaining-manifest on a completed

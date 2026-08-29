@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -62,8 +64,28 @@ func openReceiptStore(t *testing.T) (*sqlite.Store, *Service, string) {
 	return s, svc, dispatchID
 }
 
+// testLaneProjection/testLaneRevision are a real content-addressed pair
+// for the wiki-primary test lane (E12 epic validation: the store verifies
+// persisted revisions are the content address of their bytes and child
+// references have durable rows).
+const testLaneProjection = `{"id":"wiki-primary","workstream":"maintenance","test":true}`
+
+// testLaneRevision derives through the ONE canonical derivation
+// (records.RevisionOfProjection, E12 epic whole-review round 1).
+var testLaneRevision = records.RevisionOfProjection(testLaneProjection)
+
 // receiptLineage builds one child-linked arrival on the wiki-primary lane.
 func receiptLineage(t *testing.T, dispatchID string) ports.Lineage {
+	t.Helper()
+	return receiptLineageOnLane(t, dispatchID, "wiki-primary")
+}
+
+// receiptLineageOnLane builds one child-linked arrival on the named lane:
+// the request document names the SAME lane the fanout block child-links,
+// so a follow-up derived from the stored request keeps its own lane (the
+// shared fixture above pins the wiki-primary shape every other test
+// uses).
+func receiptLineageOnLane(t *testing.T, dispatchID, destinationID string) ports.Lineage {
 	t.Helper()
 	lin := receiptLineageFields(dispatchID)
 	req, key, err := dispatch.BuildRequest(dispatch.RequestInput{
@@ -71,7 +93,7 @@ func receiptLineage(t *testing.T, dispatchID string) ports.Lineage {
 		Route:      ports.TaskRouteRef{ID: "wiki", Revision: "route-rev-1"},
 		Resource:   ports.TaskResource{ID: "vault-main", Workspace: "dir:/srv/vault"},
 		TargetID:   "hermes-kanban-main", TargetScope: "board-main",
-		Destination: ports.TaskDestinationRef{ID: "wiki-primary", Revision: "dst-rev-1", Workstream: "maintenance"},
+		Destination: ports.TaskDestinationRef{ID: destinationID, Revision: testLaneRevision, Workstream: "maintenance"},
 		Generation:  1,
 		Fingerprint: records.Digest("sha256:" + receiptHex('c')),
 		Changes: []records.ChangeItem{{
@@ -90,6 +112,16 @@ func receiptLineage(t *testing.T, dispatchID string) ports.Lineage {
 	lin.Intent.RequestJSON = requestJSON
 	lin.Intent.IdempotencyKey = key
 	lin.Intent.ContentFingerprint = string(req.Activation.ContentFingerprint)
+	if lin.Intent.Fanout != nil {
+		lin.Intent.Fanout.DestinationID = destinationID
+		lin.Intent.Fanout.Selections = []records.DestinationSelection{{
+			DestinationID: destinationID, DestinationRevision: testLaneRevision, Workstream: "maintenance",
+			Reason: "fanout_mode:all",
+		}}
+		lin.Intent.Fanout.Revisions = []ports.DestinationRevisionInput{{
+			DestinationID: destinationID, Revision: testLaneRevision, ProjectionJSON: testLaneProjection,
+		}}
+	}
 	return lin
 }
 
@@ -128,10 +160,13 @@ func receiptLineageFields(dispatchID string) ports.Lineage {
 			CreatedAt: now,
 			Fanout: &ports.FanoutInput{
 				AggregateID: "agg-" + dispatchID, Origin: string(records.OriginArrival),
-				DestinationID: "wiki-primary", DestinationRevision: "dst-rev-1", Workstream: "maintenance",
+				DestinationID: "wiki-primary", DestinationRevision: testLaneRevision, Workstream: "maintenance",
 				Selections: []records.DestinationSelection{{
-					DestinationID: "wiki-primary", DestinationRevision: "dst-rev-1", Workstream: "maintenance",
+					DestinationID: "wiki-primary", DestinationRevision: testLaneRevision, Workstream: "maintenance",
 					Reason: "fanout_mode:all",
+				}},
+				Revisions: []ports.DestinationRevisionInput{{
+					DestinationID: "wiki-primary", Revision: testLaneRevision, ProjectionJSON: testLaneProjection,
 				}},
 			},
 		},
@@ -165,7 +200,7 @@ func TestE12T3PartialCompletionSchedulesOneSameLaneFollowup(t *testing.T) {
 	burst.Intent.Fanout.AggregateID = "agg-burst"
 	burst.Decision.Disposition = "merge_pending"
 	burst.Observation.Changes[0].Path = "Inbox/merged-later.md"
-	if _, err := s.CommitMergePending(ctx, burst, []string{"wiki-primary"}, "test", "2026-08-29T00:30:00Z"); err != nil {
+	if _, err := s.CommitMergePending(ctx, burst, []string{"wiki-primary"}, []string{"wiki-primary"}, "test", "2026-08-29T00:30:00Z"); err != nil {
 		t.Fatal(err)
 	}
 	remaining := `[{"path":"Indexes/remaining.md"},{"path":"Inbox/first.md"}]`
@@ -346,5 +381,336 @@ func TestE12T3PartialOnCleanLaneCarriesExactlyRemainingScope(t *testing.T) {
 	laneSnap, err := s.LoadLaneState(ctx, "wiki", "wiki-primary")
 	if err != nil || laneSnap.State != state.RouteFollowupReady {
 		t.Fatalf("the lane must land FOLLOWUP_READY: %+v %v", laneSnap, err)
+	}
+}
+
+// TestEpicValidationOccurrenceLevelLaneSelection pins the E12 epic
+// validation residual (FAN-005): a conditioned lane's follow-up filters
+// its dirty generation by the merging OCCURRENCE's recorded selection,
+// never by re-evaluating conditions per change. The occurrence carries a
+// path that alone fails the lane's path_include, but the occurrence as a
+// whole selected the lane (a sibling path matched) — the lane's follow-up
+// carries the WHOLE merged burst; the sibling lane still excludes it; and
+// a legacy row without selection evidence keeps the per-change fallback.
+func TestEpicValidationOccurrenceLevelLaneSelection(t *testing.T) {
+	s, svc, dispatchID := openReceiptStore(t)
+	ctx := context.Background()
+
+	// The conditioned alpha lane: path_include ["alpha/**"] — the burst
+	// carries one alpha path and one other path, so the OCCURRENCE
+	// selects the lane while the other path alone would fail.
+	conds := &dispatch.DestinationConditionSet{PathInclude: []string{"alpha/**"}}
+	matcher := func(pattern, path string) (bool, error) {
+		selected, _, err := dispatch.SelectDestination(dispatch.SelectionContext{
+			Paths: []string{"alpha/kept.md", "other/dropped.md"},
+		}, &dispatch.DestinationConditionSet{PathInclude: []string{pattern}}, nil)
+		_ = selected
+		return strings.HasPrefix(path, pattern[:len(pattern)-3]), err
+	}
+	svc.LaneConditions = func(routeID, destinationID string) (*dispatch.DestinationConditionSet, error) {
+		if destinationID != "wiki-primary" {
+			return nil, fmt.Errorf("unknown lane %q", destinationID)
+		}
+		return conds, nil
+	}
+	svc.LanePathMatcher = matcher
+
+	// The merged burst: the batch records its selection evidence
+	// (occurrence-level: both destinations), and its changes carry one
+	// path that matches the include and one that does not.
+	burst := receiptLineage(t, "dispatch-burst-occ")
+	burst.Decision.DecisionID = "decision-burst-occ"
+	burst.Intent.DispatchID = "dispatch-burst-occ"
+	burst.Intent.DecisionID = "decision-burst-occ"
+	burst.Intent.IdempotencyKey = "agent-dispatch:v2:sha256:" + receiptHex('7')
+	burst.Intent.Fanout.AggregateID = "agg-burst-occ"
+	burst.Decision.Disposition = "merge_pending"
+	burst.Observation.Changes = []ports.ObservationChange{
+		{Ordinal: 0, Path: "alpha/kept.md", Operation: "modify", ExistsAfter: true, FileType: "regular",
+			AfterDigest: "sha256:" + receiptHex('1'), DigestStatus: "known"},
+		{Ordinal: 1, Path: "other/alone-fails.md", Operation: "modify", ExistsAfter: true, FileType: "regular",
+			AfterDigest: "sha256:" + receiptHex('2'), DigestStatus: "known"},
+	}
+	if _, err := s.CommitMergePending(ctx, burst, []string{"wiki-primary", "wiki-secondary"}, []string{"wiki-primary", "wiki-secondary"}, "test", "2026-08-29T00:30:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	out, err := svc.Complete(ctx, CompleteInput{
+		DispatchID: dispatchID, RunID: "run-1", ManifestJSON: `[{"path":"Inbox/first.md"}]`,
+	})
+	if err != nil {
+		t.Fatalf("completion with occurrence-level filtering: %v", err)
+	}
+	if out.FollowupDispatchID == "" {
+		t.Fatalf("the filtered lane must still schedule its follow-up: %+v", out)
+	}
+	snap, err := s.LoadIntent(ctx, out.FollowupDispatchID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var req ports.TaskRequest
+	if err := json.Unmarshal([]byte(snap.RequestJSON), &req); err != nil {
+		t.Fatal(err)
+	}
+	paths := map[string]bool{}
+	for _, m := range req.Activation.Manifest {
+		paths[m.Path] = true
+	}
+	// The WHOLE merged burst rides along: the per-path miss
+	// (other/alone-fails.md) stays because the OCCURRENCE selected the
+	// lane — no silent work loss.
+	if !paths["alpha/kept.md"] || !paths["other/alone-fails.md"] {
+		t.Fatalf("the follow-up must carry the whole occurrence-selected burst: %v", paths)
+	}
+}
+
+// TestEpicValidationBusyLanesMergeKeepsFullSelection pins the round-2
+// merge-evidence residual through the PRODUCTION arrival path: a burst
+// that selects BOTH lanes of a route whose lanes are BOTH busy merges on
+// each lane through ArrivalFanout — the first committer's
+// CommitMergePending must not narrow the batch's selection to the merging
+// lane, and the later lane's MergeSelectedLanes must union the
+// occurrence's FULL selection onto the shared batch — so the evidence
+// reads both destinations and EACH lane's completion carries the whole
+// burst in its follow-up (FAN-005/CON-008; the silent-work-loss class).
+func TestEpicValidationBusyLanesMergeKeepsFullSelection(t *testing.T) {
+	s, svc, primary := openReceiptStore(t)
+	ctx := context.Background()
+	// The second busy lane: wiki-secondary holds its own accepted dispatch
+	// (the request document AND the fanout block name the same lane, so
+	// its follow-up keeps it).
+	secondary := "dispatch-e12t3-secondary"
+	second := receiptLineageOnLane(t, secondary, "wiki-secondary")
+	second.Decision.DecisionID = "decision-" + secondary
+	second.Intent.DispatchID = secondary
+	second.Intent.DecisionID = "decision-" + secondary
+	second.Intent.IdempotencyKey = "agent-dispatch:v2:sha256:" + receiptHex('9')
+	second.Intent.Fanout.AggregateID = "agg-" + secondary
+	if err := s.CommitLineage(ctx, second); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ActivateDispatch(ctx, secondary, "test", "2026-08-29T00:00:05Z"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Begin(ctx, BeginInput{DispatchID: secondary, RunID: "run-2"}); err != nil {
+		t.Fatal(err)
+	}
+	// Per-change conditions that alone would DROP the burst's other path
+	// on both lanes — the occurrence-level evidence must keep it.
+	svc.LaneConditions = func(routeID, destinationID string) (*dispatch.DestinationConditionSet, error) {
+		return &dispatch.DestinationConditionSet{PathInclude: []string{"alpha/**"}}, nil
+	}
+	svc.LanePathMatcher = func(pattern, path string) (bool, error) {
+		return strings.HasPrefix(path, strings.TrimSuffix(pattern, "**")), nil
+	}
+
+	// The two-lane burst through the REAL fan-out arrival: one lineage per
+	// lane over the shared observation/batch/decision prefix. Both lanes
+	// are busy, so BOTH merge (the first committer through
+	// CommitMergePending, its sibling through MergeSelectedLanes).
+	burstA := receiptLineage(t, "dispatch-burst-fanout")
+	burstA.Decision.DecisionID = "decision-burst-fanout"
+	burstA.Intent.DispatchID = "dispatch-burst-fanout"
+	burstA.Intent.DecisionID = "decision-burst-fanout"
+	burstA.Intent.IdempotencyKey = "agent-dispatch:v2:sha256:" + receiptHex('a')
+	burstA.Intent.Fanout.AggregateID = "agg-burst-fanout"
+	burstA.Decision.Disposition = "merge_pending"
+	burstA.Observation.Changes = []ports.ObservationChange{
+		{Ordinal: 0, Path: "alpha/kept.md", Operation: "modify", ExistsAfter: true, FileType: "regular",
+			AfterDigest: "sha256:" + receiptHex('1'), DigestStatus: "known"},
+		{Ordinal: 1, Path: "other/alone-fails.md", Operation: "modify", ExistsAfter: true, FileType: "regular",
+			AfterDigest: "sha256:" + receiptHex('2'), DigestStatus: "known"},
+	}
+	burstB := burstA
+	// Intent.Fanout is a POINTER: the sibling lineage needs its own copy
+	// or both lineages alias one fanout block and the arrival sees the
+	// same lane twice (the shared-state class the round-2 mutation
+	// finding guards against).
+	burstFanout := *burstA.Intent.Fanout
+	burstFanout.DestinationID = "wiki-secondary"
+	burstB.Intent.Fanout = &burstFanout
+	burstB.Intent.DispatchID = "dispatch-burst-fanout-b"
+	burstB.Intent.IdempotencyKey = "agent-dispatch:v2:sha256:" + receiptHex('b')
+
+	coordinator := &dispatch.Coordinator{
+		Store: s, Now: func() string { return "2026-08-29T00:30:00Z" }, Actor: "test",
+	}
+	outcome, err := coordinator.ArrivalFanout(ctx, []ports.Lineage{burstA, burstB})
+	if err != nil {
+		t.Fatalf("the busy-lane fan-out arrival must merge on both lanes: %v", err)
+	}
+	if len(outcome.Merged) != 2 || len(outcome.Activated) != 0 || len(outcome.Failed) != 0 {
+		t.Fatalf("both busy lanes merge, nothing activates, nothing fails: %+v", outcome)
+	}
+	// The shared batch's selection evidence is the occurrence's FULL
+	// selection — never narrowed to the first merging lane.
+	var evidence string
+	if err := s.QueryRow(`SELECT COALESCE(selected_destinations_json, '') FROM change_batches WHERE batch_id = ?`,
+		burstA.Batch.BatchID).Scan(&evidence); err != nil {
+		t.Fatal(err)
+	}
+	if evidence != `["wiki-primary","wiki-secondary"]` {
+		t.Fatalf("the merged batch must record the occurrence's full selection, got %s", evidence)
+	}
+
+	// Drive BOTH lanes' completions through work complete: each lane's
+	// follow-up carries the WHOLE burst (occurrence-level evidence), even
+	// though the per-change conditions would drop other/alone-fails.md.
+	followups := map[string]string{}
+	for _, completion := range []struct {
+		dispatch, run string
+	}{{primary, "run-1"}, {secondary, "run-2"}} {
+		out, err := svc.Complete(ctx, CompleteInput{
+			DispatchID: completion.dispatch, RunID: completion.run, ManifestJSON: `[{"path":"Inbox/first.md"}]`,
+		})
+		if err != nil {
+			t.Fatalf("completion of %s: %v", completion.dispatch, err)
+		}
+		if out.FollowupDispatchID == "" {
+			t.Fatalf("lane %s must schedule its follow-up over the merged burst: %+v", completion.dispatch, out)
+		}
+		followups[completion.dispatch] = out.FollowupDispatchID
+	}
+	for lane, followup := range followups {
+		snap, err := s.LoadIntent(ctx, followup)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var req ports.TaskRequest
+		if err := json.Unmarshal([]byte(snap.RequestJSON), &req); err != nil {
+			t.Fatal(err)
+		}
+		paths := map[string]bool{}
+		for _, m := range req.Activation.Manifest {
+			paths[m.Path] = true
+		}
+		if !paths["alpha/kept.md"] || !paths["other/alone-fails.md"] {
+			t.Fatalf("lane %s's follow-up must carry the whole occurrence-selected burst: %v", lane, paths)
+		}
+	}
+}
+
+// TestEpicValidationLegacyRowsKeepPerChangeFallback pins the fallback:
+// a merged batch WITHOUT selection evidence (the legacy pre-v15 shape)
+// keeps the per-change condition evaluation — the alone-failing path is
+// dropped from the conditioned lane's follow-up exactly as before.
+func TestEpicValidationLegacyRowsKeepPerChangeFallback(t *testing.T) {
+	s, svc, dispatchID := openReceiptStore(t)
+	ctx := context.Background()
+	svc.LaneConditions = func(routeID, destinationID string) (*dispatch.DestinationConditionSet, error) {
+		return &dispatch.DestinationConditionSet{PathInclude: []string{"alpha/**"}}, nil
+	}
+	svc.LanePathMatcher = func(pattern, path string) (bool, error) {
+		return strings.HasPrefix(path, strings.TrimSuffix(pattern, "**")), nil
+	}
+	burst := receiptLineage(t, "dispatch-burst-legacy")
+	burst.Decision.DecisionID = "decision-burst-legacy"
+	burst.Intent.DispatchID = "dispatch-burst-legacy"
+	burst.Intent.DecisionID = "decision-burst-legacy"
+	burst.Intent.IdempotencyKey = "agent-dispatch:v2:sha256:" + receiptHex('8')
+	burst.Intent.Fanout.AggregateID = "agg-burst-legacy"
+	burst.Decision.Disposition = "merge_pending"
+	burst.Observation.Changes = []ports.ObservationChange{
+		{Ordinal: 0, Path: "alpha/kept.md", Operation: "modify", ExistsAfter: true, FileType: "regular",
+			AfterDigest: "sha256:" + receiptHex('1'), DigestStatus: "known"},
+		{Ordinal: 1, Path: "other/alone-fails.md", Operation: "modify", ExistsAfter: true, FileType: "regular",
+			AfterDigest: "sha256:" + receiptHex('2'), DigestStatus: "known"},
+	}
+	// No selectedDestinations argument: the batch records no evidence.
+	if _, err := s.CommitMergePending(ctx, burst, nil, nil, "test", "2026-08-29T00:40:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	out, err := svc.Complete(ctx, CompleteInput{
+		DispatchID: dispatchID, RunID: "run-1", ManifestJSON: `[{"path":"Inbox/first.md"}]`,
+	})
+	if err != nil {
+		t.Fatalf("completion with legacy filtering: %v", err)
+	}
+	snap, err := s.LoadIntent(ctx, out.FollowupDispatchID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var req ports.TaskRequest
+	if err := json.Unmarshal([]byte(snap.RequestJSON), &req); err != nil {
+		t.Fatal(err)
+	}
+	paths := map[string]bool{}
+	for _, m := range req.Activation.Manifest {
+		paths[m.Path] = true
+	}
+	if !paths["alpha/kept.md"] {
+		t.Fatalf("the matching path must stay: %v", paths)
+	}
+	if paths["other/alone-fails.md"] {
+		t.Fatalf("the legacy fallback drops the alone-failing path: %v", paths)
+	}
+}
+
+// TestEpicValidationDigestLessScopeClassifiesModify pins the conservative
+// classification (E12 epic validation): a remaining-scope row with NO
+// digests carries no removal evidence and classifies as modify — deletion
+// requires the exact before-present/after-absent pair.
+func TestEpicValidationDigestLessScopeClassifiesModify(t *testing.T) {
+	if got := scopeOperation(nil, nil); got != records.OpModify {
+		t.Fatalf("no digests must classify modify, got %s", got)
+	}
+	empty := ""
+	if got := scopeOperation(&empty, &empty); got != records.OpModify {
+		t.Fatalf("empty digests must classify modify, got %s", got)
+	}
+	present := "sha256:" + receiptHex('3')
+	if got := scopeOperation(&present, nil); got != records.OpDelete {
+		t.Fatalf("before-present/after-absent must classify delete, got %s", got)
+	}
+	if got := scopeOperation(&present, &empty); got != records.OpDelete {
+		t.Fatalf("before-present/after-empty must classify delete, got %s", got)
+	}
+	if got := scopeOperation(nil, &present); got != records.OpCreate {
+		t.Fatalf("before-absent/after-present must classify create, got %s", got)
+	}
+	if got := scopeOperation(&present, &present); got != records.OpModify {
+		t.Fatalf("both present must classify modify, got %s", got)
+	}
+}
+
+// TestEpicValidationFilterFailClosedArms pins the filter's fail-closed
+// arms at the service level (E12 epic validation, testing gap): a
+// resolver error, a nil matcher beside path conditions, and an
+// unparseable stored operation each refuse the completion — never a
+// silently widened follow-up.
+func TestEpicValidationFilterFailClosedArms(t *testing.T) {
+	newService := func(laneConds func(string, string) (*dispatch.DestinationConditionSet, error), matcher func(string, string) (bool, error)) *Service {
+		_, svc, _ := openReceiptStore(t)
+		svc.LaneConditions = laneConds
+		svc.LanePathMatcher = matcher
+		return svc
+	}
+	legacyDirty := func() []ports.DirtyChange {
+		return []ports.DirtyChange{{Path: "alpha/x.md", Operation: "modify", Classification: "normal", Disposition: "merge_pending"}}
+	}
+	intent := ports.IntentSnapshot{RouteID: "wiki", DispatchID: "dispatch-e12t3", DestinationID: "wiki-primary"}
+
+	// Resolver error: the completion fails closed naming the lane.
+	svc := newService(func(string, string) (*dispatch.DestinationConditionSet, error) {
+		return nil, fmt.Errorf("route has no destination beta")
+	}, nil)
+	if _, err := svc.filterDirtyToLane(intent, legacyDirty()); err == nil || !strings.Contains(err.Error(), "beta") {
+		t.Fatalf("a lane-condition resolver error must fail closed naming the cause: %v", err)
+	}
+
+	// Nil matcher beside path conditions: path evaluation cannot proceed.
+	svc = newService(func(string, string) (*dispatch.DestinationConditionSet, error) {
+		return &dispatch.DestinationConditionSet{PathInclude: []string{"alpha/**"}}, nil
+	}, nil)
+	if _, err := svc.filterDirtyToLane(intent, legacyDirty()); err == nil || !strings.Contains(err.Error(), "path matcher") {
+		t.Fatalf("path conditions with a nil matcher must fail closed: %v", err)
+	}
+
+	// Unparseable stored operation on a legacy (no selection evidence) row.
+	svc = newService(func(string, string) (*dispatch.DestinationConditionSet, error) {
+		return &dispatch.DestinationConditionSet{Operations: []string{"modify"}}, nil
+	}, nil)
+	badOp := []ports.DirtyChange{{Path: "alpha/x.md", Operation: "exploded", Classification: "normal", Disposition: "merge_pending"}}
+	if _, err := svc.filterDirtyToLane(intent, badOp); err == nil || !strings.Contains(err.Error(), "operation") {
+		t.Fatalf("an unparseable stored operation must fail closed: %v", err)
 	}
 }

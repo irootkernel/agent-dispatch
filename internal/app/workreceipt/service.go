@@ -73,8 +73,29 @@ func sameChangeEntries(a, b []changeEntry) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	for i := range a {
-		if a[i] != b[i] {
+	// Compare by VALUE over a canonical order (E12 epic validation): the
+	// entries carry optional-digest POINTERS, so struct comparison
+	// compares addresses and can never match two equal scopes; canonical
+	// sorting makes the comparison order-insensitive as submitted scopes
+	// legitimately differ in order.
+	key := func(entries []changeEntry) []string {
+		keys := make([]string, 0, len(entries))
+		for _, e := range entries {
+			before, after := "", ""
+			if e.BeforeDigest != nil {
+				before = *e.BeforeDigest
+			}
+			if e.AfterDigest != nil {
+				after = *e.AfterDigest
+			}
+			keys = append(keys, e.Path+"\x00"+before+"\x00"+after)
+		}
+		sort.Strings(keys)
+		return keys
+	}
+	left, right := key(a), key(b)
+	for i := range left {
+		if left[i] != right[i] {
 			return false
 		}
 	}
@@ -376,21 +397,54 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 		}
 		status = document.Status
 	}
+	// --manual-reason belongs to the blocked outcome only (E12 epic
+	// validation): beside any other outcome it was silently discarded. The
+	// guard validates against the EFFECTIVE outcome — the reconciled
+	// document status first, the flag status otherwise (E12 epic
+	// whole-review round 1) — so a blocked DOCUMENT carrying its matching
+	// flag reason is the legal doubled form, never a misleading rejection
+	// that names the flag default the document already overrode. The
+	// message names exactly the blocked outcome (round 3): the rule admits
+	// one status, so the rejection names it, never a wider list.
+	if strings.TrimSpace(in.ManualReason) != "" && status != StatusBlocked {
+		reason := fmt.Sprintf("--manual-reason belongs to the blocked outcome only (carry a manual reason just with --status blocked); got status %q", boundEcho(status, statusEchoBound))
+		s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: []string{reason}})
+		return Result{}, &InvalidError{Reasons: []string{reason}}
+	}
 	manualReason := strings.TrimSpace(in.ManualReason)
-	if document.IsV2 && document.ManualReason != "" {
-		if manualReason != "" && manualReason != document.ManualReason {
+	if document.IsV2 && strings.TrimSpace(document.ManualReason) != "" {
+		if manualReason != "" && manualReason != strings.TrimSpace(document.ManualReason) {
 			reason := "the document manual_reason conflicts with --manual-reason; submit one manual reason"
 			s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: []string{reason}})
 			return Result{}, &InvalidError{Reasons: []string{reason}}
 		}
-		manualReason = document.ManualReason
+		// The document form trims like the flag form (E12 epic
+		// validation): a whitespace-only manual_reason is empty.
+		manualReason = strings.TrimSpace(document.ManualReason)
+		// A document manual_reason beside any outcome other than blocked
+		// rejects exactly like the flag form (E12 epic whole-review round
+		// 2): the effective outcome already reconciled above, so a manual
+		// reason riding a completed or partially_completed document is a
+		// shape error naming the status — never silently discarded.
+		if status != StatusBlocked {
+			reason := fmt.Sprintf("the document manual_reason belongs to the blocked outcome only (carry a manual reason just with a blocked document); got status %q", boundEcho(status, statusEchoBound))
+			s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: []string{reason}})
+			return Result{}, &InvalidError{Reasons: []string{reason}}
+		}
 	}
 	if status == StatusBlocked {
 		// A blocked outcome takes its manual reason — never a completion
 		// manifest: a bare change array (or v1 document) beside a blocked
-		// outcome is a shape error, while the v2 blocked document (whose
-		// changes are the honest empty scope) is the shipped example form
-		// (review round 1, security finding).
+		// outcome is a shape error, and a v2 blocked document carrying a
+		// NON-EMPTY change set rejects the same way (E12 epic validation:
+		// blocked takes the reason, not a change set — dropped changes
+		// were silently discarded evidence). The empty-changes v2 blocked
+		// document remains the shipped example form.
+		if len(changes) > 0 {
+			reason := "a blocked receipt takes its manual reason, not a change set; submit the changes through the resolving work complete"
+			s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: []string{reason}})
+			return Result{}, &InvalidError{Reasons: []string{reason}}
+		}
 		if !document.IsV2 && strings.TrimSpace(in.ManifestJSON) != "" && strings.TrimSpace(in.ManifestJSON) != "[]" {
 			reason := "a blocked receipt takes --manual-reason only; submit the completion manifest through the resolving work complete"
 			s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: []string{reason}})
@@ -433,6 +487,28 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 	// --remaining-manifest or the v2 document's remaining_scope; both
 	// present with different content is an explicit conflict.
 	var remainingScope []records.ChangeItem
+	// The v2 document's completed_scope is authoritative when present
+	// (E12 epic validation): persist it on the receipt row exactly as the
+	// flag path persists its scope, never validating-then-dropping it.
+	completedScope := changes
+	if document.IsV2 && len(document.CompletedScope) > 0 {
+		// Subset cross-check (E12 epic whole-review round 1): the completed
+		// scope must name only paths the document's own changes report — a
+		// scope claiming paths the change set never carried is unauditable
+		// completion evidence, so it rejects with a bounded error.
+		manifestPaths := make(map[string]bool, len(changes))
+		for _, c := range changes {
+			manifestPaths[c.Path] = true
+		}
+		for _, entry := range document.CompletedScope {
+			if !manifestPaths[entry.Path] {
+				reason := fmt.Sprintf("the document completed_scope names path %q absent from its changes; the completed scope must be a subset of the reported changes", boundEcho(entry.Path, idEchoBound))
+				s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: []string{reason}})
+				return Result{}, &InvalidError{Reasons: []string{reason}}
+			}
+		}
+		completedScope = document.CompletedScope
+	}
 	if status == StatusPartiallyComplete {
 		remainingEntries := document.RemainingScope
 		if strings.TrimSpace(in.RemainingManifestJSON) != "" {
@@ -476,9 +552,10 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 		SubmittedAt:     s.timestamp(),
 		ValidationState: "valid",
 		// The partial outcome's scopes persist beside the receipt
-		// (migration v14): the completed scope is the manifest above; the
-		// remaining scope is exactly what the follow-up will carry.
-		CompletedScope: workScopeOf(entriesToItems(changes)),
+		// (migration v14): the completed scope is the document's own when
+		// it carried one, else the manifest above; the remaining scope is
+		// exactly what the follow-up will carry.
+		CompletedScope: workScopeOf(entriesToItems(completedScope)),
 		RemainingScope: workScopeOf(remainingScope),
 	}
 	// Exact self-change attribution (E5-t3): match the receipt against
@@ -635,17 +712,20 @@ func (s *Service) completeBlocked(ctx context.Context, intent ports.IntentSnapsh
 }
 
 // scopeOperation derives a scope item's change operation from its
-// optional digests (FBK-010): the manifest item shape carries no
-// operation member, and the follow-up's fingerprint projection needs one.
-// An absent after-digest is a removal; a first-seen after-digest is a
-// create; everything else (and digest-less rows) is a modify — the
-// conservative default that never fabricates creation or removal
-// evidence.
+// optional digests (FBK-010, E12 epic validation): the manifest item
+// shape carries no operation member, and the follow-up's fingerprint
+// projection needs one. Deletion evidence demands the exact
+// before-present/after-absent pair; creation demands
+// before-absent/after-present. A row with NO digests carries neither
+// piece of evidence and classifies as modify — the conservative default
+// that never fabricates removal (or creation) evidence.
 func scopeOperation(before, after *string) records.Operation {
+	beforePresent := before != nil && *before != ""
+	afterPresent := after != nil && *after != ""
 	switch {
-	case after == nil || *after == "":
+	case beforePresent && !afterPresent:
 		return records.OpDelete
-	case before == nil || *before == "":
+	case !beforePresent && afterPresent:
 		return records.OpCreate
 	default:
 		return records.OpModify
@@ -686,13 +766,17 @@ func workScopeOf(changes []records.ChangeItem) []ports.WorkChange {
 }
 
 // filterDirtyToLane scopes one dirty generation to the completing
-// dispatch's destination lane (E12-T2, CON-008): every change is offered
-// to the lane's structural conditions as a single-path occurrence (the
-// path, its operation, and the merging decision's classification and
-// disposition), and only the changes the lane selects survive into the
-// attribution match and the follow-up manifest — a sibling lane's
-// conditioned-out work can never ride along. A pre-contract dispatch
-// (empty destination identity) keeps the route-scoped generation; a
+// dispatch's destination lane (E12-T2, CON-008; E12 epic validation).
+// The PRIMARY rule is occurrence-level (FAN-005): a change whose merging
+// batch recorded its destination selection stays whenever that selection
+// contains the completing lane — the same occurrence-level OR the
+// arrival evaluation used, so a path that alone fails a path_include is
+// never silently dropped from a lane the occurrence selected. The
+// per-change condition evaluation (the path, its operation, and the
+// merging decision's classification and disposition) is the FALLBACK for
+// rows without recorded selection evidence — legacy batches and any
+// writer that predates migration v15. A pre-contract dispatch (empty
+// destination identity) keeps the route-scoped generation; a
 // child-linked dispatch whose lane conditions cannot be resolved fails
 // the completion closed, never silently widens the follow-up.
 func (s *Service) filterDirtyToLane(intent ports.IntentSnapshot, dirty []ports.DirtyChange) ([]ports.DirtyChange, error) {
@@ -710,6 +794,20 @@ func (s *Service) filterDirtyToLane(intent ports.IntentSnapshot, dirty []ports.D
 	}
 	out := make([]ports.DirtyChange, 0, len(dirty))
 	for _, c := range dirty {
+		if len(c.SelectedDestinations) > 0 {
+			// Occurrence-level evidence (migration v15): the merging batch
+			// recorded the occurrence's selection — keep the change exactly
+			// when that selection contains this lane, never re-evaluating
+			// per path.
+			for _, selected := range c.SelectedDestinations {
+				if selected == intent.DestinationID {
+					out = append(out, c)
+					break
+				}
+			}
+			continue
+		}
+		// Legacy fallback: no recorded selection — per-change evaluation.
 		operation, opErr := records.ParseOperation(c.Operation)
 		if opErr != nil {
 			return nil, fmt.Errorf("dirty change %q operation %q: %v", c.Path, c.Operation, opErr)

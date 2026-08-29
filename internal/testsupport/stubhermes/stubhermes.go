@@ -75,8 +75,8 @@ case "$cmd" in
     # a JSON document: backslash-escape the JSON string metacharacters
     # first (the fixed members stay single-quoted literals like the tables
     # above), so a quote or backslash in argv can never break the record.
-    jtitle=$(printf '%s' "$title" | sed 's/\\/\\\\/g; s/"/\\"/g')
-    jassignee=$(printf '%s' "$assignee" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    jtitle=$(printf '%s' "$title" | tr -d '[:cntrl:]' | sed 's/\\/\\\\/g; s/"/\\"/g')
+    jassignee=$(printf '%s' "$assignee" | tr -d '[:cntrl:]' | sed 's/\\/\\\\/g; s/"/\\"/g')
     cat > "$DIR/id-$id" <<JSON
 {"id":"$id","title":"$jtitle","status":"ready","created_at":1787142146,"assignee":"$jassignee","mutex_key":"wiki-publish","skills":["llm-wiki"]}
 JSON

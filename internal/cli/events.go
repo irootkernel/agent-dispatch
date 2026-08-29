@@ -58,9 +58,13 @@ func runEventsShow(command string, args []string, stdout, stderr io.Writer) int 
 		rendered = append(rendered, row)
 		// The aggregate status is the worst class over its children
 		// (DAT-011): evidence-gap > manual-intervention > failed >
-		// in-progress > completed.
+		// in-progress > completed. A valid BEGUN receipt classifies
+		// in-progress, NOT evidence-gap (E12 epic whole-review round 1):
+		// its completion evidence is missing but the run itself is
+		// known-busy work — the gap class stays for accepted work with no
+		// (or an invalid) receipt to trust.
 		switch {
-		case row["completion_evidence"] == "missing":
+		case row["completion_evidence"] == "missing" && !begunReceipt(child):
 			status = worstAggregateStatus(status, "evidence-gap")
 		case child.WorkReceipt == string(records.WorkBlocked):
 			status = worstAggregateStatus(status, "manual-intervention")
@@ -115,16 +119,19 @@ func eventsChildProjection(child sqlite.AggregateChildRow) map[string]any {
 	} else {
 		row["work_receipt"] = nil
 	}
-	// FBK-012 (AC-806 posture): accepted work without a valid attributable
+	// FBK-012 (AC-806 posture): accepted work without a valid TERMINAL
 	// work receipt is a completion-evidence gap with the actionable next
-	// step — never "completed". A child that was never accepted has no
-	// completion evidence to audit yet and renders not-applicable (its
-	// pending state is the story, not a false "present"; review round 1).
+	// step — never "completed". present demands a valid receipt in a
+	// terminal outcome (completed, partially_completed, blocked, failed):
+	// a valid BEGUN receipt is a run in flight, not completion evidence
+	// (E12 epic validation). A child that was never accepted has no
+	// completion evidence to audit yet and renders not-applicable.
 	accepted := child.Acceptance == string(records.AcceptanceAccepted) || child.IntentState == string(records.IntentAccepted)
+	terminalReceipt := child.WorkReceiptValid && child.WorkReceipt != "" && child.WorkReceipt != string(records.WorkBegan)
 	switch {
 	case !accepted:
 		row["completion_evidence"] = "not-applicable"
-	case child.WorkReceipt == "" || !child.WorkReceiptValid:
+	case !terminalReceipt:
 		row["completion_evidence"] = "missing"
 		row["completion_evidence_next_step"] = fmt.Sprintf(
 			"collect the work receipt for dispatch %s (agent-dispatch work begin/work complete --dispatch-id %s --run-id <run>) or record its absence through reconciliation", child.DispatchID, child.DispatchID)
@@ -137,10 +144,23 @@ func eventsChildProjection(child sqlite.AggregateChildRow) map[string]any {
 	return row
 }
 
+// begunReceipt reports one child's valid BEGUN work receipt: a run in
+// flight (E12 epic whole-review round 1). Its completion evidence is
+// still missing — present demands a terminal receipt — but the aggregate
+// classifies the child in-progress instead of evidence-gap: the record is
+// trustworthy, the work simply has not finished.
+func begunReceipt(child sqlite.AggregateChildRow) bool {
+	return child.WorkReceiptValid && child.WorkReceipt == string(records.WorkBegan)
+}
+
 // childReceiptResolved reports whether one child's work receipt reached a
 // terminal, valid completion (partially_completed still owes its follow-up
 // and blocked awaits the operator — both keep the aggregate busy).
 func childReceiptResolved(child sqlite.AggregateChildRow) bool {
+	// A resolved child carries a valid TERMINAL completed receipt (E12
+	// epic validation): a begun or blocked receipt keeps the aggregate
+	// busy — begun is a run in flight, blocked is manual intervention
+	// (named by its own class above).
 	return child.WorkReceiptValid && child.WorkReceipt == string(records.WorkCompleted)
 }
 

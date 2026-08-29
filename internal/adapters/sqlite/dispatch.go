@@ -29,8 +29,7 @@ func (s *Store) CommitLineage(ctx context.Context, lin ports.Lineage) error {
 	if err := s.SaveObservation(tx, portsObservation(lin.Observation)); err != nil {
 		return mapIntentConstraint(err)
 	}
-	if err := s.SaveBatch(tx, lin.Batch.BatchID, lin.Batch.RouteID, lin.Batch.RouteRevision,
-		lin.Batch.ResourceID, lin.Batch.CreatedAt, lin.Batch.ContentFingerprint, lin.Batch.ObservationIDs); err != nil {
+	if err := s.SaveBatch(tx, batchRecordOf(lin.Batch)); err != nil {
 		return err
 	}
 	if err := s.SaveDecision(tx, portsDecision(lin.Decision)); err != nil {
@@ -514,7 +513,7 @@ func (s *Store) CloseDeadLetter(ctx context.Context, dispatchID, actor, reason, 
 	}
 	if err := s.transitionWithin(ctx, tx, dispatchID, records.IntentDeadLettered, records.IntentSuperseded, state.ReasonReprocessOrDiscard,
 		state.IntentEvidence{Actor: actor}, now,
-		fmt.Sprintf(`{"reason":%q,"actor":%q,"operator_reason":%q}`, state.ReasonReprocessOrDiscard, actor, reason)); err != nil {
+		auditJSON("reason", state.ReasonReprocessOrDiscard, "actor", actor, "operator_reason", reason)); err != nil {
 		return outcome, err
 	}
 	// The lane slot releases only when this dead letter actually held it

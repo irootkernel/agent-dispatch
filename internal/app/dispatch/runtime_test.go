@@ -105,7 +105,7 @@ func testRequest(dispatchID string) ports.TaskRequest {
 		Route:       ports.TaskRouteRef{ID: "wiki-maintenance", Revision: "route-rev-1"},
 		Resource:    ports.TaskResource{ID: "vault-main", Workspace: "dir:/srv/vault"},
 		TargetID:    "hermes-kanban-main",
-		Destination: ports.TaskDestinationRef{ID: "wiki-primary", Revision: "dst-rev-1", Workstream: "maintenance"},
+		Destination: ports.TaskDestinationRef{ID: "wiki-primary", Revision: testLaneRevision, Workstream: "maintenance"},
 		Generation:  1,
 		Fingerprint: records.Digest("sha256:" + hex64('c')),
 		Changes: []records.ChangeItem{{
@@ -359,7 +359,7 @@ func TestBuildRequestDeterminism(t *testing.T) {
 		Route:       ports.TaskRouteRef{ID: "wiki-maintenance", Revision: "route-rev-1"},
 		Resource:    ports.TaskResource{ID: "vault-main", Workspace: "dir:/srv/vault"},
 		TargetID:    "hermes-kanban-main",
-		Destination: ports.TaskDestinationRef{ID: "wiki-primary", Revision: "dst-rev-1", Workstream: "maintenance"},
+		Destination: ports.TaskDestinationRef{ID: "wiki-primary", Revision: testLaneRevision, Workstream: "maintenance"},
 		Generation:  1,
 		Fingerprint: records.Digest("sha256:" + hex64('c')),
 		Changes: []records.ChangeItem{{

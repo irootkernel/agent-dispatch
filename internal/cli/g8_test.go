@@ -462,8 +462,11 @@ func TestG8AC804DestinationEditRequiresReacknowledgement(t *testing.T) {
 // (feedback-loop §7), never a third automatic generation.
 func TestG8AC805FourReceiptOutcomes(t *testing.T) {
 	configPath, vault := g8TwoLanes(t, false)
-	// Budget one: the failed leg must exhaust it in one cooperative
-	// failure (the fixture ships two; the edit is the test's own fixture).
+	// Budget one: the FIRST failure still has budget remaining and
+	// schedules one follow-up; the SECOND failure (on that follow-up)
+	// exhausts it into the UNCERT operator hold — the corrected budget
+	// semantics the docstring above states (the fixture ships two; the
+	// edit is the test's own fixture).
 	raw, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatal(err)
@@ -534,7 +537,7 @@ func TestG8AC805FourReceiptOutcomes(t *testing.T) {
 	if firstFail["status"] != "failed" || failureFollowup == "" {
 		t.Fatalf("the first failure within budget must schedule its follow-up: %v", firstFail)
 	}
-	g8Drain(t, configPath) // the failure follow-up submits
+	g8Drain(t, configPath) // the FIRST failure's follow-up submits (budget remained)
 	out.Reset()
 	errb.Reset()
 	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", failureFollowup, "--run-id", "run-fail-2"}, &out, &errb); code != 0 {
@@ -778,6 +781,19 @@ func TestG8StressConcurrentArrivalsPerLane(t *testing.T) {
 	}
 }
 
+// g8StressLaneProjection/g8StressLaneRevision render one stress lane's
+// real content-addressed pair (E12 epic validation: the store verifies
+// persisted revisions are the content address of their bytes and child
+// references have durable rows; the derivation is the canonical
+// records.RevisionOfProjection).
+func g8StressLaneProjection(destinationID string) string {
+	return `{"id":"` + destinationID + `","stress":true}`
+}
+
+func g8StressLaneRevision(destinationID string) string {
+	return records.RevisionOfProjection(g8StressLaneProjection(destinationID))
+}
+
 // g8StressLineages builds one fan-out occurrence's two lane lineages
 // with unique batch identities per burst. It intentionally mirrors the
 // app/dispatch concurrency fixture shape
@@ -823,10 +839,13 @@ func g8StressLineages(t *testing.T, s *sqlite.Store, n int) []ports.Lineage {
 			RequestVersion: "agent-dispatch.hermes-task/v1", RequestJSON: `{}`, CreatedAt: now,
 			Fanout: &ports.FanoutInput{
 				AggregateID: fmt.Sprintf("agg-g8-%d-%s", n, lane.id), Origin: "arrival",
-				DestinationID: lane.id, DestinationRevision: "dst-g8", Workstream: lane.workstream,
+				DestinationID: lane.id, DestinationRevision: g8StressLaneRevision(lane.id), Workstream: lane.workstream,
 				Selections: []records.DestinationSelection{{
-					DestinationID: lane.id, DestinationRevision: "dst-g8",
+					DestinationID: lane.id, DestinationRevision: g8StressLaneRevision(lane.id),
 					Workstream: lane.workstream, Reason: "fanout_mode:all",
+				}},
+				Revisions: []ports.DestinationRevisionInput{{
+					DestinationID: lane.id, Revision: g8StressLaneRevision(lane.id), ProjectionJSON: g8StressLaneProjection(lane.id),
 				}},
 			},
 		}
@@ -850,6 +869,21 @@ func TestG8RealHermesTwoDestinationWalkthrough(t *testing.T) {
 		return perr == nil && ver.Eligible(hermeskanban.MinimumEligibleVersion)
 	})
 	bin, _ := exec.LookPath("hermes")
+	// The HOME redirect below happens after the board exists; the cleanup
+	// defer may therefore run under the REDIRECTED HOME (E12 epic
+	// validation, review posture): capture the real HOME now so the
+	// deletion command runs in the operator's environment, and the board
+	// name is recorded in the test log for manual removal if the cleanup
+	// still fails (the disposable-board guarantee stays honest).
+	realHome := os.Getenv("HOME")
+	cleanupEnv := func(argv ...string) (string, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, bin, argv...)
+		cmd.Env = append(os.Environ(), "HOME="+realHome)
+		out, err := cmd.CombinedOutput()
+		return strings.TrimSpace(string(out)), err
+	}
 	// The frozen 0.19.1 create surface: a drifted surface is the E11-T2
 	// capability probe's detection, not this walkthrough's (same posture
 	// as the adapter's realboard test).
@@ -864,11 +898,12 @@ func TestG8RealHermesTwoDestinationWalkthrough(t *testing.T) {
 	// logs the orphan honestly instead of failing the test (review round 1,
 	// security finding).
 	board := fmt.Sprintf("agent-dispatch-g8-%d", time.Now().UnixNano())
-	if out, err := g3Hermes(t, "kanban", "boards", "create", board); err != nil {
+	if out, err := cleanupEnv("kanban", "boards", "create", board); err != nil {
 		t.Skipf("boards create unavailable (%v): %s", err, out)
 	}
+	t.Logf("disposable walkthrough board: %s", board)
 	defer func() {
-		out, err := g3Hermes(t, "kanban", "boards", "rm", board, "--delete")
+		out, err := cleanupEnv("kanban", "boards", "rm", board, "--delete")
 		if err != nil {
 			t.Logf("best-effort cleanup of the disposable board %s failed (%v): %s — remove it manually (TST-007 posture)", board, err, out)
 		}
@@ -1037,5 +1072,263 @@ routes:
 		if code := Run([]string{"work", "complete", "--config", cfgPath, "--dispatch-id", id, "--run-id", "run-" + lane, "--manifest", manifest}, &wOut, &wErr); code != 0 {
 			t.Fatalf("real work complete %s: %s", lane, wErr.String())
 		}
+	}
+}
+
+// TestEpicValidationReconcileFansOutBothLanes pins the E12 epic
+// validation residual: the reconcile path fans the reconciliation intent
+// out per selected destination — one shared aggregate, one child per
+// lane, origin reconcile — instead of committing one child on the
+// canonically-first lane only.
+func TestEpicValidationReconcileFansOutBothLanes(t *testing.T) {
+	configPath, vault := g8TwoLanes(t, false)
+	g8Enable(t, configPath)
+	// Due work exists on both lanes' scope: a fresh file the initial
+	// reconciliation will diff.
+	os.WriteFile(filepath.Join(vault, "Inbox", "reconcile-both.md"), []byte("due work"), 0o644)
+	var out, errb bytes.Buffer
+	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "initial", "--submit"}, &out, &errb); code != 0 {
+		t.Fatalf("reconcile --submit: %s", errb.String())
+	}
+	res := decodeEnvelope(t, &out)
+	if res["submitted"] != true {
+		t.Fatalf("the reconcile intent must submit: %v", res)
+	}
+	lanes, _ := res["reconcile_lanes"].([]any)
+	if len(lanes) != 1 {
+		t.Fatalf("the sibling lane's child must be listed beside the result: %v", res)
+	}
+	store := g8Store(t, configPath)
+	rows, err := store.Query(`SELECT c.destination_id, c.dispatch_id, a.origin FROM child_dispatches c JOIN aggregate_events a ON a.aggregate_id = c.aggregate_id WHERE a.origin = 'reconcile'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	byLane := map[string]string{}
+	aggregateIDs := map[string]bool{}
+	for rows.Next() {
+		var dest, dispatch, origin string
+		if err := rows.Scan(&dest, &dispatch, &origin); err != nil {
+			t.Fatal(err)
+		}
+		byLane[dest] = dispatch
+	}
+	if len(byLane) != 2 {
+		t.Fatalf("the reconcile fan-out must create one child per lane: %v", byLane)
+	}
+	for _, lane := range []string{"main", "review"} {
+		if byLane[lane] == "" {
+			t.Fatalf("lane %s must carry a reconcile child: %v", lane, byLane)
+		}
+		// Both children sit beneath ONE shared aggregate.
+		var aggregate string
+		if err := store.QueryRow(`SELECT aggregate_id FROM child_dispatches WHERE dispatch_id = ?`, byLane[lane]).Scan(&aggregate); err != nil {
+			t.Fatal(err)
+		}
+		aggregateIDs[aggregate] = true
+	}
+	if len(aggregateIDs) != 1 {
+		t.Fatalf("both reconcile children must share one aggregate: %v", aggregateIDs)
+	}
+	// Durable-first order (E12 epic whole-review round 1): the sibling
+	// children commit BEFORE the first lane's reconciliation transaction,
+	// so the shared aggregate's creation audit names the SIBLING that
+	// created it — the crash window between the two leaves ready siblings
+	// the drain submits, never an unmarked first lane.
+	var aggregateID string
+	for id := range aggregateIDs {
+		aggregateID = id
+	}
+	var createdContext string
+	if err := store.QueryRow(`SELECT context_json FROM state_transitions
+		WHERE entity_type = 'aggregate_event' AND entity_id = ?`, aggregateID).Scan(&createdContext); err != nil {
+		t.Fatalf("the aggregate's creation audit must persist: %v", err)
+	}
+	if !strings.Contains(createdContext, `"review"`) || !strings.Contains(createdContext, `"origin":"reconcile"`) {
+		t.Fatalf("the aggregate must be created by the durable-first sibling commit, not the first lane: %s", createdContext)
+	}
+	// Each sibling child's OWN creation audit names origin reconcile and
+	// its own destination (E12 epic whole-review round 2): the sibling is
+	// reconcile work on its lane, never misattributed arrival work.
+	var reviewChild string
+	if err := store.QueryRow(`SELECT dispatch_id FROM child_dispatches WHERE destination_id = 'review'`).Scan(&reviewChild); err != nil {
+		t.Fatal(err)
+	}
+	var siblingContext string
+	if err := store.QueryRow(`SELECT context_json FROM state_transitions
+		WHERE entity_type = 'dispatch_intent' AND entity_id = ? AND transition_id = ?`, reviewChild, reviewChild+":created").Scan(&siblingContext); err != nil {
+		t.Fatalf("the sibling's creation audit must persist: %v", err)
+	}
+	if !strings.Contains(siblingContext, `"origin":"reconcile"`) || !strings.Contains(siblingContext, `"destination_id":"review"`) {
+		t.Fatalf("the sibling creation audit must name origin reconcile and its own destination: %s", siblingContext)
+	}
+}
+
+// TestEpicValidationReconcileSiblingFailureExitsNonzero pins the exit-code
+// policy of the reconcile fan-out (E12 epic whole-review round 1): a
+// sibling child whose commit fails for a non-slot-held reason is never
+// silent and never zeroes the exit — the reconcile still delivers its
+// first lane, the envelope lists the failed lane beside the result, and
+// the error rides stderr with a mapped non-zero exit.
+func TestEpicValidationReconcileSiblingFailureExitsNonzero(t *testing.T) {
+	configPath, vault := g8TwoLanes(t, false)
+	g8Enable(t, configPath)
+	os.WriteFile(filepath.Join(vault, "Inbox", "sibling-failure.md"), []byte("due work"), 0o644)
+	store := g8Store(t, configPath)
+	defer store.Close()
+	// Stage a store-layer fault on exactly the sibling lane's child insert
+	// (the durable-first order commits the sibling BEFORE the first lane's
+	// transaction, and the trigger's WHEN clause leaves the main lane's
+	// child insert untouched): a non-slot-held failure by construction.
+	if _, err := store.Exec(`CREATE TRIGGER stage_sibling_commit_failure
+		BEFORE INSERT ON child_dispatches WHEN NEW.destination_id = 'review'
+		BEGIN SELECT RAISE(ABORT, 'staged sibling commit failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "initial"}, &out, &errb)
+	if code == 0 {
+		t.Fatalf("a failed sibling commit must exit non-zero: %s", out.String())
+	}
+	// The stdout envelope keeps the delivered reconcile result with the
+	// failed lane listed (ok:false rides the stderr error envelope).
+	res := decodeEnvelope(t, &out)
+	lanes, _ := res["reconcile_lanes"].([]any)
+	if len(lanes) != 1 {
+		t.Fatalf("the failed sibling lane must be listed beside the result: %v", res)
+	}
+	entry, _ := lanes[0].(map[string]any)
+	if entry["destination_id"] != "review" || entry["committed"] != false || entry["error"] == nil {
+		t.Fatalf("the failed sibling entry carries its bounded error: %v", entry)
+	}
+	if !strings.Contains(errb.String(), "review") {
+		t.Fatalf("the sibling failure must surface on stderr: %s", errb.String())
+	}
+	// The first lane's child still committed through the reconciliation
+	// transaction (CON-007 isolation): the occurrence delivered its main
+	// lane despite the sibling's failure.
+	var mainChildren int
+	if err := store.QueryRow(`SELECT COUNT(*) FROM child_dispatches c
+		JOIN aggregate_events a ON a.aggregate_id = c.aggregate_id
+		WHERE a.origin = 'reconcile' AND c.destination_id = 'main'`).Scan(&mainChildren); err != nil || mainChildren != 1 {
+		t.Fatalf("the first lane must commit despite the sibling failure: %d %v", mainChildren, err)
+	}
+	// The storage fault classifies as STORAGE (20), never internal: the
+	// sibling commit wraps its store failures as typed store errors (E12
+	// epic whole-review round 2).
+	if code != 20 {
+		t.Fatalf("a store-fault sibling failure must exit 20 (storage), got %d", code)
+	}
+}
+
+// TestEpicValidationReconcileFirstLaneFailureSurfacesSiblings pins the
+// failure-path visibility (E12 epic whole-review round 2): the
+// durable-first order commits the siblings BEFORE the first lane's
+// transaction, so when the FIRST lane's commit fails the already-committed
+// siblings still reach the operator — the error envelope's result slot
+// carries the lane listing and stderr names each committed sibling.
+func TestEpicValidationReconcileFirstLaneFailureSurfacesSiblings(t *testing.T) {
+	configPath, vault := g8TwoLanes(t, false)
+	g8Enable(t, configPath)
+	os.WriteFile(filepath.Join(vault, "Inbox", "first-lane-failure.md"), []byte("due work"), 0o644)
+	store := g8Store(t, configPath)
+	defer store.Close()
+	// The staged fault hits exactly the FIRST lane's child insert; the
+	// sibling lane's child commits before it (durable-first).
+	if _, err := store.Exec(`CREATE TRIGGER stage_first_lane_failure
+		BEFORE INSERT ON child_dispatches WHEN NEW.destination_id = 'main'
+		BEGIN SELECT RAISE(ABORT, 'staged first lane failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "initial"}, &out, &errb)
+	if code == 0 {
+		t.Fatalf("the failed first-lane commit must exit non-zero: %s", out.String())
+	}
+	// The sibling outcomes ride the stderr error envelope's result slot
+	// (writeErrorWithResult), committed siblings included. The envelope is
+	// the JSON line on stderr beside the plain-text notes.
+	var errEnvelope map[string]any
+	var envelopeLine string
+	for _, line := range strings.Split(errb.String(), "\n") {
+		if strings.HasPrefix(line, "{") {
+			envelopeLine = line
+		}
+	}
+	if err := json.Unmarshal([]byte(envelopeLine), &errEnvelope); err != nil {
+		t.Fatalf("the failure must write the error envelope: %s", errb.String())
+	}
+	result, _ := errEnvelope["result"].(map[string]any)
+	lanes, _ := result["reconcile_lanes"].([]any)
+	if len(lanes) != 1 {
+		t.Fatalf("the committed sibling must ride the failure envelope: %v", errEnvelope)
+	}
+	entry, _ := lanes[0].(map[string]any)
+	if entry["destination_id"] != "review" || entry["committed"] != true {
+		t.Fatalf("the committed sibling must be visible beside the error: %v", entry)
+	}
+	// And on stderr as a plain note, so the operator sees it without
+	// parsing the envelope.
+	if !strings.Contains(errb.String(), "committed its child") || !strings.Contains(errb.String(), "review") {
+		t.Fatalf("the committed sibling must be named on stderr: %s", errb.String())
+	}
+	// The sibling really is durable: its child row exists beneath the
+	// reconcile aggregate while the first lane has none.
+	var reviewChildren, mainChildren int
+	store.QueryRow(`SELECT COUNT(*) FROM child_dispatches WHERE destination_id = 'review'`).Scan(&reviewChildren)
+	store.QueryRow(`SELECT COUNT(*) FROM child_dispatches WHERE destination_id = 'main'`).Scan(&mainChildren)
+	if reviewChildren != 1 || mainChildren != 0 {
+		t.Fatalf("exactly the sibling committed: review=%d main=%d", reviewChildren, mainChildren)
+	}
+}
+
+// TestEpicValidationReconcileRetryAfterPartialFailure pins the truthful
+// retry shape (E12 epic whole-review round 2): a retry after a partial
+// failure is a FRESH occurrence whose already-committed lane refuses with
+// the slot-held skip — nothing new commits for that lane, no duplicate
+// child appears, and the retry reports the lane as skipped with its note.
+func TestEpicValidationReconcileRetryAfterPartialFailure(t *testing.T) {
+	configPath, vault := g8TwoLanes(t, false)
+	g8Enable(t, configPath)
+	os.WriteFile(filepath.Join(vault, "Inbox", "retry-partial.md"), []byte("due work"), 0o644)
+	store := g8Store(t, configPath)
+	defer store.Close()
+	// Run 1: the first lane fails, the sibling commits (durable-first).
+	if _, err := store.Exec(`CREATE TRIGGER stage_first_lane_failure
+		BEFORE INSERT ON child_dispatches WHEN NEW.destination_id = 'main'
+		BEGIN SELECT RAISE(ABORT, 'staged first lane failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "initial"}, &out, &errb); code == 0 {
+		t.Fatalf("run 1 must fail on the staged first-lane fault: %s", out.String())
+	}
+	if _, err := store.Exec(`DROP TRIGGER stage_first_lane_failure`); err != nil {
+		t.Fatal(err)
+	}
+	// Run 2 (the retry): the first lane's work is still due, the sibling's
+	// lane already holds its committed child.
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"reconcile", "--route", "wiki", "--config", configPath, "--reason", "initial"}, &out, &errb); code != 0 {
+		t.Fatalf("the retry must succeed once the fault clears: %s", errb.String())
+	}
+	res := decodeEnvelope(t, &out)
+	lanes, _ := res["reconcile_lanes"].([]any)
+	if len(lanes) != 1 {
+		t.Fatalf("the retry must report the already-committed sibling lane: %v", res)
+	}
+	entry, _ := lanes[0].(map[string]any)
+	note, _ := entry["note"].(string)
+	if entry["destination_id"] != "review" || entry["committed"] != false || note == "" {
+		t.Fatalf("the retry reports the committed lane as the slot-held skip: %v", entry)
+	}
+	// Nothing new committed for the retrying lane and no duplicate exists:
+	// the earlier child IS that lane's reconciliation.
+	var reviewChildren, mainChildren int
+	store.QueryRow(`SELECT COUNT(*) FROM child_dispatches WHERE destination_id = 'review'`).Scan(&reviewChildren)
+	store.QueryRow(`SELECT COUNT(*) FROM child_dispatches WHERE destination_id = 'main'`).Scan(&mainChildren)
+	if reviewChildren != 1 || mainChildren != 1 {
+		t.Fatalf("the retry commits nothing new for the held lane and delivers the first lane: review=%d main=%d", reviewChildren, mainChildren)
 	}
 }

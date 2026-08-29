@@ -25,7 +25,7 @@ The implementation must verify the resulting journal mode and fail `doctor` if t
 | `watch_bindings` | Effective Watchman binding per route (configured root, actual root, relative root, trigger name) | unique route ID |
 | `source_observations` | Immutable source delivery evidence | unique observation ID; optional unique source event key per source |
 | `observation_changes` | Normalized path evidence | primary key observation ID + ordinal |
-| `change_batches` | Canonical policy unit | unique batch ID |
+| `change_batches` | Canonical policy unit; since v15 the batches the merge and arrival paths persist carry the occurrence's destination-selection evidence (`selected_destinations_json`, E12 epic validation) | unique batch ID |
 | `batch_observations` | Many-to-many lineage | unique pair |
 | `policy_decisions` | Immutable decisions | unique decision ID |
 | `dispatch_intents` | Durable external intent | unique dispatch ID; unique target ID + idempotency key |
@@ -55,7 +55,14 @@ uncertainty; every other coordination read goes through the lane rows (the
 route's aggregated snapshot folds its lanes). Lane rows materialize lazily
 on their first write; migration v13 backfilled one lane row per route whose
 active dispatch existed at the cutover (the child row's destination, else
-the synthetic `__legacy__` lane of pre-cutover work).
+the synthetic `__legacy__` lane of pre-cutover work). Since migration v15
+the batches BOTH the merge and the arrival paths persist record the
+occurrence's destination selection (`selected_destinations_json` — a merge
+stamps the merging occurrence's selection, an activation-committed batch
+carries the selection of the occurrence it delivered), so a lane's
+follow-up filters its dirty generation by the occurrence's selection —
+occurrence-level FAN-005 semantics with a per-change condition fallback
+for legacy rows without selection evidence (E12 epic validation).
 
 ## 3. Dispatch State Machine
 

@@ -107,9 +107,13 @@ without a replacement.
 
 **Batch record** (the canonical policy unit behind `dispatches reprocess`): the
 retained observation-to-batch lineage — `batch_id`, `route_id`,
-`route_revision`, `resource_id`, `created_at`, `content_fingerprint`, and
-observation ids — with its normalized change rows (`path`, `operation`,
-`exists`, `file_type`, `before_digest`, `after_digest`, `digest_status`).
+`route_revision`, `resource_id`, `created_at`, `content_fingerprint`,
+observation ids, and — since migration v15 (E12 epic validation) — the
+`selected_destinations` list, the occurrence's FULL destination selection
+recorded as merge evidence in canonical destination order (empty when
+unrecorded; the pre-v15 legacy shape). The batch keeps its normalized
+change rows (`path`, `operation`, `exists`, `file_type`, `before_digest`,
+`after_digest`, `digest_status`).
 
 **Decision record** (every policy outcome): `decision_id`, `route_id`,
 `route_revision`, `policy_revision`, exactly one of `batch_id` or

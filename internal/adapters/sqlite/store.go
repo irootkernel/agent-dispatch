@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -90,18 +91,65 @@ type ChangeRecord struct {
 	DigestStatus string
 }
 
-// SaveBatch stores the canonical batch and its observation lineage.
-func (s *Store) SaveBatch(tx *sql.Tx, batchID, routeID, routeRevision, resourceID, createdAt, contentFingerprint string, observationIDs []string) error {
+// BatchRecord is the persistence shape of one change batch (E12 epic
+// whole-review round 2: the explicit record form replaces the widened
+// positional parameter list — the v15 selection column made nine
+// positional arguments one transposition away from silent corruption).
+type BatchRecord struct {
+	BatchID            string
+	RouteID            string
+	RouteRevision      string
+	ResourceID         string
+	CreatedAt          string
+	ContentFingerprint string
+	ObservationIDs     []string
+	// SelectedDestinations is the occurrence's destination-selection
+	// evidence (migration v15): the FULL selection of the occurrence that
+	// persisted this batch, canonically sorted at write time. Empty means
+	// unrecorded (the legacy pre-v15 shape keeps the per-change fallback).
+	SelectedDestinations []string
+}
+
+// batchRecordOf projects one ports batch input into its persistence
+// record — the single conversion every SaveBatch caller shares (E12 epic
+// whole-review round 2).
+func batchRecordOf(b ports.BatchInput) BatchRecord {
+	return BatchRecord{
+		BatchID: b.BatchID, RouteID: b.RouteID, RouteRevision: b.RouteRevision,
+		ResourceID: b.ResourceID, CreatedAt: b.CreatedAt, ContentFingerprint: b.ContentFingerprint,
+		ObservationIDs: b.ObservationIDs, SelectedDestinations: b.SelectedDestinations,
+	}
+}
+
+// SaveBatch stores the canonical batch and its observation lineage. The
+// optional selection summary (E12 epic validation, migration v15)
+// persists the occurrence's destination selection as merge evidence.
+func (s *Store) SaveBatch(tx *sql.Tx, b BatchRecord) error {
 	// batch_seq is the monotonic watermark assigned at insert (MAX+1)
 	// inside the insert transaction; the unique index makes a lost
 	// assignment a hard failure instead of a silent tie (E8-T1, H-1.3).
-	if _, err := execOn(tx, s.DB, `INSERT INTO change_batches (batch_id, route_id, route_revision, resource_id, created_at, content_fingerprint, batch_seq)
+	// The selection column is written ONLY when evidence exists (E12
+	// epic validation, migration v15): an empty selection never touches
+	// the column, so pre-v15 code paths and seeds keep working against
+	// their own schema shape, and legacy rows stay NULL (unknown).
+	if len(b.SelectedDestinations) > 0 {
+		sorted := records.CanonicalDestinations(b.SelectedDestinations)
+		raw, err := json.Marshal(sorted)
+		if err != nil {
+			return err
+		}
+		if _, err := execOn(tx, s.DB, `INSERT INTO change_batches (batch_id, route_id, route_revision, resource_id, created_at, content_fingerprint, batch_seq, selected_destinations_json)
+			VALUES (?,?,?,?,?,?, (SELECT COALESCE(MAX(batch_seq), 0) + 1 FROM change_batches), ?)`,
+			b.BatchID, b.RouteID, b.RouteRevision, b.ResourceID, b.CreatedAt, b.ContentFingerprint, string(raw)); err != nil {
+			return err
+		}
+	} else if _, err := execOn(tx, s.DB, `INSERT INTO change_batches (batch_id, route_id, route_revision, resource_id, created_at, content_fingerprint, batch_seq)
 		VALUES (?,?,?,?,?,?, (SELECT COALESCE(MAX(batch_seq), 0) + 1 FROM change_batches))`,
-		batchID, routeID, routeRevision, resourceID, createdAt, contentFingerprint); err != nil {
+		b.BatchID, b.RouteID, b.RouteRevision, b.ResourceID, b.CreatedAt, b.ContentFingerprint); err != nil {
 		return err
 	}
-	for _, obsID := range observationIDs {
-		if _, err := execOn(tx, s.DB, `INSERT INTO batch_observations (batch_id, observation_id) VALUES (?,?)`, batchID, obsID); err != nil {
+	for _, obsID := range b.ObservationIDs {
+		if _, err := execOn(tx, s.DB, `INSERT INTO batch_observations (batch_id, observation_id) VALUES (?,?)`, b.BatchID, obsID); err != nil {
 			return err
 		}
 	}

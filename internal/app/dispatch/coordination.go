@@ -35,6 +35,25 @@ type CoordinatorStore interface {
 	ports.DispatchStore
 }
 
+// SingleLaneFanout builds the one-lane fanout block every derived child
+// carries (E12-T1, E12 epic validation): the aggregate identity, origin,
+// the child's destination lane, its single-lane selection summary with
+// the closed reason, and the durable destination-revision records the
+// selection references. ONE constructor for the five creation sites —
+// arrival and reconcile in the CLI, follow-up, rerun, and rebuild in the
+// app services — so the assembly can never drift between them.
+func SingleLaneFanout(aggregateID string, origin records.AggregateOrigin, lane ports.TaskDestinationRef, reason string, revisions []ports.DestinationRevisionInput) *ports.FanoutInput {
+	return &ports.FanoutInput{
+		AggregateID: aggregateID, Origin: string(origin),
+		DestinationID: lane.ID, DestinationRevision: lane.Revision, Workstream: lane.Workstream,
+		Selections: []records.DestinationSelection{{
+			DestinationID: lane.ID, DestinationRevision: lane.Revision,
+			Workstream: lane.Workstream, Reason: reason,
+		}},
+		Revisions: revisions,
+	}
+}
+
 // LegacyDestinationLaneID is the ports-side declaration of the synthetic
 // legacy lane (ADR-0016): pre-cutover work without a child row coordinates
 // on this lane. The app layer references the shared constant so the value
@@ -93,15 +112,34 @@ type FanoutLaneFailure struct {
 	DispatchID string
 	// Error is the bounded, redacted failure text (BoundLaneError).
 	Error string
+	// Err is the LIVE failure (round 3): the bounded text above is
+	// presentation; this member preserves the typed error so callers can
+	// classify non-lane-isolated classes (an invalid fanout record is a
+	// configuration failure for EVERY lane, never a per-lane warning).
+	Err error
 }
 
-// laneErrorBound caps one lane failure's reported text (OPS-009 posture:
-// the envelope stays bounded even when the underlying error is not).
-const laneErrorBound = 300
+// operatorTextBound caps one lane failure's or resolver diagnostic's
+// reported operator text (OPS-009 posture: the envelope stays bounded
+// even when the underlying error is not; ONE bound for the package's
+// operator-facing surfaces, E12 epic whole-review round 3).
+const operatorTextBound = 300
+
+// boundTruncate is the ONE bounded-text truncator of this package (E12
+// epic whole-review round 1): the cut lands ON A RUNE BOUNDARY with an
+// explicit marker — a byte cut could split a multi-byte character and
+// emit invalid UTF-8 into a JSON envelope or stored diagnostic.
+func boundTruncate(text string, max int) string {
+	runes := []rune(text)
+	if len(runes) <= max {
+		return text
+	}
+	return string(runes[:max]) + "...(truncated)"
+}
 
 // BoundLaneError renders one lane failure's bounded, redacted text:
 // control characters collapse to spaces (envelope-safe) and an oversized
-// tail is cut with an explicit marker.
+// tail is cut through the shared rune-bound truncator.
 func BoundLaneError(err string) string {
 	var b strings.Builder
 	for _, r := range err {
@@ -111,16 +149,14 @@ func BoundLaneError(err string) string {
 		}
 		b.WriteRune(r)
 	}
-	out := b.String()
-	if len(out) > laneErrorBound {
-		out = out[:laneErrorBound] + "...(truncated)"
-	}
-	return out
+	return boundTruncate(b.String(), operatorTextBound)
 }
 
 // arrivalOne applies the single-lane arrival decision: the lane's snapshot
 // gates activation (CON-001 per lane, CON-007); a held slot merges into
-// exactly this lane's dirty generation (CON-008).
+// exactly this lane's dirty generation (CON-008). The occurrence's
+// selection is this one lane — the store still unions it with any
+// selection the batch already carried.
 func (c *Coordinator) arrivalOne(ctx context.Context, lin ports.Lineage) (FanoutLaneResult, error) {
 	lane := laneOfLineage(lin)
 	snap, err := c.Store.LoadLaneState(ctx, lin.Decision.RouteID, lane)
@@ -145,7 +181,7 @@ func (c *Coordinator) arrivalOne(ctx context.Context, lin ports.Lineage) (Fanout
 		// A concurrent arrival won the lane's slot: this burst merges (AC-204
 		// posture — the loser observes existing ownership).
 	}
-	dirty, err := c.Store.CommitMergePending(ctx, lin, []string{lane}, c.Actor, c.Now())
+	dirty, err := c.Store.CommitMergePending(ctx, lin, []string{lane}, []string{lane}, c.Actor, c.Now())
 	if err != nil {
 		return FanoutLaneResult{DestinationID: lane}, err
 	}
@@ -164,15 +200,27 @@ func (c *Coordinator) ArrivalFanout(ctx context.Context, lins []ports.Lineage) (
 	if len(lins) == 0 {
 		return out, fmt.Errorf("%w: a fan-out arrival needs at least one destination lineage", ports.ErrStateNotEligible)
 	}
+	// The occurrence's FULL selection (E12 epic whole-review round 2): a
+	// lane's merge records the WHOLE occurrence's selected lanes as batch
+	// evidence — never just the merging lane — so every selected lane's
+	// follow-up keeps the whole burst (FAN-005/CON-008; the merging lane
+	// set and the selection evidence are different facts and are passed
+	// separately to the store).
+	selection := make([]string, 0, len(lins))
+	for _, lin := range lins {
+		selection = append(selection, laneOfLineage(lin))
+	}
 	var lastErr error
 	persisted := false
 	// recordFailure keeps one lane's failure visible beside its siblings'
-	// successes (CON-007): the bounded text rides in the outcome and the
+	// successes (CON-007): the bounded text rides in the outcome, the live
+	// typed error rides beside it for classification (round 3), and the
 	// error stays live for the all-failed return.
 	recordFailure := func(lane, dispatchID string, err error) {
 		lastErr = err
 		out.Failed = append(out.Failed, FanoutLaneFailure{
-			DestinationID: lane, DispatchID: dispatchID, Error: BoundLaneError(err.Error()),
+			DestinationID: lane, DispatchID: dispatchID,
+			Error: BoundLaneError(err.Error()), Err: err,
 		})
 	}
 	for _, lin := range lins {
@@ -215,9 +263,9 @@ func (c *Coordinator) ArrivalFanout(ctx context.Context, lins []ports.Lineage) (
 		var dirty int
 		var mergeErr error
 		if !persisted {
-			dirty, mergeErr = c.Store.CommitMergePending(ctx, lin, []string{lane}, c.Actor, c.Now())
+			dirty, mergeErr = c.Store.CommitMergePending(ctx, lin, []string{lane}, selection, c.Actor, c.Now())
 		} else {
-			dirty, mergeErr = c.Store.MergeSelectedLanes(ctx, lin.Decision.RouteID, []string{lane}, c.Actor, c.Now())
+			dirty, mergeErr = c.Store.MergeSelectedLanes(ctx, lin.Decision.RouteID, lin.Batch.BatchID, []string{lane}, selection, c.Actor, c.Now())
 		}
 		if mergeErr != nil {
 			recordFailure(lane, "", mergeErr)
@@ -267,8 +315,20 @@ func (c *Coordinator) Activate(ctx context.Context, dispatchID string) error {
 // revision digests, so a derived child that references the lane can also
 // persist the destination-revision record it names (DAT-010: every
 // referenced revision has its projection row). ok is false when the route
-// or its certified destination cannot be resolved.
-type DestinationLaneResolver func(routeID string) (lane ports.TaskDestinationRef, projectionJSON string, ok bool)
+// or its certified destination cannot be resolved; detail then carries
+// the bounded underlying reason (route missing, multi-destination bound,
+// projection failure) so the fail-closed error names WHY (E12 epic
+// validation).
+type DestinationLaneResolver func(routeID string) (lane ports.TaskDestinationRef, projectionJSON string, ok bool, detail string)
+
+// boundedResolverDetail keeps a resolver's diagnostic bounded (E12 epic
+// validation): the underlying configuration cause is operator-facing
+// text inside a typed error, never unbounded prose. The cut is the
+// package's shared rune-bound truncator at the shared operator-text
+// bound (E12 epic whole-review round 3).
+func boundedResolverDetail(detail string) string {
+	return boundTruncate(detail, operatorTextBound)
+}
 
 // ResolveDestinationLane resolves the destination lane for derived work
 // (E12-T1, DAT-013 precedence): the stored request's destination block
@@ -285,8 +345,10 @@ func ResolveDestinationLane(routeID string, stored *ports.TaskDestinationRef, sn
 		return snapshotLane, "", nil
 	}
 	if resolver != nil {
-		if lane, projection, ok := resolver(routeID); ok {
+		if lane, projection, ok, detail := resolver(routeID); ok {
 			return lane, projection, nil
+		} else if detail != "" {
+			return ports.TaskDestinationRef{}, "", fmt.Errorf("%w: the work predates the destinations contract and no live destination lane resolves for route %s (%s); regenerate the configuration before rerunning legacy work", ports.ErrStateNotEligible, routeID, boundedResolverDetail(detail))
 		}
 	}
 	return ports.TaskDestinationRef{}, "", fmt.Errorf("%w: the work predates the destinations contract and no live destination lane resolves for route %s; regenerate the configuration before rerunning legacy work", ports.ErrStateNotEligible, routeID)
@@ -367,15 +429,8 @@ func BuildFollowupRequest(original ports.IntentSnapshot, manifest []records.Chan
 		ContentFingerprint: next.Activation.ContentFingerprint,
 		ManifestDigest:     ManifestDigest(manifest),
 		RequestVersion:     RequestContractVersion, RequestJSON: requestJSON,
-		Fanout: &ports.FanoutInput{
-			AggregateID: string(aggregateID), Origin: string(records.OriginFollowup),
-			DestinationID: destination.ID, DestinationRevision: destination.Revision, Workstream: destination.Workstream,
-			Selections: []records.DestinationSelection{{
-				DestinationID: destination.ID, DestinationRevision: destination.Revision,
-				Workstream: destination.Workstream, Reason: "followup:" + original.DispatchID,
-			}},
-			Revisions: revisions,
-		},
+		Fanout: SingleLaneFanout(string(aggregateID), records.OriginFollowup, destination,
+			"followup:"+original.DispatchID, revisions),
 	}, nil
 }
 

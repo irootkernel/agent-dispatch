@@ -385,7 +385,7 @@ func (s *Store) ApplyOperatorRetry(ctx context.Context, dispatchID, actor, reaso
 	}
 	transitionID := fmt.Sprintf("%s:%s:operator-retry", dispatchID, now)
 	if err := s.AppendTransition(tx, transitionID, "dispatch_intent", dispatchID, current, "ready", now,
-		fmt.Sprintf(`{"reason":%q,"actor":%q,"operator_reason":%q,"attempt_budget_reset":true}`, state.ReasonExplicitRetry, actor, reason)); err != nil {
+		auditJSON("reason", state.ReasonExplicitRetry, "actor", actor, "operator_reason", reason, "attempt_budget_reset", true)); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -411,7 +411,7 @@ func (s *Store) MakeRetryDue(ctx context.Context, dispatchID, actor, now string)
 		return fmt.Errorf("%w: %s is not retry_wait", ports.ErrStateNotEligible, dispatchID)
 	}
 	if err := s.AppendTransition(tx, dispatchID+":retry-reset:"+now+":"+ids.RandomSuffix(), "dispatch_intent", dispatchID, "retry_wait", "retry_wait", now,
-		fmt.Sprintf(`{"reason":"explicit_retry_reset","actor":%q}`, actor)); err != nil {
+		auditJSON("reason", "explicit_retry_reset", "actor", actor)); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -471,7 +471,7 @@ func (s *Store) RerunIntent(ctx context.Context, in ports.RerunInput) (ports.Int
 		return sum, err
 	}
 	supersedeContext := func(reason state.IntentReason) string {
-		return fmt.Sprintf(`{"reason":%q,"actor":%q,"operator_reason":%q,"superseded_by":%q}`, reason, in.Actor, in.Reason, in.New.DispatchID)
+		return auditJSON("reason", reason, "actor", in.Actor, "operator_reason", in.Reason, "superseded_by", in.New.DispatchID)
 	}
 	switch records.IntentState(originalState) {
 	case records.IntentReady:
@@ -514,7 +514,7 @@ func (s *Store) RerunIntent(ctx context.Context, in ports.RerunInput) (ports.Int
 		return sum, fmt.Errorf("%w: lane %s/%s is %s; rerun requires a resolved lane", ports.ErrStateNotEligible, in.New.RouteID, takeoverLane, laneSnap.State)
 	}
 	if err := s.AppendTransition(tx, in.New.DispatchID+":created", "dispatch_intent", in.New.DispatchID, "", "ready", now,
-		fmt.Sprintf(`{"reason":"operator_rerun","actor":%q,"operator_reason":%q,"supersedes_dispatch":%q,"new_generation":%d}`, in.Actor, in.Reason, in.OriginalDispatchID, in.New.Generation)); err != nil {
+		auditJSON("reason", "operator_rerun", "actor", in.Actor, "operator_reason", in.Reason, "supersedes_dispatch", in.OriginalDispatchID, "new_generation", in.New.Generation)); err != nil {
 		return sum, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -560,7 +560,7 @@ func (s *Store) ReconcileUnknown(ctx context.Context, dispatchID, actor string, 
 	}
 	// unknown -> reconciling with the actor guard.
 	if err := s.transitionWithin(ctx, tx, dispatchID, records.IntentUnknown, records.IntentReconciling, state.ReasonLookupStarted,
-		state.IntentEvidence{Actor: actor}, now, fmt.Sprintf(`{"reason":%q,"actor":%q}`, state.ReasonLookupStarted, actor)); err != nil {
+		state.IntentEvidence{Actor: actor}, now, auditJSON("reason", state.ReasonLookupStarted, "actor", actor)); err != nil {
 		return "", err
 	}
 	evidence := state.IntentEvidence{Actor: actor, Reconciliation: &state.ReconciliationEvidence{
@@ -587,7 +587,7 @@ func (s *Store) ReconcileUnknown(ctx context.Context, dispatchID, actor string, 
 		to, reason = records.IntentDeadLettered, state.ReasonUnresolvedOrLimit
 	}
 	if err := s.transitionWithin(ctx, tx, dispatchID, records.IntentReconciling, to, reason, evidence, now,
-		fmt.Sprintf(`{"reason":%q,"actor":%q,"lookup_status":%q,"attempts_exhausted":%v}`, reason, actor, lookup.Status, attemptsExhausted)); err != nil {
+		auditJSON("reason", reason, "actor", actor, "lookup_status", lookup.Status, "attempts_exhausted", attemptsExhausted)); err != nil {
 		return "", err
 	}
 	if to == records.IntentAccepted {

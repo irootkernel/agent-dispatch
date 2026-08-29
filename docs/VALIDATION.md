@@ -1,7 +1,7 @@
 # SOT Package Validation
 
 > **Validated:** 2026-08-29 (E12 delivers gate G8; implementation gate G9 remains Planned)
-> **Package target:** Agent Dispatch SOT 1.1.12 / implementation v0.1.5 (planned); v0.1.4 is shipped
+> **Package target:** Agent Dispatch SOT 1.1.13 / implementation v0.1.5 (planned); v0.1.4 is shipped
 
 ## Completed Checks
 
@@ -257,10 +257,13 @@ v13, and v14 units are each interrupted and healed by the existing test
 without duplication here.
 
 Migration, crash, race, and schema-example evidence (cited, not
-duplicated): migration v12/v13/v14 preservation and backfill are
+duplicated): migration v12/v13/v14/v15 preservation and backfill are
 `TestE12T1MigrationV12PreservesHistoryAndAddsFanoutTables`,
-`TestE12T2MigrationV13BackfillsActiveLanes`, and
-`TestE12T3MigrationV14WidensStatusCheckAndPreservesRows` with the
+`TestE12T2MigrationV13BackfillsActiveLanes`,
+`TestE12T3MigrationV14WidensStatusCheckAndPreservesRows`, and the E12
+epic-validation merge-selection coverage (migration v15's column is
+exercised by the occurrence-level lane-selection tests in the workreceipt
+suite) with the
 e10t1/e9val rewind arms re-applying each unit over its prior-era shape;
 the crash windows are the G2 suite (`TestG2AC201` through `TestG2AC207`);
 the race suite runs in `make verify` (`test-race`); and the work-receipt

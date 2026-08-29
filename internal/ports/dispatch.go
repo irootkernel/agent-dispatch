@@ -102,6 +102,13 @@ type BatchInput struct {
 	CreatedAt          string
 	ContentFingerprint string
 	ObservationIDs     []string
+	// SelectedDestinations records the occurrence's destination-selection
+	// summary on the batches a MERGE persisted (E12 epic validation,
+	// FAN-005 occurrence-level semantics): the follow-up filter keeps a
+	// change when its merging occurrence's selection contains the
+	// completing lane. Empty means unrecorded (non-merge batches and
+	// legacy rows) — the filter then falls back to per-change evaluation.
+	SelectedDestinations []string
 }
 
 // DecisionInput is the immutable policy decision.
@@ -286,6 +293,16 @@ var ErrIdempotencyConflict = errors.New("duplicate target idempotency key")
 // ErrRouteSlotHeld reports the route already has one active dispatch
 // (CON-001: a route cannot hold two active dispatch IDs).
 var ErrRouteSlotHeld = errors.New("route already has an active dispatch")
+
+// ErrInvalidFanoutRecord reports a fan-out record that failed the
+// store-boundary validation (E12 epic whole-review round 2): a
+// destination revision that is not the content address of its projection
+// bytes, a child referencing a destination revision with no durable row,
+// or a merge with no batch row to carry the occurrence's selection
+// evidence. These are producer/configuration defects — the data is wrong,
+// not racy — so operators are told to fix the input, never to retry (the
+// invalid-configuration family, non-retryable).
+var ErrInvalidFanoutRecord = errors.New("fanout record failed store-boundary validation")
 
 // ErrLeaseHeld reports another process owns the attempt lease (DUR-012).
 var ErrLeaseHeld = errors.New("attempt lease held by another owner")

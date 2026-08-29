@@ -3044,11 +3044,15 @@ fan-out failure surfacing, retry isolation, sibling-isolation,
 destination-change, differing-target, and no-selection behaviors are pinned
 by `internal/app/dispatch/selection_test.go`, `internal/adapters/sqlite/e12t2_test.go`,
 `internal/app/dispatch/e12t2_test.go`, and `internal/cli/e12t2_test.go`;
-`make verify` green at the task commit. Known bounded residual recorded for
-the epic validation: reconcile-path fan-out commits one child on the
-canonically-first lane, and follow-up lane filtering evaluates conditions
-per change while arrival selection evaluates per occurrence (multi-lane
-conditioned routes only; the certified single-lane path is unaffected).
+`make verify` green at the task commit. The two residuals originally
+recorded for the epic validation — reconcile-path fan-out committing one
+child on the canonically-first lane, and follow-up lane filtering
+evaluating conditions per change while arrival selection evaluated per
+occurrence — are remediated by the E12 epic-validation hardening batch
+(CHANGELOG 1.1.13): the reconcile path now fans out per certified lane
+under one shared aggregate, and migration v15's merge-selection evidence
+makes the follow-up filter occurrence-level with a per-change fallback
+for legacy rows.
 
 ## E12-T3: Work Receipt v2, Aggregate Status, and Completion Evidence
 

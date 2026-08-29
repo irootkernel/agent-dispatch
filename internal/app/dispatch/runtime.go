@@ -478,13 +478,10 @@ func Timestamp(t time.Time) string {
 	return t.UTC().Truncate(time.Second).Format(time.RFC3339)
 }
 
-// boundedDiagnostic keeps the recorded diagnostic bounded.
+// boundedDiagnostic keeps the recorded diagnostic bounded through the
+// package's shared rune-bound truncator.
 func boundedDiagnostic(d string) string {
-	const max = 2000
-	if len(d) > max {
-		return d[:max] + "...(truncated)"
-	}
-	return d
+	return boundTruncate(d, 2000)
 }
 
 // boundedPayload keeps the recorded structured evidence bounded; digests

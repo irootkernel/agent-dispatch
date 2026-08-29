@@ -18,6 +18,18 @@ import (
 // chains (CON-003), per-lane lease admission, the v13 backfill, and the
 // route-level hold that blocks every lane.
 
+// e12t2LaneProjection/e12t2LaneRevision render one lane's real
+// content-addressed pair (E12 epic validation: the store verifies
+// persisted revisions and durable child references; the derivation is the
+// canonical records.RevisionOfProjection both sides share).
+func e12t2LaneProjection(destinationID string) string {
+	return `{"id":"` + destinationID + `","workstream":"ws-` + destinationID + `"}`
+}
+
+func e12t2LaneRevision(destinationID string) string {
+	return records.RevisionOfProjection(e12t2LaneProjection(destinationID))
+}
+
 // e12t2LaneLineage builds one child lineage of a shared fan-out
 // occurrence for the named destination lane (E12-T2): the observation,
 // batch, and decision of the shared prefix plus the lane's own intent.
@@ -31,10 +43,14 @@ func e12t2LaneLineage(dispatchID, decisionID, batchID, destinationID string) por
 	lin.Intent.DecisionID = decisionID
 	lin.Intent.Fanout = &ports.FanoutInput{
 		AggregateID: "agg-e12t2", Origin: string(records.OriginArrival),
-		DestinationID: destinationID, DestinationRevision: "dst-" + destinationID, Workstream: "ws-" + destinationID,
+		DestinationID: destinationID, DestinationRevision: e12t2LaneRevision(destinationID), Workstream: "ws-" + destinationID,
 		Selections: []records.DestinationSelection{
-			{DestinationID: "wiki-primary", DestinationRevision: "dst-wiki-primary", Workstream: "ws-wiki-primary", Reason: "fanout_mode:all"},
-			{DestinationID: "wiki-secondary", DestinationRevision: "dst-wiki-secondary", Workstream: "ws-wiki-secondary", Reason: "fanout_mode:all"},
+			{DestinationID: "wiki-primary", DestinationRevision: e12t2LaneRevision("wiki-primary"), Workstream: "ws-wiki-primary", Reason: "fanout_mode:all"},
+			{DestinationID: "wiki-secondary", DestinationRevision: e12t2LaneRevision("wiki-secondary"), Workstream: "ws-wiki-secondary", Reason: "fanout_mode:all"},
+		},
+		Revisions: []ports.DestinationRevisionInput{
+			{DestinationID: "wiki-primary", Revision: e12t2LaneRevision("wiki-primary"), ProjectionJSON: e12t2LaneProjection("wiki-primary")},
+			{DestinationID: "wiki-secondary", Revision: e12t2LaneRevision("wiki-secondary"), ProjectionJSON: e12t2LaneProjection("wiki-secondary")},
 		},
 	}
 	return lin
@@ -118,7 +134,7 @@ func TestE12T2MergeBumpsOnlySelectedLane(t *testing.T) {
 	e12t2CommitFanout(t, s, "decision-e12t2-b")
 	burst := lineage("dispatch-burst-b", "agent-dispatch:v2:sha256:"+repeat("b", 64))
 	burst.Decision.Disposition = "merge_pending"
-	if _, err := s.CommitMergePending(context.Background(), burst, []string{"wiki-primary"}, "test", "2026-08-29T02:00:00Z"); err != nil {
+	if _, err := s.CommitMergePending(context.Background(), burst, []string{"wiki-primary"}, []string{"wiki-primary"}, "test", "2026-08-29T02:00:00Z"); err != nil {
 		t.Fatalf("merge into one lane: %v", err)
 	}
 	if _, _, dirty := laneCoordination(t, s, "wiki-maintenance", "wiki-primary"); dirty != 1 {
@@ -144,7 +160,7 @@ func TestE12T2CompletionAndFollowupPerLane(t *testing.T) {
 	first, second := e12t2CommitFanout(t, s, "decision-e12t2-c")
 	burst := lineage("dispatch-burst-c", "agent-dispatch:v2:sha256:"+repeat("c", 64))
 	burst.Decision.Disposition = "merge_pending"
-	if _, err := s.CommitMergePending(context.Background(), burst, []string{"wiki-primary"}, "test", "2026-08-29T02:00:00Z"); err != nil {
+	if _, err := s.CommitMergePending(context.Background(), burst, []string{"wiki-primary"}, []string{"wiki-primary"}, "test", "2026-08-29T02:00:00Z"); err != nil {
 		t.Fatal(err)
 	}
 	followup := ports.IntentInput{
@@ -157,9 +173,9 @@ func TestE12T2CompletionAndFollowupPerLane(t *testing.T) {
 		CreatedAt: "2026-08-29T02:00:01Z",
 		Fanout: &ports.FanoutInput{
 			AggregateID: "agg-followup-primary", Origin: string(records.OriginFollowup),
-			DestinationID: "wiki-primary", DestinationRevision: "dst-wiki-primary", Workstream: "ws-wiki-primary",
+			DestinationID: "wiki-primary", DestinationRevision: e12t2LaneRevision("wiki-primary"), Workstream: "ws-wiki-primary",
 			Selections: []records.DestinationSelection{{
-				DestinationID: "wiki-primary", DestinationRevision: "dst-wiki-primary", Workstream: "ws-wiki-primary",
+				DestinationID: "wiki-primary", DestinationRevision: e12t2LaneRevision("wiki-primary"), Workstream: "ws-wiki-primary",
 				Reason: "followup:dispatch-lane-a",
 			}},
 		},
@@ -463,7 +479,7 @@ func TestE12T2MergeUnderUncertainHoldNeverLowersDirtyGenerations(t *testing.T) {
 	// A burst merges the SIBLING lane while the hold stands.
 	burst := lineage("dispatch-hold-burst", "agent-dispatch:v2:sha256:"+repeat("h", 64))
 	burst.Decision.Disposition = "merge_pending"
-	if _, err := s.CommitMergePending(context.Background(), burst, []string{"wiki-secondary"}, "test", "2026-08-29T02:01:00Z"); err != nil {
+	if _, err := s.CommitMergePending(context.Background(), burst, []string{"wiki-secondary"}, []string{"wiki-secondary"}, "test", "2026-08-29T02:01:00Z"); err != nil {
 		t.Fatalf("merge the sibling lane under the hold: %v", err)
 	}
 	// No count decreased anywhere: lane A keeps 2 (retained under the

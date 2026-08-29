@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 	"github.com/irootkernel/agent-dispatch/internal/domain/state"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
@@ -109,12 +110,35 @@ func (s *Store) aggregateLaneState(q rowsQueryer, snap state.RouteSnapshot) (sta
 	return snap, rows.Err()
 }
 
+// unionSelections merges destination-selection sets into one canonically
+// sorted, de-duplicated slice (E12 epic whole-review round 2): selection
+// evidence is written ONCE per occurrence and never narrowed — a later
+// merging lane's evidence can only widen the recorded set. The canonical
+// form itself is the ONE shared derivation in records
+// (records.CanonicalDestinations, E12 epic whole-review round 3).
+func unionSelections(sets ...[]string) []string {
+	out := []string{}
+	for _, set := range sets {
+		for _, dest := range set {
+			if dest != "" {
+				out = append(out, dest)
+			}
+		}
+	}
+	return records.CanonicalDestinations(out)
+}
+
 // CommitMergePending persists one arriving lineage as merge_pending and
-// durably increments the dirty generation of exactly the lanes whose
-// destinations the occurrence selected (CON-002, CON-008, FBK-001). An
-// empty selected-destination list merges the synthetic legacy lane
-// (pre-cutover work, ADR-0016). It returns the highest new dirty count.
-func (s *Store) CommitMergePending(ctx context.Context, lin ports.Lineage, selectedDestinations []string, actor, now string) (int, error) {
+// durably increments the dirty generation of exactly the mergeDestinations
+// lanes (CON-002, CON-008, FBK-001). An empty merge list merges the
+// synthetic legacy lane (pre-cutover work, ADR-0016). The batch's
+// selection evidence becomes the occurrence's FULL selectedDestinations
+// UNION any selection the lineage's batch already carried (E12 epic
+// whole-review round 2: the merging lanes are NOT necessarily the whole
+// occurrence — a conditioned multi-lane burst whose first committing lane
+// merges keeps every selected lane's follow-up whole). It returns the
+// highest new dirty count.
+func (s *Store) CommitMergePending(ctx context.Context, lin ports.Lineage, mergeDestinations, selectedDestinations []string, actor, now string) (int, error) {
 	now = normalizeTimestamp(now)
 	tx, err := s.BeginTx(ctx, nil)
 	if err != nil {
@@ -124,13 +148,26 @@ func (s *Store) CommitMergePending(ctx context.Context, lin ports.Lineage, selec
 	if err := s.SaveObservation(tx, portsObservation(lin.Observation)); err != nil {
 		return 0, err
 	}
-	if err := s.SaveBatch(tx, lin.Batch.BatchID, lin.Batch.RouteID, lin.Batch.RouteRevision,
-		lin.Batch.ResourceID, lin.Batch.CreatedAt, lin.Batch.ContentFingerprint, lin.Batch.ObservationIDs); err != nil {
+	// The merged batch records the occurrence's FULL destination selection
+	// as durable evidence (E12 epic validation, migration v15): the
+	// follow-up filter reads occurrence-level FAN-005 semantics from it
+	// instead of re-evaluating conditions per change. The union keeps the
+	// evidence monotonic — a pre-stamped multi-lane selection (the arrival
+	// path stamps the occurrence's set on the shared batch) is never
+	// narrowed to the merging lane (E12 epic whole-review round 2).
+	batch := lin.Batch
+	batch.SelectedDestinations = unionSelections(batch.SelectedDestinations, selectedDestinations)
+	if err := s.SaveBatch(tx, BatchRecord{
+		BatchID: batch.BatchID, RouteID: batch.RouteID, RouteRevision: batch.RouteRevision,
+		ResourceID: batch.ResourceID, CreatedAt: batch.CreatedAt, ContentFingerprint: batch.ContentFingerprint,
+		ObservationIDs: batch.ObservationIDs, SelectedDestinations: batch.SelectedDestinations,
+	}); err != nil {
 		return 0, err
 	}
 	// The merge is the outcome this transaction persists: the decision
 	// records merge_pending, never the planner's optimistic dispatch
-	// disposition (POL-006, E7-T6/M-18).
+	// disposition (POL-006, E7-T6/M-18). The local copy keeps the caller's
+	// lineage untouched (E12 epic whole-review round 2).
 	merged := lin.Decision
 	if merged.Disposition == "dispatch" {
 		merged.Disposition = "merge_pending"
@@ -145,7 +182,7 @@ func (s *Store) CommitMergePending(ctx context.Context, lin ports.Lineage, selec
 	if routeSnap.State == state.RouteQuarantined {
 		return 0, fmt.Errorf("%w: route %s is %s, arriving work cannot merge", ports.ErrStateNotEligible, lin.Decision.RouteID, routeSnap.State)
 	}
-	maxDirty, _, err := s.mergeLanesTx(tx, lin.Decision.RouteID, selectedDestinations, actor, now, lin.Batch.BatchID)
+	maxDirty, _, err := s.mergeLanesTx(tx, lin.Decision.RouteID, mergeDestinations, actor, now, lin.Batch.BatchID)
 	if err != nil {
 		return 0, err
 	}
@@ -156,11 +193,16 @@ func (s *Store) CommitMergePending(ctx context.Context, lin ports.Lineage, selec
 }
 
 // MergeSelectedLanes durably increments the dirty generation of exactly
-// the named destination lanes under the merge guards (CON-008, E12-T2)
+// the mergeDestinations lanes under the merge guards (CON-008, E12-T2)
 // without re-persisting the occurrence's lineage: a fan-out sibling that
 // lost its lane's slot race merges beside the winner's already-committed
-// prefix. An empty list merges the synthetic legacy lane.
-func (s *Store) MergeSelectedLanes(ctx context.Context, routeID string, selectedDestinations []string, actor, now string) (int, error) {
+// prefix. An empty list merges the synthetic legacy lane. The occurrence's
+// FULL selectedDestinations union onto the named batch's selection
+// evidence (E12 epic whole-review round 2): the first committer recorded
+// the shared batch, and every later lane's merge widens — never narrows —
+// the recorded selection so each selected lane's follow-up keeps the whole
+// burst. An empty batchID skips the evidence write.
+func (s *Store) MergeSelectedLanes(ctx context.Context, routeID, batchID string, mergeDestinations, selectedDestinations []string, actor, now string) (int, error) {
 	now = normalizeTimestamp(now)
 	tx, err := s.BeginTx(ctx, nil)
 	if err != nil {
@@ -174,7 +216,10 @@ func (s *Store) MergeSelectedLanes(ctx context.Context, routeID string, selected
 	if routeSnap.State == state.RouteQuarantined {
 		return 0, fmt.Errorf("%w: route %s is %s, arriving work cannot merge", ports.ErrStateNotEligible, routeID, routeSnap.State)
 	}
-	maxDirty, _, err := s.mergeLanesTx(tx, routeID, selectedDestinations, actor, now, "")
+	if err := s.unionBatchSelectionTx(tx, batchID, selectedDestinations); err != nil {
+		return 0, err
+	}
+	maxDirty, _, err := s.mergeLanesTx(tx, routeID, mergeDestinations, actor, now, batchID)
 	if err != nil {
 		return 0, err
 	}
@@ -182,6 +227,42 @@ func (s *Store) MergeSelectedLanes(ctx context.Context, routeID string, selected
 		return 0, err
 	}
 	return maxDirty, nil
+}
+
+// unionBatchSelectionTx unions selectedDestinations onto one persisted
+// batch's selection evidence inside the caller's transaction (E12 epic
+// whole-review round 2). An empty batchID or empty selection is a no-op.
+// A named batch that does not exist fails closed: the evidence is
+// load-bearing (FAN-005 occurrence-level filtering) — silently skipping
+// the write would recreate the silent-work-loss class this evidence
+// exists to prevent.
+func (s *Store) unionBatchSelectionTx(tx *sql.Tx, batchID string, selectedDestinations []string) error {
+	if batchID == "" || len(selectedDestinations) == 0 {
+		return nil
+	}
+	var existing string
+	err := txOrDB(tx, s.DB).QueryRow(`SELECT COALESCE(selected_destinations_json, '') FROM change_batches WHERE batch_id = ?`, batchID).Scan(&existing)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("batch %s carries no row to record the occurrence's selection evidence: %w", batchID, ports.ErrInvalidFanoutRecord)
+	}
+	if err != nil {
+		return err
+	}
+	var recorded []string
+	if existing != "" {
+		if err := json.Unmarshal([]byte(existing), &recorded); err != nil {
+			return fmt.Errorf("batch %s selection evidence is not valid JSON: %w", batchID, err)
+		}
+	}
+	merged := unionSelections(recorded, selectedDestinations)
+	raw, err := json.Marshal(merged)
+	if err != nil {
+		return err
+	}
+	if _, err := execOn(tx, s.DB, `UPDATE change_batches SET selected_destinations_json = ? WHERE batch_id = ?`, string(raw), batchID); err != nil {
+		return err
+	}
+	return nil
 }
 
 // mergeLanesTx bumps the named lanes' dirty generations with the E3-T1
@@ -314,21 +395,43 @@ func (s *Store) routeStateOfTx(tx *sql.Tx, routeID string) (state.RouteState, er
 // whose shared observation/batch/decision lineage a sibling already
 // committed (E12-T2, FAN-003): the intent, its child-dispatch record and
 // aggregate references, and its lane-slot reservation commit in one
-// transaction. ErrRouteSlotHeld reports the lane's held slot.
+// transaction. ErrRouteSlotHeld reports the lane's held slot; every other
+// failure wraps as a typed store error so callers classify genuine
+// storage faults as storage, not internal defects (E12 epic whole-review
+// round 2). The creation audit names the child's OWN origin and
+// destination from its fanout block (E12 epic whole-review round 2) — a
+// reconcile sibling is audited as reconcile work on its lane, never as
+// an arrival.
 func (s *Store) CommitFanoutChild(ctx context.Context, intent ports.IntentInput) error {
 	tx, err := s.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return ports.WrapStore(err)
 	}
 	defer tx.Rollback()
 	if err := s.SaveIntent(tx, portsIntent(intent)); err != nil {
-		return mapIntentConstraint(err)
+		return ports.WrapStore(mapIntentConstraint(err))
+	}
+	// The creation audit carries the child's own lineage: the fanout
+	// block's origin (arrival, reconcile, ...) and destination lane when
+	// the block exists, the legacy arrival shape otherwise.
+	origin, destination := "arrival", ""
+	if intent.Fanout != nil {
+		origin = intent.Fanout.Origin
+		destination = intent.Fanout.DestinationID
+	}
+	contextKeys := []any{"reason", origin, "origin", origin, "route_id", intent.RouteID,
+		"route_revision", intent.RouteRevision, "generation", intent.Generation, "fanout_child", true}
+	if destination != "" {
+		contextKeys = append(contextKeys, "destination_id", destination)
 	}
 	if err := s.AppendTransition(tx, intent.DispatchID+":created", "dispatch_intent", intent.DispatchID, "", "ready", intent.CreatedAt,
-		auditJSON("reason", "arrival", "route_id", intent.RouteID, "route_revision", intent.RouteRevision, "generation", intent.Generation, "fanout_child", true)); err != nil {
-		return err
+		auditJSON(contextKeys...)); err != nil {
+		return ports.WrapStore(err)
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return ports.WrapStore(err)
+	}
+	return nil
 }
 
 // CompleteActive applies one work-completion transaction (persistence

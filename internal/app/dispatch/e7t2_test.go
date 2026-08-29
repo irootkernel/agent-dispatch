@@ -138,7 +138,7 @@ func rerunRequestFromSnapshot(t *testing.T, snap ports.IntentSnapshot) ports.Int
 		Route:              ports.TaskRouteRef{ID: snap.RouteID, Revision: "route-rev-1"},
 		Resource:           ports.TaskResource{ID: snap.ResourceID, Workspace: "dir:/srv/vault"},
 		TargetID:           snap.TargetID,
-		Destination:        ports.TaskDestinationRef{ID: "wiki-primary", Revision: "dst-rev-1", Workstream: "maintenance"},
+		Destination:        ports.TaskDestinationRef{ID: "wiki-primary", Revision: testLaneRevision, Workstream: "maintenance"},
 		Generation:         snap.Generation + 1,
 		Fingerprint:        records.Digest(snap.ManifestDigest),
 		AcceptanceCriteria: WikiAcceptanceCriteria,

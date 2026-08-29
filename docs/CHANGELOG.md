@@ -1,5 +1,113 @@
 # SOT Changelog
 
+## 1.1.13 - 2026-08-29
+
+E12 epic validation: the reconciled member-task review residuals are
+remediated as one hardening batch (FAN-005, FBK-010/FBK-011, DAT-010,
+CON-008, CLI-013), folded together with the epic whole-review round-1
+through round-3 residuals (FAN-002/FAN-005, CON-007/CON-008, FBK-012,
+DAT-010):
+
+- SQLite migration v15 (`merge-selection-evidence`) records each merged
+  batch's destination-selection summary at merge time — and the arrival
+  path stamps the same occurrence evidence on the batches it commits —
+  and the follow-up lane filter reads OCCURRENCE-level FAN-005 semantics
+  from it: a change whose path alone fails a path_include stays in the
+  selected lane's follow-up (the occurrence selected the lane), a
+  sibling lane still excludes it, and legacy rows without selection
+  evidence keep the per-change fallback — no more silent work loss on
+  conditioned multi-lane routes; the evidence is the occurrence's FULL
+  selection, written once and never narrowed: the merge path UNIONs the
+  occurrence's selection into the batch (a first committing lane that
+  merges no longer overwrites it with its own lane) and the later
+  lanes' merges union onto the same batch, so a conditioned burst with
+  every lane busy keeps every selected lane's follow-up whole (round 2);
+- a digest-less remaining-scope entry classifies as modify (the
+  conservative default): deletion evidence now requires the exact
+  before-present/after-absent pair, never a fabricated removal;
+- the reconcile path fans the reconciliation intent out per certified
+  destination — one shared aggregate and decision, one child per lane
+  with origin reconcile — through the existing single-intent store
+  surface plus the app-layer sibling commit
+  (`dispatch.CommitReconcileSiblings`); the siblings commit DURABLY
+  FIRST, so the crash window leaves ready siblings the drain submits
+  instead of a first lane with no durable marker of the remaining
+  selection, and a sibling's non-slot-held commit failure is never
+  silent — it rides the `reconcile_lanes` envelope member, stderr, and a
+  non-zero exit while the first lane still delivers (slot-held skips
+  stay warnings); the sibling outcomes stay visible on the FIRST-lane
+  failure path too (the error envelope's result slot carries the lane
+  listing and stderr names each committed sibling); the retry shape is
+  truthful — a retry after partial failure is a fresh occurrence whose
+  already-committed lane skips by constraint (held slot or the
+  content-derived duplicate idempotency key), never a duplicate child;
+  each sibling's creation audit names origin reconcile and its own
+  destination; the sibling outcomes are OWNED at the app seam (the
+  `ReconcileSiblingJournal` the CLI only renders from — success, skip,
+  and failure paths alike); and a storage fault in a sibling commit
+  classifies as storage (20), never internal;
+- store-boundary hardening in `saveFanoutTx`: every persisted
+  destination-revision record must be the content address of its
+  projection bytes, and a child's destination reference must have a
+  durable revision row (inserted in the transaction or previously) —
+  dangling references fail closed as NON-RETRYABLE validation failures
+  of the invalid-configuration family (never replayed conflicts), and
+  the failure is never lane-isolated: a lane outcome of that class
+  keeps its live typed error and surfaces as the command-level
+  configuration failure (exit 3) even when sibling lanes succeeded; the
+  dst- derivation itself is ONE canonical function
+  (`records.RevisionOfProjection`) shared by the config-level
+  computation and the store verification, and the selection evidence's
+  canonical form is ONE shared derivation too
+  (`records.CanonicalDestinations`: sort + dedupe) used by both the
+  union writes and the batch-column encoding;
+- work-receipt contract truth: `--manual-reason` outside the blocked
+  outcome rejects naming exactly the blocked outcome — validated against the
+  EFFECTIVE outcome (the v2 document's status first), so a blocked
+  document carrying its matching flag reason accepts, and a document
+  manual_reason beside a non-blocked outcome rejects the same way
+  instead of being silently discarded; a change set beside a blocked
+  outcome rejects (blocked takes its reason); a whitespace-only
+  document manual_reason rejects like the flag form; the
+  document-vs-flag scope conflict compares canonicalized values, not
+  struct order; a v2 document's `completed_scope` persists on the
+  receipt row and must be a subset by path of the document's own
+  changes (unauditable scopes reject); and `completion_evidence:
+  present` requires a valid TERMINAL receipt — a valid begun receipt
+  renders the running state, never completed, and classifies the
+  aggregate in-progress rather than evidence-gap (FBK-012);
+- the mixed activate+merge dispatch envelope reports `merged_lanes`
+  beside the fan-out (with stderr notes); `BoundLaneError`, the
+  resolver diagnostics, and the package's other bounded texts truncate
+  through ONE shared rune-bound helper at ONE shared operator-text
+  bound; the operator-text audit contexts (discard, retry, rerun)
+  build through the JSON encoder; and the live-lane resolver surfaces
+  the bounded underlying configuration cause when resolution fails;
+- the published contracts follow the code: the fan-out dispatch
+  envelope lives under `dispatch` in cli-spec (not `work begin`),
+  §9 Reconciliation documents the per-lane reconcile fan-out, where
+  `reconcile_lanes` rides in each envelope shape, the sibling policy
+  with its retry and exit-code behavior, that `reconcile_lanes` lists
+  the SIBLING lanes only, and the reconcile/dispatch help lines name the
+  invalid-fanout-record exit-3 cause; cli-spec §5 names the same cause
+  beside no-destination-selected; `events show`'s aggregate-status
+  precedence documents the begun in-progress class in cli-spec AND the
+  observability guide (the shipped terminal-receipt rule); the batch
+  record's canonical contract carries the v15 `selected_destinations`
+  evidence; `SaveBatch` takes the explicit `BatchRecord` form instead of
+  a widened positional list; and `CommitMergePending` never writes
+  through the caller's lineage;
+- test gaps closed: rebuild-path child persistence, the filter's
+  fail-closed arms, lane-aggregation precedence (ACTIVE over
+  FOLLOWUP_READY, first-holder-in-destination-order, ListRoutes agreeing
+  with LoadRouteState), the begun-receipt events-show case, the sibling
+  commit policy (including the duplicate-key retry arm) and its
+  non-zero exit, the busy-lane production-shaped merge-evidence path
+  through ArrivalFanout, the mixed merge+invalid-record arm keeping the
+  live typed error for the command-level exit-3 class, and
+  content-addressed revision pairs in every test fixture the store now
+  verifies.
+
 ## 1.1.12 - 2026-08-29
 
 E12-T4: the multi-destination and completion gate G8 closes with its

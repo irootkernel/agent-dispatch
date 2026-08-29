@@ -128,4 +128,11 @@ type DirtyChange struct {
 	// the policy-outcome and classification classes read them).
 	Classification string
 	Disposition    string
+	// SelectedDestinations is the merging occurrence's recorded
+	// destination-selection summary (E12 epic validation, migration v15):
+	// occurrence-level FAN-005 semantics — when the completing lane is in
+	// the selection, the change stays regardless of any per-path
+	// condition miss. Empty means unrecorded (legacy rows): the filter
+	// falls back to per-change evaluation.
+	SelectedDestinations []string
 }

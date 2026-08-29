@@ -1,6 +1,8 @@
 package records
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"unicode/utf8"
@@ -60,6 +62,39 @@ func (s DestinationSelection) Validate() error {
 		}
 	}
 	return nil
+}
+
+// RevisionOfProjection renders the canonical content address of one
+// destination's canonical projection bytes (E11-T1, ADR-0016):
+// "dst-"+hex(sha256(bytes)). Exactly ONE derivation lives here in the pure
+// domain layer (E12 epic whole-review round 1): the config-level
+// DestinationRevision computation and the store-boundary verification in
+// saveFanoutTx both call it, so the producer and the verifier can never
+// drift apart — and because internal/domain imports nothing, both
+// internal/config and internal/adapters may depend on it without touching
+// the import direction.
+func RevisionOfProjection(projectionJSON string) string {
+	sum := sha256.Sum256([]byte(projectionJSON))
+	return "dst-" + hex.EncodeToString(sum[:])
+}
+
+// CanonicalDestinations renders one destination-ID list in the canonical
+// form every selection-evidence write shares (E12 epic whole-review
+// round 3): sorted, de-duplicated, on a fresh slice — ONE derivation so
+// the store's union writes and its batch-column encoding can never drift
+// apart.
+func CanonicalDestinations(destinations []string) []string {
+	seen := make(map[string]bool, len(destinations))
+	out := make([]string, 0, len(destinations))
+	for _, dest := range destinations {
+		if dest == "" || seen[dest] {
+			continue
+		}
+		seen[dest] = true
+		out = append(out, dest)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // SortSelections orders selections canonically by destination ID with the

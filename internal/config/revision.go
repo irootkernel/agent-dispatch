@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"runtime"
 	"sort"
+
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 )
 
 // CaseMode resolves the v0.1 default `filesystem` case policy for this
@@ -248,14 +250,16 @@ func notificationsProjection(n *Notifications) map[string]any {
 // destination as the route projection sees it (§14): the same projection
 // the route revision digests for this destination, hashed alone, so a
 // destination-qualified edit can report its own revision and pause state
-// (used by the E11-T3 mutation commands).
+// (used by the E11-T3 mutation commands). The dst- content address itself
+// is the ONE canonical derivation in the domain layer
+// (records.RevisionOfProjection, E12 epic whole-review round 1) — the same
+// function the store boundary verifies against.
 func DestinationRevision(cfg *Config, route Route, dest Destination) string {
 	enc, err := json.Marshal(destinationProjection(cfg, dest))
 	if err != nil {
 		return ""
 	}
-	sum := sha256.Sum256(enc)
-	return "dst-" + hex.EncodeToString(sum[:])
+	return records.RevisionOfProjection(string(enc))
 }
 
 // DestinationProjectionJSON renders the exact deterministic projection

@@ -46,6 +46,7 @@ var Migrations = []Migration{
 	{Version: 12, Name: "aggregate-fanout-records", SQL: schemaV12AggregateFanoutRecords},
 	{Version: 13, Name: "destination-lane-state", SQL: schemaV13DestinationLaneState},
 	{Version: 14, Name: "work-receipt-v2-outcomes", SQL: schemaV14WorkReceiptV2Outcomes},
+	{Version: 15, Name: "merge-selection-evidence", SQL: schemaV15MergeSelectionEvidence},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
@@ -664,6 +665,19 @@ FROM work_receipts;
 DROP TABLE work_receipts;
 ALTER TABLE work_receipts_v14 RENAME TO work_receipts;
 CREATE INDEX idx_work_receipts_route_revision ON work_receipts(route_revision);
+`
+
+// schemaV15MergeSelectionEvidence records each merged batch's
+// destination-selection summary at merge time (E12 epic validation,
+// FAN-005 occurrence-level semantics): a lane's follow-up filters its
+// dirty generation by the merging OCCURRENCE's selection, not by
+// re-evaluating the conditions per change — per-change evaluation
+// silently dropped changes whose path alone failed a path_include while
+// the occurrence as a whole selected the lane. The column is
+// additive-only: legacy rows keep NULL (unknown selection) and the
+// follow-up filter falls back to the per-change evaluation for them.
+const schemaV15MergeSelectionEvidence = `
+ALTER TABLE change_batches ADD COLUMN selected_destinations_json TEXT;
 `
 
 const schemaV13DestinationLaneState = `

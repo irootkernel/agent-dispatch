@@ -103,8 +103,8 @@ type storeOp interface {
 	LoadRouteState(ctx context.Context, routeID string) (state.RouteSnapshot, error)
 	LoadLaneState(ctx context.Context, routeID, destinationID string) (state.RouteSnapshot, error)
 	LoadIntentLane(ctx context.Context, dispatchID string) (state.RouteSnapshot, error)
-	CommitMergePending(ctx context.Context, lin ports.Lineage, selectedDestinations []string, actor, now string) (int, error)
-	MergeSelectedLanes(ctx context.Context, routeID string, selectedDestinations []string, actor, now string) (int, error)
+	CommitMergePending(ctx context.Context, lin ports.Lineage, mergeDestinations, selectedDestinations []string, actor, now string) (int, error)
+	MergeSelectedLanes(ctx context.Context, routeID, batchID string, mergeDestinations, selectedDestinations []string, actor, now string) (int, error)
 	CommitFanoutChild(ctx context.Context, intent ports.IntentInput) error
 	CompleteActive(ctx context.Context, req ports.ActiveCompletion) (ports.FollowupCreated, error)
 	ActivateDispatch(ctx context.Context, dispatchID, actor, now string) error

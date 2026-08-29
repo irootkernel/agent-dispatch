@@ -269,7 +269,8 @@ func reasonsOrArray(reasons string) string {
 func (s *Store) LoadActiveGenerationChanges(ctx context.Context, routeID, dispatchID string) ([]ports.DirtyChange, error) {
 	rows, err := s.QueryContext(ctx, `SELECT oc.path, oc.operation, oc.before_digest, oc.after_digest, oc.digest_status, so.observed_at, bo.batch_id,
 			COALESCE((SELECT pd.classification FROM policy_decisions pd WHERE pd.batch_id = cb.batch_id ORDER BY pd.created_at, pd.decision_id LIMIT 1), ''),
-			COALESCE((SELECT pd.disposition FROM policy_decisions pd WHERE pd.batch_id = cb.batch_id ORDER BY pd.created_at, pd.decision_id LIMIT 1), '')
+			COALESCE((SELECT pd.disposition FROM policy_decisions pd WHERE pd.batch_id = cb.batch_id ORDER BY pd.created_at, pd.decision_id LIMIT 1), ''),
+			COALESCE(cb.selected_destinations_json, '')
 		FROM observation_changes oc
 		JOIN source_observations so ON so.observation_id = oc.observation_id
 		JOIN batch_observations bo ON bo.observation_id = oc.observation_id
@@ -286,10 +287,22 @@ func (s *Store) LoadActiveGenerationChanges(ctx context.Context, routeID, dispat
 	for rows.Next() {
 		var c ports.DirtyChange
 		var before, after sql.NullString
-		if err := rows.Scan(&c.Path, &c.Operation, &before, &after, &c.DigestStatus, &c.ObservedAt, &c.BatchID, &c.Classification, &c.Disposition); err != nil {
+		var selectionJSON string
+		if err := rows.Scan(&c.Path, &c.Operation, &before, &after, &c.DigestStatus, &c.ObservedAt, &c.BatchID, &c.Classification, &c.Disposition, &selectionJSON); err != nil {
 			return nil, err
 		}
 		c.BeforeDigest, c.AfterDigest = nullText(before), nullText(after)
+		// The batch's recorded selection evidence rides along (E12 epic
+		// validation, migration v15): empty stays empty (the legacy
+		// unrecorded shape) — the service filter then falls back to
+		// per-change evaluation.
+		if selectionJSON != "" {
+			var selected []string
+			if err := json.Unmarshal([]byte(selectionJSON), &selected); err != nil {
+				return nil, fmt.Errorf("batch %s selection evidence is not the recorded JSON shape: %v", c.BatchID, err)
+			}
+			c.SelectedDestinations = selected
+		}
 		out = append(out, c)
 	}
 	return out, rows.Err()

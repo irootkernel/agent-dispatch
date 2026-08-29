@@ -27,8 +27,7 @@ func (s *Store) CommitQuarantineLineage(ctx context.Context, lin ports.Lineage, 
 	if err := s.SaveObservation(tx, portsObservation(lin.Observation)); err != nil {
 		return err
 	}
-	if err := s.SaveBatch(tx, lin.Batch.BatchID, lin.Batch.RouteID, lin.Batch.RouteRevision,
-		lin.Batch.ResourceID, lin.Batch.CreatedAt, lin.Batch.ContentFingerprint, lin.Batch.ObservationIDs); err != nil {
+	if err := s.SaveBatch(tx, batchRecordOf(lin.Batch)); err != nil {
 		return err
 	}
 	if err := s.SaveDecision(tx, portsDecision(lin.Decision)); err != nil {
@@ -61,8 +60,7 @@ func (s *Store) CommitDropLineage(ctx context.Context, lin ports.Lineage) error 
 	if err := s.SaveObservation(tx, portsObservation(lin.Observation)); err != nil {
 		return err
 	}
-	if err := s.SaveBatch(tx, lin.Batch.BatchID, lin.Batch.RouteID, lin.Batch.RouteRevision,
-		lin.Batch.ResourceID, lin.Batch.CreatedAt, lin.Batch.ContentFingerprint, lin.Batch.ObservationIDs); err != nil {
+	if err := s.SaveBatch(tx, batchRecordOf(lin.Batch)); err != nil {
 		return err
 	}
 	if err := s.SaveDecision(tx, portsDecision(lin.Decision)); err != nil {
@@ -83,8 +81,7 @@ func (s *Store) CommitReconcileLineage(ctx context.Context, lin ports.Lineage, s
 	if err := s.SaveObservation(tx, portsObservation(lin.Observation)); err != nil {
 		return err
 	}
-	if err := s.SaveBatch(tx, lin.Batch.BatchID, lin.Batch.RouteID, lin.Batch.RouteRevision,
-		lin.Batch.ResourceID, lin.Batch.CreatedAt, lin.Batch.ContentFingerprint, lin.Batch.ObservationIDs); err != nil {
+	if err := s.SaveBatch(tx, batchRecordOf(lin.Batch)); err != nil {
 		return err
 	}
 	if err := s.SaveDecision(tx, portsDecision(lin.Decision)); err != nil {

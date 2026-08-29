@@ -51,6 +51,22 @@ func mustMarshalRequest(t *testing.T, req ports.TaskRequest) string {
 	return raw
 }
 
+// snapshotLaneProjection/snapshotLaneRevision are a real content-addressed
+// pair for the snapshot-linkage lane (E12 epic validation: the store
+// verifies persisted revisions are the content address of their bytes and
+// child references have durable rows; the derivation is the canonical
+// records.RevisionOfProjection).
+const snapshotLaneProjection = `{"id":"wiki-primary","workstream":"maintenance","snapshot":true}`
+
+var snapshotLaneRevision = records.RevisionOfProjection(snapshotLaneProjection)
+
+// liveLaneProjection/liveLaneRevision are the resolver branch's real
+// content-addressed pair (E12 epic validation: the store verifies the
+// content address of every persisted revision record).
+const liveLaneProjection = `{"id":"wiki-primary","workstream":"maintenance","live":true}`
+
+var liveLaneRevision = records.RevisionOfProjection(liveLaneProjection)
+
 // seedLegacyIntent stores a ready intent whose stored request carries no
 // destination block. WithFanout additionally child-links it (the snapshot
 // linkage lane), so the three DAT-013 resolution branches can be pinned
@@ -63,9 +79,12 @@ func seedLegacyIntent(t *testing.T, s interface {
 	if withFanout {
 		lin.Intent.Fanout = &ports.FanoutInput{
 			AggregateID: "agg-" + dispatchID, Origin: string(records.OriginArrival),
-			DestinationID: "wiki-primary", DestinationRevision: "dst-snapshot", Workstream: "maintenance",
+			DestinationID: "wiki-primary", DestinationRevision: snapshotLaneRevision, Workstream: "maintenance",
 			Selections: []records.DestinationSelection{{
-				DestinationID: "wiki-primary", DestinationRevision: "dst-snapshot", Workstream: "maintenance", Reason: "fanout_mode:all",
+				DestinationID: "wiki-primary", DestinationRevision: snapshotLaneRevision, Workstream: "maintenance", Reason: "fanout_mode:all",
+			}},
+			Revisions: []ports.DestinationRevisionInput{{
+				DestinationID: "wiki-primary", Revision: snapshotLaneRevision, ProjectionJSON: snapshotLaneProjection,
 			}},
 		}
 	}
@@ -90,7 +109,7 @@ func TestE12T1RerunPersistsChildAndAggregate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the rerun intent must be child-linked: %v", err)
 	}
-	if child.DestinationID != "wiki-primary" || child.DestinationRevision != "dst-rev-1" || child.Workstream != "maintenance" {
+	if child.DestinationID != "wiki-primary" || child.DestinationRevision != testLaneRevision || child.Workstream != "maintenance" {
 		t.Fatalf("the rerun child keeps the stored request's lane: %+v", child)
 	}
 	agg, err := s.LoadAggregateEvent(context.Background(), child.AggregateID)
@@ -110,8 +129,8 @@ func TestE12T1LaneResolutionBranches(t *testing.T) {
 		seedReadyIntent(t, s, "dispatch-1")
 		op := &OperatorService{
 			Store: s, Now: func() string { return "2026-08-20T01:02:00Z" },
-			DestinationResolver: func(routeID string) (ports.TaskDestinationRef, string, bool) {
-				return ports.TaskDestinationRef{ID: "resolver-lane", Revision: "dst-live", Workstream: "live"}, "{}", true
+			DestinationResolver: func(routeID string) (ports.TaskDestinationRef, string, bool, string) {
+				return ports.TaskDestinationRef{ID: "resolver-lane", Revision: liveLaneRevision, Workstream: "live"}, liveLaneProjection, true, ""
 			},
 		}
 		summary, err := op.Rerun(context.Background(), "dispatch-1", "operator", "r")
@@ -137,7 +156,7 @@ func TestE12T1LaneResolutionBranches(t *testing.T) {
 			t.Fatal(err)
 		}
 		child, _ := s.LoadChildDispatch(context.Background(), summary.DispatchID)
-		if child.DestinationRevision != "dst-snapshot" {
+		if child.DestinationRevision != snapshotLaneRevision {
 			t.Fatalf("the snapshot's child linkage must supply the lane: %+v", child)
 		}
 	})
@@ -146,9 +165,8 @@ func TestE12T1LaneResolutionBranches(t *testing.T) {
 		seedLegacyIntent(t, s, "dispatch-3", false)
 		op := &OperatorService{
 			Store: s, Now: func() string { return "2026-08-20T01:02:00Z" },
-			DestinationResolver: func(routeID string) (ports.TaskDestinationRef, string, bool) {
-				return ports.TaskDestinationRef{ID: "wiki-primary", Revision: "dst-live", Workstream: "maintenance"},
-					`{"id":"wiki-primary","workstream":"maintenance"}`, true
+			DestinationResolver: func(routeID string) (ports.TaskDestinationRef, string, bool, string) {
+				return ports.TaskDestinationRef{ID: "wiki-primary", Revision: liveLaneRevision, Workstream: "maintenance"}, liveLaneProjection, true, ""
 			},
 		}
 		summary, err := op.Rerun(context.Background(), "dispatch-3", "operator", "r")
@@ -156,11 +174,11 @@ func TestE12T1LaneResolutionBranches(t *testing.T) {
 			t.Fatal(err)
 		}
 		child, _ := s.LoadChildDispatch(context.Background(), summary.DispatchID)
-		if child.DestinationRevision != "dst-live" {
+		if child.DestinationRevision != liveLaneRevision {
 			t.Fatalf("the resolver's live lane must be used: %+v", child)
 		}
 		var revisions int
-		if err := s.QueryRow(`SELECT COUNT(*) FROM destination_revisions WHERE destination_id = 'wiki-primary' AND revision = 'dst-live'`).Scan(&revisions); err != nil || revisions != 1 {
+		if err := s.QueryRow(`SELECT COUNT(*) FROM destination_revisions WHERE destination_id = 'wiki-primary' AND revision = ?`, liveLaneRevision).Scan(&revisions); err != nil || revisions != 1 {
 			t.Fatalf("the live-resolved lane's revision record must persist with the child: %d %v", revisions, err)
 		}
 	})
@@ -173,4 +191,43 @@ func TestE12T1LaneResolutionBranches(t *testing.T) {
 			t.Fatalf("a bare legacy intent without a resolver must fail closed: %v", err)
 		}
 	})
+}
+
+// TestE12T1RebuildPersistsChildAndAggregate mirrors the rerun test
+// through RebuildStale (E12 epic validation, testing gap): a legacy
+// stored request whose lane resolves through the live resolver rebuilds
+// as one child beneath its own origin `rebuild` aggregate, and the
+// live-resolved destination-revision record persists with it (DAT-010).
+func TestE12T1RebuildPersistsChildAndAggregate(t *testing.T) {
+	s := openE3T3Store(t)
+	seedLegacyIntent(t, s, "dispatch-stale", false)
+	op := &OperatorService{
+		Store: s, Now: func() string { return "2026-08-20T01:02:00Z" },
+		RevisionResolver: func(routeID string) (string, bool) { return "route-rev-1", true },
+		TargetResolver: func(routeID string) (string, string, string, bool) {
+			return "hermes-kanban-main", "hermes_kanban", "board-main", true
+		},
+		DestinationResolver: func(routeID string) (ports.TaskDestinationRef, string, bool, string) {
+			return ports.TaskDestinationRef{ID: "wiki-primary", Revision: liveLaneRevision, Workstream: "maintenance"}, liveLaneProjection, true, ""
+		},
+	}
+	replacement, err := op.RebuildStale(context.Background(), "dispatch-stale", "operator")
+	if err != nil {
+		t.Fatalf("rebuild: %v", err)
+	}
+	child, err := s.LoadChildDispatch(context.Background(), replacement)
+	if err != nil {
+		t.Fatalf("the rebuild intent must be child-linked: %v", err)
+	}
+	if child.DestinationID != "wiki-primary" || child.DestinationRevision != liveLaneRevision {
+		t.Fatalf("the rebuild child must carry the resolved lane: %+v", child)
+	}
+	agg, err := s.LoadAggregateEvent(context.Background(), child.AggregateID)
+	if err != nil || agg.Origin != string(records.OriginRebuild) {
+		t.Fatalf("the rebuild aggregate must persist with origin rebuild: %+v %v", agg, err)
+	}
+	var revisions int
+	if err := s.QueryRow(`SELECT COUNT(*) FROM destination_revisions WHERE destination_id = 'wiki-primary' AND revision = ?`, liveLaneRevision).Scan(&revisions); err != nil || revisions != 1 {
+		t.Fatalf("the live-resolved lane's revision record must persist with the rebuild child: %d %v", revisions, err)
+	}
 }

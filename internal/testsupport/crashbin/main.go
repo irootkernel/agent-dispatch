@@ -190,8 +190,11 @@ func commitStage(db, stage string) error {
 		if err := s.SaveObservation(tx, portsObservationFor(lin)); err != nil {
 			return err
 		}
-		if err := s.SaveBatch(tx, lin.Batch.BatchID, lin.Batch.RouteID, lin.Batch.RouteRevision,
-			lin.Batch.ResourceID, lin.Batch.CreatedAt, lin.Batch.ContentFingerprint, lin.Batch.ObservationIDs); err != nil {
+		if err := s.SaveBatch(tx, sqlite.BatchRecord{
+			BatchID: lin.Batch.BatchID, RouteID: lin.Batch.RouteID, RouteRevision: lin.Batch.RouteRevision,
+			ResourceID: lin.Batch.ResourceID, CreatedAt: lin.Batch.CreatedAt, ContentFingerprint: lin.Batch.ContentFingerprint,
+			ObservationIDs: lin.Batch.ObservationIDs, SelectedDestinations: lin.Batch.SelectedDestinations,
+		}); err != nil {
 			return err
 		}
 		if err := s.SaveDecision(tx, decisionFor(lin)); err != nil {

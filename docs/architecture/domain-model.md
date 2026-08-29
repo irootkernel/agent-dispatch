@@ -252,7 +252,12 @@ UNCERTAIN/QUARANTINED hold — a hold blocks every lane. The envelope members
 (activation state, acknowledged revision, capability fingerprint, pending
 reconciliation, source position, reconcile timestamp) stay route-scoped,
 and `LoadRouteState` reports the lanes' aggregation with the hold taking
-precedence.
+precedence. Since migration v15 the batches both the merge and the
+arrival paths persist record the occurrence's destination selection
+(`selected_destinations_json` on `change_batches`), so a lane's follow-up
+filters its dirty generation by the occurrence's selection —
+occurrence-level FAN-005 semantics with a per-change fallback for legacy
+rows (E12 epic validation).
 
 ## 12. WorkReceipt
 

@@ -145,6 +145,24 @@ agent-dispatch dispatch \
 
 A no-op meaningful-change result exits 0 with disposition `drop`.
 
+The fan-out dispatch envelope (E12-T2 and the E12 epic validation) carries
+`fanout` — one `{destination_id, dispatch_id, dirty_generation}` row per
+selected destination in destination order — plus `failed_lanes` (bounded,
+redacted per-lane error text with the durable dispatch ID of a failed
+activation) and `merged_lanes` (the lanes that merged into their dirty
+generation while a sibling activated; also emitted as stderr notes). The
+canonically-first lane's child is the envelope's `dispatch_id` and the one
+the command submits; the sibling children stay ready and reach the target
+through `dispatches drain`. An occurrence no destination's conditions
+select refuses at exit 3 (configuration class) creating nothing — no
+aggregate, no child, no intent. An invalid fan-out record is the other
+exit-3 configuration failure (E12 epic whole-review round 2): a
+destination revision that is not the content address of its projection
+bytes, or a child referencing a destination revision with no durable
+row (`ErrInvalidFanoutRecord`) — a producer/configuration defect that is
+never lane-isolated and never retryable, so even when sibling lanes
+succeeded the command fails at exit 3 naming the record.
+
 ## 6. Dispatch Inspection and Actions
 
 ### `dispatches list`
@@ -221,7 +239,7 @@ agent-dispatch work complete \
   [--result-revision <opaque>]
 ```
 
-Manifest contains only relative paths and before/after digests. It may trigger exact suppression and one follow-up decision transactionally. Since work-receipt/v2 (E12-T3, FBK-009) the outcome is explicit: `--status completed` (the default) is the full-completion path; `--status partially_completed` requires `--remaining-manifest` (a non-empty bounded scope of the paths that remain) and records both scopes — the current child completes its lane and exactly one follow-up on the SAME destination lane carries the remaining scope unioned with the lane's unresolved dirty changes (FBK-010; an empty remaining scope is rejected with guidance to use completed); `--status blocked` requires `--manual-reason` (non-empty, bounded) and records the blocked receipt WITHOUT completing the lane or scheduling anything (FBK-011) — the child stays active on its lane, nothing auto-runs (the automatic retry machinery only touches retry_wait/dead-lettered states), and resolution is operator-only: run `work begin` with a fresh `--run-id` for that dispatch, then `work complete` or `work fail` under that run (or `dispatches rerun`). `--manifest` is the completed scope and is required except for `--status blocked` (a blocked run may have changed nothing). The full work-receipt/v2 document form routes through its own outcome: a document carrying `partially_completed` (with both scopes) or `blocked` (with its manual reason) submits through `--manifest` alone, an explicit `--status` that disagrees with the document rejects as a conflict, and a `--remaining-manifest` that differs from the document's remaining scope rejects likewise. `--remaining-manifest` outside the partial outcome is a usage error, and a bare change-array manifest beside `--status blocked` rejects — blocked takes its manual reason (or a v2 blocked document).
+Manifest contains only relative paths and before/after digests. It may trigger exact suppression and one follow-up decision transactionally. Since work-receipt/v2 (E12-T3, FBK-009) the outcome is explicit: `--status completed` (the default) is the full-completion path; `--status partially_completed` requires `--remaining-manifest` (a non-empty bounded scope of the paths that remain) and records both scopes — the current child completes its lane and exactly one follow-up on the SAME destination lane carries the remaining scope unioned with the lane's unresolved dirty changes (FBK-010; an empty remaining scope is rejected with guidance to use completed); `--status blocked` requires `--manual-reason` (non-empty, bounded) and records the blocked receipt WITHOUT completing the lane or scheduling anything (FBK-011) — the child stays active on its lane, nothing auto-runs (the automatic retry machinery only touches retry_wait/dead-lettered states), and resolution is operator-only: run `work begin` with a fresh `--run-id` for that dispatch, then `work complete` or `work fail` under that run (or `dispatches rerun`). `--manifest` is the completed scope and is required except for `--status blocked` (a blocked run may have changed nothing). The full work-receipt/v2 document form routes through its own outcome: a document carrying `partially_completed` (with both scopes) or `blocked` (with its manual reason) submits through `--manifest` alone, an explicit `--status` that disagrees with the document rejects as a conflict, and a `--remaining-manifest` that differs from the document's remaining scope rejects likewise. `--remaining-manifest` outside the partial outcome is a usage error; `--manual-reason` outside the blocked outcome rejects naming exactly the blocked outcome — validated against the EFFECTIVE outcome (the v2 document's status first, the flag status otherwise, so a blocked document carrying its matching flag reason is the legal doubled form), and a v2 document's `manual_reason` beside a non-blocked outcome rejects the same way; a v2 document's `completed_scope` must be a subset by path of its own `changes` (or empty), because a scope naming unreported paths is unauditable completion evidence; and any change set beside a blocked outcome — bare array or a v2 blocked document's non-empty `changes` — rejects, because blocked takes its reason, not a change set (a v2 blocked document with empty changes remains the shipped form).
 
 ### `work fail`
 
@@ -264,6 +282,10 @@ agent-dispatch reconcile \
 ```
 
 Default behavior persists the current-state reconciliation decision. `--submit` attempts an eligible intent and then drains the route's other due work (bounded), so a pending follow-up generation reaches the target on the scheduled path without a manual drain (E7-T2); an accepted follow-up is promoted to the route's active task at acceptance. A route whose activation state is not `enabled` fails closed with the state-conflict classification (`transition_invalid`, exit 14), never a storage failure. The installed scheduled recipes carry `--submit` unconditionally (E9-T4/T2-F001): the two-key gate is the safety boundary — before the production acknowledgement the route fails closed at exit 14 as above, and after it a route disabled in configuration (the YAML key) persists its reconciliation decisions and recovers without submitting.
+
+Since the E12 epic validation a reconciliation on a multi-destination route fans out PER LANE (FAN-002): one shared aggregate and decision, one child per certified destination lane with origin `reconcile`. The sibling children commit DURABLY FIRST — before the first lane's transaction — through the app-layer commit loop (`dispatch.CommitReconcileSiblings`), so a crash between the two leaves ready siblings the existing `dispatches drain` submits, never a first lane whose remaining selection left no durable marker (E12 epic whole-review round 1). Where `reconcile_lanes` rides depends on the envelope shape: the NO-SUBMIT result and the two `--submit`-skipped shapes render the enumeration result's own members at the top level with `reconcile_lanes` merged in BESIDE them, while the completed `--submit` envelope nests the result under `result` and carries `reconcile_lanes` at the top level beside `submitted`/`drained`; a first-lane failure carries it inside the error envelope's `result` slot. `reconcile_lanes` lists the SIBLING lanes only — the first lane's outcome is the result's own members (`reconcile_dispatch_id`, the enumeration counts). Each row is `{destination_id, dispatch_id, committed}` with a `note` (slot-held skip, or the duplicate idempotency key of an already-committed lane on a retry) or bounded `error`.
+
+The sibling policy follows CON-007 isolation: a sibling whose lane already holds its own active work, or whose identical child already exists (a retry after partial failure — the content-derived idempotency key collides), skips with a warning (stderr and the envelope's `warnings` member; its lane keeps its coordination, exit stays 0, nothing new commits for that lane), and a sibling failing for any other reason never blocks the first lane but is never silent — the reconcile exits NON-ZERO with the mapped error on stderr (the result envelope still ships on stdout so the operator sees the delivered lanes, and a storage fault maps to the storage class, 20), because the occurrence is not fully durable.
 
 ## 10. Status and Doctor
 
@@ -327,10 +349,15 @@ separate destination, intent-state, acceptance, execution-projection,
 work-receipt (status + validity), retry, and completion-evidence
 projections, and the aggregate status as the worst child class
 (evidence-gap > manual-intervention > failed > in-progress > completed;
-FBK-012: accepted work without a valid attributable work receipt — absent
-or invalid — renders `completion_evidence: missing` with the actionable
-next step, never "completed"; a never-accepted child renders
-`not-applicable`). `notifications test|list|retry|drain` remain E13 work and
+FBK-012: accepted work without a valid attributable TERMINAL work receipt
+— absent, invalid, or a still-begun run — renders `completion_evidence:
+missing` with the actionable next step, never "completed"; a valid
+terminal receipt (completed, partially_completed, blocked, failed)
+renders `present`; a never-accepted child renders `not-applicable`. A
+valid BEGUN receipt classifies the aggregate in-progress, not
+evidence-gap — the run is known-busy work, and the gap class stays for
+accepted work with no (or an invalid) receipt to trust, E12 epic
+whole-review round 1). `notifications test|list|retry|drain` remain E13 work and
 are not part of the shipped surface; an invocation today is
 `command_unknown` at exit 2.
 

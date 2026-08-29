@@ -35,10 +35,13 @@ func e12t2WithLane(base ports.Lineage, destinationID string) ports.Lineage {
 	lin.Intent.IdempotencyKey = "agent-dispatch:v2:" + destinationID + ":" + base.Intent.IdempotencyKey
 	lin.Intent.Fanout = &ports.FanoutInput{
 		AggregateID: "agg-" + base.Intent.DispatchID + "-" + destinationID, Origin: string(records.OriginArrival),
-		DestinationID: destinationID, DestinationRevision: "dst-rev-1", Workstream: "ws-" + destinationID,
+		DestinationID: destinationID, DestinationRevision: testLaneRevision, Workstream: "ws-" + destinationID,
 		Selections: []records.DestinationSelection{{
-			DestinationID: destinationID, DestinationRevision: "dst-rev-1", Workstream: "ws-" + destinationID,
+			DestinationID: destinationID, DestinationRevision: testLaneRevision, Workstream: "ws-" + destinationID,
 			Reason: "fanout_mode:all",
+		}},
+		Revisions: []ports.DestinationRevisionInput{{
+			DestinationID: destinationID, Revision: testLaneRevision, ProjectionJSON: testLaneProjection,
 		}},
 	}
 	return lin

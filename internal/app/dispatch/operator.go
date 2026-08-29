@@ -162,15 +162,8 @@ func (o *OperatorService) Rerun(ctx context.Context, dispatchID, actor, reason s
 			ContentFingerprint: next.Activation.ContentFingerprint,
 			ManifestDigest:     snap.ManifestDigest,
 			RequestVersion:     RequestContractVersion, RequestJSON: requestJSON, CreatedAt: now,
-			Fanout: &ports.FanoutInput{
-				AggregateID: string(aggregateID), Origin: string(records.OriginRerun),
-				DestinationID: destination.ID, DestinationRevision: destination.Revision, Workstream: destination.Workstream,
-				Selections: []records.DestinationSelection{{
-					DestinationID: destination.ID, DestinationRevision: destination.Revision,
-					Workstream: destination.Workstream, Reason: "rerun:" + dispatchID,
-				}},
-				Revisions: revisions,
-			},
+			Fanout: SingleLaneFanout(string(aggregateID), records.OriginRerun, destination,
+				"rerun:"+dispatchID, revisions),
 		},
 	})
 }
@@ -278,15 +271,8 @@ func (o *OperatorService) RebuildStale(ctx context.Context, dispatchID, actor st
 			ContentFingerprint: next.Activation.ContentFingerprint,
 			ManifestDigest:     snap.ManifestDigest,
 			RequestVersion:     RequestContractVersion, RequestJSON: requestJSON, CreatedAt: now,
-			Fanout: &ports.FanoutInput{
-				AggregateID: string(aggregateID), Origin: string(records.OriginRebuild),
-				DestinationID: destination.ID, DestinationRevision: destination.Revision, Workstream: destination.Workstream,
-				Selections: []records.DestinationSelection{{
-					DestinationID: destination.ID, DestinationRevision: destination.Revision,
-					Workstream: destination.Workstream, Reason: "rebuild:" + dispatchID,
-				}},
-				Revisions: revisions,
-			},
+			Fanout: SingleLaneFanout(string(aggregateID), records.OriginRebuild, destination,
+				"rebuild:"+dispatchID, revisions),
 		},
 	})
 	if err != nil {

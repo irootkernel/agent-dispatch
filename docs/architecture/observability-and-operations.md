@@ -93,10 +93,14 @@ only value is `json`) and `doctor` (always JSON):
   work-receipt (status + validity), retry, and completion-evidence
   projections; the `aggregate_status` member is the worst child class
   (evidence-gap > manual-intervention > failed > in-progress >
-  completed, FBK-012: accepted work without a valid attributable work
-  receipt — absent or invalid — renders `completion_evidence: missing`
-  with the actionable next step, never "completed"; a never-accepted
-  child renders `not-applicable`);
+  completed, FBK-012: `completion_evidence: present` requires a valid
+  TERMINAL receipt — completed, partially_completed, blocked, or failed;
+  accepted work whose latest receipt is absent or invalid renders
+  `completion_evidence: missing` with the actionable next step, never
+  "completed"; a valid BEGUN receipt is a run in flight — it renders
+  missing-because-in-flight the same way while the aggregate classifies
+  the child in-progress (known-busy work), not evidence-gap; a
+  never-accepted child renders `not-applicable`);
 - `doctor` always emits its findings envelope on stdout (no `--output`
   flag required; `--output json` is accepted and ignored): `findings` (stable code, severity, summary, details,
   remediation, and the request's `trace_id`) and `findings_count`.

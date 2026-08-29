@@ -176,7 +176,8 @@ Flags: --route <id> (required), --input watchman (required),
   --no-submit (plan only), --dry-run.
 
 Exit codes: 0; 3 configuration (including the capability fingerprint
-block); 4 input rejected; 11 target unavailable; 14 conflict; 20 storage.
+block and an invalid fan-out record); 4 input rejected; 11 target
+unavailable; 14 conflict; 20 storage.
 
 Side effects: persists the observation, batch, and intent; submits to
 the target unless --no-submit. The stdin payload is untrusted input and
@@ -284,8 +285,10 @@ Usage: agent-dispatch reconcile --route <id> --reason <text> [flags]
 Flags: --route (required), --reason (required), --submit (submit the
   generation; default dry enumeration).
 
-Exit codes: 0; 3 configuration; 11 target unavailable; 14 conflict; 20
-  storage.
+Exit codes: 0; 3 configuration (including an invalid fan-out
+  record); 11 target unavailable; 14 conflict; 20 storage (including
+  a reconcile sibling lane whose child commit failed); 40 internal
+  (failures the command could not attribute).
 
 Side effects: with --submit, enumerates the vault and submits the
 latest-state request; without it, only the dry enumeration persists.

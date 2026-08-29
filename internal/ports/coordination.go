@@ -35,17 +35,25 @@ type RouteCoordinationStore interface {
 	LoadIntentLane(ctx context.Context, dispatchID string) (state.RouteSnapshot, error)
 	// CommitMergePending persists one arriving lineage whose decision is
 	// merge_pending and durably increments the dirty generation of exactly
-	// the lanes whose destinations the occurrence selected (CON-002,
-	// CON-008, FBK-001): no intent is created while another dispatch holds
-	// a selected lane's slot. An empty selection list merges the synthetic
-	// legacy lane.
-	CommitMergePending(ctx context.Context, lin Lineage, selectedDestinations []string, actor, now string) (int, error)
-	// MergeSelectedLanes durably increments the dirty generation of
-	// exactly the named destination lanes under the merge guards
-	// (CON-008, E12-T2) without re-persisting the occurrence's lineage: a
-	// fan-out sibling that lost its lane's slot race merges beside the
-	// winner's already-committed prefix.
-	MergeSelectedLanes(ctx context.Context, routeID string, selectedDestinations []string, actor, now string) (int, error)
+	// the mergeDestinations lanes (CON-002, CON-008, FBK-001): no intent is
+	// created while another dispatch holds a merging lane's slot. The
+	// batch's selection evidence becomes the occurrence's FULL
+	// selectedDestinations — UNIONed with any selection the lineage's batch
+	// already carried, canonically sorted, idempotent (E12 epic
+	// whole-review round 2: evidence is written once and never narrowed, so
+	// a conditioned multi-lane burst keeps every selected lane's follow-up
+	// whole). Empty lists merge the synthetic legacy lane and record no
+	// evidence.
+	CommitMergePending(ctx context.Context, lin Lineage, mergeDestinations, selectedDestinations []string, actor, now string) (int, error)
+	// MergeSelectedLanes durably increments the dirty generation of exactly
+	// the mergeDestinations lanes under the merge guards (CON-008, E12-T2)
+	// without re-persisting the occurrence's lineage: a fan-out sibling
+	// that lost its lane's slot race merges beside the winner's
+	// already-committed prefix. The occurrence's FULL selectedDestinations
+	// union onto the named batch's selection evidence the same way (an
+	// empty batchID skips the evidence write — the merge target owns no
+	// batch).
+	MergeSelectedLanes(ctx context.Context, routeID, batchID string, mergeDestinations, selectedDestinations []string, actor, now string) (int, error)
 	// CommitFanoutChild persists one additional child intent of an
 	// occurrence whose shared observation/batch/decision lineage a sibling
 	// already committed (FAN-003): the intent, its child-dispatch record

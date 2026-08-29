@@ -336,17 +336,25 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	// the drain.
 	fanout := laneResultsEnvelope(outcome.children)
 	failedLanes := laneFailuresEnvelope(outcome.failures)
+	// A lane that MERGED while another activated is never silent (E12 epic
+	// validation): the merged lanes ride the envelope beside the
+	// activated fan-out — the occurrence reached some lanes and merged
+	// into the others' dirty generations in the same burst.
+	mergedLanes := laneResultsEnvelope(outcome.mergedChildren)
 	for _, failure := range outcome.failures {
 		// Never silent: a lane that failed beside a successful sibling is
 		// operator-visible on stderr too (CON-007 isolation cuts both
 		// ways — the failure must be seen).
 		fmt.Fprintf(stderr, "warning: destination lane %s failed: %s\n", failure.DestinationID, failure.Error)
 	}
+	for _, merged := range outcome.mergedChildren {
+		fmt.Fprintf(stderr, "note: destination lane %s merged into its dirty generation (generation %d); a lane already held the slot\n", merged.DestinationID, merged.DirtyGeneration)
+	}
 	if noSubmit {
 		outcome.Close()
 		return writeEnvelope(stdout, command, map[string]any{
 			"route_id": artifacts.opts.routeID, "dispatch_id": outcome.dispatchID,
-			"state": "ready", "submitted": false, "fanout": fanout, "failed_lanes": failedLanes,
+			"state": "ready", "submitted": false, "fanout": fanout, "failed_lanes": failedLanes, "merged_lanes": mergedLanes,
 		})
 	}
 	// The YAML key half of the two-key gate (E7-T6/M-2): a configuration
@@ -355,7 +363,7 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 		outcome.Close()
 		return writeEnvelopeWithWarnings(stdout, command, map[string]any{
 			"route_id": artifacts.opts.routeID, "dispatch_id": outcome.dispatchID,
-			"state": "ready", "submitted": false, "fanout": fanout, "failed_lanes": failedLanes,
+			"state": "ready", "submitted": false, "fanout": fanout, "failed_lanes": failedLanes, "merged_lanes": mergedLanes,
 		}, []string{fmt.Sprintf("route %q is disabled in configuration; the intent stays ready until the route is enabled", artifacts.opts.routeID)})
 	}
 	// The submit phase needs the E4 sink adapter; the intent is durable
@@ -386,6 +394,7 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 		"route_id": artifacts.opts.routeID, "dispatch_id": outcome.dispatchID,
 		"state": string(report.To), "reason": string(report.Reason), "submitted": true,
 		"fanout": laneResultsEnvelope(outcome.children), "failed_lanes": laneFailuresEnvelope(outcome.failures),
+		"merged_lanes": mergedLanes,
 	})
 }
 
@@ -435,8 +444,13 @@ type persistOutcome struct {
 	// a sibling succeeded (E12-T2, CON-007): bounded, redacted error text
 	// with the durable dispatch ID of a failed activation.
 	failures []dispatch.FanoutLaneFailure
-	store    storeOp
-	closer   *sqlite.Store
+	// mergedChildren lists the per-destination lanes that merged into
+	// their dirty generation while a sibling activated (E12 epic
+	// validation): the mixed activate+merge envelope reports them beside
+	// the fan-out.
+	mergedChildren []dispatch.FanoutLaneResult
+	store          storeOp
+	closer         *sqlite.Store
 }
 
 // Close releases the outcome's store handle when the submit phase is
@@ -508,9 +522,34 @@ func persistThroughCoordinator(command string, artifacts *planArtifacts, stderr 
 		case errors.Is(err, ports.ErrRouteSlotHeld):
 			writeError(stderr, command, "route_slot_held", "conflict", err.Error())
 			return persistOutcome{}, 14
+		case errors.Is(err, ports.ErrInvalidFanoutRecord):
+			// A fan-out record that failed the store-boundary validation is
+			// a producer/configuration defect — non-retryable, never a
+			// conflict the operator should replay (E12 epic whole-review
+			// round 2).
+			writeError(stderr, command, "config_invalid", "configuration", err.Error())
+			return persistOutcome{}, 3
 		default:
 			writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
 			return persistOutcome{}, 20
+		}
+	}
+	// An invalid fan-out record is NOT lane-isolated (E12 epic
+	// whole-review round 3): the configuration is broken for every lane,
+	// so even when sibling lanes activated or merged the failure is the
+	// command-level configuration class (exit 3), never a per-lane
+	// warning at exit 0 — the durable per-lane outcomes ride the error
+	// envelope's result slot so the operator still sees what landed.
+	for _, failure := range outcome.Failed {
+		if errors.Is(failure.Err, ports.ErrInvalidFanoutRecord) {
+			closer.Close()
+			writeErrorWithResult(stderr, command, "config_invalid", "configuration", failure.Err.Error(),
+				map[string]any{
+					"fanout":       laneResultsEnvelope(outcome.Activated),
+					"merged_lanes": laneResultsEnvelope(outcome.Merged),
+					"failed_lanes": laneFailuresEnvelope(outcome.Failed),
+				})
+			return persistOutcome{}, 3
 		}
 	}
 	if len(outcome.Activated) == 0 && len(outcome.Failed) == 0 {
@@ -536,7 +575,7 @@ func persistThroughCoordinator(command string, artifacts *planArtifacts, stderr 
 		}
 		return persistOutcome{merged: true, dirty: snap.DirtyGeneration, children: outcome.Merged, failures: outcome.Failed}, 0
 	}
-	return persistOutcome{dispatchID: outcome.Activated[0].DispatchID, children: outcome.Activated, failures: outcome.Failed, store: store, closer: closer}, 0
+	return persistOutcome{dispatchID: outcome.Activated[0].DispatchID, children: outcome.Activated, mergedChildren: outcome.Merged, failures: outcome.Failed, store: store, closer: closer}, 0
 }
 
 // persistQuarantine commits the quarantine-classified arrival with its
@@ -744,6 +783,16 @@ func buildLineages(a *planArtifacts) ([]ports.Lineage, error) {
 		return nil, fmt.Errorf("%w: route %q selected no destination for this occurrence: every destination's conditions refused it (FAN-005)",
 			errNoDestinationSelected, a.opts.routeID)
 	}
+	// The occurrence's selection rides on the shared batch (E12 epic
+	// validation, migration v15): whichever lane commits the prefix
+	// persists the batch WITH the full selection summary, so the lanes'
+	// later follow-ups filter their dirty generations by the occurrence
+	// the merge recorded — never by re-evaluating conditions per change.
+	selectedIDs := make([]string, 0, len(selected))
+	for _, lane := range selected {
+		selectedIDs = append(selectedIDs, lane.lane.ID)
+	}
+	base.Batch.SelectedDestinations = selectedIDs
 	out := make([]ports.Lineage, 0, len(selected))
 	for _, lane := range selected {
 		dispatchID, err := gen.NewID()
@@ -787,6 +836,8 @@ func buildLineages(a *planArtifacts) ([]ports.Lineage, error) {
 			ResourceID:  a.route.Source.Resource, Generation: 1, IdempotencyKey: key,
 			ContentFingerprint: a.plan.ContentFingerprint, ManifestDigest: dispatch.ManifestDigest(a.batch.Changes),
 			RequestVersion: dispatch.RequestContractVersion, RequestJSON: requestJSON, CreatedAt: base.Decision.CreatedAt,
+			// The full multi-selection summary (all lanes) rides every
+			// child; the constructor shape is per-child lane identity.
 			Fanout: &ports.FanoutInput{
 				AggregateID: string(aggregateID), Origin: string(records.OriginArrival),
 				DestinationID: lane.lane.ID, DestinationRevision: lane.lane.Revision, Workstream: lane.lane.Workstream,

@@ -549,42 +549,58 @@ func TestE13T1LateTerminalAttemptKeepsFirstResolution(t *testing.T) {
 	}
 }
 
-// TestE13T1PayloadBoundsFailClosed pins the round-1 F003 remediation:
-// the payload projection's safety is enforced at the enqueue boundary —
-// an over-long value or a control character fails the owning transaction
-// loudly instead of leaking into a notification payload.
-func TestE13T1PayloadBoundsFailClosed(t *testing.T) {
+// TestE13T1PayloadBoundsDropUnsafeFields pins the reconciled bound
+// semantics (the round-1 F003 fail-closed posture, reconciled by the
+// epic audit against the deferred availability coupling): a violating
+// source value is DROPPED whole — never truncated, never leaked — and
+// the notification still commits with its safe fields, so a payload
+// defect can never block the owning transition (ADR-0019).
+func TestE13T1PayloadBoundsDropUnsafeFields(t *testing.T) {
 	s := openTestStore(t)
 	e13t1Policy(s, records.EventReconciliationRequired)
 	tx, err := s.BeginTx(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tx.Rollback()
 	tooLong := strings.Repeat("x", 257)
-	if _, err := s.enqueueNotificationTx(tx, "wiki-maintenance", records.EventReconciliationRequired,
+	created, err := s.enqueueNotificationTx(tx, "wiki-maintenance", records.EventReconciliationRequired,
 		"route:wiki-maintenance:pending_reconcile:bound", "",
-		map[string]string{"blob": tooLong}, "2026-08-30T09:00:00Z"); err == nil {
-		t.Fatal("an over-long source value must fail closed")
+		map[string]string{"blob": tooLong, "origin": "explicit_mark"}, "2026-08-30T09:00:00Z")
+	if err != nil || created != 2 {
+		t.Fatalf("an unsafe field must drop without blocking the enqueue: %d %v", created, err)
 	}
-	if _, err := s.enqueueNotificationTx(tx, "wiki-maintenance", records.EventReconciliationRequired,
-		"route:wiki-maintenance:pending_reconcile:bound", "",
-		map[string]string{"note": "line one\nline two"}, "2026-08-30T09:00:00Z"); err == nil {
-		t.Fatal("a control character must fail closed")
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	notifications, err := s.ListNotifications(context.Background(), ports.NotificationFilter{SinkID: "ops-log"})
+	if err != nil || len(notifications) != 1 {
+		t.Fatalf("the sanitized notification must exist: %+v %v", notifications, err)
+	}
+	if strings.Contains(notifications[0].PayloadJSON, "blob") || !strings.Contains(notifications[0].PayloadJSON, "explicit_mark") {
+		t.Fatalf("the violating field drops whole while the safe field stays: %s", notifications[0].PayloadJSON)
+	}
+	// Control characters, over-long keys, and invalid UTF-8 drop the same way.
+	for name, value := range map[string]string{
+		"note":                  "line one\nline two",
+		strings.Repeat("k", 65): "v",
+	} {
+		_ = name
+		_ = value
+	}
+	if dropped := sanitizeNotificationSource(map[string]string{"a": "line one\nline two", "b": "ok"}); len(dropped) != 1 || dropped["b"] != "ok" {
+		t.Fatalf("a control character drops its field whole: %+v", dropped)
+	}
+	if dropped := sanitizeNotificationSource(map[string]string{strings.Repeat("k", 65): "v", "b": "ok"}); len(dropped) != 1 || dropped["b"] != "ok" {
+		t.Fatalf("an over-long key drops its field whole: %+v", dropped)
+	}
+	if dropped := sanitizeNotificationSource(map[string]string{"a": string([]byte{0xff, 0xfe}), "b": "ok"}); len(dropped) != 1 {
+		t.Fatalf("invalid UTF-8 drops its field whole: %+v", dropped)
 	}
 	overMany := map[string]string{}
 	for i := 0; i < 13; i++ {
 		overMany[fmt.Sprintf("k%02d", i)] = "v"
 	}
-	if _, err := s.enqueueNotificationTx(tx, "wiki-maintenance", records.EventReconciliationRequired,
-		"route:wiki-maintenance:pending_reconcile:bound", "",
-		overMany, "2026-08-30T09:00:00Z"); err == nil {
-		t.Fatal("an over-large source projection must fail closed")
-	}
-	// The bound itself stays generous enough for every real emission site.
-	if _, err := s.enqueueNotificationTx(tx, "wiki-maintenance", records.EventReconciliationRequired,
-		"route:wiki-maintenance:pending_reconcile:bound", "",
-		map[string]string{"origin": "explicit_mark", "source_position": "pos"}, "2026-08-30T09:00:00Z"); err != nil {
-		t.Fatalf("a bounded projection must pass: %v", err)
+	if dropped := sanitizeNotificationSource(overMany); len(dropped) != 12 {
+		t.Fatalf("the projection keeps at most the bound: %d", len(dropped))
 	}
 }

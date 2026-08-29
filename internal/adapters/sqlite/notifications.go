@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 	"github.com/irootkernel/agent-dispatch/internal/domain/state"
@@ -27,36 +28,56 @@ import (
 // emission site grows its context.
 const notificationSourceBound = 12
 
-// notificationSourceValueBound caps one source field's value and rejects
-// control characters (E13-T1 review round 1, F003): the payload's safety
-// is enforced at this boundary, not left to call-site discipline — an
-// emission site that passes an over-long value (a document body, a
-// resolved secret, anything unbounded) fails its transaction loudly
-// instead of leaking into a notification.
-const notificationSourceValueBound = 256
+// notificationSourceValueBound caps one source field's value and its
+// key (E13-T1 review round 1 F003, reconciled by the epic audit): the
+// payload's safety is enforced at this boundary, not left to call-site
+// discipline. A violating field is DROPPED whole — never truncated,
+// never leaked, and never blocking the owning transition (ADR-0019: a
+// notification defect must not affect state): the notification still
+// commits with its remaining safe fields.
+const (
+	notificationSourceValueBound = 256
+	notificationSourceKeyBound   = 64
+)
 
-// validateNotificationSource enforces the bounded, safe payload
+// sanitizeNotificationSource enforces the bounded, safe payload
 // projection (SEC-011): at most notificationSourceBound fields, each
-// non-empty, at most notificationSourceValueBound bytes of valid UTF-8
-// without control characters.
-func validateNotificationSource(source map[string]string) error {
-	if len(source) > notificationSourceBound {
-		return fmt.Errorf("notification source projection exceeds %d fields", notificationSourceBound)
-	}
+// with a non-empty bounded key and at most notificationSourceValueBound
+// bytes of valid UTF-8 without control characters. Violating fields are
+// dropped whole; the caller proceeds with the safe remainder.
+func sanitizeNotificationSource(source map[string]string) map[string]string {
+	safe := make(map[string]string, len(source))
 	for k, v := range source {
-		if k == "" || v == "" {
-			return fmt.Errorf("notification source projection carries an empty field")
+		if k == "" || v == "" || len(k) > notificationSourceKeyBound || len(v) > notificationSourceValueBound {
+			continue
 		}
-		if len(v) > notificationSourceValueBound {
-			return fmt.Errorf("notification source field %q exceeds %d bytes", k, notificationSourceValueBound)
+		if !utf8.ValidString(v) {
+			continue
 		}
+		unsafe := false
 		for _, r := range v {
 			if r < 0x20 || r == 0x7f {
-				return fmt.Errorf("notification source field %q carries a control character", k)
+				unsafe = true
+				break
 			}
 		}
+		if !unsafe {
+			safe[k] = v
+		}
 	}
-	return nil
+	// The field-count bound drops deterministically: the canonically
+	// first bound keys stay, the overflow drops.
+	if len(safe) > notificationSourceBound {
+		keys := make([]string, 0, len(safe))
+		for k := range safe {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys[notificationSourceBound:] {
+			delete(safe, k)
+		}
+	}
+	return safe
 }
 
 // SetNotificationPolicy installs the per-route effective-policy resolver
@@ -90,11 +111,10 @@ func (s *Store) enqueueNotificationTx(tx *sql.Tx, routeID string, event records.
 		return 0, nil
 	}
 	// The payload projection is enforced before any sink write: an
-	// unbounded or unsafe source value fails the owning transaction
-	// instead of leaking into a notification (SEC-011, review round 1).
-	if err := validateNotificationSource(source); err != nil {
-		return 0, fmt.Errorf("route %s event %s: %w", routeID, event, err)
-	}
+	// unbounded or unsafe source value drops whole instead of leaking
+	// into a notification, and the transition is never blocked (the
+	// epic audit's reconciliation of the round-2 availability coupling).
+	source = sanitizeNotificationSource(source)
 	sinks := make([]ports.NotificationSinkRef, len(policy.Sinks))
 	copy(sinks, policy.Sinks)
 	sort.Slice(sinks, func(i, j int) bool { return sinks[i].ID < sinks[j].ID })
@@ -106,19 +126,36 @@ func (s *Store) enqueueNotificationTx(tx *sql.Tx, routeID string, event records.
 		if err != nil {
 			return 0, err
 		}
-		res, err := tx.Exec(`INSERT OR IGNORE INTO notification_events
+		// A plain INSERT, never OR IGNORE (the epic audit's reconciliation
+		// of the E13-T1 deferral): the only tolerated failure is the
+		// dedup hit on the deterministic identity — every other
+		// constraint violation (a CHECK or NOT NULL drift) fails loudly
+		// instead of silently dropping the notification.
+		_, err = tx.Exec(`INSERT INTO notification_events
 			(notification_id, route_id, event, destination_id, transition, sink_id, sink_type, policy_revision, idempotency_key, payload_json, state, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
 			notificationID, routeID, string(event), nullString(destinationID), transition, sink.ID, sink.Type, policy.Revision,
 			records.NotificationIdempotencyKey(notificationID), payload, now)
 		if err != nil {
+			if isNotificationDedupHit(err, notificationID) {
+				continue
+			}
 			return 0, err
 		}
-		if n, _ := res.RowsAffected(); n > 0 {
-			created++
-		}
+		created++
 	}
 	return created, nil
+}
+
+// isNotificationDedupHit reports whether one insert failure is the
+// tolerated dedup hit: the deterministic notification id or its
+// idempotency key already exists (a replayed or rerun transition).
+func isNotificationDedupHit(err error, notificationID string) bool {
+	text := err.Error()
+	return strings.Contains(text, "notification_events.notification_id") ||
+		strings.Contains(text, "notification_events.idempotency_key") ||
+		strings.Contains(text, "UNIQUE constraint failed: notification_events") ||
+		strings.Contains(text, notificationID)
 }
 
 // notificationPayloadJSON renders the notification-event/v1 projection

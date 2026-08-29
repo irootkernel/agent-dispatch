@@ -37,6 +37,7 @@ agent-dispatch watchman install|status|remove|test
 agent-dispatch dispatch
 agent-dispatch dispatches list|show|retry|reprocess|rerun|discard|refresh|drain
 agent-dispatch events show
+agent-dispatch notifications test|list|retry|drain
 agent-dispatch receipts list|show
 agent-dispatch work begin|complete|fail
 agent-dispatch quarantine list|show|release|discard

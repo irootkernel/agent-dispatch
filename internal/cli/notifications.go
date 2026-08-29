@@ -279,7 +279,7 @@ func runNotificationsRetry(command string, args []string, stdout, stderr io.Writ
 	ctx := requestCtx()
 	rec, err := closer.LoadNotification(ctx, notificationID)
 	if err != nil {
-		return planErr(stderr, command, "notification_not_found", "not_found", err.Error(), 4)
+		return planErr(stderr, command, "notification_not_found", "input_rejected", err.Error(), 4)
 	}
 	// The sink constructs BEFORE any state changes: a defective
 	// declaration is a pure configuration failure that re-arms nothing.
@@ -293,7 +293,7 @@ func runNotificationsRetry(command string, args []string, stdout, stderr io.Writ
 	}
 	if err := closer.RetryNotification(ctx, notificationID); err != nil {
 		if errors.Is(err, ports.ErrStateNotEligible) {
-			return planErr(stderr, command, "notification_already_delivered", "not_found", err.Error(), 4)
+			return planErr(stderr, command, "notification_already_delivered", "input_rejected", err.Error(), 4)
 		}
 		return planErr(stderr, command, "sqlite_query_failed", "storage", err.Error(), 20)
 	}

@@ -1,5 +1,32 @@
 # SOT Changelog
 
+## 1.1.18 - 2026-08-30
+
+E13 epic validation: every promoted hardening-deferral finding from the
+member tasks is reconciled against the final epic state and remediated
+as one audit batch:
+
+- the E13-T1 availability coupling is resolved the ADR-0019 way: an
+  unsafe notification source field (over-long value or key, invalid
+  UTF-8, control characters) now DROPS whole at the enqueue boundary —
+  never truncated, never leaked, and never blocking the owning state
+  transition — with the field-count bound enforced deterministically;
+  the insert is a plain INSERT whose only tolerated failure is the
+  dedup hit on the deterministic identity, so a CHECK or NOT NULL drift
+  fails loudly instead of silently dropping a notification;
+- the E13-T2 registry and contract gaps close: notification_not_found
+  and notification_already_delivered join the closed error-code
+  registry under input_rejected at exit 4 (the retry command's category
+  matches), the cli-spec command tree lists the notifications group,
+  and the sink contract names the structured stderr log sink;
+- the E13-T3 real-leg assertion is by content: both lanes'
+  work_completed payloads must arrive, with the exact total left to the
+  environment (the drain's drift evaluation legitimately adds the
+  fresh profile's drift findings on the same sink);
+- the E13-T4 hostile-paths helper drops its HOME re-derivation (the
+  vault and config-path scans carry the assertion inside the
+  platformpaths-clean test boundary).
+
 ## 1.1.17 - 2026-08-30
 
 E13-T4: documentation truth, release proof, and the local v0.1.5

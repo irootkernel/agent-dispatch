@@ -253,6 +253,12 @@ func classifyStatus(status int, body []byte, readErr error, secret string, out p
 // posture).
 func classifyTransportFailure(err error, secret, endpoint string, out ports.NotificationAttemptInput) ports.NotificationAttemptInput {
 	redacted := redactText(endpoint, "(endpoint)", redact(secret, err.Error()))
+	// The resolved address can stand in for the endpoint after DNS: the
+	// host portion redacts too, so no network detail of the configured
+	// destination persists into notification evidence.
+	if host := endpointHost(endpoint); host != "" {
+		redacted = redactText(host, "(endpoint-host)", redacted)
+	}
 	if provableNoSend(err) {
 		out.Outcome = records.NotificationRetryableOutcome
 		out.ErrorCode = boundedCode(redacted)
@@ -261,6 +267,16 @@ func classifyTransportFailure(err error, secret, endpoint string, out ports.Noti
 	out.Outcome = records.NotificationAmbiguousOutcome
 	out.ErrorCode = boundedCode(redacted)
 	return out
+}
+
+// endpointHost extracts the scheme-less host of the configured endpoint
+// for address redaction.
+func endpointHost(endpoint string) string {
+	u, err := url.Parse(endpoint)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return u.Hostname()
 }
 
 // boundedCode keeps one bounded, secret-free error class marker,

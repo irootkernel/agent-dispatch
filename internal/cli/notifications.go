@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/notificationsink"
@@ -212,6 +213,11 @@ func runNotificationsList(command string, args []string, stdout, stderr io.Write
 		RouteID: flags.val("--route"),
 		State:   flags.val("--state"),
 		SinkID:  flags.val("--sink"),
+	}
+	if filter.State != "" {
+		if _, err := records.ParseNotificationState(filter.State); err != nil {
+			return usageError(stderr, command, "--state must be one of pending, delivered, or refused")
+		}
 	}
 	if raw := flags.val("--limit"); raw != "" {
 		n, ok := parseBoundedLimit(raw)
@@ -450,8 +456,8 @@ func driftOccurrence(routeID string, finding driftFinding) string {
 // parseBoundedLimit parses the listing bound 1..500 — the store's
 // listing ceiling, surfaced as a usage error instead of a silent clamp.
 func parseBoundedLimit(raw string) (int, bool) {
-	var n int
-	if _, err := fmt.Sscanf(raw, "%d", &n); err != nil || n < 1 || n > 500 {
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 1 || n > 500 {
 		return 0, false
 	}
 	return n, true

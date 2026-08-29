@@ -163,7 +163,7 @@ Do not fingerprint arbitrary marshaled domain structs because adding a field cou
 | `agent-dispatch.work-receipt/v2` | Completed, partial, blocked, or failed bounded worker evidence |
 | `agent-dispatch.hermes-capabilities/v2` | Executable identity, version, command/shape evidence, profiles, and required skills |
 | `agent-dispatch.notification-event/v1` | Channel-neutral safe transition payload |
-| `agent-dispatch.notification-attempt/v1` | Sink attempt and outcome under the stable idempotency identity (retry scheduling arrives with E13-T2 delivery) |
+| `agent-dispatch.notification-attempt/v1` | Sink attempt and outcome under the stable idempotency identity (delivery retries are operator-driven: the drain, the explicit retry, and the scheduled recipe) |
 
 Aggregate event identity is independently generated and never substitutes for
 content fingerprint. Child identity is independently generated; its

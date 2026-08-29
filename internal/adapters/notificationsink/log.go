@@ -1,6 +1,6 @@
 // Package notificationsink implements the two shipped notification
 // sink adapters of E13-T2 (NTF-006, sink-adapter-contract §10): the
-// structured stdout/log sink and the authenticated HTTPS webhook sink.
+// structured log sink and the authenticated HTTPS webhook sink.
 // Both consume the notification-event/v1 payload, return the four-way
 // outcome contract, and never mutate state outside the notification
 // tables (NTF-005).
@@ -14,7 +14,7 @@ import (
 	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
-// LogSink is the structured stdout/log sink: one delivery appends the
+// LogSink is the structured log (stderr) sink: one delivery appends the
 // stored notification-event/v1 payload as a single JSON line to the
 // operator's stream — no external effect, no secret, no document
 // content (the payload is already the safe projection, SEC-011). A

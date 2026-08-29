@@ -100,7 +100,7 @@ below only after G6 through G9 carry executable evidence:
 - [x] Versioned operator and worker skills plus isolated operational
       walkthrough (E13-T3, operator 2.0.0 / worker 1.2.0).
 - [x] SOT/roadmap/VALIDATION/release-note truth synchronized at 75/75
-      (this release; SOT 1.1.17).
+      (this release; SOT 1.1.18 including the epic-audit batches).
 - [x] Two byte-identical darwin/arm64 builds and local v0.1.5 tag; no push or
       production activation (the E13-T4 release proof; the tag names the
       final tree).

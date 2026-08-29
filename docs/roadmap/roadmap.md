@@ -3388,9 +3388,10 @@ rows in VALIDATION.md carry their executable evidence (the E13-T1
 outbox suite, the E13-T2 sink and CLI suites, and the E13-T3 G9
 walkthrough), the G6-G8 rows stand as verified history, and the
 traceability matrix is regenerated at 75 tasks. Every status surface
-agrees at 75/75: README SOT 1.1.17 with the v0.1.5 local-candidate
+agrees at 75/75: README SOT 1.1.18 with the v0.1.5 local-candidate
 posture, VALIDATION with its G9 and release-proof sections, CHANGELOG
-1.1.17, the closed v0.1.5 release-checklist addendum, the v0.1.5
+1.1.18 (the audit batches included), the closed v0.1.5 release-checklist
+addendum, the v0.1.5
 release notes, and this roadmap. Two consecutive
 `make release VERSION=v0.1.5` builds from the release commit are
 byte-identical with `dist/SHA256SUMS` recording the artifact digest;

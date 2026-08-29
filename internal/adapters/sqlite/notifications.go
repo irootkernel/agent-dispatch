@@ -137,7 +137,13 @@ func (s *Store) enqueueNotificationTx(tx *sql.Tx, routeID string, event records.
 			notificationID, routeID, string(event), nullString(destinationID), transition, sink.ID, sink.Type, policy.Revision,
 			records.NotificationIdempotencyKey(notificationID), payload, now)
 		if err != nil {
-			if isNotificationDedupHit(err, notificationID) {
+			// The only tolerated insert failure is the dedup hit: the
+			// deterministic identity already exists (a replayed or rerun
+			// transition). It is proven by the row's EXISTENCE — never by
+			// matching driver error text, which would silently absorb a
+			// CHECK or NOT NULL drift as a fake dedup.
+			var existing int
+			if qerr := tx.QueryRow(`SELECT COUNT(*) FROM notification_events WHERE notification_id = ?`, notificationID).Scan(&existing); qerr == nil && existing > 0 {
 				continue
 			}
 			return 0, err
@@ -145,17 +151,6 @@ func (s *Store) enqueueNotificationTx(tx *sql.Tx, routeID string, event records.
 		created++
 	}
 	return created, nil
-}
-
-// isNotificationDedupHit reports whether one insert failure is the
-// tolerated dedup hit: the deterministic notification id or its
-// idempotency key already exists (a replayed or rerun transition).
-func isNotificationDedupHit(err error, notificationID string) bool {
-	text := err.Error()
-	return strings.Contains(text, "notification_events.notification_id") ||
-		strings.Contains(text, "notification_events.idempotency_key") ||
-		strings.Contains(text, "UNIQUE constraint failed: notification_events") ||
-		strings.Contains(text, notificationID)
 }
 
 // notificationPayloadJSON renders the notification-event/v1 projection

@@ -279,7 +279,10 @@ func runNotificationsRetry(command string, args []string, stdout, stderr io.Writ
 	ctx := requestCtx()
 	rec, err := closer.LoadNotification(ctx, notificationID)
 	if err != nil {
-		return planErr(stderr, command, "notification_not_found", "input_rejected", err.Error(), 4)
+		if errors.Is(err, ports.ErrNotificationNotFound) {
+			return planErr(stderr, command, "notification_not_found", "input_rejected", err.Error(), 4)
+		}
+		return planErr(stderr, command, "sqlite_query_failed", "storage", err.Error(), 20)
 	}
 	// The sink constructs BEFORE any state changes: a defective
 	// declaration is a pure configuration failure that re-arms nothing.
@@ -408,18 +411,24 @@ func evaluateDriftNotifications(ctx context.Context, cfg *config.Config, store *
 			default:
 				continue
 			}
-			occurrence := driftOccurrence(routeID, finding)
+			transition := "drift:" + finding.Class + ":" + driftOccurrence(routeID, finding)
 			created, err := store.EnqueueRouteNotification(ctx, routeID, event,
-				"drift:"+finding.Class+":"+occurrence, "",
+				transition, "",
 				map[string]string{"class": finding.Class, "origin": "drift_evaluation"}, now)
 			if err != nil {
 				enqueued[finding.Class] = map[string]any{"error": err.Error()}
 				continue
 			}
 			if created == 0 {
-				// The effective policy filtered the event: report the
-				// filtering honestly, never a phantom enqueue.
-				enqueued[finding.Class] = map[string]any{"filtered": true, "detail": finding.Detail}
+				// Zero created is either the policy filter or a
+				// dedup-collapsed replay of the same drift appearance —
+				// distinguished by the durable row, never guessed.
+				var existing int
+				if qerr := store.QueryRowContext(ctx, `SELECT COUNT(*) FROM notification_events WHERE route_id = ? AND transition = ?`, routeID, transition).Scan(&existing); qerr == nil && existing > 0 {
+					enqueued[finding.Class] = map[string]any{"already_notified": true, "detail": finding.Detail}
+				} else {
+					enqueued[finding.Class] = map[string]any{"filtered": true, "detail": finding.Detail}
+				}
 				continue
 			}
 			enqueued[finding.Class] = map[string]any{"sinks": created, "detail": finding.Detail}

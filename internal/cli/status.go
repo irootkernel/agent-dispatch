@@ -115,6 +115,9 @@ func runStatus(args []string, stdout, stderr io.Writer) int {
 	if notificationCounts["pending"] > 0 {
 		warnings = append(warnings, fmt.Sprintf("%d notifications are pending delivery: run 'agent-dispatch notifications drain'", notificationCounts["pending"]))
 	}
+	if notificationCounts["refused"] > 0 {
+		warnings = append(warnings, fmt.Sprintf("%d notifications were refused by their sink: inspect 'agent-dispatch notifications list --state refused' and retry explicitly after fixing the sink", notificationCounts["refused"]))
+	}
 	return writeEnvelopeWithWarnings(stdout, command, map[string]any{
 		"routes":            routeRows,
 		"queues":            intents,

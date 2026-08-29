@@ -30,6 +30,8 @@ Commands:
   dispatch       Plan and submit one Watchman arrival (the trigger entrypoint).
   dispatches     list, show, retry, reprocess, rerun, refresh, drain, discard.
   receipts       list and show acceptance and execution evidence.
+  events         show — aggregate-event inspection with per-child evidence.
+  notifications  test, list, retry, drain — the notification delivery surface.
   work           begin, complete, fail — the Hermes companion receipt surface.
   quarantine     list, release, discard — held-path operator exits.
   reconcile      Run a full-scope reconciliation generation.

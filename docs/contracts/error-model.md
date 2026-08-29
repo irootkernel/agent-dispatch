@@ -108,8 +108,10 @@ The v0.1 registry is closed: implementations emit only the codes below. Adding o
 | `route_not_registered` | `conflict` | 14 |
 | `dispatch_not_found` |input_rejected| 4 |
 | `batch_not_found` | `input_rejected` | 4 |
-| `receipt_not_found` |input_rejected| 4 |
+| `receipt_not_found` | `input_rejected` | 4 |
 | `quarantine_not_found` | `input_rejected` | 4 |
+| `notification_not_found` | `input_rejected` | 4 |
+| `notification_already_delivered` | `input_rejected` | 4 |
 | `transition_invalid` | `conflict` | 14 |
 | `attempt_lease_conflict` | `conflict` | 14 |
 | `dispatch_dead_lettered` | `conflict` | 14 |

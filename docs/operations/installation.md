@@ -154,3 +154,18 @@ The v0.1.5 installation and setup commands are shipped and evidenced
 (gate G9 closed 2026-08-30): `setup wiki`, `route preflight`, and the
 notification surface are current; the v0.1.4 commands remain valid
 history for the pushed v0.1.4 release.
+
+## v0.1.6 Setup Follow-up
+
+E14 makes the walkthrough route-correct and rerunnable: `setup wiki`
+selects one route explicitly (`--route`, single-route auto-selection,
+or an interactive choice — never a silent sorted-first default), its
+baseline step runs the disabled-route `reconcile --reason initial
+--baseline-only` operation instead of the old advisory dry
+reconciliation, and the final summary reports the five production-gate
+states (configuration enabled, runtime activation, Watchman binding,
+initial baseline, production acknowledgement) beside the exact enable
+command. Every non-production rerun posture converges: a clean host, a
+host with the Watchman trigger installed, a materialized disabled
+runtime row, an unchanged rerun, and a walkthrough interrupted inside
+the baseline all reach the same disabled gate summary (gate G10).

@@ -29,8 +29,16 @@ state: every mutating action stays an explicit operator command.
 1. `agent-dispatch setup wiki` — the guided disabled flow. It writes a
    disabled configuration, probes Hermes (`hermes probe`), preflights
    the destination (`route preflight`), checks the Watchman binding,
-   and runs the initial reconciliation. It stops before enablement and
-   prints the exact production-gate command.
+   and establishes the initial baseline
+   (`reconcile --reason initial --baseline-only` — route-scoped,
+   disabled-only, and safely rerunnable, so a walkthrough interrupted
+   at any non-production step simply reruns). With multiple routes
+   pass `--route <id>` (or answer the interactive choice); a
+   non-interactive multi-route run refuses instead of choosing. It
+   stops before enablement and prints the five-state production-gate
+   summary (configuration enabled, runtime activation, Watchman
+   binding, initial baseline, production acknowledgement) followed by
+   the exact enable command.
 2. Review the written configuration and the printed revision. Declare
    the notification policy beside the destinations: the `notifications`
    block names each sink (a structured log sink, or an HTTPS webhook

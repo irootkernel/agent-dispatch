@@ -425,9 +425,14 @@ choosing one silently. Every route-scoped step, printed Watchman
 command, and the final enable command name the selected route. It
 validates, probes Hermes, preflights the destination, checks the
 Watchman binding state (printing the explicit install and test
-commands), and runs the initial dry reconciliation. It stops before
-enablement and prints the exact production-gate command; it never
-accepts production approval implicitly and never installs the Watchman
+commands), and establishes the initial baseline (the disabled-route
+reconcile --baseline-only operation, safely rerunnable across clean,
+installed, materialized, and interrupted postures). It stops before
+enablement and prints the five-state production-gate summary —
+configuration enabled state, runtime activation, Watchman binding,
+initial baseline, and production acknowledgement — followed by the
+exact enable command; it never accepts production approval implicitly,
+never executes the enable command, and never installs the Watchman
 trigger itself.
 
 Exit codes: 0; 2 usage (unknown route, or multiple routes without a

@@ -191,12 +191,17 @@ Do not collect note bodies or secrets unless the operator deliberately handles t
 
 ## 14. v0.1.5 Operational Flow
 
-1. Run `setup wiki`; review the disabled config and effective Watchman binding.
+1. Run `setup wiki` (pass `--route <id>` when several routes are
+   declared); review the disabled config and effective Watchman binding.
 2. Run `hermes probe` and `route preflight`; resolve every missing profile,
    skill, capability, sink, and trigger finding.
-3. Run the initial reconciliation and inspect aggregate status.
+3. Confirm the walkthrough's baseline step established the initial
+   baseline (`reconcile --reason initial --baseline-only` ran inside it;
+   it may be rerun standalone at any time while the route stays
+   disabled) and inspect aggregate status.
 4. Enable only with the exact route revision and capability-evidence
-   fingerprint shown by the production gate.
+   fingerprint shown by the production gate; the walkthrough's summary
+   names all five gate states and never enables anything itself.
 5. Use `events show` for parent/child state and `notifications list` for sink
    state; retry them independently.
 

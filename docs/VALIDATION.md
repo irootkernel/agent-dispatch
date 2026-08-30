@@ -330,6 +330,26 @@ local `v0.1.5` tag names the final tree. No push, no hosted release,
 and no production activation is part of this release proof: the
 handoff is the local candidate with this file as its evidence.
 
+## Gate G10: Guided Setup and Disabled Baseline (E14)
+
+Every criterion drives the real `setup wiki` and `reconcile
+--baseline-only` surfaces over the deterministic stub Hermes; the
+observation-fenced transaction, the guards, and the crash windows are
+the E14-T2 store and service suites cited per criterion.
+
+| Criterion | Evidence |
+|---|---|
+| AC-1001 a setup-selected route names every route-scoped step and instruction | `TestE14T1ExplicitRouteFlagDrivesNamedRoute`, `TestE14T1InteractiveMultiRouteSelectionHonored`, and `TestE14T1RouteSpellingsCovered` — the preflight, Watchman status and guidance, baseline envelope, and enable command all carry the selected route with negative assertions against the unselected route |
+| AC-1002 multiple routes without a selection prompt clearly or refuse non-interactively | `TestE14T1NonInteractiveMultiRouteRefusesInsteadOfSortedFirst` (exit 2, no route chosen, no gate summary) and `TestE14T1InteractiveRouteIDAnswerAndGarbageRefused` (numbered and route-ID answers select; garbage refuses) |
+| AC-1003 every non-production rerun posture reaches the gate summary idempotently with both controls off | `TestG10AC1003CleanHostReachesDisabledGate`, `TestG10AC1003WatchmanInstalledRerun`, `TestG10AC1003UnchangedRerunIsIdempotent` (exactly one baseline row), and `TestG10AC1003InterruptedRerunConverges` (the crashbin die-before-write window leaves the previous baseline and the rerun converges); `g10AssertControlsOff` proves the configuration key off, the runtime half disabled, no acknowledgement, and zero decision/intent/notification rows after every posture |
+| AC-1004 a committed or crashed baseline records the previous or complete new snapshot and creates no decision, dispatch, task, acknowledgement, or notification | The E14-T2 suites: `TestE14T2ReplacePathFactsWithBaselineCommitsAtomically`, `TestE14T2BaselineFenceRefusesConcurrentMutation`, `TestE14T2BaselineTransactionRefusesActivationFlip`, `TestE14T2BaselineCleanHostEstablishesSnapshot`, and `TestE14T2InterruptedBaselineRerunConverges` with table-count assertions across the six production tables |
+| AC-1005 the summary reports five distinct gate states and prints but never executes the enable command | `TestG10AC1005EnableCommandRenderedNotExecuted` (the exact computed revision rendered; no acknowledgement, no dispatch row) and the five-state assertions of `g10AssertGateSummary` across every posture |
+
+Route-selection regression, the shared bounded enumeration, migration
+v17 against real SQLite files, and the public CLI-017 contract are the
+E14-T1 and E14-T2 suites referenced above; `make verify` including the
+race suite is green on darwin/arm64 at this tree.
+
 ## MUST-Closure Matrix (E8-T6, D-020) — supersedes the E7-T12 matrix
 
 Every MUST requirement the 2026-08-23 review judged FAIL or PARTIAL on

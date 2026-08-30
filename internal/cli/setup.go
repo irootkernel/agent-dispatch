@@ -228,40 +228,89 @@ func runSetupWiki(command string, args []string, ui *setupUI) int {
 	fmt.Fprintln(ui.stderr, "  agent-dispatch watchman install --route "+routeID+" --config "+configPath)
 	fmt.Fprintln(ui.stderr, "  agent-dispatch watchman test --route "+routeID+" --config "+configPath)
 
-	ui.step("Step 5/6 — initial reconciliation (dry enumeration)")
-	// A fresh walkthrough has no runtime state yet (registration happens
-	// at the first dispatch or watchman install), so a failing dry
-	// reconciliation is the expected first-use outcome there — reported
-	// with the exact re-run command, never as a completed enumeration.
-	// Against a registered route the same failure is a real finding and
-	// stops the walkthrough before the gate summary.
-	registered := false
-	if store, serr := openUnmigratedStore(configPath); serr == nil {
-		_, lerr := store.LoadRouteState(requestCtx(), routeID)
-		registered = lerr == nil
-		store.Close()
-	}
-	reconcileCode := step([]string{"reconcile", "--route", routeID, "--reason", "initial", "--config", configPath})
-	if reconcileCode != 0 {
-		if !registered {
-			fmt.Fprintf(ui.stderr, "the route has no runtime state yet (nothing dispatched and no trigger installed); the initial reconciliation runs after registration — re-run it then with:\n  agent-dispatch reconcile --route %s --reason initial --config %s\n", routeID, configPath)
-		} else {
-			fmt.Fprintf(ui.stderr, "the initial reconciliation did not complete; resolve the reported findings and re-run it with:\n  agent-dispatch reconcile --route %s --reason initial --config %s\n", routeID, configPath)
-			writeError(ui.stderr, command, "config_invalid", "configuration", "the initial reconciliation failed; setup stops before the gate summary")
-			return 3
-		}
+	ui.step("Step 5/6 — initial baseline (disabled, no production work)")
+	// The baseline is the public disabled-route operation of ADR-0020
+	// (E14-T3): it enumerates and records the initial path facts while
+	// the route stays disabled — on a clean host or a materialized
+	// disabled row alike — and a rerun converges, so an interrupted
+	// walkthrough is safely repeatable (AC-1003/AC-1004). It never
+	// submits and never creates production work; a genuine refusal (an
+	// enabled route, an unresolved hold) is a real finding and stops the
+	// walkthrough before the gate summary.
+	baselineCode := step([]string{"reconcile", "--route", routeID, "--reason", "initial", "--baseline-only", "--config", configPath})
+	if baselineCode != 0 {
+		fmt.Fprintf(ui.stderr, "the initial baseline did not complete; resolve the reported findings and re-run setup wiki, or the baseline alone with:\n  agent-dispatch reconcile --route %s --reason initial --baseline-only --config %s\n", routeID, configPath)
+		writeError(ui.stderr, command, "config_invalid", "configuration", "the initial baseline failed; setup stops before the gate summary")
+		return 3
 	}
 
 	ui.step("Step 6/6 — the production gate (NOT performed by setup)")
+	setupGateSummary(ui, cfg, configPath, routeID)
+	return 0
+}
+
+// setupGateSummary prints the honest five-state production-gate summary
+// (OPS-016, AC-1005): configuration enabled state, runtime activation,
+// Watchman binding, initial baseline, and production acknowledgement as
+// distinct states, followed by the exact reviewed enable command —
+// printed, never executed. Every state is read from current durable
+// facts (the configuration, the route runtime row, the stored Watchman
+// binding, and the baseline record the walkthrough just committed); an
+// unreadable fact degrades to an explicit "unreadable" instead of an
+// invented state.
+func setupGateSummary(ui *setupUI, cfg *config.Config, configPath, routeID string) {
 	revision, ok := config.RouteRevision(cfg, routeID)
 	if !ok {
 		revision = "<run 'agent-dispatch route show --route " + routeID + "' for the computed revision>"
 	}
+	configState := "disabled"
+	if route, ok := cfg.Routes[routeID]; ok && route.Enabled {
+		configState = "enabled"
+	}
+	runtimeState := "unreadable (state store could not be opened)"
+	baselineState := "unreadable (state store could not be opened)"
+	ackState := "unreadable (state store could not be opened)"
+	if store, serr := openUnmigratedStore(configPath); serr == nil {
+		runtimeState = "disabled (no runtime state; nothing dispatched and no trigger installed)"
+		ackState = "not acknowledged"
+		if present, Perr := store.RouteRuntimeStatePresent(requestCtx(), routeID); Perr == nil && present {
+			if snap, lerr := store.LoadRouteState(requestCtx(), routeID); lerr == nil {
+				runtimeState = string(snap.ActivationState)
+				if snap.AcknowledgedRevision != "" {
+					ackState = "acknowledged for revision " + snap.AcknowledgedRevision
+				}
+			} else {
+				runtimeState = "unreadable (runtime state could not be loaded)"
+			}
+		} else if Perr != nil {
+			runtimeState = "unreadable (runtime state could not be loaded)"
+		}
+		if baseline, berr := store.LoadRouteBaseline(requestCtx(), routeID); berr == nil {
+			if baseline != nil {
+				baselineState = fmt.Sprintf("established (%d facts, observation revision %d, at %s)",
+					baseline.FactCount, baseline.ObservationRevision, baseline.EstablishedAt)
+			} else {
+				baselineState = "not established"
+			}
+		}
+		store.Close()
+	}
+	bindingState := "not installed"
+	if stored, hasStored, err := storedBindingFor(configPath, routeID); err == nil && hasStored {
+		bindingState = "installed (trigger " + stored.TriggerName + ")"
+	} else if err != nil {
+		bindingState = "unreadable (stored binding could not be loaded)"
+	}
 	fmt.Fprintln(ui.stdout, "setup complete; the route is DISABLED and nothing was submitted")
+	fmt.Fprintln(ui.stdout, "production-gate summary:")
+	fmt.Fprintf(ui.stdout, "  configuration enabled:      %s\n", configState)
+	fmt.Fprintf(ui.stdout, "  runtime activation:         %s\n", runtimeState)
+	fmt.Fprintf(ui.stdout, "  Watchman binding:           %s\n", bindingState)
+	fmt.Fprintf(ui.stdout, "  initial baseline:           %s\n", baselineState)
+	fmt.Fprintf(ui.stdout, "  production acknowledgement: %s\n", ackState)
 	fmt.Fprintln(ui.stdout, "review the configuration, then enable explicitly with:")
 	fmt.Fprintf(ui.stdout, "  agent-dispatch route enable --route %s --config %s --acknowledge-production-gate %s --yes\n", routeID, configPath, revision)
 	fmt.Fprintln(ui.stdout, "setup never enables the route or accepts production approval implicitly")
-	return 0
 }
 
 // anyRouteEnabled reports whether any route carries the YAML key half

@@ -116,8 +116,8 @@ func e14t1PrepareVault(t *testing.T, configPath string) {
 
 // e14t1AssertWalkthroughNamesRoute proves AC-1001 for the deterministic
 // surfaces: the printed enable command, the Watchman install/test
-// guidance, and the reconciliation re-run instruction name the selected
-// route, and no instruction points at the unselected route.
+// guidance, and the baseline step's envelope name the selected route,
+// and no instruction points at the unselected route.
 func e14t1AssertWalkthroughNamesRoute(t *testing.T, configPath, stdout, stderr, route string) {
 	t.Helper()
 	if !strings.Contains(stdout, "route enable --route "+route+" --config "+configPath+" ") {
@@ -129,17 +129,19 @@ func e14t1AssertWalkthroughNamesRoute(t *testing.T, configPath, stdout, stderr, 
 	if !strings.Contains(stderr, "watchman test --route "+route+" ") {
 		t.Fatalf("the Watchman test guidance must name route %s: %s", route, stderr)
 	}
-	if !strings.Contains(stderr, "reconcile --route "+route+" --reason initial --config "+configPath) {
-		t.Fatalf("the reconciliation re-run instruction must name route %s: %s", route, stderr)
+	// The baseline step's result envelope carries the driven route (the
+	// E14-T3 walkthrough baselines instead of the old advisory dry run).
+	if !strings.Contains(stdout, "\"route_id\":\""+route+"\"") {
+		t.Fatalf("the baseline step envelope must name route %s: %s", route, stdout)
 	}
 	for _, wrong := range []string{"journal"} {
 		if wrong == route {
 			continue
 		}
 		if strings.Contains(stdout, "route enable --route "+wrong) ||
+			strings.Contains(stdout, "\"route_id\":\""+wrong+"\"") ||
 			strings.Contains(stderr, "watchman install --route "+wrong) ||
-			strings.Contains(stderr, "watchman test --route "+wrong) ||
-			strings.Contains(stderr, "reconcile --route "+wrong) {
+			strings.Contains(stderr, "watchman test --route "+wrong) {
 			t.Fatalf("the walkthrough must not drive or point at the unselected route %s", wrong)
 		}
 	}

@@ -13,11 +13,11 @@
 | Shipped release | v0.1.5 (published 2026-08-30) |
 | Planned SOT baseline | 1.2.0 ([D-027](../specs/decision-log.md)) |
 | Release target | v0.1.6 (planned) |
-| Current epic | E14 In Progress |
+| Current epic | E14 Completed (G10 evidenced); next E15 |
 | Current active task | None |
-| Next task | E14-T3 |
-| Completed tasks | 77 / 89 |
-| Planned tasks | 12 / 89 |
+| Next task | E15-T1 |
+| Completed tasks | 78 / 89 |
+| Planned tasks | 11 / 89 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -47,7 +47,7 @@
 | E11 | Hermes Preflight and Operator Setup | **Completed** | 4 | G7 |
 | E12 | Multi-Destination Lifecycle | **Completed** | 4 | G8 |
 | E13 | Notifications and v0.1.5 Release | **Completed** | 4 | G9 |
-| E14 | Guided Setup and Disabled Baseline | **In Progress** | 3 | G10 |
+| E14 | Guided Setup and Disabled Baseline | **Completed** | 3 | G10 |
 | E15 | Hermes Mutex Downgrade and Serialization Groups | **Planned** | 4 | G11 |
 | E16 | Automatic Durable Notification Draining | **Planned** | 4 | G12 |
 | E17 | Documentation, Cold Validation, and v0.1.6 Release | **Planned** | 3 | G13 |
@@ -133,7 +133,7 @@
 | 75 | E13-T4 | Completed | Documentation truth, release proof, and v0.1.5 |
 | 76 | E14-T1 | Completed | Explicit setup route selection and propagation |
 | 77 | E14-T2 | Completed | Disabled baseline-only reconciliation and persistence |
-| 78 | E14-T3 | Planned | Rerunnable setup, five-state summary, and G10 |
+| 78 | E14-T3 | Completed | Rerunnable setup, five-state summary, and G10 |
 | 79 | E15-T1 | Planned | Serialization configuration, revisions, and migration |
 | 80 | E15-T2 | Planned | Consistent Hermes mutex downgrade contract |
 | 81 | E15-T3 | Planned | Group slot enforcement and bounded follow-up |
@@ -3423,7 +3423,7 @@ verification before any publication.
 
 # E14: Guided Setup and Disabled Baseline
 
-**Epic status:** In Progress
+**Epic status:** Completed
 **Purpose:** Make the disabled Wiki setup path route-correct, safely rerunnable, and explicit about every production-gate state.
 **Gate:** G10
 **Detailed SOT:** [v0.1.6 operational follow-up](../specs/v0.1.6-operational-follow-up.md)
@@ -3529,7 +3529,7 @@ coverage, CI pass, and zero findings.
 
 ## E14-T3: Rerunnable Setup, Five-State Summary, and G10
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -3560,7 +3560,23 @@ E14-T2 Completed.
 
 ### Evidence
 
-Planned; none.
+Completed 2026-08-31. The walkthrough's fifth step is now the disabled-route
+baseline (`reconcile --reason initial --baseline-only`): a clean host and every
+rerun posture establish the snapshot instead of the retired advisory dry
+reconciliation, and a genuine refusal stops the walkthrough before the gate
+summary. The sixth step prints the honest five-state production-gate summary
+(OPS-016, AC-1005) — configuration enabled, runtime activation, Watchman
+binding, initial baseline, and production acknowledgement, each read from
+current durable facts with explicit unreadable degradation — followed by the
+exact reviewed enable command, printed never executed. `g10_test.go` proves
+TST-015's five postures (clean host, Watchman-installed on a disabled
+materialized row, unchanged rerun with exactly one baseline row, interrupted
+rerun through the crashbin die-before-write window, and the exact-revision
+enable rendering) with controls-off and zero-production-row assertions after
+every posture; the documentation is promoted to the cli-spec setup contract,
+the operator skill, the installation and runbook guidance, the setup help,
+and the VALIDATION G10 evidence section. Review round 1 published committed
+with complete coverage, CI pass, and zero findings; `make verify` is green.
 
 ---
 

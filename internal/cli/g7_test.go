@@ -311,6 +311,14 @@ func decodeChecks(t *testing.T, raw string) []map[string]any {
 func TestE11T4SetupDraftsDisabledCopyFromEnabledBase(t *testing.T) {
 	bin := stubhermes.Write(t)
 	configPath := e11t2HermesConfig(t, bin)
+	// The baseline step enumerates the resource root (E14-T3).
+	if cfg, err := config.Load(configPath); err == nil {
+		if err := os.MkdirAll(cfg.Resources["vault-main"].Root, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		t.Fatal(err)
+	}
 	raw, _ := os.ReadFile(configPath)
 	if err := os.WriteFile(configPath, bytes.Replace(raw, []byte("enabled: false"), []byte("enabled: true"), 1), 0o600); err != nil {
 		t.Fatal(err)
@@ -387,6 +395,16 @@ func TestE11T4SetupDraftsDisabledCopyFromEnabledBase(t *testing.T) {
 func TestE11T4SetupForwardsOperatorGlobals(t *testing.T) {
 	bin := stubhermes.Write(t)
 	configPath := e11t2HermesConfig(t, bin)
+	// The baseline step enumerates the resource root, so the walkthrough's
+	// vault must exist on disk (E14-T3 made the baseline authoritative
+	// where the old dry reconciliation tolerated an advisory failure).
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cfg.Resources["vault-main"].Root, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	setPlanEnv(t, "/tmp", false)
 	var out, errb bytes.Buffer
 	var code int

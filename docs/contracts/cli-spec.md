@@ -428,16 +428,26 @@ Route activation binds the record's fingerprint beside the acknowledged
 revision, and the submit path re-proves it against the live executable
 before any side effect (HER-018, AC-703).
 
-`setup wiki` is an interactive walkthrough (shipped with E11-T4): with
-an explicitly named configuration it uses a disabled base in place (an
-enabled base becomes a disabled draft beside it, re-runnable across
-setup attempts); without one it generates a fresh disabled example
-after prompting for the vault root. The six steps are: validate the
-configuration, run the Hermes probes, preflight the destination, check
-the Watchman binding state (printing the explicit install and test
-commands — setup does not install the trigger), run the initial dry
-reconciliation, and print the exact production-gate command. It stops
-there: it never enables the route, never accepts production approval
+`setup wiki` is an interactive walkthrough (shipped with E11-T4,
+route-correct and rerunnable since E14): with an explicitly named
+configuration it uses a disabled base in place (an enabled base becomes
+a disabled draft beside it, re-runnable across setup attempts); without
+one it generates a fresh disabled example after prompting for the vault
+root. The route is chosen explicitly (E14-T1): `--route <id>` names a
+declared route, a single-route configuration selects its only route,
+and multiple routes require the flag or an explicit interactive choice —
+a non-interactive multi-route invocation fails rather than choosing one
+silently. The six steps are: validate the configuration, run the Hermes
+probes, preflight the destination, check the Watchman binding state
+(printing the explicit install and test commands — setup does not
+install the trigger), run the initial baseline
+(`reconcile --reason initial --baseline-only`, the disabled-route
+operation of §9 that converges across reruns and interrupted attempts),
+and print the five-state production-gate summary: configuration enabled
+state, runtime activation, Watchman binding, initial baseline, and
+production acknowledgement as distinct states read from current durable
+facts, followed by the exact reviewed enable command. It stops there:
+it never enables the route, never accepts production approval
 implicitly, and selects nothing on the operator's behalf beyond the
 documented defaults. JSON commands use the existing envelope and
 represent empty collections as `[]` or `{}`.

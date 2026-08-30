@@ -22,6 +22,10 @@ import (
 // warning preserved.
 func TestE9T6EnableGateLivenessWarningKeepsEligibilityDeferred(t *testing.T) {
 	configPath, _ := e4t3Fixture(t)
+	// The below-floor refusal is a version-gate verdict, not a liveness
+	// one: the probe budget is widened so a transient host stall cannot
+	// flip the refusal into the liveness-warning path.
+	e5t4Rewrite(t, configPath, "lookup_timeout: 30s", "lookup_timeout: 120s")
 	cfgDir := filepath.Dir(configPath)
 	enable := func() (int, string, string) {
 		cfg, err := config.Load(configPath)

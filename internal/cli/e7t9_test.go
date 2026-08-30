@@ -123,6 +123,9 @@ func TestDisabledReconcileRefusalClassified(t *testing.T) {
 // per-capability refusal returns with the E11-T2 probe).
 func TestRouteEnableValidatesEligibility(t *testing.T) {
 	configPath, vault := e4t3Fixture(t)
+	// The probe budget is widened so a transient host stall cannot flip
+	// the below-floor refusal into a liveness warning.
+	e5t4Rewrite(t, configPath, "lookup_timeout: 30s", "lookup_timeout: 120s")
 	setPlanEnv(t, vault, false)
 	e4t3RegisterRoute(t, configPath)
 	// Point at a stub reporting a below-floor version: the enablement

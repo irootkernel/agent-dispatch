@@ -23,7 +23,11 @@ func e4t1StubHermes(t *testing.T, dir, versionLine string) string {
 
 // e4t1ProbeConfig writes a one-target configuration pointing at the
 // given executable with the given eligibility floor ("" keeps the
-// 0.19.1 default).
+// 0.19.1 default). The lookup budget is deliberately generous — these
+// tests assert probe verdicts, and a transient host stall must not
+// flip them to the unavailable path — while submit_timeout stays 5s
+// because TestConfigValidateProbeTargetsInvalidTimeouts rewrites that
+// literal.
 func e4t1ProbeConfig(t *testing.T, dir, executable, floor string) string {
 	t.Helper()
 	cfg := `version: 1
@@ -41,7 +45,7 @@ hermes_targets:
     compatibility: capability_probe
     executable: ` + executable + `
     submit_timeout: 5s
-    lookup_timeout: 5s
+    lookup_timeout: 120s
     environment_allowlist: [PATH, HOME]
 routes:
   wiki:

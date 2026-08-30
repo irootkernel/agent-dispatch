@@ -1,7 +1,9 @@
 # v0.1.5 Multi-Destination Operational Loop
 
-> **Status:** Approved target design; implementation is Planned in E10-E13.
-> **Shipped baseline:** v0.1.4 remains current until gate G9 closes.
+> **Status:** Implemented; E10-E13 delivered this loop and gate G9 closed on
+> 2026-08-30.
+> **Shipped baseline:** v0.1.5 is the local release candidate (v0.1.4 remains
+> the latest pushed release until the candidate is published).
 
 ## 1. Outcome and Boundaries
 

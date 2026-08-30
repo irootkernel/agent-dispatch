@@ -287,7 +287,7 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | NTF-003 | Notification identity **MUST** include event, optional destination, transition, sink, and notification-policy revision. |
 | NTF-004 | Every notification attempt and outcome **MUST** be durable and inspectable. |
 | NTF-005 | Notification failure or unknown delivery **MUST NOT** modify event, child dispatch, acceptance, execution, or work-receipt state. |
-| NTF-006 | The release **MUST** ship a channel-neutral event contract plus structured stdout/log and HTTPS webhook sinks. |
+| NTF-006 | The release **MUST** ship a channel-neutral event contract plus structured log (stderr) and HTTPS webhook sinks. |
 | NTF-007 | Retry **MUST** reuse a stable notification idempotency key and remain at-least-once under ambiguous transport outcomes. |
 | NTF-008 | Operators **MUST** be able to test a sink without creating a source event or Hermes task. |
 | NTF-009 | Adding a future channel adapter **MUST NOT** require changing dispatch or work-completion state semantics. |

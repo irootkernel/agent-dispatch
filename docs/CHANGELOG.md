@@ -40,6 +40,19 @@ tree) remediates its confirmed code findings:
   matching the storage classification of every other notifications
   command.
 
+The same round's documentation findings close as one truth batch:
+NTF-006 names the structured log (stderr) sink the release actually
+ships; the multi-destination loop header, the charter's gate status,
+the record-families section, the error-model and task-contract
+headings, the release-checklist addendum, and the runbook/installation
+titles no longer describe shipped v0.1.5 surfaces as planned; the
+runbook states the notification delivery posture (the unresolvable-sink
+operator exit and the one-drain-at-a-time overlap posture) and the
+release notes carry the same exit; VALIDATION.md's completed-checks
+bullets and package statistics agree with the closed 75/75 roadmap
+(eighteen schemas, eighty-four manifest markdown files, twenty-four
+examples).
+
 ## 1.1.17 - 2026-08-30
 
 E13-T4: documentation truth, release proof, and the local v0.1.5

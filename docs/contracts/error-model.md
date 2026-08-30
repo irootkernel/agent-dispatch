@@ -157,7 +157,7 @@ Boundary notes:
 
 Errors may include relative path, resource ID, route ID, and target ID. They must not include note body, resolved secret, authorization header, or unrestricted subprocess output.
 
-## 7. Planned v0.1.5 Typed Failures
+## 7. v0.1.5 Typed Failures
 
 The existing categories remain stable. New reason codes distinguish effective
 Watchman binding drift, reconciliation fence conflict, file growth/instability,

@@ -153,7 +153,7 @@ Do not fingerprint arbitrary marshaled domain structs because adding a field cou
 - SQLite migration version and JSON contract version are independent.
 - Examples are validated against schemas by `make schema-validation` inside `make verify` (hosted CI is not used; D-017).
 
-## 10. Planned v0.1.5 Record Families
+## 10. v0.1.5 Record Families
 
 | Contract | Required purpose |
 |---|---|
@@ -186,6 +186,6 @@ notification-policy revision (NTF-003), so a replayed or rerun transition
 collapses onto its existing record (AC-902); attempts are separate durable
 records whose outcomes never rewrite the intent's source state (NTF-005),
 and resolved notification evidence prunes past retention while pending
-evidence stays retained and inspectable (NTF-004). The remaining families
-are still planned and the checked-in JSON schemas for them describe the
-shipped v0.1.4 wire surface until their owning tasks implement them.
+evidence stays retained and inspectable (NTF-004). Every family above is
+implemented and its checked-in JSON schema describes the shipped v0.1.5
+wire surface.

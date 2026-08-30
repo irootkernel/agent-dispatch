@@ -189,7 +189,7 @@ Collect:
 
 Do not collect note bodies or secrets unless the operator deliberately handles them outside the standard support bundle.
 
-## 14. Planned v0.1.5 Operational Flow
+## 14. v0.1.5 Operational Flow
 
 1. Run `setup wiki`; review the disabled config and effective Watchman binding.
 2. Run `hermes probe` and `route preflight`; resolve every missing profile,
@@ -205,6 +205,15 @@ an explicit replace after status review. A reconciliation fence conflict is
 normal retryable evidence, not data loss. Partial work follows the remaining
 scope; blocked work stays manual. Notification failure never justifies retrying
 or rewriting an otherwise successful Hermes task.
+
+Notification delivery posture: a pending notification whose sink declaration
+no longer resolves records a retryable `sink_unresolvable` attempt on every
+drain and stays pending — the operator exit is to restore a declaration for
+that sink id (a log sink is enough) and let the next drain resolve or refuse
+it, never to touch the notification tables directly. Run one drain pass at a
+time: two overlapping passes (for example a manual drain over the scheduled
+one) can surface a storage-conflict exit while both passes' deliveries stay
+idempotent under the stable key, and the interrupted pass simply re-runs.
 
 For rollback, disable the route and remove the managed trigger, preserve the
 v0.1.5 database, restore the verified pre-migration database/config backup, and

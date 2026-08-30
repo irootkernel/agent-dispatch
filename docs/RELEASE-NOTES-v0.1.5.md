@@ -102,4 +102,7 @@ local tag with `docs/VALIDATION.md` as its evidence.
   identity: an ambiguous or retryable delivery stays pending for the
   next drain and is inspectable through `notifications list --state
   pending`; a permanently retryable notification has no automatic
-  attempt ceiling (the operator surface owns the retry decision).
+  attempt ceiling (the operator surface owns the retry decision: a sink
+  id that no longer resolves is restored — a log sink declaration is
+  enough — so the next drain resolves or refuses its pending
+  notifications).

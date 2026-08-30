@@ -80,10 +80,10 @@
 - [x] Changelog and release notes (the v0.1.1 notes disclose the Linux exception — historical; releases from v0.1.4 on are darwin/arm64-only under D-023).
 - [x] Acceptance reports (docs/VALIDATION.md; the compliance-review findings live in the decision log's D-017/D-020/D-023 records).
 
-## Planned v0.1.5 Addendum
+## v0.1.5 Addendum (closed)
 
-The checked items above are v0.1.4 release history. E13-T4 may check the items
-below only after G6 through G9 carry executable evidence:
+The checked items above are v0.1.4 release history. The items below carry the
+G6 through G9 executable evidence E13-T4 closed them with:
 
 - [x] Effective nested Watchman binding and complete managed-trigger removal
       (E10-T2/E10-T3, G6 rows in VALIDATION.md).

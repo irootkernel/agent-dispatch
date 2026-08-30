@@ -112,7 +112,8 @@ reconciliation cannot erase newer facts, Hermes 0.19.1+ compatibility is
 capability-probed without modifying Hermes, profiles and skills preflight, one
 event can fan out to independent destination lanes, bounded receipts distinguish
 completed/partial/blocked/failed work, and configured notifications are durable
-and retryable. Gates G6 through G9 are cumulative and currently Planned.
+and retryable. Gates G6 through G9 are cumulative and all closed: G6-G8
+evidenced through E10-E12 and G9 evidenced with E13 on 2026-08-30.
 
 ## 9. Product Constraints
 

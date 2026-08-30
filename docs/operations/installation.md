@@ -143,7 +143,7 @@ automatically, because that history is the dedup and reconciliation
 evidence. Discarding the state directory is a manual, backed-up
 operator decision.
 
-## Planned v0.1.5 Setup
+## v0.1.5 Setup
 
 E11-T4 replaces the manual multi-step initial path with `agent-dispatch setup
 wiki`. The wizard writes only disabled v0.1.5 configuration and stops at the

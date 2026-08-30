@@ -6,7 +6,7 @@
 ## Completed Checks
 
 - All JSON files parse.
-- All twelve JSON Schemas pass standard Draft 2020-12 validation (D-015).
+- All eighteen JSON Schemas pass standard Draft 2020-12 validation (D-015).
 - The example YAML configuration is validated reproducibly by the Go loader pipeline in every `make schema-validation` and `go test` run: YAML parsing with duplicate-key rejection, JSON Schema validation, and semantic validation (E1-T2).
 - Source observation, dispatch plan, dispatch intent, dispatch receipt, work receipt, Hermes capability-report, and Hermes task-request examples validate against their schemas (structural validation of type, const, enum, required, properties and additionalProperties, items with minItems/maxItems/uniqueItems, pattern, minLength/maxLength, minimum/maximum with exclusive bounds, minProperties/maxProperties, allOf/anyOf/oneOf/not, and if/then/else conditional constraints; `$ref` resolved across schema documents).
 - The `dispatch-intent` example's `request` field validates against `hermes-task-request.schema.json` through the schema `$ref`.
@@ -17,18 +17,18 @@
 - Internal Markdown links resolve within the package, excluding intentionally unresolved wiki links retained in the historical source draft.
 - Markdown code fences are balanced.
 - The documentation package has one delivery scope, exactly one owner for each of the seven semantic roles, and `docs/roadmap/roadmap.md` as its sole lifecycle authority.
-- The roadmap contains exactly 14 epics and 75 task headings (the 67 completed tasks through E11 plus 8 planned v0.1.5 tasks in E12 and E13).
+- The roadmap contains exactly 14 epics and 75 task headings (the 67 tasks through E11 plus the 8 v0.1.5 tasks in E12 and E13, all Completed).
 - Every task uses one allowed status value.
-- The v0.1, E7, E8, E9, E10, and E11 sequences are fully Completed; E12 and E13 are Planned, no task is active, and E12-T1 is next.
+- Every sequence through E13 is fully Completed (75/75); no task is active and none is next.
 - Required-spec IDs are unique.
 - Acceptance-scenario IDs are unique.
 - The D-025 functional baseline remains unchanged; D-026 moves paths and adds ownership indexes without changing roadmap identity, lifecycle, or executable-evidence claims.
 
 ## Package Statistics at Validation
 
-- Markdown files: 81 on the manifest basis (including the seven role indexes, supporting collection indexes, v0.1.5 source record, target architecture, and ADR-0016 through ADR-0019)
-- JSON Schemas: 12
-- Example files: 12
+- Markdown files: 84 on the manifest basis (including the seven role indexes, supporting collection indexes, v0.1.5 source record, target architecture, and ADR-0016 through ADR-0019)
+- JSON Schemas: 18
+- Example files: 24
 - Integration reports: 2 (Hermes public interface E0-T4, Watchman public interface E0-T5)
 - Integration fixtures: 42 files, 9 under `integrations/fixtures/hermes/` and 33 under `integrations/fixtures/watchman/`
 - Roadmap tasks: 75 (33 v0.1 + 12 E7 + 6 E8 + 9 E9 + 15 E10-E13)

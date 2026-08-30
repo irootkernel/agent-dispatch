@@ -420,6 +420,13 @@ func decodeEnvelope(t *testing.T, out *bytes.Buffer) map[string]any {
 func TestConfigValidateWatchmanReporting(t *testing.T) {
 	configPath, _ := planFixture(t)
 	t.Setenv("AGENT_DISPATCH_STATE_DIR", t.TempDir())
+	// The bare `config show` leg runs in a fresh sandboxed home so a
+	// host that actively uses agent-dispatch (a real default config, or
+	// AGENT_DISPATCH_CONFIG in the environment) cannot turn the expected
+	// missing-config defect into a successful load.
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("AGENT_DISPATCH_CONFIG", "")
 	var out, errb bytes.Buffer
 	code := Run([]string{"config", "validate", "--config", configPath}, &out, &errb)
 	if code != 0 {

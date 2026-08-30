@@ -26,23 +26,23 @@ OUT = DOCS / "specs/traceability-matrix.md"
 # Release-gate tasks per group. Manually curated; these are verification
 # endpoints, not citation coverage.
 FINAL_VERIFICATION = {
-    "BND": "E6-T4, E13-T4",
-    "SCP": "E6-T3, E6-T4",
-    "SRC": "E2-T5, E6-T3, E10-T3, E13-T4",
-    "PTH": "E2-T5, E5-T5, E10-T3, E13-T4",
-    "DAT": "E3-T5, E12-T4, E13-T4",
-    "POL": "E5-T5",
-    "DUR": "E3-T5, E4-T5, E10-T3, E13-T1, E13-T4",
-    "CON": "E5-T5, E12-T4, E13-T4",
-    "HER": "E4-T5, E6-T4, E11-T4, E13-T4",
-    "WHK": "E6-T4",
-    "FBK": "E5-T5, E12-T4, E13-T3, E13-T4",
-    "CLI": "E6-T4, E11-T4, E13-T3, E13-T4",
-    "SEC": "E5-T5, E6-T4, E11-T4, E13-T2, E13-T4",
-    "OPS": "E6-T4, E10-T3, E11-T4, E13-T4",
-    "TST": "E6-T4, E13-T4",
-    "FAN": "E12-T4, E13-T4",
-    "NTF": "E13-T3, E13-T4",
+    "BND": "E6-T4, E13-T4, E15-T4, E17-T2, E17-T3",
+    "SCP": "E6-T3, E6-T4, E17-T3",
+    "SRC": "E2-T5, E6-T3, E10-T3, E13-T4, E17-T3",
+    "PTH": "E2-T5, E5-T5, E10-T3, E13-T4, E17-T3",
+    "DAT": "E3-T5, E12-T4, E13-T4, E17-T3",
+    "POL": "E5-T5, E17-T3",
+    "DUR": "E3-T5, E4-T5, E10-T3, E13-T1, E13-T4, E14-T3, E15-T4, E16-T4, E17-T3",
+    "CON": "E5-T5, E12-T4, E13-T4, E15-T4, E17-T3",
+    "HER": "E4-T5, E6-T4, E11-T4, E13-T4, E15-T4, E17-T3",
+    "WHK": "E6-T4, E17-T3",
+    "FBK": "E5-T5, E12-T4, E13-T3, E13-T4, E17-T3",
+    "CLI": "E6-T4, E11-T4, E13-T3, E13-T4, E14-T3, E16-T4, E17-T3",
+    "SEC": "E5-T5, E6-T4, E11-T4, E13-T2, E13-T4, E17-T2, E17-T3",
+    "OPS": "E6-T4, E10-T3, E11-T4, E13-T4, E14-T3, E16-T4, E17-T3",
+    "TST": "E6-T4, E13-T4, E14-T3, E15-T4, E16-T4, E17-T2, E17-T3",
+    "FAN": "E12-T4, E13-T4, E17-T3",
+    "NTF": "E13-T3, E13-T4, E16-T4, E17-T3",
 }
 
 EPIC_CONTRIBUTION = """\
@@ -61,7 +61,11 @@ EPIC_CONTRIBUTION = """\
 | E10 | Fences reconciliation and binds Watchman to the configured subtree. |
 | E11 | Adds capability-driven Hermes preflight and guided disabled setup. |
 | E12 | Adds aggregate events and independent destination lifecycle. |
-| E13 | Adds durable notifications, operational proof, and the v0.1.5 release. |"""
+| E13 | Adds durable notifications, operational proof, and the v0.1.5 release. |
+| E14 | Makes guided setup route-correct and safely establishes a disabled baseline. |
+| E15 | Makes target mutex optional while enforcing explicit local serialization groups. |
+| E16 | Adds bounded post-commit and scheduled progress for the durable notification outbox. |
+| E17 | Reconciles documentation and real evidence, then releases v0.1.6 reproducibly. |"""
 
 
 def load_spec_groups() -> dict[str, list[int]]:

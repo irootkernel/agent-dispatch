@@ -16,6 +16,10 @@ The release gate is cumulative. A later gate cannot pass while an earlier gate i
 | G7 | Hermes compatibility, destination preflight, and disabled setup are usable without modifying Hermes. |
 | G8 | Aggregate events fan out to independent destination lanes and close only from bounded work evidence. |
 | G9 | Notifications, operational walkthrough, documentation truth, and the v0.1.5 release checks pass. |
+| G10 | Guided Wiki setup selects one route, establishes a disabled baseline, and reruns safely. |
+| G11 | Hermes v0.20.5 is compatible through an explicit, concurrency-safe mutex downgrade. |
+| G12 | Durable notifications make bounded automatic progress without coupling delivery to source state. |
+| G13 | Documentation, cold validation, and reproducible v0.1.6 release evidence agree. |
 
 ## 2. Scenario Acceptance Matrix
 
@@ -132,6 +136,49 @@ The release gate is cumulative. A later gate cannot pass while an earlier gate i
 | AC-905 | Given a disposable vault, isolated Hermes home and board, and two destinations, when the full operational walkthrough runs, then detection through completion receipt and configured notification is demonstrated without touching production state or Hermes source. |
 | AC-906 | Given the v0.1.5 candidate, when `make verify` and two release builds run, then all G0-G9 gates are reconciled, the darwin/arm64 artifacts are byte-identical, checksums and versioned skills are present, and the final tree is eligible for the local v0.1.5 tag. |
 
+### G10: Guided Setup and Disabled Baseline
+
+| ID | Given / When / Then |
+|---|---|
+| AC-1001 | Given a setup-selected route, when route-scoped setup steps and guidance run, then Watchman status, test, install guidance, preflight, baseline, and the enable command all name that exact route. |
+| AC-1002 | Given multiple configured routes, when setup has no explicit selection, then it prompts clearly on an interactive terminal and fails without choosing lexicographic-first in non-interactive execution. |
+| AC-1003 | Given clean, Watchman-installed, runtime-row-materialized, or interrupted non-production state, when setup reruns, then it reaches the production-gate summary idempotently while configuration and runtime remain disabled. |
+| AC-1004 | Given baseline-only reconciliation, when it commits or crashes, then it records either the previous or complete new snapshot and creates no decision, dispatch, task, production acknowledgement, or notification. |
+| AC-1005 | Given setup completes, when its summary is inspected, then configuration, runtime activation, Watchman binding, baseline, and acknowledgement states are distinct and the exact enable command was printed but not executed. |
+
+### G11: Hermes Mutex Downgrade and Serialization Groups
+
+| ID | Given / When / Then |
+|---|---|
+| AC-1101 | Given Hermes v0.20.5 missing only `--mutex-key`, when probed and preflighted, then it is compatible with an explicit Agent Dispatch group-enforced guarantee and no rendered command contains the unsupported flag. |
+| AC-1102 | Given an active serialization group and a burst of relevant occurrences, when they are processed, then no parallel group child is created and selected lanes retain bounded dirty work. |
+| AC-1103 | Given two destinations sharing one group, when both are selected, then they cannot run concurrently and completion promotes at most one waiting lane. |
+| AC-1104 | Given independent groups over one resource with every involved route acknowledgement current, when selected, then they may run concurrently without being described as globally single-writer. |
+| AC-1105 | Given a retry, rerun, or serialization-policy edit, when processed, then the group slot cannot be bypassed, changed policy changes destination and route revisions, and the old production acknowledgement is stale. |
+| AC-1106 | Given the frozen Hermes 0.19.1 public surface, when the same compatibility path runs, then supported target mutex rendering and durable delivery continue to work. |
+
+### G12: Automatic Durable Notification Draining
+
+| ID | Given / When / Then |
+|---|---|
+| AC-1201 | Given after-command mode, when work completion commits a completion notification, then one bounded automatic pass delivers it without waiting for another filesystem event. |
+| AC-1202 | Given webhook timeout or process death after source commit, when automatic progress resumes, then completed work is unchanged and the pending notification retains its stable identity. |
+| AC-1203 | Given simultaneous automatic drain attempts, when they claim pending work, then leases prevent duplicate logical ownership and expired claims recover safely. |
+| AC-1204 | Given a configured limit, manual mode, or scheduled mode, when draining runs, then the bound is enforced, manual behavior remains explicit, and scheduled drain runs only after healthy reconciliation. |
+| AC-1205 | Given delivery refusal, ambiguity, retryability, or sink-resolution failure, when the source command has succeeded, then its exit remains successful and the notification outcome remains independently inspectable. |
+| AC-1206 | Given pending or repeatedly failing delivery, when status and doctor run, then count, age, latest outcome, mode, limit, scheduler expectation/evidence, and actionable findings are available without direct SQLite inspection. |
+| AC-1207 | Given hostile document data, endpoint credentials, or a successful drain, when payloads and diagnostics are inspected, then no protected content leaks and no recursive drain-success notification exists. |
+| AC-1208 | Given a v0.1.5 notification database, when it migrates, then every existing notification ID, idempotency key, and attempt record is unchanged. |
+
+### G13: v0.1.6 Release
+
+| ID | Given / When / Then |
+|---|---|
+| AC-1301 | Given the final v0.1.6 tree, when focused suites and `make verify` run, then G10-G12 and all unchanged earlier gates are reconciled without including the separate general verify remediation. |
+| AC-1302 | Given disposable state, vaults, boards, and profiles, when the required clean-host, setup-rerun, real Hermes, concurrency, and notification walkthroughs run, then their sanitized transcripts cover every requested delivery-evidence item without production activation. |
+| AC-1303 | Given two release builds from the same clean commit, when darwin/arm64 artifacts are compared, then binaries and checksums are byte-identical and versioned documentation and skills agree on v0.1.6. |
+| AC-1304 | Given upgrade or rollback, when the documented procedure is followed, then forward-only migrations preserve identities, rollback restores the verified pre-upgrade database/config/binary set, and scheduler uninstall preserves state. |
+
 ## 3. Automatic-Write Gate
 
-Automatic Hermes writes to the real vault are prohibited until all scenarios in gates G0 through G9 pass in a test vault and the operator explicitly enables the production route. Dry-run, audit-only, or no-write Hermes profiles may be used earlier. The v0.1.4 historical gate evidence remains valid for its shipped scope but does not satisfy the new G6-G9 requirements.
+Automatic Hermes writes to the real vault are prohibited until all scenarios in gates G0 through G13 pass in a test vault and the operator explicitly enables the production route. Dry-run, audit-only, baseline-only, or no-write Hermes profiles may be used earlier. Historical v0.1.5 evidence remains valid for its shipped scope but does not satisfy the new G10-G13 requirements.

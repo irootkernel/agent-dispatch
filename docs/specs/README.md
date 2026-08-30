@@ -12,6 +12,7 @@ accepted ADRs and the contract collection refine it without overriding it.
 - [`acceptance-criteria.md`](acceptance-criteria.md): cumulative release gates.
 - [`traceability-matrix.md`](traceability-matrix.md): generated requirement-to-task mapping.
 - [`decision-log.md`](decision-log.md): append-only SOT admission, amendment, and errata decisions.
+- [`v0.1.6-operational-follow-up.md`](v0.1.6-operational-follow-up.md): approved detailed contract for the planned v0.1.6 operational follow-up.
 
 ## v0.1.5 Feature-to-Authority Map
 
@@ -32,3 +33,18 @@ delivered the schemas, examples, packaged skills, code, and the local
 v0.1.5 release, with the G6-G9 gate evidence recorded in
 [`../VALIDATION.md`](../VALIDATION.md). v0.1.5 is the published latest
 release (2026-08-30).
+
+## v0.1.6 Planned Feature-to-Authority Map
+
+| Capability group | Normative groups | Acceptance gate | Roadmap owner |
+|---|---|---|---|
+| Route-correct, rerunnable guided setup | `CLI-*`, `DUR-*`, `OPS-*`, `TST-*` | G10 | E14 |
+| Optional Hermes mutex and local serialization groups | `HER-*`, `CON-*`, `DUR-*`, `TST-*` | G11 | E15 |
+| Automatic durable notification draining | `NTF-*`, `DUR-*`, `CLI-*`, `OPS-*`, `TST-*` | G12 | E16 |
+| Documentation, cold validation, and release proof | all applicable groups | G13 | E17 |
+
+D-027 owns this approved plan, with the detailed contract in
+[`v0.1.6-operational-follow-up.md`](v0.1.6-operational-follow-up.md) and
+ADRs 0020 through 0022. These capabilities are not yet implemented or
+validated: E14 through E17 remain Planned, and v0.1.5 remains the published
+latest release.

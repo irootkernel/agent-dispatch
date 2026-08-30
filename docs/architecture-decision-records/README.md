@@ -23,6 +23,9 @@ Accepted ADRs are normative below `required-spec.md` and above general architect
 | [0017](0017-capability-probed-hermes-compatibility.md) | Hermes 0.19.1+ is capability-probed without modifying Hermes | Accepted |
 | [0018](0018-resource-observation-fencing.md) | Reconciliation uses a resource observation fence | Accepted |
 | [0019](0019-durable-notification-outbox.md) | Notifications use a durable state-independent outbox | Accepted |
+| [0020](0020-disabled-baseline-reconciliation.md) | Disabled setup uses baseline-only reconciliation | Accepted |
+| [0021](0021-agent-dispatch-serialization-groups.md) | Agent Dispatch serialization groups provide the mutex downgrade | Accepted |
+| [0022](0022-post-commit-notification-draining.md) | Notification draining is bounded and post-commit | Accepted |
 
 ## ADR Lifecycle
 

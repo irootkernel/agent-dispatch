@@ -1,5 +1,29 @@
 # SOT Changelog
 
+## 1.2.0 - 2026-08-31
+
+D-027 adopts the focused v0.1.6 operational follow-up as documentation-only
+planned work:
+
+- E14 owns explicit route selection, propagation to every route-scoped setup
+  step, disabled baseline-only reconciliation, rerun safety, and gate G10;
+- E15 owns optional Hermes `--mutex-key` capability handling, Agent Dispatch
+  serialization groups, revision/acknowledgement invalidation, concurrency
+  enforcement, Hermes v0.20.5 and v0.19.1 evidence, and gate G11;
+- E16 owns manual, after-command, and scheduled notification-drain policies,
+  durable leases, post-commit bounded draining, launchd rendering, status and
+  doctor visibility, and gate G12;
+- E17 owns public documentation and skill truth, cold validation, required
+  deployment transcripts, reproducible v0.1.6 artifacts, and gate G13.
+
+ADRs 0020 through 0022 establish the baseline-only, serialization-group, and
+post-commit drain decisions. The roadmap now contains 18 epics and 89 tasks:
+the shipped v0.1.5 baseline remains 75/75 Completed, fourteen E14-E17 tasks
+are Planned, and E14-T1 is next. No code, SQLite migration, current schema,
+example, packaged skill, validation evidence, artifact, tag, production state,
+or Hermes surface changes in this adoption. The separately requested general
+`make verify` remediation remains excluded.
+
 ## 1.1.18 - 2026-08-30
 
 E13 epic validation: every promoted hardening-deferral finding from the

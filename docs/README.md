@@ -1,8 +1,9 @@
 # Agent Dispatch Documentation
 
 > **Documentation profile:** Single delivery scope with an adopted legacy roadmap identity contract
-> **SOT version:** 1.1.18
-> **Implementation target:** Agent Dispatch v0.1.5 (published 2026-08-30)
+> **SOT version:** 1.2.0
+> **Shipped implementation:** Agent Dispatch v0.1.5 (published 2026-08-30)
+> **Planned release target:** Agent Dispatch v0.1.6
 > **Document status:** Approved planned baseline
 > **Language:** English
 
@@ -85,6 +86,21 @@ two byte-identical `make release VERSION=v0.1.5` builds recorded there.
 v0.1.5 is the published latest release (2026-08-30): the candidate was
 re-cut from the post-validation final tree and published with its tag
 and hosted Release.
+
+## v0.1.6 Planned Follow-up
+
+D-027 approves four sequential planned epics, E14 through E17, to close the
+three operational gaps found during a real v0.1.5 deployment: route-correct
+and rerunnable disabled setup, explicit Hermes v0.20.5 mutex downgrade through
+Agent Dispatch serialization groups, and bounded post-commit notification
+draining. The detailed contract is
+[`specs/v0.1.6-operational-follow-up.md`](specs/v0.1.6-operational-follow-up.md),
+with acceptance gates G10 through G13.
+
+This adoption is documentation only. It does not claim implementation,
+migration, test, deployment-transcript, artifact, or release evidence; v0.1.5
+remains the shipped release and E14-T1 is the next roadmap task. The separately
+requested general `make verify` remediation is outside this release scope.
 
 ## Repository-Native Checks
 

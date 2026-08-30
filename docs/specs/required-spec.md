@@ -117,6 +117,8 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | DUR-014 | Full reconciliation **MUST** replace a resource snapshot only when the pre-enumeration observation revision still matches, with replacement and revision advancement atomic. |
 | DUR-015 | A reconciliation fence conflict **MUST** preserve newer facts, record a typed concurrent-change outcome, and leave one due reconciliation generation. |
 | DUR-016 | State transitions that require notification **MUST** create their notification intent in the same transaction; delivery occurs after commit and cannot roll back or alter the underlying state. |
+| DUR-017 | Baseline-only reconciliation **MUST** atomically store the complete bounded snapshot and its route baseline evidence, and **MUST NOT** create a policy decision, dispatch intent, production acknowledgement, Hermes task, or notification. |
+| DUR-018 | Concurrent notification drainers **MUST** claim disjoint pending records through a durable lease or equivalent exclusion mechanism, and a crashed claim **MUST** become recoverable without changing notification identity. |
 
 ## 9. Route Concurrency and Latest-State Processing
 
@@ -132,6 +134,10 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | CON-008 | Dirty observations **MUST** collapse independently within each destination lane. |
 | CON-009 | Retrying one child **MUST** preserve its idempotency identity and **MUST NOT** duplicate accepted or completed siblings. |
 | CON-010 | A behavior-affecting destination change **MUST** create a new destination revision and pause incompatible reuse until production acknowledgement. |
+| CON-011 | Agent Dispatch **MUST** enforce at most one active child per effective serialization group in one shared state database, regardless of target-side mutex support. |
+| CON-012 | Relevant work arriving for an occupied serialization group **MUST** merge into the selected destination lane's dirty generation; completion **MUST** promote at most one waiting lane and retries or reruns **MUST NOT** bypass the group slot. |
+| CON-013 | Destinations governing the same resource under different serialization groups **MUST** fail preflight unless every involved route explicitly acknowledges cross-group concurrency. |
+| CON-014 | Effective serialization-group identity and cross-group acknowledgement **MUST** participate in destination and route revision so a policy change makes existing production acknowledgement stale. |
 
 ## 10. Hermes Kanban Integration
 
@@ -155,6 +161,9 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | HER-016 | Every required skill **MUST** be proven enabled for the configured profile through the public profile-scoped Hermes interface before enablement. |
 | HER-017 | Profile and skill failures **MUST** report bounded sorted alternatives and a concrete preflight remediation. |
 | HER-018 | Route activation **MUST** bind the accepted capability-evidence fingerprint in addition to the computed route revision. |
+| HER-019 | `--mutex-key` **MUST** be treated as an optional Hermes capability; a target missing only that flag remains compatible when Agent Dispatch can enforce a safe serialization topology. |
+| HER-020 | Probe, preflight, enablement, rendering, submission-time revalidation, capabilities, and status **MUST** agree on whether serialization is target-enforced, Agent Dispatch group-enforced, or unsupported and unsafe. |
+| HER-021 | The Hermes renderer **MUST NOT** send `--mutex-key` when current capability evidence says the executable does not support it. |
 
 ## 11. Hermes Webhook Integration
 
@@ -202,6 +211,9 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | CLI-013 | The product **MUST** expose aggregate event inspection and notification test, list, retry, and drain commands. |
 | CLI-014 | Empty machine-readable collections **MUST** be `[]` or `{}`, never `null`. |
 | CLI-015 | Configuration-mutating helpers **MUST** validate a candidate and replace the file atomically without modifying unrelated routes or destinations. |
+| CLI-016 | `setup wiki` **MUST** accept an explicit route, require or clearly prompt for selection when multiple routes exist, and pass the selected route to every route-scoped command and instruction. |
+| CLI-017 | `reconcile --baseline-only` **MUST** be a documented disabled-route operation with no submit path and **MUST** refuse active, uncertain, quarantined, or production-enabled state. |
+| CLI-018 | The product **MUST** render and inspect a launchd schedule using resolved binary and configuration paths, bounded explicit logs, and history-preserving disable and uninstall instructions. |
 
 ## 14. Security and Privacy
 
@@ -241,6 +253,9 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | OPS-013 | Capability, profile, skill, Watchman, and reconciliation drift **MUST** be visible in status and eligible for configured notifications. |
 | OPS-014 | v0.1.5 configuration **MUST** retain `version: 1`, require `destinations[]`, and reject legacy `dispatch` with a concrete regeneration path. |
 | OPS-015 | Rollback **MUST** preserve the upgraded database separately and restore the verified pre-migration backup with the previous readable binary and configuration; down migrations are not required. |
+| OPS-016 | Setup output **MUST** distinguish configuration enabled state, runtime activation, Watchman binding, initial baseline, and production acknowledgement, and **MUST** print but never execute the reviewed enable command. |
+| OPS-017 | Status and doctor **MUST** expose pending notification count and age, latest drain evidence, automatic mode and limit, expected scheduler state, overdue scheduled delivery, repeated ambiguous or retryable outcomes, and unresolvable sinks. |
+| OPS-018 | A scheduled notification recipe **MUST** run drain only after healthy submitted reconciliation and **MUST NOT** assume `/usr/local/bin/agent-dispatch` or delete configuration or SQLite state on uninstall. |
 
 ## 16. Test and Release Quality
 
@@ -260,6 +275,9 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | TST-012 | The same probe path **MUST** evaluate the frozen real Hermes 0.19.1 interface and the installed newer Hermes interface without modifying either Hermes installation. |
 | TST-013 | Fan-out tests **MUST** cover different profiles, repeated profiles with distinct workstreams, sibling isolation, independent retry, destination revision changes, and aggregate reruns. |
 | TST-014 | Notification tests **MUST** cover transactional intent creation, deduplication, ambiguous delivery, retry, sink isolation, and content/secret redaction. |
+| TST-015 | Guided-setup tests **MUST** cover clean host, multiple-route selection, Watchman installation, interrupted baseline, idempotent rerun, zero task/acknowledgement/notification creation, and the five-state summary. |
+| TST-016 | Hermes compatibility tests **MUST** cover the real or frozen-real v0.20.5 mutex-only downgrade, v0.19.1 regression, burst merging, shared-group exclusion, independent-group concurrency, and retry/rerun slot retention. |
+| TST-017 | Notification progress tests **MUST** cover after-command completion delivery, timeout with unchanged work state, crash recovery, stable identity, concurrent drain leases, configured limits, manual mode, scheduled rendering, non-recursion, and successful core exit under delivery failure. |
 
 ## 17. Multi-Destination Fan-Out
 
@@ -291,3 +309,9 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | NTF-007 | Retry **MUST** reuse a stable notification idempotency key and remain at-least-once under ambiguous transport outcomes. |
 | NTF-008 | Operators **MUST** be able to test a sink without creating a source event or Hermes task. |
 | NTF-009 | Adding a future channel adapter **MUST NOT** require changing dispatch or work-completion state semantics. |
+| NTF-010 | Each route **MUST** support `manual`, `after-command`, and `scheduled` bounded drain modes; existing configurations that omit the policy retain manual behavior and newly generated Wiki configuration defaults to after-command. |
+| NTF-011 | In after-command mode, one bounded drain pass **MUST** begin only after a successful notification-producing source transition commits. |
+| NTF-012 | Notification delivery failure **MUST NOT** roll back source state, change dispatch acceptance or work completion, cause task resubmission, or change a successful core command exit status. |
+| NTF-013 | Ambiguous and retryable delivery **MUST** remain pending under the same stable identity; refused delivery **MUST** remain inspectable and explicitly retryable. |
+| NTF-014 | Automatic drain **MUST** enforce the configured limit and **MUST NOT** create a notification solely about successful notification draining. |
+| NTF-015 | Existing v0.1.5 notification records **MUST** migrate forward without changing notification IDs, idempotency keys, or attempt history. |

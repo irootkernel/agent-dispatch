@@ -1,23 +1,23 @@
 # Agent Dispatch Implementation Roadmap
 
-> **Roadmap version:** 1.0  
-> **Release target:** v0.1.5
+> **Roadmap version:** 1.2
+> **Release target:** v0.1.6
 > **Execution model:** Strictly linear, one active task globally  
-> **Epics:** 14
-> **Tasks:** 75
+> **Epics:** 18
+> **Tasks:** 89
 
 ## 1. Current State
 
 | Field | Value |
 |---|---|
 | Shipped release | v0.1.5 (published 2026-08-30) |
-| Planned SOT baseline | 1.1.0 ([D-025](../specs/decision-log.md)) |
-| Release target | v0.1.5 (published 2026-08-30) |
-| Current epic | E13 Completed (G9 evidenced); roadmap complete |
+| Planned SOT baseline | 1.2.0 ([D-027](../specs/decision-log.md)) |
+| Release target | v0.1.6 (planned) |
+| Current epic | E14 Planned |
 | Current active task | None |
-| Next task | None (75/75) |
-| Completed tasks | 75 / 75 |
-| Planned tasks | 0 / 75 |
+| Next task | E14-T1 |
+| Completed tasks | 75 / 89 |
+| Planned tasks | 14 / 89 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -47,6 +47,10 @@
 | E11 | Hermes Preflight and Operator Setup | **Completed** | 4 | G7 |
 | E12 | Multi-Destination Lifecycle | **Completed** | 4 | G8 |
 | E13 | Notifications and v0.1.5 Release | **Completed** | 4 | G9 |
+| E14 | Guided Setup and Disabled Baseline | **Planned** | 3 | G10 |
+| E15 | Hermes Mutex Downgrade and Serialization Groups | **Planned** | 4 | G11 |
+| E16 | Automatic Durable Notification Draining | **Planned** | 4 | G12 |
+| E17 | Documentation, Cold Validation, and v0.1.6 Release | **Planned** | 3 | G13 |
 
 ## 3. Task Status Index
 
@@ -127,6 +131,20 @@
 | 73 | E13-T2 | Completed | Webhook/log sinks, retry commands, and scheduling |
 | 74 | E13-T3 | Completed | Operator/worker skills and operational walkthrough |
 | 75 | E13-T4 | Completed | Documentation truth, release proof, and v0.1.5 |
+| 76 | E14-T1 | Planned | Explicit setup route selection and propagation |
+| 77 | E14-T2 | Planned | Disabled baseline-only reconciliation and persistence |
+| 78 | E14-T3 | Planned | Rerunnable setup, five-state summary, and G10 |
+| 79 | E15-T1 | Planned | Serialization configuration, revisions, and migration |
+| 80 | E15-T2 | Planned | Consistent Hermes mutex downgrade contract |
+| 81 | E15-T3 | Planned | Group slot enforcement and bounded follow-up |
+| 82 | E15-T4 | Planned | Hermes v0.20.5 and v0.19.1 compatibility gate G11 |
+| 83 | E16-T1 | Planned | Drain policy, leases, and forward migration |
+| 84 | E16-T2 | Planned | Lease-safe bounded notification delivery |
+| 85 | E16-T3 | Planned | Post-commit after-command integration |
+| 86 | E16-T4 | Planned | Scheduler, status, doctor, and G12 |
+| 87 | E17-T1 | Planned | CLI, configuration, operations, and skill truth |
+| 88 | E17-T2 | Planned | Cold validation and required deployment evidence |
+| 89 | E17-T3 | Planned | Reproducible v0.1.6 release and publication |
 
 ---
 
@@ -3403,9 +3421,534 @@ verification before any publication.
 
 ---
 
+# E14: Guided Setup and Disabled Baseline
+
+**Epic status:** Planned
+**Purpose:** Make the disabled Wiki setup path route-correct, safely rerunnable, and explicit about every production-gate state.
+**Gate:** G10
+**Detailed SOT:** [v0.1.6 operational follow-up](../specs/v0.1.6-operational-follow-up.md)
+
+## E14-T1: Explicit Setup Route Selection and Propagation
+
+**Status:** Planned
+
+### Objective
+
+Select one setup route explicitly and carry that identity through every
+route-scoped setup command and instruction.
+
+### Deliverables
+
+- `setup wiki --route <id>` and interactive multi-route selection;
+- non-interactive ambiguity refusal;
+- one shared selected-route step contract for preflight, Watchman, baseline,
+  and enable guidance;
+- help and regression coverage.
+
+### Requirements
+
+`CLI-009`, `CLI-012`, `CLI-016`, `OPS-016`, `TST-015`
+
+### Dependencies
+
+E13-T4 Completed; D-027 and ADR-0020 Accepted.
+
+### Acceptance
+
+- AC-1001 and AC-1002 pass;
+- no multi-route setup silently chooses sorted-first;
+- no route-scoped nested invocation can omit or change the selected route.
+
+### Evidence
+
+Planned; none.
+
+## E14-T2: Disabled Baseline-Only Reconciliation and Persistence
+
+**Status:** Planned
+
+### Objective
+
+Establish or refresh initial path facts while a route remains disabled without
+creating production work or approval evidence.
+
+### Deliverables
+
+- public `reconcile --baseline-only` operation;
+- route-baseline record and forward-only migration;
+- atomic snapshot/baseline transaction under the observation fence;
+- disabled/active-state guards and crash/restart tests.
+
+### Requirements
+
+`DUR-013` through `DUR-017`, `CLI-017`, `OPS-009`, `OPS-015`, `TST-002`, `TST-004`, `TST-015`
+
+### Dependencies
+
+E14-T1 Completed.
+
+### Acceptance
+
+- AC-1003 and AC-1004 pass;
+- baseline creates zero decision, intent, task, acknowledgement, and notification rows;
+- a failed or interrupted attempt is safely rerunnable.
+
+### Evidence
+
+Planned; none.
+
+## E14-T3: Rerunnable Setup, Five-State Summary, and G10
+
+**Status:** Planned
+
+### Objective
+
+Complete the guided flow across every non-production rerun posture and expose
+an honest final production-gate summary.
+
+### Deliverables
+
+- clean-host, Watchman-installed, materialized-row, unchanged-rerun, and
+  interrupted-rerun acceptance suite;
+- configuration/runtime/Watchman/baseline/acknowledgement summary;
+- exact enable-command rendering without execution;
+- setup, installation, runbook, and operator-skill guidance.
+
+### Requirements
+
+`CLI-012`, `CLI-016`, `CLI-017`, `OPS-010`, `OPS-016`, `SEC-010`, `TST-015`
+
+### Dependencies
+
+E14-T2 Completed.
+
+### Acceptance
+
+- AC-1001 through AC-1005 pass;
+- setup reaches the gate summary while both enable controls remain off;
+- `make verify` is green.
+
+### Evidence
+
+Planned; none.
+
+---
+
+# E15: Hermes Mutex Downgrade and Serialization Groups
+
+**Epic status:** Planned
+**Purpose:** Certify Hermes v0.20.5 without target mutex support while enforcing an honest local concurrency guarantee.
+**Gate:** G11
+**Detailed SOT:** [v0.1.6 operational follow-up](../specs/v0.1.6-operational-follow-up.md)
+
+## E15-T1: Serialization Configuration, Revisions, and Migration
+
+**Status:** Planned
+
+### Objective
+
+Define stable Agent Dispatch serialization groups and make every concurrency
+policy change production-gate visible.
+
+### Deliverables
+
+- destination `serialization_group` and route cross-group acknowledgement;
+- effective-group resolution and same-resource topology validation;
+- destination/route revision participation;
+- group-state persistence and forward migration preserving historical work.
+
+### Requirements
+
+`CON-010` through `CON-014`, `DUR-009`, `OPS-009`, `OPS-015`, `TST-002`, `TST-016`
+
+### Dependencies
+
+E14-T3 Completed; ADR-0021 Accepted.
+
+### Acceptance
+
+- serialization edits change both revisions and stale production acknowledgement;
+- unsafe cross-group topology fails before submission;
+- migration preserves existing dispatch, lane, and receipt identities.
+
+### Evidence
+
+Planned; none.
+
+## E15-T2: Consistent Hermes Mutex Downgrade Contract
+
+**Status:** Planned
+
+### Objective
+
+Use one optional-mutex decision across capability probing, activation, command
+rendering, submission revalidation, and operator surfaces.
+
+### Deliverables
+
+- versioned capability evidence with effective serialization mode;
+- probe/preflight/capabilities/status output for the three modes;
+- enable and submission topology gate;
+- renderer suppression of unsupported `--mutex-key`.
+
+### Requirements
+
+`HER-011` through `HER-021`, `SEC-004`, `SEC-010`, `CLI-010`, `OPS-011`, `TST-012`, `TST-016`
+
+### Dependencies
+
+E15-T1 Completed.
+
+### Acceptance
+
+- AC-1101 passes;
+- a mutex-only capability absence is a warning downgrade, not contradictory failure;
+- executable revalidation cannot change or bypass the certified mode.
+
+### Evidence
+
+Planned; none.
+
+## E15-T3: Group Slot Enforcement and Bounded Follow-Up
+
+**Status:** Planned
+
+### Objective
+
+Enforce one active child per serialization group across destination lanes while
+retaining independent dirty generations and bounded progress.
+
+### Deliverables
+
+- transactional global group-slot acquisition, transfer, and release;
+- occupied-group merge into destination dirty state;
+- deterministic one-waiter promotion and bounded remainder;
+- retry, rerun, recovery, and multi-process concurrency tests.
+
+### Requirements
+
+`CON-001` through `CON-014`, `DUR-010` through `DUR-012`, `FBK-010`, `TST-004`, `TST-005`, `TST-016`
+
+### Dependencies
+
+E15-T2 Completed.
+
+### Acceptance
+
+- AC-1102 through AC-1105 pass;
+- shared groups never run parallel children;
+- acknowledged independent groups progress concurrently.
+
+### Evidence
+
+Planned; none.
+
+## E15-T4: Hermes v0.20.5 and v0.19.1 Compatibility Gate G11
+
+**Status:** Planned
+
+### Objective
+
+Prove the downgrade against the deployed Hermes release and retain the frozen
+older public-surface compatibility contract.
+
+### Deliverables
+
+- real Hermes v0.20.5 probe/preflight/render/submission transcript;
+- burst, shared-group, and independent-group demonstrations;
+- Hermes 0.19.1 regression suite;
+- capability, integration, runbook, and migration documentation.
+
+### Requirements
+
+`BND-003`, `BND-004`, `HER-019` through `HER-021`, `CON-011` through `CON-014`, `TST-007`, `TST-012`, `TST-016`
+
+### Dependencies
+
+E15-T3 Completed.
+
+### Acceptance
+
+- AC-1101 through AC-1106 pass;
+- no Hermes core or private storage is modified;
+- `make verify` is green.
+
+### Evidence
+
+Planned; none.
+
+---
+
+# E16: Automatic Durable Notification Draining
+
+**Epic status:** Planned
+**Purpose:** Make notification delivery progress boundedly during normal one-shot operation without coupling it to source state.
+**Gate:** G12
+**Detailed SOT:** [v0.1.6 operational follow-up](../specs/v0.1.6-operational-follow-up.md)
+
+## E16-T1: Drain Policy, Leases, and Forward Migration
+
+**Status:** Planned
+
+### Objective
+
+Define route-scoped manual, after-command, and scheduled policy and persist the
+claim and run evidence automatic delivery requires.
+
+### Deliverables
+
+- drain mode, limit, preserve-pending policy, and pending-age configuration;
+- v0.1.5-compatible defaults and after-command generated Wiki default;
+- notification leases and drain-run record migration;
+- schema/example/revision and round-trip coverage.
+
+### Requirements
+
+`DUR-016` through `DUR-018`, `NTF-010` through `NTF-015`, `OPS-009`, `OPS-015`, `TST-002`, `TST-017`
+
+### Dependencies
+
+E15-T4 Completed; ADR-0022 Accepted.
+
+### Acceptance
+
+- manual omission preserves v0.1.5 behavior;
+- existing notification identities and attempts survive migration unchanged;
+- every behavior-affecting policy field participates in a documented revision.
+
+### Evidence
+
+Planned; none.
+
+## E16-T2: Lease-Safe Bounded Notification Delivery
+
+**Status:** Planned
+
+### Objective
+
+Make manual and automatic drain share one bounded service that excludes
+concurrent ownership and recovers process death safely.
+
+### Deliverables
+
+- atomic pending claim, lease expiry, and drain-run persistence;
+- stable-idempotency retry and refused-state handling;
+- configured limit and sink isolation;
+- crash, simultaneous-drain, non-recursion, and redaction tests.
+
+### Requirements
+
+`DUR-018`, `NTF-003` through `NTF-015`, `SEC-011` through `SEC-013`, `TST-004`, `TST-005`, `TST-017`
+
+### Dependencies
+
+E16-T1 Completed.
+
+### Acceptance
+
+- AC-1202 through AC-1205, AC-1207, and AC-1208 pass;
+- a crashed or overlapping drainer cannot claim the same live lease;
+- delivery never writes dispatch, work, or source-state tables.
+
+### Evidence
+
+Planned; none.
+
+## E16-T3: Post-Commit After-Command Integration
+
+**Status:** Planned
+
+### Objective
+
+Run one route-scoped drain after successful notification-producing commands
+without changing their output or exit contract.
+
+### Deliverables
+
+- explicit post-commit command registry and route resolution;
+- integration for dispatch, work completion/failure, applicable dispatch retry
+  and rerun, quarantine resolution, reconciliation, and drift evaluation;
+- setup/baseline/read-only/drain recursion exclusions;
+- source-success/delivery-failure exit and state-isolation tests.
+
+### Requirements
+
+`NTF-010` through `NTF-014`, `CLI-001`, `CLI-002`, `CLI-008`, `OPS-001`, `TST-017`
+
+### Dependencies
+
+E16-T2 Completed.
+
+### Acceptance
+
+- AC-1201, AC-1202, AC-1204, and AC-1205 pass;
+- Watchman dispatch and later `work complete` both advance notifications;
+- an automatic delivery failure leaves the core command successful.
+
+### Evidence
+
+Planned; none.
+
+## E16-T4: Scheduler, Status, Doctor, and G12
+
+**Status:** Planned
+
+### Objective
+
+Provide scheduled-mode operational progress and make stalled delivery
+diagnosable without direct database inspection.
+
+### Deliverables
+
+- `schedule render|inspect --platform launchd` with resolved paths;
+- install, inspect, disable, uninstall, and bounded-log guidance;
+- status projection and doctor findings for delivery and scheduler posture;
+- launchd syntax, overdue, unresolvable-sink, and end-to-end tests.
+
+### Requirements
+
+`CLI-009`, `CLI-018`, `NTF-010` through `NTF-015`, `OPS-017`, `OPS-018`, `SEC-007`, `TST-017`
+
+### Dependencies
+
+E16-T3 Completed.
+
+### Acceptance
+
+- AC-1201 through AC-1208 pass;
+- generated launchd syntax validates and never assumes a fixed binary path;
+- `make verify` is green.
+
+### Evidence
+
+Planned; none.
+
+---
+
+# E17: Documentation, Cold Validation, and v0.1.6 Release
+
+**Epic status:** Planned
+**Purpose:** Reconcile every v0.1.6 claim with executable and real-environment evidence, then publish one reproducible release.
+**Gate:** G13
+**Detailed SOT:** [v0.1.6 operational follow-up](../specs/v0.1.6-operational-follow-up.md)
+
+## E17-T1: CLI, Configuration, Operations, and Skill Truth
+
+**Status:** Planned
+
+### Objective
+
+Synchronize the public operator contract only after the three implementation
+epics have delivered their final behavior.
+
+### Deliverables
+
+- root/group/setup/reconcile/notifications/schedule help;
+- configuration specification, schema, examples, and migration notes;
+- installation, runbook, upgrade, rollback, and known-limitations guidance;
+- operator skill and worker skill only where its execution instructions changed.
+
+### Requirements
+
+`CLI-009`, `CLI-016` through `CLI-018`, `HER-019` through `HER-021`, `NTF-010` through `NTF-015`, `OPS-015` through `OPS-018`, `TST-009`
+
+### Dependencies
+
+E16-T4 Completed.
+
+### Acceptance
+
+- every new field and enum is versioned, non-null where absence has no meaning,
+  schema/example covered, and mapped to the correct revision;
+- documentation distinguishes shipped behavior, migration prerequisites, and
+  state-database-scoped guarantees;
+- no current worker instruction is changed without a corresponding behavior change.
+
+### Evidence
+
+Planned; none.
+
+## E17-T2: Cold Validation and Required Deployment Evidence
+
+**Status:** Planned
+
+### Objective
+
+Cold-validate the complete E14-E16 result in disposable real and deterministic
+environments and remediate only in-scope findings.
+
+### Deliverables
+
+- focused acceptance results for every G10-G12 criterion;
+- clean-host and post-Watchman-install setup transcripts;
+- real Hermes v0.20.5 probe/preflight and concurrency transcripts;
+- notification completion, outbox, automatic delivery, timeout, retry, and
+  crash-recovery transcript;
+- whole-target review and known-limitations record.
+
+### Requirements
+
+`BND-003`, `BND-004`, `SEC-001` through `SEC-014`, `TST-007`, `TST-009`, `TST-015` through `TST-017`
+
+### Dependencies
+
+E17-T1 Completed.
+
+### Acceptance
+
+- AC-1301 and AC-1302 pass with every requested evidence item present;
+- no production vault, board, route, or profile is modified;
+- unrelated general `make verify` remediation is reported, not absorbed.
+
+### Evidence
+
+Planned; none.
+
+## E17-T3: Reproducible v0.1.6 Release and Publication
+
+**Status:** Planned
+
+### Objective
+
+Close the roadmap against one final clean tree and publish the reproducible
+darwin/arm64 v0.1.6 release.
+
+### Deliverables
+
+- G10-G13 validation and traceability truth;
+- synchronized README, VALIDATION, changelog, release checklist, release notes,
+  schemas, examples, and versioned skills;
+- full `make verify` result and two byte-identical v0.1.6 release builds;
+- release commit, annotated tag, main/tag publication, and hosted artifact with
+  SHA256SUMS;
+- explicit no-production-activation record.
+
+### Requirements
+
+`BND-*`, `SCP-*`, `SRC-*`, `PTH-*`, `DAT-*`, `POL-*`, `DUR-*`, `CON-*`, `HER-*`, `WHK-*`, `FBK-*`, `CLI-*`, `SEC-*`, `OPS-*`, `FAN-*`, `NTF-*`, `TST-009`, `TST-015` through `TST-017`
+
+### Dependencies
+
+E17-T2 Completed.
+
+### Acceptance
+
+- AC-1301 through AC-1304 and every cumulative prior gate pass;
+- both darwin/arm64 builds and checksums are byte-identical;
+- the tag and hosted release name the reviewed final tree;
+- no production route is enabled and no Hermes core/private state is changed.
+
+### Evidence
+
+Planned; none.
+
+---
+
 # 4. Deferred Future Work
 
-The following do not count toward the 75 tracked roadmap tasks (33 v0.1 feature tasks, 12 E7, 6 E8, 9 E9 remediation tasks, and 15 v0.1.5 tasks across E10-E13) and remain Deferred until a new roadmap is approved:
+The following do not count toward the 89 tracked roadmap tasks (75 completed
+through v0.1.5 and 14 planned v0.1.6 tasks across E14-E17) and remain Deferred
+until a new roadmap is approved:
 
 - Agent Dispatch managed daemon;
 - multi-vault production certification and global budgets;

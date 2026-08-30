@@ -443,3 +443,34 @@ history remain unchanged. The roadmap continues at E10-T1 with no active task;
 v0.1.4 remains the shipped release and v0.1.5 remains planned. No runtime code,
 schema shape, example contract, packaged skill, artifact, tag, or Hermes surface
 changes. SOT 1.1.1.
+
+## D-027 - 2026-08-31 - v0.1.6 operational reliability follow-up approved
+
+**Decision.** The focused deployment follow-up discovered with Agent Dispatch
+v0.1.5, Hermes Agent v0.20.5, Watchman 2026.07.27.00, a named non-default
+board, and a named Wiki-maintenance profile is adopted as the complete v0.1.6
+target. Four sequential epics E14 through E17 own guided setup and disabled
+baseline safety, optional Hermes mutex compatibility with Agent Dispatch
+serialization groups, automatic durable notification draining, and final
+documentation/cold-validation/release proof. The detailed planned contract is
+`v0.1.6-operational-follow-up.md`. ADR-0020 through ADR-0022 fix the baseline,
+serialization, and notification-drain decisions. The separately requested
+general `make verify` remediation is excluded; the release still runs the
+existing verification gate and reports an unrelated failure without absorbing
+its repair.
+
+**Context.** A real v0.1.5 deployment exposed three remaining operational
+gaps. Setup omitted the selected route from Watchman status and could not rerun
+after Watchman materialized disabled runtime state. Hermes v0.20.5 retained the
+required durable public Kanban surface but removed `--mutex-key`, while the
+existing downgrade did not express or enforce cross-destination resource
+serialization. Notification intents and delivery were durable but ordinary
+operation required a separate remembered drain command. None of these gaps
+requires changing Hermes or weakening the production gate.
+
+**Consequences.** The roadmap becomes 18 epics and 89 tasks: the shipped
+v0.1.5 baseline remains 75/75 Completed, the 14 E14-E17 tasks are Planned,
+E14-T1 is next, and gates G10 through G13 block v0.1.6. Configuration remains
+version 1 with additive planned fields; SQLite remains forward-only; current
+schemas, examples, code, tests, validation evidence, release artifacts, tags,
+and production state do not change in this design adoption. SOT 1.2.0.

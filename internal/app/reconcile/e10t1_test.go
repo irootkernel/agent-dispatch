@@ -309,7 +309,7 @@ func TestE10T1StableOverBoundFileIsQuarantineEvidence(t *testing.T) {
 	e10t1SeedFacts(t, s, []ports.PathFact{{Path: "Inbox/big.md", Digest: "", Exists: true}})
 	service := e10t1Service(t, s, root, 16) // the bound sits far below the file
 
-	digest, outcome := service.hash("Inbox/big.md")
+	digest, outcome := scopeWalker{Resolver: service.Resolver, Engine: service.Engine, FileScope: service.FileScope, MaxHash: service.MaxHash}.hash("Inbox/big.md")
 	if digest != "" || outcome != hashOverBound {
 		t.Fatalf("a stable over-bound file must classify as over-bound with no digest: %q %v", digest, outcome)
 	}

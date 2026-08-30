@@ -73,6 +73,14 @@ func main() {
 		// hard (AC-207 interruption window).
 		err := migratePartial(flag("db"), flag("steps"))
 		exitWith(err)
+	case "baseline":
+		// baseline --db PATH --vault PATH [--route ID] [--resource ID]
+		// [--window full|die-before-write]: run one real baseline-only
+		// reconciliation; die-before-write dies hard after the
+		// enumeration, immediately before the fenced transaction (the
+		// E14-T2 interrupted-attempt window, AC-1004).
+		err := baselineRun(flag("db"), flag("vault"), flag("route"), flag("resource"), flag("window"))
+		exitWith(err)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command %q\n", os.Args[1])
 		os.Exit(64)

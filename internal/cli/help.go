@@ -312,18 +312,33 @@ Next safe command: agent-dispatch quarantine release <id> --reason ...`,
 Usage: agent-dispatch reconcile --route <id> --reason <text> [flags]
 
 Flags: --route (required), --reason (required), --submit (submit the
-  generation; default dry enumeration).
+  generation; default dry enumeration), --baseline-only (the documented
+  disabled-route operation: establish or refresh the initial snapshot
+  and its route baseline record while the route stays disabled).
 
-Exit codes: 0; 3 configuration (including an invalid fan-out
-  record); 11 target unavailable; 14 conflict; 20 storage (including
-  a reconcile sibling lane whose child commit failed); 40 internal
-  (failures the command could not attribute).
+--baseline-only runs only when the route is disabled in both halves of
+the production gate (configuration key off and runtime activation
+disabled) and refuses active, uncertain, quarantined, or production-
+enabled state. It atomically stores the bounded snapshot and the
+baseline evidence in one observation-fenced transaction, creates no
+policy decision, dispatch intent, Hermes task, acknowledgement, or
+notification, has no submit path (combining it with --submit is a usage
+error), and is safely rerunnable — a crashed attempt converges on the
+next run.
+
+Exit codes: 0; 2 usage (including --baseline-only with --submit); 3
+  configuration (including an invalid fan-out record); 11 target
+  unavailable; 14 conflict (including baseline refusals); 20 storage
+  (including a reconcile sibling lane whose child commit failed); 40
+  internal (failures the command could not attribute).
 
 Side effects: with --submit, enumerates the vault and submits the
-latest-state request; without it, only the dry enumeration persists.
+latest-state request; with --baseline-only, stores only the snapshot
+and the route baseline record; without either, only the dry enumeration
+persists.
 
 Example:
-  agent-dispatch reconcile --route wiki --reason scheduled
+  agent-dispatch reconcile --route wiki --reason initial --baseline-only
 
 Next safe command: agent-dispatch status`,
 	"status": `status — the operational snapshot

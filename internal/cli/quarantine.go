@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -186,15 +187,24 @@ const maxScheduledDrainIntents = 100
 func runReconcile(args []string, stdout, stderr io.Writer) int {
 	command := "reconcile"
 	// --submit is reconcile-only: it is stripped here so the shared
-	// parser rejects it on every other command.
+	// parser rejects it on every other command. --baseline-only is the
+	// same (E14-T2, CLI-017): the disabled-route baseline operation.
 	submit := false
+	baselineOnly := false
 	filtered := make([]string, 0, len(args))
 	for _, arg := range args {
 		if arg == "--submit" {
 			submit = true
 			continue
 		}
+		if arg == "--baseline-only" {
+			baselineOnly = true
+			continue
+		}
 		filtered = append(filtered, arg)
+	}
+	if submit && baselineOnly {
+		return usageError(stderr, command, "--baseline-only has no submit path and cannot be combined with --submit")
 	}
 	flags, code := parseDispatchesFlags(command, filtered, stderr, nil)
 	if code != 0 {
@@ -223,6 +233,43 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 	policyRev := ""
 	if route, ok := artifacts.cfg.Routes[routeID]; ok {
 		policyRev = config.PolicyRevision(route)
+	}
+	// The disabled-route baseline operation (E14-T2, ADR-0020, CLI-017):
+	// one observation-fenced snapshot-and-baseline transaction with no
+	// submit path, guarded on both halves of the production gate.
+	if baselineOnly {
+		canonical := filepath.Clean(artifacts.resource.Root)
+		if resolved, serr := filepath.EvalSymlinks(canonical); serr == nil {
+			canonical = resolved
+		}
+		gitMode := "disabled"
+		if artifacts.resource.Git != nil {
+			gitMode = artifacts.resource.Git.Mode
+		}
+		baselineService := &reconcile.BaselineService{
+			Store: closer, Resolver: artifacts.resolver, Engine: artifacts.engine,
+			FileScope: artifacts.fileScope, MaxHash: artifacts.maxHash,
+			ResourceID: artifacts.resourceID, RouteID: routeID,
+			RouteRevision: artifacts.revision, PolicyRevision: policyRev,
+			ConfigEnabled: artifacts.route.Enabled,
+			// The clean-host materialization mirrors registerRouteState's
+			// trusted values; an existing resource row is never rewritten.
+			ResourceRegistration: &ports.ResourceRegistrationInput{
+				ResourceID: artifacts.resourceID, Revision: artifacts.revision,
+				Root: artifacts.resource.Root, CanonicalRoot: canonical,
+				FileScope: artifacts.resource.FileScope, GitMode: gitMode,
+			},
+			Now: time.Now,
+		}
+		baseline, berr := baselineService.Run(requestCtx(), routeID, reason)
+		if berr != nil {
+			return reconcileErr(stderr, command, berr)
+		}
+		var warnings []string
+		if baseline.ConcurrentChange {
+			warnings = append(warnings, "the baseline was not stored: a newer durable path-fact mutation landed inside the enumeration window; the newer facts stand and a rerun converges")
+		}
+		return writeEnvelopeWithWarnings(stdout, command, baseline, warnings)
 	}
 	service := &reconcile.FullService{
 		Store: closer, Resolver: artifacts.resolver, Engine: artifacts.engine,

@@ -48,6 +48,7 @@ var Migrations = []Migration{
 	{Version: 14, Name: "work-receipt-v2-outcomes", SQL: schemaV14WorkReceiptV2Outcomes},
 	{Version: 15, Name: "merge-selection-evidence", SQL: schemaV15MergeSelectionEvidence},
 	{Version: 16, Name: "notification-events-attempts", SQL: schemaV16NotificationEventsAttempts},
+	{Version: 17, Name: "route-baselines", SQL: schemaV17RouteBaselines},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
@@ -744,4 +745,32 @@ CREATE TABLE notification_attempts (
 	UNIQUE (notification_id, attempt_number)
 );
 CREATE INDEX idx_notification_attempts_notification ON notification_attempts(notification_id, attempt_number);
+`
+
+// schemaV17RouteBaselines creates the disabled-route baseline record of
+// ADR-0020 (E14-T2, DUR-017): one row per route holding the evidence of
+// the latest baseline-only reconciliation — the observation revision the
+// snapshot committed at, the bounded fact count and canonical snapshot
+// digest, the route and policy revisions the evidence names, and the
+// reason and timestamp of establishment. The row is written only inside
+// the same observation-fenced transaction that stores the snapshot (see
+// ReplacePathFactsWithBaseline), so a crash leaves either the previous
+// baseline or the complete new one and a rerun converges by replacing
+// the row. The table is create-only: no row exists before v0.1.6 and no
+// other table references it. It deliberately carries no foreign key to
+// routes or route_runtime_state — a clean host establishes its baseline
+// before any route row exists.
+const schemaV17RouteBaselines = `
+CREATE TABLE route_baselines (
+	route_id             TEXT PRIMARY KEY,
+	resource_id          TEXT NOT NULL,
+	observation_revision INTEGER NOT NULL,
+	fact_count           INTEGER NOT NULL,
+	snapshot_sha256      TEXT NOT NULL,
+	route_revision       TEXT NOT NULL,
+	policy_revision      TEXT NOT NULL,
+	reason               TEXT NOT NULL,
+	established_at       TEXT NOT NULL
+);
+CREATE INDEX idx_route_baselines_resource ON route_baselines(resource_id);
 `

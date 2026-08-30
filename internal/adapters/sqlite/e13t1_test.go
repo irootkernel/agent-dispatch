@@ -478,8 +478,8 @@ func TestE13T1MigrationV16UpgradesCleanly(t *testing.T) {
 		t.Fatal(err)
 	}
 	version, err := upgraded.SchemaVersion()
-	if err != nil || version != 16 {
-		t.Fatalf("the upgraded ledger must record v16: %d %v", version, err)
+	if err != nil || version != MaxSchemaVersion {
+		t.Fatalf("the upgraded ledger must reach the current baseline past v16: %d %v", version, err)
 	}
 	for _, table := range []string{"notification_events", "notification_attempts"} {
 		if _, err := upgraded.Exec(`SELECT 1 FROM ` + table); err != nil {

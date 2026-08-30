@@ -15,9 +15,9 @@
 | Release target | v0.1.6 (planned) |
 | Current epic | E14 In Progress |
 | Current active task | None |
-| Next task | E14-T2 |
-| Completed tasks | 76 / 89 |
-| Planned tasks | 13 / 89 |
+| Next task | E14-T3 |
+| Completed tasks | 77 / 89 |
+| Planned tasks | 12 / 89 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -132,7 +132,7 @@
 | 74 | E13-T3 | Completed | Operator/worker skills and operational walkthrough |
 | 75 | E13-T4 | Completed | Documentation truth, release proof, and v0.1.5 |
 | 76 | E14-T1 | Completed | Explicit setup route selection and propagation |
-| 77 | E14-T2 | Planned | Disabled baseline-only reconciliation and persistence |
+| 77 | E14-T2 | Completed | Disabled baseline-only reconciliation and persistence |
 | 78 | E14-T3 | Planned | Rerunnable setup, five-state summary, and G10 |
 | 79 | E15-T1 | Planned | Serialization configuration, revisions, and migration |
 | 80 | E15-T2 | Planned | Consistent Hermes mutex downgrade contract |
@@ -3479,7 +3479,7 @@ hardening-deferral evidence package.
 
 ## E14-T2: Disabled Baseline-Only Reconciliation and Persistence
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -3509,7 +3509,23 @@ E14-T1 Completed.
 
 ### Evidence
 
-Planned; none.
+Completed 2026-08-31. SQLite migration v17 creates the `route_baselines`
+evidence table (one row per route, deliberately un-FKed so a clean host
+baselines before any route row exists) and `ReplacePathFactsWithBaseline`
+commits the clean-host resource registration, the observation-revision CAS
+advance, the path-fact replacement, and the baseline upsert as ONE fenced
+transaction that re-checks the runtime activation state inside the commit
+(DUR-013/DUR-014/DUR-015/DUR-017, OPS-009; the shared `scopeWalker` gives
+the baseline the same containment-defended enumeration as full
+reconciliation). `reconcile --baseline-only` is the public CLI-017 surface
+(guards on both gate halves refusing at exit 14, `--submit` mutual exclusion
+at exit 2, typed `concurrent_change` outcome, cli-spec §9 documentation),
+`BaselineService` maps the typed refusals, and the canonical snapshot digest
+is the JSON-encoded sorted projection. Zero-production-row creation and
+crash-window rerun convergence are proven by table-count assertions and the
+crashbin die-before-write window (TST-002/TST-004); review round 1
+remediated three low findings and round 2 published committed with complete
+coverage, CI pass, and zero findings.
 
 ## E14-T3: Rerunnable Setup, Five-State Summary, and G10
 

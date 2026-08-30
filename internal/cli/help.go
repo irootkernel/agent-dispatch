@@ -397,19 +397,26 @@ Example:
 Next safe command: agent-dispatch route preflight --route wiki`,
 	"setup": `setup — the guided disabled setup
 
-Usage: agent-dispatch setup wiki [--config <path>]
+Usage: agent-dispatch setup wiki [--config <path>] [--route <id>]
 
 The guided walkthrough: with a named configuration it validates it (an
 enabled base becomes a re-runnable disabled draft beside it);
 without one it prompts for the vault root and generates a fresh
-disabled example. It validates, probes Hermes, preflights the
-destination, checks the Watchman binding state (printing the explicit
-install and test commands), and runs the initial dry reconciliation.
-It stops before enablement and prints the exact production-gate
-command; it never accepts production approval implicitly and never
-installs the Watchman trigger itself.
+disabled example. The route is chosen explicitly: --route names a
+declared route, a single-route configuration selects its only route,
+and multiple routes require the flag or an explicit interactive
+choice — a non-interactive multi-route invocation fails rather than
+choosing one silently. Every route-scoped step, printed Watchman
+command, and the final enable command name the selected route. It
+validates, probes Hermes, preflights the destination, checks the
+Watchman binding state (printing the explicit install and test
+commands), and runs the initial dry reconciliation. It stops before
+enablement and prints the exact production-gate command; it never
+accepts production approval implicitly and never installs the Watchman
+trigger itself.
 
-Exit codes: 0; 3 configuration.
+Exit codes: 0; 2 usage (unknown route, or multiple routes without a
+selection); 3 configuration.
 
 Side effects: writes the (disabled) configuration and the state store;
 nothing is submitted and no Hermes state is touched.

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/irootkernel/agent-dispatch/internal/config"
@@ -19,6 +20,11 @@ import (
 // printing the exact production-gate action. It never accepts
 // production approval implicitly: enablement stays the operator's
 // explicit two-key command.
+//
+// E14-T1 (CLI-016): the walkthrough drives exactly one explicitly
+// selected route — through --route, a single-route configuration's only
+// choice, or an interactive selection — and never a silent sorted-first
+// fallback.
 
 // runSetup implements the `setup` group; only `wiki` exists in v0.1.5.
 func runSetup(args []string, stdout, stderr io.Writer) int {
@@ -34,9 +40,11 @@ func runSetup(args []string, stdout, stderr io.Writer) int {
 }
 
 // setupUI is the bounded interaction surface: prompts on stderr,
-// results on stdout, input from the reader. A nil reader (EOF) selects
-// the documented default at every prompt — the flow degrades to the
-// defaults rather than blocking.
+// results on stdout, input from the reader. The vault-root prompt
+// degrades to its documented default on a nil reader (EOF) or an empty
+// answer; the route selection is the deliberate exception (E14-T1) —
+// it has no default, and an empty or unreadable answer refuses the
+// walkthrough instead of choosing a route silently.
 type setupUI struct {
 	stdout, stderr io.Writer
 	reader         *bufio.Reader
@@ -71,14 +79,22 @@ func runSetupWiki(command string, args []string, ui *setupUI) int {
 	home, _ := os.UserHomeDir()
 	defaultRoot := filepath.Join(home, "Documents", "Obsidian", "MainVault")
 	// An explicit --config path names the walkthrough's target file;
-	// the platform default is used otherwise.
+	// the platform default is used otherwise. An explicit --route names
+	// the one route the walkthrough drives (E14-T1, CLI-016).
 	explicitConfig := ""
+	explicitRoute := ""
 	for i, a := range args {
 		if a == "--config" && i+1 < len(args) {
 			explicitConfig = args[i+1]
 		}
 		if strings.HasPrefix(a, "--config=") {
 			explicitConfig = strings.TrimPrefix(a, "--config=")
+		}
+		if a == "--route" && i+1 < len(args) {
+			explicitRoute = args[i+1]
+		}
+		if strings.HasPrefix(a, "--route=") {
+			explicitRoute = strings.TrimPrefix(a, "--route=")
 		}
 	}
 
@@ -183,15 +199,13 @@ func runSetupWiki(command string, args []string, ui *setupUI) int {
 		return 3
 	}
 
-	// The walkthrough drives the configuration's first declared route
-	// (the generated example carries exactly one; a multi-route base
-	// names the choice for the operator).
-	routeID := "wiki-maintenance"
-	if ids := cfg.SortedRouteIDs(); len(ids) > 0 {
-		routeID = ids[0]
-		if len(ids) > 1 {
-			ui.step("the configuration declares %d routes; the walkthrough uses %q (the first in sorted order)", len(ids), routeID)
-		}
+	// The selected-route contract (E14-T1): one route identity is
+	// resolved before any route-scoped step runs, and the preflight,
+	// Watchman status and guidance, baseline reconciliation, and the
+	// final enable command all name exactly that route.
+	routeID, routeExit := selectSetupRoute(command, cfg, explicitRoute, ui)
+	if routeExit != 0 {
+		return routeExit
 	}
 
 	ui.step("Step 3/6 — Hermes dependency probes")
@@ -209,7 +223,7 @@ func runSetupWiki(command string, args []string, ui *setupUI) int {
 	}
 
 	ui.step("Step 4/6 — Watchman binding check")
-	step([]string{"watchman", "status", "--config", configPath})
+	step([]string{"watchman", "status", "--config", configPath, "--route", routeID})
 	fmt.Fprintln(ui.stderr, "the Watchman test (watchman test) drives the real trigger surface; install it explicitly after setup and run the test:")
 	fmt.Fprintln(ui.stderr, "  agent-dispatch watchman install --route "+routeID+" --config "+configPath)
 	fmt.Fprintln(ui.stderr, "  agent-dispatch watchman test --route "+routeID+" --config "+configPath)
@@ -259,6 +273,65 @@ func anyRouteEnabled(cfg *config.Config) bool {
 		}
 	}
 	return false
+}
+
+// selectSetupRoute resolves the one route the walkthrough drives
+// (E14-T1, CLI-016): an explicit --route that names a declared route,
+// the only route of a single-route configuration, or an explicit
+// interactive choice. A multi-route configuration without a flag or a
+// usable answer is refused — the walkthrough never falls back to the
+// first route in sorted order.
+func selectSetupRoute(command string, cfg *config.Config, explicit string, ui *setupUI) (string, int) {
+	ids := cfg.SortedRouteIDs()
+	if explicit != "" {
+		if _, ok := cfg.Routes[explicit]; !ok {
+			writeError(ui.stderr, command, "flag_invalid", "usage",
+				"the configuration does not declare route "+explicit+"; it declares: "+strings.Join(ids, ", "))
+			return "", 2
+		}
+		ui.step("the walkthrough drives the explicitly selected route %q", explicit)
+		return explicit, 0
+	}
+	switch len(ids) {
+	case 0:
+		writeError(ui.stderr, command, "flag_invalid", "usage",
+			"the configuration declares no routes; nothing to walk through — add a route before re-running setup wiki")
+		return "", 2
+	case 1:
+		ui.step("the configuration declares one route; the walkthrough uses %q", ids[0])
+		return ids[0], 0
+	}
+	return ui.promptRoute(command, ids)
+}
+
+// promptRoute renders the numbered route choice and reads one explicit
+// selection (AC-1002). There is deliberately no default: an empty or
+// unreadable answer fails the walkthrough rather than choosing the first
+// route in sorted order, so non-interactive execution must pass --route.
+func (u *setupUI) promptRoute(command string, ids []string) (string, int) {
+	u.step("the configuration declares %d routes; select one to walk through", len(ids))
+	for i, id := range ids {
+		fmt.Fprintf(u.stderr, "  %d) %s\n", i+1, id)
+	}
+	fmt.Fprintf(u.stderr, "Route [1-%d or the route ID]: ", len(ids))
+	line, err := u.reader.ReadString('\n')
+	if (err != nil && line == "") || strings.TrimSpace(line) == "" {
+		return u.routeRefused(command, ids)
+	}
+	answer := strings.TrimSpace(line)
+	for i, id := range ids {
+		if answer == strconv.Itoa(i+1) || answer == id {
+			u.step("the walkthrough drives the selected route %q", id)
+			return id, 0
+		}
+	}
+	return u.routeRefused(command, ids)
+}
+
+func (u *setupUI) routeRefused(command string, ids []string) (string, int) {
+	writeError(u.stderr, command, "flag_invalid", "usage",
+		"an explicit route selection is required when the configuration declares multiple routes; re-run with --route <id> (declared: "+strings.Join(ids, ", ")+")")
+	return "", 2
 }
 
 // setupDraftName is the stable draft file the walkthrough writes beside

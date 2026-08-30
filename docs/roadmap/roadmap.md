@@ -13,11 +13,11 @@
 | Shipped release | v0.1.5 (published 2026-08-30) |
 | Planned SOT baseline | 1.2.0 ([D-027](../specs/decision-log.md)) |
 | Release target | v0.1.6 (planned) |
-| Current epic | E14 Planned |
+| Current epic | E14 In Progress |
 | Current active task | None |
-| Next task | E14-T1 |
-| Completed tasks | 75 / 89 |
-| Planned tasks | 14 / 89 |
+| Next task | E14-T2 |
+| Completed tasks | 76 / 89 |
+| Planned tasks | 13 / 89 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -47,7 +47,7 @@
 | E11 | Hermes Preflight and Operator Setup | **Completed** | 4 | G7 |
 | E12 | Multi-Destination Lifecycle | **Completed** | 4 | G8 |
 | E13 | Notifications and v0.1.5 Release | **Completed** | 4 | G9 |
-| E14 | Guided Setup and Disabled Baseline | **Planned** | 3 | G10 |
+| E14 | Guided Setup and Disabled Baseline | **In Progress** | 3 | G10 |
 | E15 | Hermes Mutex Downgrade and Serialization Groups | **Planned** | 4 | G11 |
 | E16 | Automatic Durable Notification Draining | **Planned** | 4 | G12 |
 | E17 | Documentation, Cold Validation, and v0.1.6 Release | **Planned** | 3 | G13 |
@@ -131,7 +131,7 @@
 | 73 | E13-T2 | Completed | Webhook/log sinks, retry commands, and scheduling |
 | 74 | E13-T3 | Completed | Operator/worker skills and operational walkthrough |
 | 75 | E13-T4 | Completed | Documentation truth, release proof, and v0.1.5 |
-| 76 | E14-T1 | Planned | Explicit setup route selection and propagation |
+| 76 | E14-T1 | Completed | Explicit setup route selection and propagation |
 | 77 | E14-T2 | Planned | Disabled baseline-only reconciliation and persistence |
 | 78 | E14-T3 | Planned | Rerunnable setup, five-state summary, and G10 |
 | 79 | E15-T1 | Planned | Serialization configuration, revisions, and migration |
@@ -3423,14 +3423,14 @@ verification before any publication.
 
 # E14: Guided Setup and Disabled Baseline
 
-**Epic status:** Planned
+**Epic status:** In Progress
 **Purpose:** Make the disabled Wiki setup path route-correct, safely rerunnable, and explicit about every production-gate state.
 **Gate:** G10
 **Detailed SOT:** [v0.1.6 operational follow-up](../specs/v0.1.6-operational-follow-up.md)
 
 ## E14-T1: Explicit Setup Route Selection and Propagation
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -3461,7 +3461,21 @@ E13-T4 Completed; D-027 and ADR-0020 Accepted.
 
 ### Evidence
 
-Planned; none.
+Completed 2026-08-31. `setup wiki` resolves one route explicitly before any
+route-scoped step runs (CLI-016): `--route <id>` (and `--route=<id>`) names a
+declared route, a single-route configuration auto-selects its only route, and
+multiple routes require the flag or an explicit interactive numbered choice
+whose empty or unreadable answer refuses the walkthrough at exit 2 — the
+sorted-first fallback is gone. The nested `watchman status` step now carries
+the selected route beside the preflight, reconciliation, install/test
+guidance, and the final enable command (`internal/cli/setup.go`), the setup
+help documents the flag, selection semantics, and exit codes (CLI-009), and
+`internal/cli/e14t1_test.go` proves AC-1001/AC-1002 with negative assertions
+against the unselected route plus both `--route` spellings. Review round 1
+remediated three low findings; round 2 passed CI with complete coverage and
+deferred two low findings (an architecture-doc contradiction and the valueless
+trailing `--route` leniency) to epic hardening through the promoted
+hardening-deferral evidence package.
 
 ## E14-T2: Disabled Baseline-Only Reconciliation and Persistence
 

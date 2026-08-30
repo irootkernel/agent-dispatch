@@ -507,13 +507,18 @@ routes:
 	if code := Run([]string{"notifications", "drain", "--config", cfgPath}, &out, &errb); code != 0 {
 		t.Fatalf("real notifications drain: %s", errb.String())
 	}
-	if len(f.deliveredPayloads()) != 2 {
-		t.Fatalf("the real walkthrough must notify both completions: %d", len(f.deliveredPayloads()))
-	}
+	// The real-leg assertion is by content, never exact total: both
+	// lanes' work_completed payloads must arrive, and the drain's drift
+	// evaluation may legitimately add drift findings on the same sink
+	// (the CHANGELOG 1.1.18 remediation this matches).
+	completions := 0
 	for _, payload := range f.deliveredPayloads() {
-		if !strings.Contains(payload, `"event":"work_completed"`) {
-			t.Fatalf("each real notification must carry the completion: %s", payload)
+		if strings.Contains(payload, `"event":"work_completed"`) {
+			completions++
 		}
+	}
+	if completions != 2 {
+		t.Fatalf("the real walkthrough must notify both completions by content: %d of %d payloads", completions, len(f.deliveredPayloads()))
 	}
 	// Managed-trigger removal leaves no binding behind.
 	out.Reset()

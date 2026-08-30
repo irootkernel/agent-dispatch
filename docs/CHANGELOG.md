@@ -27,6 +27,19 @@ as one audit batch:
   vault and config-path scans carry the assertion inside the
   platformpaths-clean test boundary).
 
+E13 cold validation round 1 (the fresh whole-epic review of the final
+tree) remediates its confirmed code findings:
+
+- the drain envelope reports the store's post-pass pending truth:
+  `pending` no longer reads false while a bounded pass leaves a backlog,
+  and `pending_remaining` counts it — the pass bound never hides work,
+  and the cli-spec drain contract states both fields plus the
+  drift-enqueue storage posture;
+- a drift-enqueue storage failure aborts the drain as the storage class
+  (exit 20) instead of riding the success envelope as data with exit 0,
+  matching the storage classification of every other notifications
+  command.
+
 ## 1.1.17 - 2026-08-30
 
 E13-T4: documentation truth, release proof, and the local v0.1.5

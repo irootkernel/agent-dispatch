@@ -2,10 +2,12 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +18,8 @@ import (
 	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/hermeswebhook"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 )
 
 // E13-T2 CLI coverage: the notifications test, list, retry, and drain
@@ -599,5 +603,68 @@ func TestE13T2ProbeIdempotencyAndDialRefusal(t *testing.T) {
 	}
 	if strings.Contains(out.String(), closedURL) || strings.Contains(errb.String(), closedURL) {
 		t.Fatal("the endpoint URL must not persist into ordinary output")
+	}
+}
+
+// TestE13T2DrainReportsPendingBeyondThePassBound pins the round-1
+// remediation of the epic validation: the envelope's pending truth is
+// the store's post-pass pending set, never just this pass's outcomes —
+// a pass bound must not hide a backlog.
+func TestE13T2DrainReportsPendingBeyondThePassBound(t *testing.T) {
+	configPath, vault := e13t1NotificationsFixture(t)
+	e13t2CompleteWork(t, configPath, vault, "main", "bound-a")
+	e13t2CompleteWork(t, configPath, vault, "review", "bound-b")
+	if n := e13t2NotificationCount(t, configPath, "state = 'pending'"); n != 2 {
+		t.Fatalf("two pending work intents: %d", n)
+	}
+	// The drift evaluation first enqueues the missing-binding drift
+	// intent, so the bounded pass delivers one of three pending
+	// notifications and must report the two that remain.
+	var out, errb bytes.Buffer
+	if code := Run([]string{"notifications", "drain", "--limit", "1", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("drain: %s", errb.String())
+	}
+	res := decodeEnvelope(t, &out)
+	drain, _ := res["drain"].(map[string]any)
+	if drain["delivered"] != float64(1) {
+		t.Fatalf("the bounded pass must deliver exactly one: %v", res["drain"])
+	}
+	if res["pending"] != true || res["pending_remaining"] != float64(2) {
+		t.Fatalf("the envelope must report the beyond-bound backlog: %v", res)
+	}
+	// An unbounded pass drains the remainder and reports a clean set.
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"notifications", "drain", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("second drain: %s", errb.String())
+	}
+	res = decodeEnvelope(t, &out)
+	if res["pending"] != false || res["pending_remaining"] != float64(0) {
+		t.Fatalf("the drained set must report no pending remainder: %v", res)
+	}
+}
+
+// TestE13T2DrainAbortsWhenDriftEnqueueFails pins the round-1
+// remediation of the epic validation: a drift-enqueue storage failure
+// is the storage class (exit 20), never envelope data with exit 0.
+func TestE13T2DrainAbortsWhenDriftEnqueueFails(t *testing.T) {
+	configPath, _ := e13t1NotificationsFixture(t)
+	e4t3RegisterRoute(t, configPath)
+	e12t2Enable(t, configPath)
+	original := driftEnqueue
+	driftEnqueue = func(context.Context, *sqlite.Store, string, records.NotificationEventKind, string, map[string]string, string) (int, error) {
+		return 0, errors.New("drift enqueue storage failure")
+	}
+	t.Cleanup(func() { driftEnqueue = original })
+	var out, errb bytes.Buffer
+	code := Run([]string{"notifications", "drain", "--config", configPath}, &out, &errb)
+	if code != 20 {
+		t.Fatalf("a drift-enqueue storage failure must exit 20, got %d (%s)", code, errb.String())
+	}
+	if !strings.Contains(errb.String(), "sqlite_query_failed") {
+		t.Fatalf("the failure must carry the storage error code: %s", errb.String())
+	}
+	if strings.Contains(out.String(), "drift enqueue storage failure") {
+		t.Fatal("a storage failure must not ride the success envelope as data")
 	}
 }

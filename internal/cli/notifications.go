@@ -345,7 +345,9 @@ func (s notificationDeliveryStore) RecordNotificationAttempt(ctx context.Context
 // once per drift appearance (OPS-013) — and then performs one bounded
 // attempt per pending notification. Delivery outcomes are reported,
 // never exit-coded: an ambiguous or retryable remainder is visible work
-// for the next pass (NTF-007).
+// for the next pass (NTF-007). The pass bound never hides a backlog:
+// `pending` and `pending_remaining` report the store's post-pass
+// pending truth, not just this pass's outcomes.
 func runNotificationsDrain(command string, args []string, stdout, stderr io.Writer) int {
 	flags, code := parseDispatchesFlags(command, args, stderr, map[string]bool{"--config": true, "--limit": true})
 	if code != 0 {
@@ -375,7 +377,10 @@ func runNotificationsDrain(command string, args []string, stdout, stderr io.Writ
 		delivery.MaxPerRun = n
 	}
 	ctx := requestCtx()
-	drift := evaluateDriftNotifications(ctx, cfg, closer, dispatch.Timestamp(time.Now()))
+	drift, driftErr := evaluateDriftNotifications(ctx, cfg, closer, dispatch.Timestamp(time.Now()))
+	if driftErr != nil {
+		return planErr(stderr, command, "sqlite_query_failed", "storage", driftErr.Error(), 20)
+	}
 	report, err := delivery.DeliverPending(ctx)
 	if err != nil {
 		var construction *appnotifications.SinkConstructionError
@@ -384,12 +389,24 @@ func runNotificationsDrain(command string, args []string, stdout, stderr io.Writ
 		}
 		return planErr(stderr, command, "sqlite_query_failed", "storage", err.Error(), 20)
 	}
+	byState, err := closer.CountNotificationsByState(ctx)
+	if err != nil {
+		return planErr(stderr, command, "sqlite_query_failed", "storage", err.Error(), 20)
+	}
+	pendingRemaining := int(byState[string(records.NotificationPending)])
 	return writeEnvelope(stdout, command, map[string]any{
-		"drain":   report,
-		"drift":   drift,
-		"pending": report.Pending(),
-		"note":    "one bounded attempt per pending notification; ambiguous and retryable outcomes stay pending under their stable idempotency identity",
+		"drain":             report,
+		"drift":             drift,
+		"pending":           report.Pending() || pendingRemaining > 0,
+		"pending_remaining": pendingRemaining,
+		"note":              "one bounded attempt per pending notification; ambiguous and retryable outcomes stay pending under their stable idempotency identity",
 	})
+}
+
+// driftEnqueue binds the drift evaluation to the store's enqueue
+// surface; tests swap it to prove the drain's storage-failure posture.
+var driftEnqueue = func(ctx context.Context, store *sqlite.Store, routeID string, event records.NotificationEventKind, transition string, source map[string]string, now string) (int, error) {
+	return store.EnqueueRouteNotification(ctx, routeID, event, transition, "", source, now)
 }
 
 // evaluateDriftNotifications runs the OPS-013 drift evaluation for the
@@ -400,7 +417,10 @@ func runNotificationsDrain(command string, args []string, stdout, stderr io.Writ
 // drift never re-notifies and a changed or newly appearing drift does
 // (AC-901). The reconciliation class is excluded: its appearances
 // already notify through the pending-reconcile transitions of E13-T1.
-func evaluateDriftNotifications(ctx context.Context, cfg *config.Config, store *sqlite.Store, now string) []map[string]any {
+// A drift-enqueue storage failure aborts the drain as the storage
+// class — it is a durable-store condition, never a delivery outcome
+// that belongs in the envelope as data.
+func evaluateDriftNotifications(ctx context.Context, cfg *config.Config, store *sqlite.Store, now string) ([]map[string]any, error) {
 	out := []map[string]any{}
 	for _, routeID := range cfg.SortedRouteIDs() {
 		route := cfg.Routes[routeID]
@@ -420,12 +440,10 @@ func evaluateDriftNotifications(ctx context.Context, cfg *config.Config, store *
 				continue
 			}
 			transition := "drift:" + finding.Class + ":" + driftOccurrence(routeID, finding)
-			created, err := store.EnqueueRouteNotification(ctx, routeID, event,
-				transition, "",
+			created, err := driftEnqueue(ctx, store, routeID, event, transition,
 				map[string]string{"class": finding.Class, "origin": "drift_evaluation"}, now)
 			if err != nil {
-				enqueued[finding.Class] = map[string]any{"error": err.Error()}
-				continue
+				return nil, err
 			}
 			if created == 0 {
 				// Zero created is either the policy filter or a
@@ -433,7 +451,10 @@ func evaluateDriftNotifications(ctx context.Context, cfg *config.Config, store *
 				// distinguished through the store surface, never raw SQL
 				// from the CLI layer.
 				existing, qerr := store.CountNotificationsByTransition(ctx, routeID, transition)
-				if qerr == nil && existing > 0 {
+				if qerr != nil {
+					return nil, qerr
+				}
+				if existing > 0 {
 					enqueued[finding.Class] = map[string]any{"already_notified": true, "detail": finding.Detail}
 				} else {
 					enqueued[finding.Class] = map[string]any{"filtered": true, "detail": finding.Detail}
@@ -444,7 +465,7 @@ func evaluateDriftNotifications(ctx context.Context, cfg *config.Config, store *
 		}
 		out = append(out, entry)
 	}
-	return out
+	return out, nil
 }
 
 // driftOccurrence digests one drift finding's STABLE identity — the

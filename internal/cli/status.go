@@ -127,8 +127,9 @@ func runStatus(args []string, stdout, stderr io.Writer) int {
 		"targets":           targetCapabilitySummary(cfg),
 		"notifications":     notificationCounts,
 		// OPS-013: the five drift classes — capability, profile, skill,
-		// watchman, reconciliation — surfaced per route; each is also an
-		// eligible notification target once E13 delivers sinks.
+		// watchman, reconciliation — surfaced per route; four of them
+		// notify through the drain's drift evaluation and reconciliation
+		// through the pending-reconcile transitions of E13-T1.
 		"drift": routeDriftSummary(ctx, cfg, closer),
 	}, warnings)
 }

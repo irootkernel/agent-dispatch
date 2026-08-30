@@ -391,7 +391,11 @@ skill findings enqueue `integration_drift`, each exactly once per drift
 appearance through the finding-digest occurrence; the reconciliation
 class stays with the pending-reconcile transitions) and then performs
 one bounded attempt per pending notification, oldest first, bounded by
-`--limit`. Delivery outcomes are data, never exit codes: an ambiguous or
+`--limit`; a drift-enqueue storage failure aborts the command as the
+storage class (exit 20). The envelope's `pending` and
+`pending_remaining` report the store's post-pass pending truth — the
+pass bound never hides a backlog. Delivery outcomes are data, never
+exit codes: an ambiguous or
 retryable outcome stays pending for the next pass, and no delivery
 outcome ever mutates dispatch, receipt, or work state (NTF-005); the log
 sink emits its structured payload lines on stderr so stdout keeps the

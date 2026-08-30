@@ -140,8 +140,10 @@ type Conditions struct {
 }
 
 // Notifications is the per-route notification policy (NTF-001): disabled
-// when no sinks are configured. Delivery and durability arrive with
-// E13; v0.1.5 validates and revisions the declared policy only.
+// when no sinks are configured. The durable outbox (ADR-0019) enqueues
+// inside the owning transition and delivers through the configured
+// sinks after commit; the policy revision digests the effective event
+// set and sink identities (NTF-003).
 type Notifications struct {
 	Events []string           `yaml:"events" json:"events"`
 	Sinks  []NotificationSink `yaml:"sinks"  json:"sinks"`

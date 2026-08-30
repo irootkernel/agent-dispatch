@@ -29,6 +29,6 @@ owns task identity, ordering, dependencies, and current status.
 
 The v0.1.5 feature baseline is executable proof: the owning E10-E13 tasks
 delivered the schemas, examples, packaged skills, code, and the local
-v0.1.5 release candidate, with the G6-G9 gate evidence recorded in
-[`../VALIDATION.md`](../VALIDATION.md). v0.1.4 remains the latest pushed
-release until the operator publishes the candidate.
+v0.1.5 release, with the G6-G9 gate evidence recorded in
+[`../VALIDATION.md`](../VALIDATION.md). v0.1.5 is the published latest
+release (2026-08-30).

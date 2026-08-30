@@ -104,3 +104,8 @@ G6 through G9 executable evidence E13-T4 closed them with:
 - [x] Two byte-identical darwin/arm64 builds and local v0.1.5 tag; no push or
       production activation (the E13-T4 release proof; the tag names the
       final tree).
+- [x] Published 2026-08-30 after the cold validation: the candidate
+      re-cut from the post-validation final tree (two byte-identical
+      builds), `main` fast-forwarded, the `v0.1.5` tag pushed to name the
+      release commit, and the hosted Release created with the artifact
+      and SHA256SUMS. No production activation.

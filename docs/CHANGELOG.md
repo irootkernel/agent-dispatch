@@ -53,6 +53,12 @@ bullets and package statistics agree with the closed 75/75 roadmap
 (eighteen schemas, eighty-four manifest markdown files, twenty-four
 examples).
 
+v0.1.5 is published (2026-08-30): the cold validation closed on the
+final tree, the candidate was re-cut from it as two byte-identical
+builds, `main` and the `v0.1.5` tag were pushed, and the hosted Release
+carries the artifact with its checksums. No production activation is
+part of the release.
+
 ## 1.1.17 - 2026-08-30
 
 E13-T4: documentation truth, release proof, and the local v0.1.5

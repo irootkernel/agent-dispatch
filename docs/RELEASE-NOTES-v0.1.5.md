@@ -1,12 +1,14 @@
 # Agent Dispatch v0.1.5
 
-Released 2026-08-30 from the tagged local tree. v0.1.5 is the release
-candidate superseding v0.1.4 and ships the approved v0.1.5 plan (D-025):
-source and reconciliation integrity, Hermes capability-driven preflight
-and operator setup, the multi-destination lifecycle, durable
-notifications, and the release proof. No push, hosted release, or
-production activation is part of this candidate: the handoff is the
-local tag with `docs/VALIDATION.md` as its evidence.
+Published 2026-08-30. v0.1.5 supersedes v0.1.4 as the latest release
+and ships the approved v0.1.5 plan (D-025): source and reconciliation
+integrity, Hermes capability-driven preflight and operator setup, the
+multi-destination lifecycle, durable notifications, and the release
+proof. The candidate was cut from the post-validation final tree, the
+`v0.1.5` tag names that tree on the published `main`, and the hosted
+Release carries the artifact and its checksums with
+`docs/VALIDATION.md` as the evidence. No production activation is part
+of this release.
 
 ## Source and Reconciliation Integrity (E10)
 

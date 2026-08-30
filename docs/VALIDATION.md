@@ -1,7 +1,7 @@
 # SOT Package Validation
 
 > **Validated:** 2026-08-30 (E13 delivers gate G9 and the v0.1.5 release proof; the roadmap is complete at 75/75)
-> **Package target:** Agent Dispatch SOT 1.1.18 / implementation v0.1.5 (local release candidate); v0.1.4 is the latest pushed release
+> **Package target:** Agent Dispatch SOT 1.1.18 / implementation v0.1.5 (published 2026-08-30)
 
 ## Completed Checks
 

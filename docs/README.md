@@ -2,7 +2,7 @@
 
 > **Documentation profile:** Single delivery scope with an adopted legacy roadmap identity contract
 > **SOT version:** 1.1.18
-> **Implementation target:** Agent Dispatch v0.1.5 (local release candidate); v0.1.4 remains the latest pushed release
+> **Implementation target:** Agent Dispatch v0.1.5 (published 2026-08-30)
 > **Document status:** Approved planned baseline
 > **Language:** English
 
@@ -82,8 +82,9 @@ rows live in [`VALIDATION.md`](VALIDATION.md) with their E10-E12 suites, and
 G9 (notifications and the release proof) closed with E13 on 2026-08-30 —
 the notification outbox, sinks, retry and drain surface, skills, and the
 two byte-identical `make release VERSION=v0.1.5` builds recorded there.
-v0.1.5 is the local release candidate; v0.1.4 remains the latest pushed
-release until the operator publishes the candidate.
+v0.1.5 is the published latest release (2026-08-30): the candidate was
+re-cut from the post-validation final tree and published with its tag
+and hosted Release.
 
 ## Repository-Native Checks
 

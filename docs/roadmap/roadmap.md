@@ -10,9 +10,9 @@
 
 | Field | Value |
 |---|---|
-| Shipped release | v0.1.4 (v0.1.5 is the local release candidate, not pushed) |
+| Shipped release | v0.1.5 (published 2026-08-30) |
 | Planned SOT baseline | 1.1.0 ([D-025](../specs/decision-log.md)) |
-| Release target | v0.1.5 (local candidate complete) |
+| Release target | v0.1.5 (published 2026-08-30) |
 | Current epic | E13 Completed (G9 evidenced); roadmap complete |
 | Current active task | None |
 | Next task | None (75/75) |

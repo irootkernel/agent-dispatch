@@ -2,8 +2,7 @@
 
 > **Status:** Implemented; E10-E13 delivered this loop and gate G9 closed on
 > 2026-08-30.
-> **Shipped baseline:** v0.1.5 is the local release candidate (v0.1.4 remains
-> the latest pushed release until the candidate is published).
+> **Shipped baseline:** v0.1.5 is the published latest release (2026-08-30).
 
 ## 1. Outcome and Boundaries
 

@@ -1,0 +1,71 @@
+{
+  "schema": "aquarium.hardening-deferral-findings/v1",
+  "work_unit": {
+    "kind": "task",
+    "id": "E15-T1"
+  },
+  "target": {
+    "git_head": "33f615c99f9a55826f9c7791768e112470729355",
+    "capture_kind": "dirty",
+    "content_sha256": "sha256:4634904bdf9821f9a57b4e096150cea470d873391e0c5728e7b67534575ce6cf"
+  },
+  "review": {
+    "coverage_status": "complete",
+    "ci_decision": "pass",
+    "publication_status": "committed",
+    "structured_extraction_status": "mixed"
+  },
+  "findings": [
+    {
+      "id": "F001",
+      "severity": "medium",
+      "disposition": "deferred-for-hardening",
+      "affected_paths": [
+        "docs/contracts/configuration-spec.md"
+      ]
+    },
+    {
+      "id": "F002",
+      "severity": "medium",
+      "disposition": "deferred-for-hardening",
+      "affected_paths": [
+        "internal/cli/e11t3.go",
+        "internal/cli/e15t1_test.go"
+      ]
+    },
+    {
+      "id": "F003",
+      "severity": "medium",
+      "disposition": "deferred-for-hardening",
+      "affected_paths": [
+        "internal/cli/quarantine.go",
+        "internal/cli/state.go"
+      ]
+    },
+    {
+      "id": "F004",
+      "severity": "low",
+      "disposition": "deferred-for-hardening",
+      "affected_paths": [
+        "docs/architecture/domain-model.md",
+        "docs/specs/terminology.md"
+      ]
+    },
+    {
+      "id": "F005",
+      "severity": "low",
+      "disposition": "deferred-for-hardening",
+      "affected_paths": [
+        "internal/adapters/sqlite/e15t1_test.go"
+      ]
+    },
+    {
+      "id": "F006",
+      "severity": "low",
+      "disposition": "deferred-for-hardening",
+      "affected_paths": [
+        "internal/cli/quarantine.go"
+      ]
+    }
+  ]
+}

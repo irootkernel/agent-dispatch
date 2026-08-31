@@ -91,6 +91,25 @@ func notificationPolicyResolver(cfg *config.Config) func(routeID string) *ports.
 	}
 }
 
+// materializeSerializationGroups reconciles the durable group topology
+// with current configuration (E15-T1, CON-011): every configured
+// destination's effective group becomes the lane's member row and each
+// group's slot state is recomputed from the live lanes. It returns the
+// groups currently reporting a preserved conflict and the store failure
+// when the topology write itself failed — the caller surfaces the
+// degraded signal (round-1 F005: a silent topology failure must not
+// read as a clean reconciliation).
+func materializeSerializationGroups(store *sqlite.Store, cfg *config.Config) ([]sqlite.SerializationGroupRow, error) {
+	memberships := config.SerializationGroupMemberships(cfg)
+	members := make([]sqlite.SerializationGroupMemberInput, 0, len(memberships))
+	for _, m := range memberships {
+		members = append(members, sqlite.SerializationGroupMemberInput{
+			RouteID: m.RouteID, DestinationID: m.DestinationID, GroupID: m.Group,
+		})
+	}
+	return store.MaterializeSerializationGroups(requestCtx(), members, "reconcile", time.Now().UTC().Format(time.RFC3339Nano))
+}
+
 // openUnmigratedStore opens the SQLite store without applying
 // migrations — the doctor examination path, where the schema version
 // must be observed as it stands (OPS-005) rather than advanced.
@@ -229,7 +248,7 @@ func certifiedLanes(cfg *config.Config, routeID string) ([]certifiedLaneInfo, er
 	}
 	out := make([]certifiedLaneInfo, 0, len(dests))
 	for _, dest := range dests {
-		projection, err := config.DestinationProjectionJSON(cfg, dest)
+		projection, err := config.DestinationProjectionJSON(cfg, route, dest)
 		if err != nil {
 			return nil, fmt.Errorf("destination %q projection: %v", dest.ID, err)
 		}

@@ -72,15 +72,16 @@ type normalizedAuth struct {
 }
 
 type normalizedDestination struct {
-	ID             string         `json:"id"`
-	Target         string         `json:"target"`
-	Profile        string         `json:"profile"`
-	Skills         []string       `json:"skills"`
-	Workstream     string         `json:"workstream"`
-	Workspace      string         `json:"workspace,omitempty"`
-	MutexKey       string         `json:"mutex_key,omitempty"`
-	ExecutionHints ExecutionHints `json:"execution_hints"`
-	Conditions     *Conditions    `json:"conditions,omitempty"`
+	ID                 string         `json:"id"`
+	Target             string         `json:"target"`
+	Profile            string         `json:"profile"`
+	Skills             []string       `json:"skills"`
+	Workstream         string         `json:"workstream"`
+	Workspace          string         `json:"workspace,omitempty"`
+	SerializationGroup string         `json:"serialization_group,omitempty"`
+	MutexKey           string         `json:"mutex_key,omitempty"`
+	ExecutionHints     ExecutionHints `json:"execution_hints"`
+	Conditions         *Conditions    `json:"conditions,omitempty"`
 }
 
 type normalizedNotifications struct {
@@ -96,19 +97,20 @@ type normalizedSinkRef struct {
 }
 
 type normalizedRoute struct {
-	Enabled          bool                     `json:"enabled"`
-	Source           Source                   `json:"source"`
-	Batching         Batching                 `json:"batching"`
-	Policy           Policy                   `json:"policy"`
-	FanoutMode       string                   `json:"fanout_mode"`
-	Destinations     []normalizedDestination  `json:"destinations"`
-	Notifications    *normalizedNotifications `json:"notifications,omitempty"`
-	SubmissionRetry  Retry                    `json:"submission_retry"`
-	LatestState      bool                     `json:"latest_state"`
-	FailureBudget    int                      `json:"failure_budget"`
-	ActiveStaleAfter string                   `json:"active_stale_after"`
-	Reconciliation   Reconciliation           `json:"reconciliation"`
-	Retention        *Retention               `json:"retention,omitempty"`
+	Enabled                    bool                     `json:"enabled"`
+	Source                     Source                   `json:"source"`
+	Batching                   Batching                 `json:"batching"`
+	Policy                     Policy                   `json:"policy"`
+	FanoutMode                 string                   `json:"fanout_mode"`
+	Destinations               []normalizedDestination  `json:"destinations"`
+	Notifications              *normalizedNotifications `json:"notifications,omitempty"`
+	SubmissionRetry            Retry                    `json:"submission_retry"`
+	LatestState                bool                     `json:"latest_state"`
+	FailureBudget              int                      `json:"failure_budget"`
+	ActiveStaleAfter           string                   `json:"active_stale_after"`
+	Reconciliation             Reconciliation           `json:"reconciliation"`
+	Retention                  *Retention               `json:"retention,omitempty"`
+	AllowCrossGroupConcurrency bool                     `json:"allow_cross_group_concurrency,omitempty"`
 }
 
 func normalizedResources(in map[string]Resource) map[string]Resource {
@@ -206,6 +208,7 @@ func normalizedRoutes(in map[string]Route) map[string]normalizedRoute {
 			SubmissionRetry: v.SubmissionRetry, LatestState: v.LatestState,
 			FailureBudget: v.FailureBudget, ActiveStaleAfter: v.ActiveStaleAfter,
 			Reconciliation: v.Reconciliation, Retention: v.Retention,
+			AllowCrossGroupConcurrency: v.AllowCrossGroupConcurrency,
 		}
 	}
 	return out

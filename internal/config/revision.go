@@ -53,7 +53,7 @@ func RouteRevision(cfg *Config, routeID string) (string, bool) {
 	}
 	destinations := make([]map[string]any, 0, len(route.Destinations))
 	for _, dest := range route.SortedDestinations() {
-		destinations = append(destinations, destinationProjection(cfg, dest))
+		destinations = append(destinations, destinationProjection(cfg, route, dest))
 	}
 	projection := map[string]any{
 		"source": map[string]any{
@@ -87,6 +87,11 @@ func RouteRevision(cfg *Config, routeID string) (string, bool) {
 			"failure_budget":     route.FailureBudget,
 			"active_stale_after": route.ActiveStaleAfter,
 		},
+		// The cross-group acknowledgement is behavior-affecting
+		// serialization policy (CON-014, E15-T1): flipping it permits
+		// cross-group concurrency over the governed resource and must
+		// pause the acknowledged route.
+		"allow_cross_group_concurrency": route.AllowCrossGroupConcurrency,
 		// The referenced resource's shape is behavior-affecting (E8-T3,
 		// H-2/POL-007): repointing the vault root, switching the file scope
 		// or git mode, or changing the global limits must change the
@@ -114,19 +119,23 @@ func RouteRevision(cfg *Config, routeID string) (string, bool) {
 
 // destinationProjection renders one destination's behavior-affecting
 // shape: its target binding, profile, sorted skills, workstream,
-// workspace, mutex, execution hints, and sorted selection conditions
-// (§14: destination revision includes target, profile, skills,
-// workstream, workspace, mutex, hints, and conditions).
-func destinationProjection(cfg *Config, dest Destination) map[string]any {
+// workspace, EFFECTIVE serialization group, execution hints, and sorted
+// selection conditions (§14, CON-014). The projection carries the
+// resolved group — explicit field, deprecated alias, and the
+// resource-derived default that equals an explicit default-form value
+// all hash identically, because the effective identity is the
+// behavior — so any serialization edit changes the destination and
+// route revisions and pauses production acknowledgement.
+func destinationProjection(cfg *Config, route Route, dest Destination) map[string]any {
 	out := map[string]any{
-		"id":              dest.ID,
-		"target":          dest.Target,
-		"profile":         dest.Profile,
-		"skills":          sortedCopy(dest.Skills),
-		"workstream":      dest.Workstream,
-		"workspace":       dest.Workspace,
-		"mutex_key":       dest.MutexKey,
-		"execution_hints": dest.ExecutionHints,
+		"id":                  dest.ID,
+		"target":              dest.Target,
+		"profile":             dest.Profile,
+		"skills":              sortedCopy(dest.Skills),
+		"workstream":          dest.Workstream,
+		"workspace":           dest.Workspace,
+		"serialization_group": EffectiveSerializationGroup(route.Source.Resource, dest),
+		"execution_hints":     dest.ExecutionHints,
 	}
 	if dest.Conditions != nil {
 		out["conditions"] = map[string]any{
@@ -255,7 +264,7 @@ func notificationsProjection(n *Notifications) map[string]any {
 // (records.RevisionOfProjection, E12 epic whole-review round 1) — the same
 // function the store boundary verifies against.
 func DestinationRevision(cfg *Config, route Route, dest Destination) string {
-	enc, err := json.Marshal(destinationProjection(cfg, dest))
+	enc, err := json.Marshal(destinationProjection(cfg, route, dest))
 	if err != nil {
 		return ""
 	}
@@ -267,9 +276,11 @@ func DestinationRevision(cfg *Config, route Route, dest Destination) string {
 // destination-revision record persists these bytes beside the revision,
 // so an inspection of any stored child can recover the canonical behavior
 // projection its revision named. Map keys marshal sorted, so the bytes are
-// stable across runs and platforms.
-func DestinationProjectionJSON(cfg *Config, dest Destination) (string, error) {
-	enc, err := json.Marshal(destinationProjection(cfg, dest))
+// stable across runs and platforms. Since E15-T1 the projection includes
+// the destination's EFFECTIVE serialization group, whose resolution
+// needs the route's resource — the caller supplies the whole route.
+func DestinationProjectionJSON(cfg *Config, route Route, dest Destination) (string, error) {
+	enc, err := json.Marshal(destinationProjection(cfg, route, dest))
 	if err != nil {
 		return "", err
 	}

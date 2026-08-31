@@ -55,13 +55,13 @@ func Example(instanceID, resourceRoot string) *Config {
 				FanoutMode: "all",
 				Destinations: []Destination{
 					{
-						ID:             "indexing",
-						Target:         "hermes-main",
-						Profile:        "wiki-maintainer",
-						Skills:         []string{"llm-wiki"},
-						Workstream:     "indexing",
-						MutexKey:       "wiki-publish",
-						ExecutionHints: ExecutionHints{MaxRuntime: "30m", MaxAttempts: 2},
+						ID:                 "indexing",
+						Target:             "hermes-main",
+						Profile:            "wiki-maintainer",
+						Skills:             []string{"llm-wiki"},
+						Workstream:         "indexing",
+						SerializationGroup: "wiki-publish",
+						ExecutionHints:     ExecutionHints{MaxRuntime: "30m", MaxAttempts: 2},
 					},
 				},
 				Notifications: &Notifications{

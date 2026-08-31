@@ -7,6 +7,7 @@ import (
 	"io"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
@@ -233,6 +234,26 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 	policyRev := ""
 	if route, ok := artifacts.cfg.Routes[routeID]; ok {
 		policyRev = config.PolicyRevision(route)
+	}
+	// Topology reconciliation (E15-T1, ADR-0021): the first — and every
+	// later — reconciliation materializes the serialization-group
+	// membership from current configuration and recomputes each group's
+	// slot state. A preserved active collision reports
+	// serialization_conflict with no holder and blocks new group work;
+	// the command surfaces the conflict instead of failing the snapshot
+	// paths that must remain available, and a topology write failure is
+	// reported rather than silently skipped (round-1 F005).
+	serializationConflicts, serializationErr := materializeSerializationGroups(closer, artifacts.cfg)
+	if serializationErr != nil {
+		fmt.Fprintf(stderr, "warning: the serialization-group topology could not be materialized: %v; the durable group state is not current\n", serializationErr)
+	}
+	for _, conflict := range serializationConflicts {
+		var collisions []string
+		for _, c := range conflict.Collisions {
+			collisions = append(collisions, fmt.Sprintf("%s/%s (%s)", c.RouteID, c.DestinationID, c.DispatchID))
+		}
+		fmt.Fprintf(stderr, "warning: serialization group %q reports a preserved conflict between %s; new group work is blocked until the allowed existing-work exits leave at most one active child\n",
+			conflict.GroupID, strings.Join(collisions, ", "))
 	}
 	// The disabled-route baseline operation (E14-T2, ADR-0020, CLI-017):
 	// one observation-fenced snapshot-and-baseline transaction with no

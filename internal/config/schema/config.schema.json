@@ -409,10 +409,19 @@
           "pattern": "^(scratch|worktree|worktree:.+|dir:.+)$",
           "description": "Hermes workspace form; defaults to dir:<resource root> when omitted."
         },
+        "serialization_group": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$",
+          "description": "Explicit Agent Dispatch serialization group (CON-011): at most one active child per effective group in one state database. Omitted, the deprecated mutex_key alias, or the resource-derived default resource:<resource_id> resolve in that order; an explicit default-form value intentionally joins the resource-derived group. New configuration never emits mutex_key."
+        },
         "mutex_key": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 255
+          "maxLength": 255,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$",
+          "description": "Deprecated compatibility alias of serialization_group: it may coexist with the explicit field only when the values are identical (a deprecation warning); differing values fail validation."
         },
         "execution_hints": {
           "type": "object",
@@ -704,6 +713,10 @@
         },
         "active_stale_after": {
           "$ref": "#/$defs/duration"
+        },
+        "allow_cross_group_concurrency": {
+          "type": "boolean",
+          "description": "Explicit acknowledgement that destinations governing this route's resource run under different serialization groups (CON-013). Required on every involved route before cross-group concurrency is permitted; the acknowledgement joins the route revision, so changing it pauses production acknowledgement."
         },
         "reconciliation": {
           "type": "object",

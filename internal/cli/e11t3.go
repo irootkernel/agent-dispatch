@@ -101,6 +101,65 @@ func runRoutePreflight(command string, args []string, stdout, stderr io.Writer) 
 		checks = append(checks, map[string]any{"check": check, "state": "pass", "detail": detail})
 	}
 
+	// Serialization topology (E15-T1, CON-013): destinations governing the
+	// same resource under different effective groups fail preflight unless
+	// every involved route acknowledges the concurrency, and a persisted
+	// serialization_conflict blocks before any task creation. Both gates
+	// run before the per-destination probes: the topology is a
+	// configuration defect no probe outcome can repair.
+	if conflicts := config.CrossGroupConflicts(cfg); len(conflicts) > 0 {
+		var details []string
+		for _, conflict := range conflicts {
+			details = append(details, conflict.Describe())
+		}
+		block("serialization", strings.Join(details, "; "),
+			"set allow_cross_group_concurrency: true on every involved route (an explicit acknowledgement) or align the destinations on one serialization group", nil)
+	} else {
+		var groups []string
+		for _, m := range config.SerializationGroupMemberships(cfg) {
+			if m.ResourceID == route.Source.Resource {
+				groups = append(groups, fmt.Sprintf("%s=%s", m.DestinationID, m.Group))
+			}
+		}
+		pass("serialization", fmt.Sprintf("effective serialization groups over resource %q: %s", route.Source.Resource, strings.Join(groups, ", ")))
+	}
+	// The persisted-conflict gate fails closed on an unreadable group
+	// state (round-1 F004): a warn names the degraded read instead of
+	// silently reading as "no conflict", the same posture as the
+	// Watchman binding check below.
+	if store, serr := openUnmigratedStore(resolveConfigPath(flags.val("--config"))); serr == nil {
+		groupRows, gerr := store.LoadSerializationGroups(requestCtx())
+		if gerr != nil {
+			checks = append(checks, map[string]any{
+				"check": "serialization", "state": "warn",
+				"detail":      fmt.Sprintf("the persisted serialization-group state could not be read: %v; the conflict gate is re-checked at dispatch time", gerr),
+				"remediation": "resolve the state directory (a locked or unreadable database) and re-run the preflight",
+			})
+		} else {
+			var conflictGroups []string
+			member := map[string]bool{}
+			for _, m := range config.SerializationGroupMemberships(cfg) {
+				if m.RouteID == routeID {
+					member[m.Group] = true
+				}
+			}
+			for _, row := range groupRows {
+				if row.State == sqlite.GroupStateConflict && member[row.GroupID] {
+					var collisions []string
+					for _, c := range row.Collisions {
+						collisions = append(collisions, fmt.Sprintf("%s/%s (%s)", c.RouteID, c.DestinationID, c.DispatchID))
+					}
+					conflictGroups = append(conflictGroups, fmt.Sprintf("group %q preserves an active collision between %s; no holder was selected", row.GroupID, strings.Join(collisions, ", ")))
+				}
+			}
+			if len(conflictGroups) > 0 {
+				block("serialization", strings.Join(conflictGroups, "; "),
+					"let the preserved active children reach a terminal outcome through the allowed work exits (work complete, work fail); the group resolves to its sole survivor or oldest waiting lane and new work unblocks", nil)
+			}
+		}
+		store.Close()
+	}
+
 	for _, dest := range route.SortedDestinations() {
 		resolved, ok := cfg.ResolveTarget(dest.Target)
 		if !ok {
@@ -217,18 +276,23 @@ func runRoutePreflight(command string, args []string, stdout, stderr io.Writer) 
 		}
 		pass("skills", fmt.Sprintf("destination %q: all %d required skills are enabled for profile %q", dest.ID, len(dest.Skills), dest.Profile))
 
-		// Workspace, mutex, and hints are validated at configuration
-		// load; the preflight restates them as the reviewed envelope.
+		// Workspace, serialization group, and hints are validated at
+		// configuration load; the preflight restates them as the
+		// reviewed envelope. An explicitly declared group on a create
+		// surface without --mutex-key is the E15 posture: the group is
+		// enforced locally and the flag is suppressed at submit — a
+		// warn, never a compatibility failure (AC-1101).
 		pass("workspace", fmt.Sprintf("destination %q: workspace %q", dest.ID, workspaceOf(dest, cfg.Resources[route.Source.Resource].Root)))
-		if dest.MutexKey != "" {
+		if dest.MutexKey != "" || dest.SerializationGroup != "" {
+			group := config.EffectiveSerializationGroup(route.Source.Resource, dest)
 			if !record.CapabilitiesIncludeMutex() {
 				checks = append(checks, map[string]any{
-					"check": "mutex", "state": "warn",
-					"detail":      fmt.Sprintf("destination %q: the create surface lacks --mutex-key; the mutex key will be suppressed at submit", dest.ID),
-					"remediation": "upgrade Hermes to a release carrying --mutex-key or clear mutex_key for this destination",
+					"check": "serialization", "state": "warn",
+					"detail":      fmt.Sprintf("destination %q: effective serialization group %q; the create surface lacks --mutex-key, so the group is enforced locally and the flag is suppressed at submit", dest.ID, group),
+					"remediation": "no action required for local enforcement; upgrade Hermes to a release carrying --mutex-key to add the complementary target mutex",
 				})
 			} else {
-				pass("mutex", fmt.Sprintf("destination %q: mutex key honored by the create surface", dest.ID))
+				pass("serialization", fmt.Sprintf("destination %q: effective serialization group %q rendered as the complementary target mutex; the local group slot is never replaced", dest.ID, group))
 			}
 		}
 		pass("hints", fmt.Sprintf("destination %q: execution hints max_runtime=%s max_attempts=%d", dest.ID, dest.ExecutionHints.MaxRuntime, dest.ExecutionHints.MaxAttempts))

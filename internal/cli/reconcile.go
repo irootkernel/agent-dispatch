@@ -192,7 +192,7 @@ func (a *reconcileArtifacts) reconcileIntentBuilder(store dispatch.ReconcileSibl
 				Changes:            changes, // the reconciliation diff: bounded evidence, never content
 				Flags:              []string{"latest_state", "reconcile:" + reason},
 				AcceptanceCriteria: dispatch.WikiAcceptanceCriteria,
-				Assignment:         assignmentOf(lane.dest),
+				Assignment:         assignmentOf(a.resourceID, lane.dest),
 				ExecutionHints:     a.hints,
 			})
 			if err != nil {

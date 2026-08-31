@@ -23,11 +23,11 @@ func TestE12T1DestinationProjectionDeterministicAndAddressed(t *testing.T) {
 	routeA, routeB := a.Routes["r1"], b.Routes["r1"]
 	alphaA, _ := routeA.DestinationByID("alpha")
 	alphaB, _ := routeB.DestinationByID("alpha")
-	bytesA, err := DestinationProjectionJSON(a, alphaA)
+	bytesA, err := DestinationProjectionJSON(a, routeA, alphaA)
 	if err != nil {
 		t.Fatal(err)
 	}
-	bytesB, err := DestinationProjectionJSON(b, alphaB)
+	bytesB, err := DestinationProjectionJSON(b, routeB, alphaB)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestE12T1DestinationProjectionDeterministicAndAddressed(t *testing.T) {
 	editTarget, _ := editedRoute.DestinationByID("alpha")
 	editTarget.Workstream = "indexing-v2"
 	editedRoute.Destinations[0] = editTarget
-	editedBytes, err := DestinationProjectionJSON(edited, editTarget)
+	editedBytes, err := DestinationProjectionJSON(edited, editedRoute, editTarget)
 	if err != nil {
 		t.Fatal(err)
 	}

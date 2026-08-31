@@ -39,7 +39,7 @@
         "skills",
         "workstream",
         "workspace",
-        "mutex_key",
+        "serialization_group",
         "execution_hints",
         "conditions"
       ],
@@ -65,8 +65,9 @@
         "workspace": {
           "type": "string"
         },
-        "mutex_key": {
-          "type": "string"
+        "serialization_group": {
+          "type": "string",
+          "description": "The destination's EFFECTIVE serialization group (CON-011): explicit serialization_group, deprecated mutex_key alias, or resource:<resource_id> default. The projection carries the resolved identity, so all three resolution paths with one identity hash identically and any serialization edit changes this revision (CON-014)."
         },
         "execution_hints": {
           "type": "object"

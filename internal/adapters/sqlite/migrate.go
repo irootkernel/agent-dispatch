@@ -49,6 +49,7 @@ var Migrations = []Migration{
 	{Version: 15, Name: "merge-selection-evidence", SQL: schemaV15MergeSelectionEvidence},
 	{Version: 16, Name: "notification-events-attempts", SQL: schemaV16NotificationEventsAttempts},
 	{Version: 17, Name: "route-baselines", SQL: schemaV17RouteBaselines},
+	{Version: 18, Name: "serialization-group-state", SQL: schemaV18SerializationGroupState},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
@@ -773,4 +774,40 @@ CREATE TABLE route_baselines (
 	established_at       TEXT NOT NULL
 );
 CREATE INDEX idx_route_baselines_resource ON route_baselines(resource_id);
+`
+
+// schemaV18SerializationGroupState persists the Agent Dispatch
+// serialization-group topology of ADR-0021 (E15-T1, CON-011 through
+// CON-013): one row per materialized group holds the group's durable
+// slot state, and one member row per (route, destination) records the
+// effective group current configuration resolved for that lane. The
+// migration is additive and configuration-independent — it creates no
+// group and rewrites no historic row (DAT-012: every existing dispatch,
+// lane, and receipt identity stays exactly as queryable as before).
+// Group membership materializes from current configuration at the first
+// topology reconciliation after the upgrade; if several preserved
+// active children resolve to one group the group reports
+// serialization_conflict (state CONFLICT, no holder), and new group
+// acquisition, promotion, retry, and rerun are blocked until allowed
+// existing-work exits leave at most one active child (E15-T3 enforces
+// the acquisition gate against this state).
+const schemaV18SerializationGroupState = `
+CREATE TABLE serialization_groups (
+	group_id              TEXT PRIMARY KEY,
+	state                 TEXT NOT NULL CHECK (state IN ('OPEN','HELD','CONFLICT')),
+	holder_route_id       TEXT,
+	holder_destination_id TEXT,
+	holder_dispatch_id    TEXT,
+	conflict_json         TEXT NOT NULL DEFAULT '[]',
+	materialized_at       TEXT NOT NULL,
+	updated_at            TEXT NOT NULL,
+	version               INTEGER NOT NULL DEFAULT 0 CHECK (version >= 0)
+);
+CREATE TABLE serialization_group_members (
+	route_id       TEXT NOT NULL,
+	destination_id TEXT NOT NULL,
+	group_id       TEXT NOT NULL REFERENCES serialization_groups(group_id) ON DELETE CASCADE,
+	PRIMARY KEY (route_id, destination_id)
+);
+CREATE INDEX idx_serialization_group_members_group ON serialization_group_members(group_id);
 `

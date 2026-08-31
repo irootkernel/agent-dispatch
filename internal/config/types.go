@@ -108,6 +108,11 @@ type Route struct {
 	ActiveStaleAfter string         `yaml:"active_stale_after" json:"active_stale_after"`
 	Reconciliation   Reconciliation `yaml:"reconciliation"    json:"reconciliation"`
 	Retention        *Retention     `yaml:"retention,omitempty" json:"retention,omitempty"`
+	// AllowCrossGroupConcurrency acknowledges that destinations governing
+	// this route's resource run under different serialization groups
+	// (CON-013, ADR-0021): the acknowledgement joins the route revision,
+	// so flipping it pauses production acknowledgement.
+	AllowCrossGroupConcurrency bool `yaml:"allow_cross_group_concurrency,omitempty" json:"allow_cross_group_concurrency,omitempty"`
 }
 
 // Destination is one durable delivery lane under `destinations[]`
@@ -116,12 +121,18 @@ type Route struct {
 // structural classes evaluated with OR-within-key and AND-across-keys
 // semantics (FAN-004, FAN-005); the evaluator arrives with E12-T2.
 type Destination struct {
-	ID             string         `yaml:"id"               json:"id"`
-	Target         string         `yaml:"target"           json:"target"`
-	Profile        string         `yaml:"profile,omitempty"   json:"profile,omitempty"`
-	Skills         []string       `yaml:"skills"           json:"skills"`
-	Workstream     string         `yaml:"workstream"       json:"workstream"`
-	Workspace      string         `yaml:"workspace,omitempty" json:"workspace,omitempty"`
+	ID                 string   `yaml:"id"               json:"id"`
+	Target             string   `yaml:"target"           json:"target"`
+	Profile            string   `yaml:"profile,omitempty"   json:"profile,omitempty"`
+	Skills             []string `yaml:"skills"         json:"skills"`
+	Workstream         string   `yaml:"workstream"      json:"workstream"`
+	Workspace          string   `yaml:"workspace,omitempty" json:"workspace,omitempty"`
+	SerializationGroup string   `yaml:"serialization_group,omitempty" json:"serialization_group,omitempty"`
+	// MutexKey is the deprecated compatibility alias of
+	// SerializationGroup (CON-011, ADR-0021): it may coexist with the
+	// explicit field only when the values are identical (a deprecation
+	// warning); differing values fail validation. New configuration never
+	// emits it.
 	MutexKey       string         `yaml:"mutex_key,omitempty" json:"mutex_key,omitempty"`
 	ExecutionHints ExecutionHints `yaml:"execution_hints"  json:"execution_hints"`
 	Conditions     *Conditions    `yaml:"conditions,omitempty" json:"conditions,omitempty"`

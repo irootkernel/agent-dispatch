@@ -821,7 +821,7 @@ func buildLineages(a *planArtifacts) ([]ports.Lineage, error) {
 			Changes:            a.batch.Changes,
 			Flags:              flagsOf(a.env),
 			AcceptanceCriteria: dispatch.WikiAcceptanceCriteria,
-			Assignment:         assignmentOf(lane.dest),
+			Assignment:         assignmentOf(a.route.Source.Resource, lane.dest),
 			ExecutionHints:     hints,
 		})
 		if err != nil {
@@ -962,15 +962,19 @@ func flagsOf(env watchman.Env) []string {
 
 // assignmentOf maps the certified destination onto the request
 // assignment (sink-adapter-contract §8: the mutex is a capability
-// request, never prompt text).
-func assignmentOf(dest config.Destination) *ports.TaskAssignment {
+// request, never prompt text). The wire member carries the destination's
+// EFFECTIVE serialization group (E15-T1, CON-011): the renderer sends it
+// as the complementary target mutex exactly when current capability
+// evidence says the executable supports --mutex-key, and never replaces
+// the local group slot with it.
+func assignmentOf(resourceID string, dest config.Destination) *ports.TaskAssignment {
 	if dest.Profile == "" && len(dest.Skills) == 0 {
 		return nil
 	}
 	return &ports.TaskAssignment{
 		Profile:  dest.Profile,
 		Skills:   dest.Skills,
-		MutexKey: dest.MutexKey,
+		MutexKey: config.EffectiveSerializationGroup(resourceID, dest),
 	}
 }
 

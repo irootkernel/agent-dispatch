@@ -13,11 +13,11 @@
 | Shipped release | v0.1.5 (published 2026-08-30) |
 | Planned SOT baseline | 1.2.0 ([D-027](../specs/decision-log.md)) |
 | Release target | v0.1.6 (planned) |
-| Current epic | E14 Completed (G10 evidenced); next E15 |
+| Current epic | E15 In Progress |
 | Current active task | None |
-| Next task | E15-T1 |
-| Completed tasks | 78 / 89 |
-| Planned tasks | 11 / 89 |
+| Next task | E15-T2 |
+| Completed tasks | 79 / 89 |
+| Planned tasks | 10 / 89 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -134,7 +134,7 @@
 | 76 | E14-T1 | Completed | Explicit setup route selection and propagation |
 | 77 | E14-T2 | Completed | Disabled baseline-only reconciliation and persistence |
 | 78 | E14-T3 | Completed | Rerunnable setup, five-state summary, and G10 |
-| 79 | E15-T1 | Planned | Serialization configuration, revisions, and migration |
+| 79 | E15-T1 | Completed | Serialization configuration, revisions, and migration |
 | 80 | E15-T2 | Planned | Consistent local serialization and optional target mutex contract |
 | 81 | E15-T3 | Planned | Group slot enforcement and bounded follow-up |
 | 82 | E15-T4 | Planned | Hermes v0.20.5+ compatibility gate G11 |
@@ -3589,7 +3589,7 @@ with complete coverage, CI pass, and zero findings; `make verify` is green.
 
 ## E15-T1: Serialization Configuration, Revisions, and Migration
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -3626,7 +3626,38 @@ E14-T3 Completed; ADR-0021 Accepted.
 
 ### Evidence
 
-Planned; none.
+Completed 2026-08-31. Every destination now resolves an effective
+serialization group under CON-011 — explicit `serialization_group`, the
+deprecated `mutex_key` alias (identical values warn, differing values fail,
+ungrammatical alias values fail the group grammar), or exactly
+`resource:<resource_id>` — with the 1–255 ASCII-byte grammar, no case
+folding or Unicode normalization, and an explicit default-form value
+intentionally joining the resource group (AC-1108). The resolved identity
+and the route's `allow_cross_group_concurrency` acknowledgement join the
+destination and route revision projections (CON-014), so a serialization
+edit or acknowledgement flip pauses production acknowledgement; identical
+effective groups hash identically across all three resolution paths.
+`route preflight` fails the unacknowledged same-resource cross-group
+topology before any probe with the acknowledgement remediation (CON-013)
+and reports the persisted-conflict block, and the request assignment
+carries the effective group for the renderer's complementary target mutex.
+Migration v18 is additive and configuration-independent: the first topology
+reconciliation (`reconcile`) materializes membership and recomputes each
+group's slot state, a preserved active collision reports
+`serialization_conflict` with no holder and a typed audit row, and the
+allowed existing-work exits resolve it atomically to the sole survivor or
+an open group while every dispatch, lane, and receipt identity stays
+queryable. `e15t1_test.go` in config, sqlite (real files), and cli covers
+resolution order, grammar bounds, alias agreement/conflict, revision
+participation, topology acknowledgement, migration identity preservation,
+conflict resolution, membership replacement with retire/recreate version
+continuity, the persisted-conflict preflight gate, the reconcile
+materialization wiring, and the effective-group wire posture; review
+round 1 (remediation-eligible) published committed with complete
+coverage and CI pass, and its six findings (audit transition-ID
+collision on group retire/recreate, two coverage gaps, two silent
+degradation paths, one dead test assertion) were verified valid and
+remediated; `make verify` is green.
 
 ## E15-T2: Consistent Local Serialization and Optional Target Mutex Contract
 

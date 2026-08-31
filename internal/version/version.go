@@ -32,8 +32,9 @@ const ConfigVersion = "1"
 // v15 records each merged batch's destination-selection evidence
 // (E12 epic validation); v16 creates the durable notification outbox of
 // notification events and attempts (E13-T1, ADR-0019); v17 creates the
-// disabled-route baseline records of ADR-0020 (E14-T2, DUR-017).
-const SchemaRange = "1-17"
+// disabled-route baseline records of ADR-0020 (E14-T2, DUR-017); v18
+// persists the serialization-group topology of ADR-0021 (E15-T1).
+const SchemaRange = "1-18"
 
 // AdapterVersions returns the pinned adapter implementation versions the
 // build carries. Each entry names the delivered surface and its verified

@@ -36,6 +36,12 @@ func SemanticValidate(cfg *Config) (errs []error, warnings []string) {
 	errs = append(errs, validateAbsolutePaths(cfg)...)
 	errs = append(errs, validateMapKeys(cfg)...)
 	errs = append(errs, validateMaxHashFloor(cfg)...)
+	// Serialization-group fields (E15-T1, CON-011): grammar and alias
+	// agreement fail loading; the deprecated-alias notices join the
+	// load-time warnings.
+	serializationErrs, serializationWarnings := validateSerializationFields(cfg)
+	errs = append(errs, serializationErrs...)
+	warnings = append(warnings, serializationWarnings...)
 	return errs, warnings
 }
 
@@ -120,8 +126,8 @@ func validateDestinations(cfg *Config) []error {
 			// destination requires a unique non-empty list; a webhook
 			// destination takes none.
 			if isWebhook {
-				if dest.Profile != "" || len(dest.Skills) != 0 || dest.Workspace != "" || dest.MutexKey != "" {
-					errs = append(errs, fmt.Errorf("%s (%s) targets webhook target %q; profile, skills, workspace, and mutex_key apply only to a hermes destination", where, dest.ID, dest.Target))
+				if dest.Profile != "" || len(dest.Skills) != 0 || dest.Workspace != "" || dest.MutexKey != "" || dest.SerializationGroup != "" {
+					errs = append(errs, fmt.Errorf("%s (%s) targets webhook target %q; profile, skills, workspace, serialization_group, and mutex_key apply only to a hermes destination", where, dest.ID, dest.Target))
 				}
 			} else {
 				if dest.Profile == "" {

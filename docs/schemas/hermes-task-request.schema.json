@@ -97,7 +97,8 @@
           }
         },
         "mutex_key": {
-          "type": "string"
+          "type": "string",
+          "description": "The destination's effective serialization group (E15-T1, CON-011): the renderer transmits it as the complementary target mutex exactly when current capability evidence says the executable supports --mutex-key, and suppresses the flag otherwise; it never replaces the local group slot."
         }
       }
     },

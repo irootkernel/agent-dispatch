@@ -12,7 +12,7 @@
     ],
     "workstream": "maintenance",
     "workspace": "",
-    "mutex_key": "wiki-publish",
+    "serialization_group": "wiki-publish",
     "execution_hints": {
       "max_runtime": "30m",
       "max_attempts": 2

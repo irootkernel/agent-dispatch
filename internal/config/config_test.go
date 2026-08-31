@@ -79,14 +79,22 @@ func TestUnknownReferencesFail(t *testing.T) {
 }
 
 func TestStateDirInsideVaultWarns(t *testing.T) {
-	// Spec §3: "Validation warns if it is."
+	// Spec §3: "Validation warns if it is." The fixture's mutex_key also
+	// produces the E15-T1 deprecated-alias warning, so the assertion
+	// checks for the inside-vault warning instead of the exact count.
 	text := strings.Replace(string(minimalYAML(t)), "state_dir: /var/lib/agent-dispatch", "state_dir: /srv/vault/state", 1)
 	cfg, err := Parse([]byte(text))
 	if err != nil {
 		t.Fatalf("state dir inside the vault must warn, not fail: %v", err)
 	}
-	if len(cfg.Warnings) != 1 || !strings.Contains(cfg.Warnings[0], "inside resource") {
-		t.Fatalf("expected one inside-vault warning, got %v", cfg.Warnings)
+	found := false
+	for _, warning := range cfg.Warnings {
+		if strings.Contains(warning, "inside resource") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected an inside-vault warning, got %v", cfg.Warnings)
 	}
 }
 

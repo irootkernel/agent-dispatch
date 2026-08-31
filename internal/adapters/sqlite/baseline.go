@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/irootkernel/agent-dispatch/internal/domain/state"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
@@ -63,7 +64,7 @@ func (s *Store) ReplacePathFactsWithBaseline(ctx context.Context, expectedRevisi
 			return fmt.Errorf("%w: route %s runtime activation state is %q inside the baseline transaction; the newer state stands",
 				ports.ErrStateNotEligible, baseline.RouteID, activation)
 		}
-		if routeState == "UNCERTAIN" || routeState == "QUARANTINED" {
+		if routeState == string(state.RouteUncertain) || routeState == string(state.RouteQuarantined) {
 			return fmt.Errorf("%w: route %s state is %s inside the baseline transaction; resolve the hold before establishing a baseline",
 				ports.ErrStateNotEligible, baseline.RouteID, routeState)
 		}

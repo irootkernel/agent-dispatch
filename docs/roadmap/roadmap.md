@@ -48,7 +48,7 @@
 | E12 | Multi-Destination Lifecycle | **Completed** | 4 | G8 |
 | E13 | Notifications and v0.1.5 Release | **Completed** | 4 | G9 |
 | E14 | Guided Setup and Disabled Baseline | **Completed** | 3 | G10 |
-| E15 | Hermes Mutex Downgrade and Serialization Groups | **Planned** | 4 | G11 |
+| E15 | Hermes v0.20.5+ Compatibility and Serialization Groups | **Planned** | 4 | G11 |
 | E16 | Automatic Durable Notification Draining | **Planned** | 4 | G12 |
 | E17 | Documentation, Cold Validation, and v0.1.6 Release | **Planned** | 3 | G13 |
 
@@ -135,9 +135,9 @@
 | 77 | E14-T2 | Completed | Disabled baseline-only reconciliation and persistence |
 | 78 | E14-T3 | Completed | Rerunnable setup, five-state summary, and G10 |
 | 79 | E15-T1 | Planned | Serialization configuration, revisions, and migration |
-| 80 | E15-T2 | Planned | Consistent Hermes mutex downgrade contract |
+| 80 | E15-T2 | Planned | Consistent local serialization and optional target mutex contract |
 | 81 | E15-T3 | Planned | Group slot enforcement and bounded follow-up |
-| 82 | E15-T4 | Planned | Hermes v0.20.5 and v0.19.1 compatibility gate G11 |
+| 82 | E15-T4 | Planned | Hermes v0.20.5+ compatibility gate G11 |
 | 83 | E16-T1 | Planned | Drain policy, leases, and forward migration |
 | 84 | E16-T2 | Planned | Lease-safe bounded notification delivery |
 | 85 | E16-T3 | Planned | Post-commit after-command integration |
@@ -3580,10 +3580,10 @@ with complete coverage, CI pass, and zero findings; `make verify` is green.
 
 ---
 
-# E15: Hermes Mutex Downgrade and Serialization Groups
+# E15: Hermes v0.20.5+ Compatibility and Serialization Groups
 
 **Epic status:** Planned
-**Purpose:** Certify Hermes v0.20.5 without target mutex support while enforcing an honest local concurrency guarantee.
+**Purpose:** Make Hermes v0.20.5 the supported floor and enforce an honest local concurrency guarantee with optional target-mutex defense-in-depth.
 **Gate:** G11
 **Detailed SOT:** [v0.1.6 operational follow-up](../specs/v0.1.6-operational-follow-up.md)
 
@@ -3598,10 +3598,14 @@ policy change production-gate visible.
 
 ### Deliverables
 
-- destination `serialization_group` and route cross-group acknowledgement;
+- destination `serialization_group`, deprecated `mutex_key` alias,
+  resource-derived default, and route cross-group acknowledgement;
+- exact group grammar, `resource:<resource_id>` default, and conflicting-alias
+  refusal;
 - effective-group resolution and same-resource topology validation;
 - destination/route revision participation;
-- group-state persistence and forward migration preserving historical work.
+- group-state persistence and forward migration preserving historical work and
+  blocking preserved active collisions.
 
 ### Requirements
 
@@ -3615,31 +3619,39 @@ E14-T3 Completed; ADR-0021 Accepted.
 
 - serialization edits change both revisions and stale production acknowledgement;
 - unsafe cross-group topology fails before submission;
-- migration preserves existing dispatch, lane, and receipt identities.
+- migration preserves existing dispatch, lane, and receipt identities and
+  exposes a blocking conflict with no arbitrary holder until allowed
+  existing-work exits leave at most one active child;
+- AC-1108 passes.
 
 ### Evidence
 
 Planned; none.
 
-## E15-T2: Consistent Hermes Mutex Downgrade Contract
+## E15-T2: Consistent Local Serialization and Optional Target Mutex Contract
 
 **Status:** Planned
 
 ### Objective
 
-Use one optional-mutex decision across capability probing, activation, command
-rendering, submission revalidation, and operator surfaces.
+Use one mandatory-local and optional-target-mutex decision across capability
+probing, activation, command rendering, submission revalidation, and operator
+surfaces, with Hermes 0.20.5 as the floor.
 
 ### Deliverables
 
 - versioned capability evidence with effective serialization mode;
-- probe/preflight/capabilities/status output for the three modes;
+- probe/preflight/capabilities/status output for group-enforced,
+  group-plus-target-mutex, and unsupported-unsafe modes;
 - enable and submission topology gate;
-- renderer suppression of unsupported `--mutex-key`.
+- renderer suppression of unsupported `--mutex-key` and effective-group
+  rendering when a later target supports it;
+- atomic `hermes set-minimum-version` configuration update with omitted and
+  below-floor fail-closed migration posture.
 
 ### Requirements
 
-`HER-011` through `HER-021`, `SEC-004`, `SEC-010`, `CLI-010`, `OPS-011`, `TST-012`, `TST-016`
+`HER-011` through `HER-021`, `SEC-004`, `SEC-010`, `CLI-010`, `CLI-019`, `OPS-011`, `TST-012`, `TST-016`
 
 ### Dependencies
 
@@ -3648,7 +3660,9 @@ E15-T1 Completed.
 ### Acceptance
 
 - AC-1101 passes;
-- a mutex-only capability absence is a warning downgrade, not contradictory failure;
+- AC-1107 passes;
+- v0.20.5 without target mutex is the normal local-enforcement mode, not a
+  contradictory failure;
 - executable revalidation cannot change or bypass the certified mode.
 
 ### Evidence
@@ -3668,7 +3682,7 @@ retaining independent dirty generations and bounded progress.
 
 - transactional global group-slot acquisition, transfer, and release;
 - occupied-group merge into destination dirty state;
-- deterministic one-waiter promotion and bounded remainder;
+- oldest-first deterministic one-waiter promotion and bounded remainder;
 - retry, rerun, recovery, and multi-process concurrency tests.
 
 ### Requirements
@@ -3689,20 +3703,22 @@ E15-T2 Completed.
 
 Planned; none.
 
-## E15-T4: Hermes v0.20.5 and v0.19.1 Compatibility Gate G11
+## E15-T4: Hermes v0.20.5+ Compatibility Gate G11
 
 **Status:** Planned
 
 ### Objective
 
-Prove the downgrade against the deployed Hermes release and retain the frozen
-older public-surface compatibility contract.
+Prove local enforcement against the deployed minimum Hermes release and the
+optional target-mutex complement against a synthetic later public surface.
 
 ### Deliverables
 
 - real Hermes v0.20.5 probe/preflight/render/submission transcript;
 - burst, shared-group, and independent-group demonstrations;
-- Hermes 0.19.1 regression suite;
+- below-floor refusal and later target-mutex probe suites;
+- removal of every exact previous-baseline reference from current tracked
+  files without rewriting Git history or tags;
 - capability, integration, runbook, and migration documentation.
 
 ### Requirements
@@ -3715,7 +3731,7 @@ E15-T3 Completed.
 
 ### Acceptance
 
-- AC-1101 through AC-1106 pass;
+- AC-1101 through AC-1108 pass;
 - no Hermes core or private storage is modified;
 - `make verify` is green.
 
@@ -3743,14 +3759,16 @@ claim and run evidence automatic delivery requires.
 
 ### Deliverables
 
-- drain mode, limit, preserve-pending policy, and pending-age configuration;
+- drain mode, limit, preserve-pending policy, pending-age configuration, and
+  persistent retry backoff;
 - v0.1.5-compatible defaults and after-command generated Wiki default;
-- notification leases and drain-run record migration;
+- fenced notification leases, due deadlines, immediately-due legacy pending
+  migration, and drain-run records;
 - schema/example/revision and round-trip coverage.
 
 ### Requirements
 
-`DUR-016` through `DUR-018`, `NTF-010` through `NTF-015`, `OPS-009`, `OPS-015`, `TST-002`, `TST-017`
+`DUR-016` through `DUR-018`, `NTF-010` through `NTF-016`, `OPS-009`, `OPS-015`, `TST-002`, `TST-017`
 
 ### Dependencies
 
@@ -3760,6 +3778,7 @@ E15-T4 Completed; ADR-0022 Accepted.
 
 - manual omission preserves v0.1.5 behavior;
 - existing notification identities and attempts survive migration unchanged;
+- migrated pending notifications are immediately due;
 - every behavior-affecting policy field participates in a documented revision.
 
 ### Evidence
@@ -3773,18 +3792,20 @@ Planned; none.
 ### Objective
 
 Make manual and automatic drain share one bounded service that excludes
-concurrent ownership and recovers process death safely.
+concurrent ownership, rejects stale owners, persists retry backoff, and recovers
+process death safely.
 
 ### Deliverables
 
-- atomic pending claim, lease expiry, and drain-run persistence;
-- stable-idempotency retry and refused-state handling;
-- configured limit and sink isolation;
+- atomic due claim, fenced lease expiry, and drain-run persistence;
+- stable-idempotency retry, symmetric persisted jitter, manual due-only drain,
+  and refused-state reset handling;
+- configured limit, ten-second automatic budget, and sink isolation;
 - crash, simultaneous-drain, non-recursion, and redaction tests.
 
 ### Requirements
 
-`DUR-018`, `NTF-003` through `NTF-015`, `SEC-011` through `SEC-013`, `TST-004`, `TST-005`, `TST-017`
+`DUR-018`, `NTF-003` through `NTF-016`, `SEC-011` through `SEC-013`, `TST-004`, `TST-005`, `TST-017`
 
 ### Dependencies
 
@@ -3793,7 +3814,8 @@ E16-T1 Completed.
 ### Acceptance
 
 - AC-1202 through AC-1205, AC-1207, and AC-1208 pass;
-- a crashed or overlapping drainer cannot claim the same live lease;
+- a crashed or overlapping drainer cannot claim the same live lease and a
+  stale owner cannot commit after recovery;
 - delivery never writes dispatch, work, or source-state tables.
 
 ### Evidence
@@ -3815,11 +3837,15 @@ without changing their output or exit contract.
 - integration for dispatch, work completion/failure, applicable dispatch retry
   and rerun, quarantine resolution, reconciliation, and drift evaluation;
 - setup/baseline/read-only/drain recursion exclusions;
+- silent-success and bounded-stderr integration preserving original stdout,
+  JSON, and exit behavior;
+- existing-due progress without a new notification, failed-core exclusion, and
+  one-invocation ten-second budget with deterministic route round-robin;
 - source-success/delivery-failure exit and state-isolation tests.
 
 ### Requirements
 
-`NTF-010` through `NTF-014`, `CLI-001`, `CLI-002`, `CLI-008`, `OPS-001`, `TST-017`
+`NTF-010` through `NTF-016`, `CLI-001`, `CLI-002`, `CLI-008`, `OPS-001`, `TST-017`
 
 ### Dependencies
 
@@ -3830,6 +3856,7 @@ E16-T2 Completed.
 - AC-1201, AC-1202, AC-1204, and AC-1205 pass;
 - Watchman dispatch and later `work complete` both advance notifications;
 - an automatic delivery failure leaves the core command successful.
+- AC-1211 passes.
 
 ### Evidence
 
@@ -3846,14 +3873,18 @@ diagnosable without direct database inspection.
 
 ### Deliverables
 
-- `schedule render|inspect --platform launchd` with resolved paths;
-- install, inspect, disable, uninstall, and bounded-log guidance;
+- `schedule render|install|inspect|disable|uninstall --platform launchd` with
+  resolved paths and instance/route/config-digest managed identity;
+- direct internal runner, definition-digest inspection, idempotent install,
+  conflict refusal, unload-only disable, and managed-plist-only uninstall;
+- fifteen-minute after-command recovery, daily 03:00 scheduled default, and
+  three-file 10 MiB log rotation;
 - status projection and doctor findings for delivery and scheduler posture;
 - launchd syntax, overdue, unresolvable-sink, and end-to-end tests.
 
 ### Requirements
 
-`CLI-009`, `CLI-018`, `NTF-010` through `NTF-015`, `OPS-017`, `OPS-018`, `SEC-007`, `TST-017`
+`CLI-009`, `CLI-018`, `NTF-010` through `NTF-016`, `OPS-017`, `OPS-018`, `SEC-007`, `TST-017`
 
 ### Dependencies
 
@@ -3861,8 +3892,9 @@ E16-T3 Completed.
 
 ### Acceptance
 
-- AC-1201 through AC-1208 pass;
-- generated launchd syntax validates and never assumes a fixed binary path;
+- AC-1201 through AC-1211 pass;
+- generated launchd syntax validates, production preflight requires the
+  expected loaded definition, and no surface assumes a fixed binary path;
 - `make verify` is green.
 
 ### Evidence
@@ -3896,7 +3928,7 @@ epics have delivered their final behavior.
 
 ### Requirements
 
-`CLI-009`, `CLI-016` through `CLI-018`, `HER-019` through `HER-021`, `NTF-010` through `NTF-015`, `OPS-015` through `OPS-018`, `TST-009`
+`CLI-009`, `CLI-016` through `CLI-019`, `HER-019` through `HER-021`, `NTF-010` through `NTF-016`, `OPS-015` through `OPS-018`, `TST-009`
 
 ### Dependencies
 

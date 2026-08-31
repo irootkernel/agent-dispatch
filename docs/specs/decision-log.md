@@ -379,7 +379,7 @@ Corrected D-018 records: the T4/Low `lookup_by_idempotency_key` entry ("the repo
 **Decision.** The Hermes operations feature/change request is accepted as the
 complete v0.1.5 target and registered through four new sequential epics E10
 through E13. The release must close correct Watchman subtree binding,
-reconciliation fencing, Hermes 0.19.1+ capability probing, per-destination
+reconciliation fencing, then-current Hermes capability probing, per-destination
 profile and skill preflight, discoverable setup, aggregate event fan-out,
 bounded work outcomes, and durable notifications. Hermes core, source,
 versions, tags, private storage, and plugin surface remain outside Agent
@@ -461,12 +461,30 @@ its repair.
 
 **Context.** A real v0.1.5 deployment exposed three remaining operational
 gaps. Setup omitted the selected route from Watchman status and could not rerun
-after Watchman materialized disabled runtime state. Hermes v0.20.5 retained the
-required durable public Kanban surface but removed `--mutex-key`, while the
-existing downgrade did not express or enforce cross-destination resource
-serialization. Notification intents and delivery were durable but ordinary
-operation required a separate remembered drain command. None of these gaps
-requires changing Hermes or weakening the production gate.
+after Watchman materialized disabled runtime state. Hermes v0.20.5 became the
+minimum supported release, retained the required durable public Kanban surface,
+and removed `--mutex-key`, while the existing downgrade did not express or
+enforce cross-destination resource serialization. Notification intents and
+delivery were durable but ordinary operation required a separate remembered
+drain command. None of these gaps requires changing Hermes or weakening the
+production gate.
+
+The approved follow-up is refined before E15 implementation: same-resource
+destinations default to one resource-derived local group; explicit group splits
+require `allow_cross_group_concurrency` and production re-acknowledgement;
+existing `mutex_key` is a deprecated local alias; local enforcement is always
+mandatory and a future target mutex is defense-in-depth. Migration collisions
+preserve history, select no arbitrary holder, and block new group work until
+allowed existing-work exits resolve them. Alias conflicts fail, the exact
+default is `resource:<resource_id>`, and existing below-floor configuration
+fails closed until the atomic target-floor helper updates it. Notification
+after-command delivery gains a required fifteen-minute recovery schedule, one
+fair ten-second command budget, due-only manual behavior, explicit immediate
+retry, persisted symmetric jitter, fenced claims, and a deterministic managed
+launchd identity with safe lifecycle and bounded rotation. The
+E15 implementation retires the previous Hermes baseline from all current
+tracked files, including historical documents, fixtures, and release notes,
+while Git history and tags remain unchanged.
 
 **Consequences.** The roadmap becomes 18 epics and 89 tasks: the shipped
 v0.1.5 baseline remains 75/75 Completed, the 14 E14-E17 tasks are Planned,

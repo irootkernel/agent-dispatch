@@ -12,7 +12,12 @@ not be modified to satisfy Agent Dispatch.
 
 ## Decision
 
-Hermes 0.19.1 is the minimum eligible version and there is no fixed maximum.
+As amended for the planned v0.1.6 work by D-027, Hermes 0.20.5 is the minimum
+eligible version and there is no fixed maximum. E15 implements this raised
+floor; releases before E15 retain their previously recorded behavior.
+An omitted or lower configured floor fails closed without implicit migration.
+The atomic target-floor helper accepts 0.20.5 or higher, preserves unrelated
+configuration, and stales affected route acknowledgements.
 Eligibility is followed by a strict public-CLI capability probe. Profile
 enumeration uses bounded JSON. Skill availability uses the existing public
 profile-scoped human command under a fixed rendering environment and a

@@ -17,7 +17,7 @@ The release gate is cumulative. A later gate cannot pass while an earlier gate i
 | G8 | Aggregate events fan out to independent destination lanes and close only from bounded work evidence. |
 | G9 | Notifications, operational walkthrough, documentation truth, and the v0.1.5 release checks pass. |
 | G10 | Guided Wiki setup selects one route, establishes a disabled baseline, and reruns safely. |
-| G11 | Hermes v0.20.5 is compatible through an explicit, concurrency-safe mutex downgrade. |
+| G11 | Hermes 0.20.5 and later probe-compatible releases are safe through mandatory local serialization groups and optional target mutex defense-in-depth. |
 | G12 | Durable notifications make bounded automatic progress without coupling delivery to source state. |
 | G13 | Documentation, cold validation, and reproducible v0.1.6 release evidence agree. |
 
@@ -150,25 +150,30 @@ The release gate is cumulative. A later gate cannot pass while an earlier gate i
 
 | ID | Given / When / Then |
 |---|---|
-| AC-1101 | Given Hermes v0.20.5 missing only `--mutex-key`, when probed and preflighted, then it is compatible with an explicit Agent Dispatch group-enforced guarantee and no rendered command contains the unsupported flag. |
+| AC-1101 | Given Hermes v0.20.5 missing `--mutex-key`, when probed and preflighted, then it is compatible as `agent-dispatch-group-enforced` and no rendered command contains the unsupported flag. |
 | AC-1102 | Given an active serialization group and a burst of relevant occurrences, when they are processed, then no parallel group child is created and selected lanes retain bounded dirty work. |
-| AC-1103 | Given two destinations sharing one group, when both are selected, then they cannot run concurrently and completion promotes at most one waiting lane. |
+| AC-1103 | Given two destinations sharing one group, when both are selected, then they cannot run concurrently and completion promotes only the oldest first-dirty waiting lane. |
 | AC-1104 | Given independent groups over one resource with every involved route acknowledgement current, when selected, then they may run concurrently without being described as globally single-writer. |
 | AC-1105 | Given a retry, rerun, or serialization-policy edit, when processed, then the group slot cannot be bypassed, changed policy changes destination and route revisions, and the old production acknowledgement is stale. |
-| AC-1106 | Given the frozen Hermes 0.19.1 public surface, when the same compatibility path runs, then supported target mutex rendering and durable delivery continue to work. |
+| AC-1106 | Given Hermes 0.20.4, 0.20.5, and a synthetic later release exposing target mutex, when the same compatibility path runs, then the first fails before side effects, the second uses local enforcement only, and the later release uses local enforcement plus the effective target mutex. |
+| AC-1107 | Given an omitted or below-floor target setting, when configuration is validated, then it fails without rewriting; when `hermes set-minimum-version` receives a value at or above 0.20.5, then only that target changes atomically and every affected route requires fresh probe, preflight, and production acknowledgement. |
+| AC-1108 | Given omitted, identical dual-field, conflicting dual-field, and explicit default-form serialization settings, when validated and resolved, then they respectively produce `resource:<resource_id>`, one deprecated-alias warning, a configuration error, and intentional membership in the default group; a preserved active collision chooses no arbitrary holder and resolves atomically through allowed existing-work exits. |
 
 ### G12: Automatic Durable Notification Draining
 
 | ID | Given / When / Then |
 |---|---|
 | AC-1201 | Given after-command mode, when work completion commits a completion notification, then one bounded automatic pass delivers it without waiting for another filesystem event. |
-| AC-1202 | Given webhook timeout or process death after source commit, when automatic progress resumes, then completed work is unchanged and the pending notification retains its stable identity. |
-| AC-1203 | Given simultaneous automatic drain attempts, when they claim pending work, then leases prevent duplicate logical ownership and expired claims recover safely. |
-| AC-1204 | Given a configured limit, manual mode, or scheduled mode, when draining runs, then the bound is enforced, manual behavior remains explicit, and scheduled drain runs only after healthy reconciliation. |
+| AC-1202 | Given webhook timeout or process death after source commit and no later source command, when the fifteen-minute fallback runs, then completed work is unchanged and the due notification resumes under its stable identity. |
+| AC-1203 | Given simultaneous automatic drains or an expired owner finishing late, when due work is claimed, then leases are disjoint, expiry recovers safely, and a stale fencing token cannot record an outcome. |
+| AC-1204 | Given a configured limit, ten-second automatic budget, persisted backoff, manual mode, or scheduled mode, when draining runs, then both automatic bounds and due deadlines are enforced, manual behavior remains explicit, and scheduled drain runs only after healthy reconciliation. |
 | AC-1205 | Given delivery refusal, ambiguity, retryability, or sink-resolution failure, when the source command has succeeded, then its exit remains successful and the notification outcome remains independently inspectable. |
-| AC-1206 | Given pending or repeatedly failing delivery, when status and doctor run, then count, age, latest outcome, mode, limit, scheduler expectation/evidence, and actionable findings are available without direct SQLite inspection. |
+| AC-1206 | Given pending or repeatedly failing delivery, when status and doctor run, then count, age, due/backoff counts, live/expired claims, latest outcome/run, mode, limit, scheduler expectation/evidence, and actionable findings are available without direct SQLite inspection. |
 | AC-1207 | Given hostile document data, endpoint credentials, or a successful drain, when payloads and diagnostics are inspected, then no protected content leaks and no recursive drain-success notification exists. |
 | AC-1208 | Given a v0.1.5 notification database, when it migrates, then every existing notification ID, idempotency key, and attempt record is unchanged. |
+| AC-1209 | Given migrated pending, backoff-pending, or refused notifications, when manual drain and explicit retry run, then migrated work is initially due, drain selects due work only, retry alone makes the selected record pending and immediately due, and the persisted jittered deadline is shared by every process. |
+| AC-1210 | Given an identical, drifted, disabled, or installed managed schedule, when lifecycle commands run, then install is idempotent, conflicting definitions are preserved and refused, inspect reports file/load/digest posture, disable preserves the plist, uninstall removes only that plist, and log rotation retains three 10 MiB files. |
+| AC-1211 | Given a successful registered command affecting one or more after-command routes, when core commit completes, then existing due work advances under one global ten-second budget using deterministic one-item route rounds even if no new notification was created; a failed core command does not auto-drain, and stdout, JSON, and exit behavior remain unchanged. |
 
 ### G13: v0.1.6 Release
 

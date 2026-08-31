@@ -35,7 +35,8 @@ type RouteBaselineRecord struct {
 // revision still equals the revision the baseline observed before
 // enumerating. A revision moved by a newer durable path-fact mutation
 // refuses with ports.ErrObservationConflict; a route whose runtime
-// activation flipped away from disabled inside the enumeration window
+// activation flipped away from disabled — or whose route state rose to
+// an uncertain or quarantined hold — inside the enumeration window
 // refuses with ports.ErrStateNotEligible — both leave the stored facts
 // and the previous baseline untouched. The method writes nothing else:
 // no policy decision, dispatch intent, receipt, route runtime state, or
@@ -49,9 +50,10 @@ func (s *Store) ReplacePathFactsWithBaseline(ctx context.Context, expectedRevisi
 	// The in-transaction re-check of the runtime half of the two-key
 	// gate: the pre-enumeration guard can go stale across the (long)
 	// walk, so the commit itself refuses an activation flipped to
-	// enabled or paused inside the window (CLI-017, ADR-0020).
-	var activation string
-	switch err := tx.QueryRow(`SELECT activation_state FROM route_runtime_state WHERE route_id = ?`, baseline.RouteID).Scan(&activation); {
+	// enabled or paused — or a hold raised to uncertain or quarantined —
+	// inside the window (CLI-017, ADR-0020).
+	var activation, routeState string
+	switch err := tx.QueryRow(`SELECT activation_state, route_state FROM route_runtime_state WHERE route_id = ?`, baseline.RouteID).Scan(&activation, &routeState); {
 	case errors.Is(err, sql.ErrNoRows):
 		// The clean-host posture: no runtime row, nothing to re-check.
 	case err != nil:
@@ -60,6 +62,10 @@ func (s *Store) ReplacePathFactsWithBaseline(ctx context.Context, expectedRevisi
 		if activation != "disabled" {
 			return fmt.Errorf("%w: route %s runtime activation state is %q inside the baseline transaction; the newer state stands",
 				ports.ErrStateNotEligible, baseline.RouteID, activation)
+		}
+		if routeState == "UNCERTAIN" || routeState == "QUARANTINED" {
+			return fmt.Errorf("%w: route %s state is %s inside the baseline transaction; resolve the hold before establishing a baseline",
+				ports.ErrStateNotEligible, baseline.RouteID, routeState)
 		}
 	}
 	if register != nil {

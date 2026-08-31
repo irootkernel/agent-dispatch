@@ -217,3 +217,46 @@ func TestE14T2BaselineTransactionRefusesActivationFlip(t *testing.T) {
 		t.Fatalf("the previous baseline must stand after the refusal: %+v %v", rec, lerr)
 	}
 }
+
+// TestE14T2BaselineTransactionRefusesRouteHold proves the in-transaction
+// re-check refuses a route hold raised inside the enumeration window:
+// an uncertain or quarantined route_state refuses the commit with the
+// typed state conflict even while the runtime activation stays disabled
+// (CLI-017; cold-validation round-1 F002).
+func TestE14T2BaselineTransactionRefusesRouteHold(t *testing.T) {
+	for name, hold := range map[string]string{
+		"uncertain":   "UNCERTAIN",
+		"quarantined": "QUARANTINED",
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := e14t2Open(t)
+			ctx := context.Background()
+			register := &ports.ResourceRegistrationInput{
+				ResourceID: "vault-main", Revision: "route-rev-e14t2",
+				Root: "/srv/vault", CanonicalRoot: "/srv/vault", FileScope: "markdown", GitMode: "disabled",
+			}
+			if err := s.ReplacePathFactsWithBaseline(ctx, 0, []ports.PathFact{{Path: "a.md", Digest: e10t1Digest("a"), Exists: true}}, e14t2Baseline(1, 1, "wiki"), register, "2026-08-31T00:00:00Z"); err != nil {
+				t.Fatal(err)
+			}
+			// A materialized route row whose hold rises before the commit
+			// while its activation half stays disabled.
+			if err := s.RegisterRoute(nil, "wiki", "route-rev-e14t2", "policy-rev-e14t2", "vault-main", "hermes-kanban-main", "{}", "2026-08-31T00:00:00Z"); err != nil {
+				t.Fatal(err)
+			}
+			if err := s.InitializeRouteState(nil, "wiki"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.Exec(`UPDATE route_runtime_state SET route_state = ? WHERE route_id = ?`, hold, "wiki"); err != nil {
+				t.Fatal(err)
+			}
+			err := s.ReplacePathFactsWithBaseline(ctx, 1, []ports.PathFact{{Path: "a.md", Digest: e10t1Digest("a"), Exists: true}}, e14t2Baseline(1, 2, "wiki"), nil, "2026-08-31T00:02:00Z")
+			if !errors.Is(err, ports.ErrStateNotEligible) {
+				t.Fatalf("a %s route must refuse the commit with the typed conflict: %v", name, err)
+			}
+			rec, lerr := s.LoadRouteBaseline(ctx, "wiki")
+			if lerr != nil || rec == nil || rec.ObservationRevision != 1 {
+				t.Fatalf("the previous baseline must stand after the refusal: %+v %v", rec, lerr)
+			}
+		})
+	}
+}

@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -26,5 +27,13 @@ func TestVersionMetadataMatchesSchema(t *testing.T) {
 	}
 	if version.AdapterVersions()["sqlite"] == "not-implemented (E1-T4)" {
 		t.Error("sqlite adapter label must reflect the shipped schema-v1 repositories")
+	}
+	// The operator-facing label must track the migration baseline with
+	// its schema-v1..vN prefix, or the version surface silently stops
+	// naming newer migrations (the v17/v18 omission found by the E15
+	// cold validation).
+	wantPrefix := fmt.Sprintf("schema-v1..v%d ", MaxSchemaVersion)
+	if label := version.AdapterVersions()["sqlite"]; !strings.HasPrefix(label, wantPrefix) {
+		t.Errorf("sqlite adapter label = %q, want prefix %q (update the label with MaxSchemaVersion)", label, wantPrefix)
 	}
 }

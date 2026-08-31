@@ -3582,10 +3582,10 @@ with complete coverage, CI pass, and zero findings; `make verify` is green.
 
 # E15: Hermes v0.20.5+ Compatibility and Serialization Groups
 
-**Epic status:** Planned
+**Epic status:** Completed
 **Purpose:** Make Hermes v0.20.5 the supported floor and enforce an honest local concurrency guarantee with optional target-mutex defense-in-depth.
 **Gate:** G11
-**Detailed SOT:** [v0.1.6 operational follow-up](../specs/v0.1.6-operational-follow-up.md)
+**Canonical Outcomes:** [Serialization and concurrency requirements](../specs/required-spec.md) · [Serialization-group configuration contract](../contracts/configuration-spec.md) · [Hermes integration architecture](../architecture/hermes-integration.md) · [ADR-0021 serialization groups](../architecture-decision-records/0021-agent-dispatch-serialization-groups.md) · [Real-Hermes G11 evidence](../integrations/hermes-v0.20.5-g11-evidence.md) · [Gate G11 evidence](../VALIDATION.md)
 
 ## E15-T1: Serialization Configuration, Revisions, and Migration
 

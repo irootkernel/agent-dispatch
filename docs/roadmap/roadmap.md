@@ -48,7 +48,7 @@
 | E12 | Multi-Destination Lifecycle | **Completed** | 4 | G8 |
 | E13 | Notifications and v0.1.5 Release | **Completed** | 4 | G9 |
 | E14 | Guided Setup and Disabled Baseline | **Completed** | 3 | G10 |
-| E15 | Hermes v0.20.5+ Compatibility and Serialization Groups | **Planned** | 4 | G11 |
+| E15 | Hermes v0.20.5+ Compatibility and Serialization Groups | **Completed** | 4 | G11 |
 | E16 | Automatic Durable Notification Draining | **Planned** | 4 | G12 |
 | E17 | Documentation, Cold Validation, and v0.1.6 Release | **Planned** | 3 | G13 |
 

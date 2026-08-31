@@ -45,6 +45,6 @@ release (2026-08-30).
 
 D-027 owns this approved plan, with the detailed contract in
 [`v0.1.6-operational-follow-up.md`](v0.1.6-operational-follow-up.md) and
-ADRs 0020 through 0022. These capabilities are not yet implemented or
-validated: E14 through E17 remain Planned, and v0.1.5 remains the published
-latest release.
+ADRs 0020 through 0022. E14's capabilities are implemented, validated,
+and evidenced at gate G10 (closed 2026-08-31); E15 through E17 remain
+Planned, and v0.1.5 remains the published latest release.

@@ -97,10 +97,14 @@ draining. The detailed contract is
 [`specs/v0.1.6-operational-follow-up.md`](specs/v0.1.6-operational-follow-up.md),
 with acceptance gates G10 through G13.
 
-This adoption is documentation only. It does not claim implementation,
-migration, test, deployment-transcript, artifact, or release evidence; v0.1.5
-remains the shipped release and E14-T1 is the next roadmap task. The separately
-requested general `make verify` remediation is outside this release scope.
+The adoption itself was documentation only and claimed no implementation,
+migration, test, deployment-transcript, artifact, or release evidence at
+the time. E14 has since delivered and evidenced its share — the explicit
+setup route selection, the disabled baseline-only reconciliation, and
+the rerunnable five-state walkthrough closed gate G10 on 2026-08-31 —
+while E15 through E17 remain Planned; v0.1.5 remains the shipped release
+and E15-T1 is the next roadmap task. The separately requested general
+`make verify` remediation is outside this release scope.
 
 ## Repository-Native Checks
 

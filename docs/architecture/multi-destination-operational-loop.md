@@ -1,7 +1,8 @@
 # v0.1.5 Multi-Destination Operational Loop
 
 > **Status:** Implemented; E10-E13 delivered this loop and gate G9 closed on
-> 2026-08-30.
+> 2026-08-30; E14 extended the disabled setup and rollback path (§8) and
+> gate G10 closed on 2026-08-31.
 > **Shipped baseline:** v0.1.5 is the published latest release (2026-08-30).
 
 ## 1. Outcome and Boundaries

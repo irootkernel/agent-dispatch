@@ -2,7 +2,7 @@
 
 ## 1. Interpretation
 
-This document is normative. Each requirement has a stable ID used by the roadmap and acceptance matrix. v0.1.4 is the shipped baseline; requirements introduced by D-025 are the approved v0.1.5 target and block that release until gates G6 through G9 close.
+This document is normative. Each requirement has a stable ID used by the roadmap and acceptance matrix. v0.1.5 is the shipped baseline (gates G6 through G9 closed 2026-08-30); requirements introduced by D-027 are the approved v0.1.6 target — their E14 share, the guided setup and disabled baseline, is implemented and evidenced at gate G10 (closed 2026-08-31) — and the release stays blocked until G11 through G13 close.
 
 - **MUST** requirements block v0.1 release.
 - **SHOULD** requirements require an explicit recorded exception if not met.

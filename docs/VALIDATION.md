@@ -1,7 +1,9 @@
 # SOT Package Validation
 
-> **Validated:** 2026-08-30 (E13 delivers gate G9 and the v0.1.5 release proof; the roadmap is complete at 75/75)
-> **Package target:** Agent Dispatch SOT 1.1.18 / implementation v0.1.5 (published 2026-08-30)
+> **Validated:** 2026-08-31 (E14 delivers gate G10 over the shipped v0.1.5
+> baseline — the guided setup and disabled baseline; 78 of 89 roadmap tasks
+> are complete and E15-T1 is next)
+> **Package target:** Agent Dispatch SOT 1.2.0 / implementation v0.1.5 (published 2026-08-30)
 
 ## Completed Checks
 
@@ -17,9 +19,9 @@
 - Internal Markdown links resolve within the package, excluding intentionally unresolved wiki links retained in the historical source draft.
 - Markdown code fences are balanced.
 - The documentation package has one delivery scope, exactly one owner for each of the seven semantic roles, and `docs/roadmap/roadmap.md` as its sole lifecycle authority.
-- The roadmap contains exactly 14 epics and 75 task headings (the 67 tasks through E11 plus the 8 v0.1.5 tasks in E12 and E13, all Completed).
+- The roadmap contains exactly 18 epics and 89 task headings (the 75 tasks through E13 plus the 3 E14 tasks, all Completed, and the 11 planned E15-E17 tasks).
 - Every task uses one allowed status value.
-- Every sequence through E13 is fully Completed (75/75); no task is active and none is next.
+- Every sequence through E14 is fully Completed (78/78 delivered); no task is active and E15-T1 is next.
 - Required-spec IDs are unique.
 - Acceptance-scenario IDs are unique.
 - The D-025 functional baseline remains unchanged; D-026 moves paths and adds ownership indexes without changing roadmap identity, lifecycle, or executable-evidence claims.
@@ -31,9 +33,9 @@
 - Example files: 24
 - Integration reports: 2 (Hermes public interface E0-T4, Watchman public interface E0-T5)
 - Integration fixtures: 42 files, 9 under `integrations/fixtures/hermes/` and 33 under `integrations/fixtures/watchman/`
-- Roadmap tasks: 75 (33 v0.1 + 12 E7 + 6 E8 + 9 E9 + 15 E10-E13)
-- Normative requirements: 199
-- Acceptance scenarios: 63
+- Roadmap tasks: 89 (33 v0.1 + 12 E7 + 6 E8 + 9 E9 + 15 E10-E13 + 3 E14 delivered; 11 E15-E17 planned)
+- Normative requirements: 223
+- Acceptance scenarios: 86
 
 ## Reproduction
 

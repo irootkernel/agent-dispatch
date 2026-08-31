@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -143,6 +144,10 @@ type Store struct {
 	// from the loaded configuration; never mutated concurrently because
 	// a store is opened, used, and closed by one command run.
 	notificationPolicy func(routeID string) *ports.NotificationPolicy
+	// groupGate caches whether the serialization-group migration has
+	// been applied so the slot paths do not probe the migration ledger
+	// on every call (E15 cold-validation F002); Migrate resets it.
+	groupGate atomic.Int32
 }
 
 // Path is the absolute database file path.

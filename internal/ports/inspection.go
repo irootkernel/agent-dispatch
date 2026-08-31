@@ -325,6 +325,15 @@ type ReconcileStore interface {
 // submissions (route disable semantics).
 var ErrRouteDisabled = errors.New("route activation state prevents submissions")
 
+// CapabilityFingerprintClear is the explicit route-enable gate sentinel
+// that retires a stored capability binding (an executable change the
+// operator just re-acknowledged); an empty fingerprint preserves the
+// binding instead. The enable path decides when to send it and the
+// durable store's activation write gives it this one meaning (AC-303,
+// the E15-T4 real-Hermes gate), so the protocol constant lives at the
+// port boundary rather than in either side.
+const CapabilityFingerprintClear = "\x00clear"
+
 // ErrStateNotEligible reports the dispatch's current state does not
 // permit the requested operator action.
 var ErrStateNotEligible = errors.New("dispatch state not eligible for action")

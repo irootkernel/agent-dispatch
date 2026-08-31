@@ -642,11 +642,10 @@ func (s *Store) transitionWithin(ctx context.Context, tx *sql.Tx, dispatchID str
 // the accepted capability-evidence fingerprint (E11-T2, HER-018), so a
 // later behavior-sensitive revision change or an executable identity
 // change requires a fresh acknowledgement; disable preserves
-// observations, active work, and dirty state.
-// CapabilityFingerprintClear is the explicit enable-gate sentinel that
-// retires a stored capability binding (an executable change the operator
-// just re-acknowledged); an EMPTY string preserves the binding instead.
-const CapabilityFingerprintClear = "\x00clear"
+// observations, active work, and dirty state. The
+// ports.CapabilityFingerprintClear sentinel (this package's import, the
+// port's contract) retires a stored binding; an EMPTY string preserves
+// the binding instead.
 
 func (s *Store) SetRouteActivation(ctx context.Context, routeID, activation, acknowledgeRevision, capabilityFingerprint, now string) error {
 	if activation != "enabled" && activation != "disabled" && activation != "paused" {
@@ -673,7 +672,7 @@ func (s *Store) SetRouteActivation(ctx context.Context, routeID, activation, ack
 			                               ELSE ? END,
 			last_reconciled_at = ?, version = version + 1
 			WHERE route_id = ?`, acknowledgeRevision, capabilityFingerprint,
-			capabilityFingerprint, CapabilityFingerprintClear, capabilityFingerprint, now, routeID)
+			capabilityFingerprint, ports.CapabilityFingerprintClear, capabilityFingerprint, now, routeID)
 	} else {
 		res, err = s.ExecContext(ctx, `UPDATE route_runtime_state
 			SET activation_state = ?, version = version + 1

@@ -332,11 +332,13 @@ func (s *Store) SerializationGroupOf(ctx context.Context, routeID, destinationID
 // another lane holds it or the group reports a preserved conflict.
 // reason names the refusing holder for the operator surface.
 func (s *Store) GroupSlotFree(ctx context.Context, routeID, destinationID string) (bool, string, error) {
-	var maxVersion sql.NullInt64
-	if err := s.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&maxVersion); err != nil {
+	gated, err := s.groupGateActiveCtx(ctx)
+	if err != nil {
 		return false, "", err
 	}
-	if !maxVersion.Valid || maxVersion.Int64 < groupSchemaVersion {
+	if !gated {
+		// No slot semantics on this database (the group migration has
+		// not applied): every lane reads as free.
 		return true, "", nil
 	}
 	var (
@@ -345,7 +347,7 @@ func (s *Store) GroupSlotFree(ctx context.Context, routeID, destinationID string
 		holderDest  sql.NullString
 		holderDis   sql.NullString
 	)
-	err := s.QueryRowContext(ctx, `SELECT g.state, g.holder_route_id, g.holder_destination_id, g.holder_dispatch_id
+	err = s.QueryRowContext(ctx, `SELECT g.state, g.holder_route_id, g.holder_destination_id, g.holder_dispatch_id
 		FROM serialization_groups g
 		JOIN serialization_group_members m ON m.group_id = g.group_id
 		WHERE m.route_id = ? AND m.destination_id = ?`, routeID, destinationID).
@@ -370,24 +372,86 @@ func (s *Store) GroupSlotFree(ctx context.Context, routeID, destinationID string
 }
 
 // groupSchemaVersion is the migration that introduced the group
-// tables: a database below it has no slot semantics at all (the
-// harness's pre-upgrade shapes and any crash-window state before the
-// v18 unit applies), so acquisitions and releases there are no-ops
-// rather than schema errors.
-const groupSchemaVersion = 18
+// tables: a database whose ledger stops below it has no slot
+// semantics at all (the harness's pre-upgrade shapes and any
+// crash-window state before the unit applies), so acquisitions and
+// releases there are no-ops rather than schema errors. Derived from
+// the migration registry by name so the gate cannot desynchronize
+// from the ledger (E15 cold-validation finding F002).
+var groupSchemaVersion = migrationVersion("serialization-group-state")
+
+// The cached states of the group-semantics gate: unknown (probe on the
+// next call), applied (the group migration's ledger row exists), and
+// missing (the ledger stops below it).
+const (
+	groupGateUnknown = int32(0)
+	groupGateApplied = int32(1)
+	groupGateMissing = int32(2)
+)
+
+// groupGateActiveCtx reports whether the group tables' migration has
+// been applied, probing the migration ledger once per store and
+// caching the answer (E15 cold-validation finding F002): the slot
+// paths no longer pay a MAX(version) probe inside every activation.
+// Migrate resets the cache to unknown, so a store that upgrades its
+// database mid-life re-probes; a ledger row never disappears, so a
+// cached applied answer stays true forever.
+func (s *Store) groupGateActiveCtx(ctx context.Context) (bool, error) {
+	switch s.groupGate.Load() {
+	case groupGateApplied:
+		return true, nil
+	case groupGateMissing:
+		return false, nil
+	}
+	var maxVersion sql.NullInt64
+	if err := s.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&maxVersion); err != nil {
+		return false, err
+	}
+	return s.cacheGroupGate(maxVersion), nil
+}
+
+// groupGateActiveTx is groupGateActiveCtx inside one transaction: the
+// probe reads the ledger through the caller's own snapshot.
+func (s *Store) groupGateActiveTx(tx *sql.Tx) (bool, error) {
+	switch s.groupGate.Load() {
+	case groupGateApplied:
+		return true, nil
+	case groupGateMissing:
+		return false, nil
+	}
+	var maxVersion sql.NullInt64
+	if err := tx.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&maxVersion); err != nil {
+		return false, err
+	}
+	return s.cacheGroupGate(maxVersion), nil
+}
+
+// cacheGroupGate records one probe's answer: a probe that saw the
+// group migration's ledger row stores applied unconditionally, while
+// a probe that did not may only land while the cache is still
+// unknown, so a concurrent upgrade's applied answer is never
+// downgraded.
+func (s *Store) cacheGroupGate(maxVersion sql.NullInt64) bool {
+	if maxVersion.Valid && maxVersion.Int64 >= groupSchemaVersion {
+		s.groupGate.Store(groupGateApplied)
+		return true
+	}
+	s.groupGate.CompareAndSwap(groupGateUnknown, groupGateMissing)
+	return false
+}
 
 // groupOfLaneTx resolves one lane's group inside a transaction; ok is
 // false for lanes without membership (no slot semantics).
-func groupOfLaneTx(tx *sql.Tx, routeID, destinationID string) (string, bool, error) {
-	var maxVersion sql.NullInt64
-	if err := tx.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&maxVersion); err != nil {
+func (s *Store) groupOfLaneTx(tx *sql.Tx, routeID, destinationID string) (string, bool, error) {
+	gated, err := s.groupGateActiveTx(tx)
+	if err != nil {
 		return "", false, err
 	}
-	if !maxVersion.Valid || maxVersion.Int64 < groupSchemaVersion {
+	if !gated {
 		return "", false, nil
 	}
 	var groupID string
-	err := tx.QueryRow(`SELECT group_id FROM serialization_group_members WHERE route_id = ? AND destination_id = ?`,
+	err = tx.QueryRow(`SELECT group_id FROM serialization_group_members WHERE route_id = ? AND destination_id = ?`,
 		routeID, destinationID).Scan(&groupID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil
@@ -404,7 +468,7 @@ func groupOfLaneTx(tx *sql.Tx, routeID, destinationID string) (string, bool, err
 // caller merges instead), and this lane's own hold or a promotion
 // reserved for this lane passes. Idempotent for the holding dispatch.
 func (s *Store) acquireGroupSlotTx(tx *sql.Tx, routeID, destinationID, dispatchID, actor, now string) error {
-	groupID, ok, err := groupOfLaneTx(tx, routeID, destinationID)
+	groupID, ok, err := s.groupOfLaneTx(tx, routeID, destinationID)
 	if err != nil || !ok {
 		return err
 	}
@@ -467,7 +531,7 @@ func (s *Store) acquireGroupSlotTx(tx *sql.Tx, routeID, destinationID, dispatchI
 // opens. The completing lane's own follow-up competes for the slot
 // like any other lane; promotion never picks the releaser itself.
 func (s *Store) releaseGroupSlotTx(tx *sql.Tx, routeID, destinationID, dispatchID, actor, now string) error {
-	groupID, ok, err := groupOfLaneTx(tx, routeID, destinationID)
+	groupID, ok, err := s.groupOfLaneTx(tx, routeID, destinationID)
 	if err != nil || !ok {
 		return err
 	}
@@ -539,7 +603,7 @@ func (s *Store) releaseGroupSlotTx(tx *sql.Tx, routeID, destinationID, dispatchI
 // the rerun, and any other state (open, another lane's hold) leaves
 // the new dispatch to acquire through its own activation.
 func (s *Store) transferGroupSlotTx(tx *sql.Tx, routeID, destinationID, originalDispatchID, newDispatchID, actor, now string) error {
-	groupID, ok, err := groupOfLaneTx(tx, routeID, destinationID)
+	groupID, ok, err := s.groupOfLaneTx(tx, routeID, destinationID)
 	if err != nil || !ok {
 		return err
 	}

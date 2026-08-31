@@ -56,6 +56,20 @@ var Migrations = []Migration{
 // database at a newer version is refused rather than silently modified.
 var MaxSchemaVersion = Migrations[len(Migrations)-1].Version
 
+// migrationVersion resolves one registered migration's version by
+// name. It panics at init for an unregistered name: callers bind
+// schema-versioned gates to registry entries, and a missing entry is
+// a programming error every test run catches, never a runtime
+// posture.
+func migrationVersion(name string) int64 {
+	for _, m := range Migrations {
+		if m.Name == name {
+			return int64(m.Version)
+		}
+	}
+	panic(fmt.Sprintf("migration %q is not registered", name))
+}
+
 // schemaV2AttemptsUniqueByAttemptID drops the over-constraining
 // UNIQUE(dispatch_id, started_at) on dispatch_attempts: with the
 // canonical second-precision timestamps it rejected legitimate
@@ -118,6 +132,10 @@ func (s *Store) Migrate(backupDir string) error {
 	if backupDir == "" {
 		return fmt.Errorf("migrations require a backup directory (backup before migration)")
 	}
+	// The serialization-group gate cache may predate the units this
+	// run applies: reset it so the slot paths re-probe the ledger
+	// after the upgrade (E15 cold-validation F002).
+	s.groupGate.Store(groupGateUnknown)
 	list := s.migrations
 	if list == nil {
 		list = Migrations

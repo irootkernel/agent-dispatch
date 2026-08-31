@@ -340,7 +340,7 @@ func routeEnableGate(command string, cfg *config.Config, routeID, revision strin
 			if binding.previousExecutable != "" && binding.previousExecutable != resolved.Hermes.Executable {
 				fmt.Fprintf(stderr, "warning: hermes_targets.%s probes partially after an executable change (%s to %s); the previous capability binding is retired and the submit path re-proves the new executable at run time\n", resolved.ID, binding.previousExecutable, resolved.Hermes.Executable)
 			}
-			return sqlite.CapabilityFingerprintClear, 0
+			return ports.CapabilityFingerprintClear, 0
 		}
 		if binding.partial {
 			fmt.Fprintf(stderr, "warning: hermes_targets.%s probes partially: %s\n", resolved.ID, binding.partialDetail)

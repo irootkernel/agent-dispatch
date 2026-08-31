@@ -324,7 +324,7 @@ func (s *Store) mergeLanesTx(tx *sql.Tx, routeID string, selectedDestinations []
 			// child. The dirty generation still records the burst and the
 			// reserved dispatch activates through its own gated path.
 			groupFree := true
-			if groupID, ok, gerr := groupOfLaneTx(tx, routeID, dest); gerr != nil {
+			if groupID, ok, gerr := s.groupOfLaneTx(tx, routeID, dest); gerr != nil {
 				return 0, false, gerr
 			} else if ok {
 				var gState string

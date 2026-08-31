@@ -94,7 +94,7 @@ func TestSinkClassificationTable(t *testing.T) {
 	// versionOK prefixes the frozen --version answer so the sink's
 	// construction gate passes and the create path reaches the scripted
 	// failure.
-	versionOK := `if [ "$1" = "--version" ]; then printf 'Hermes Agent v0.19.1 (2026.7.30)\n'; exit 0; fi
+	versionOK := `if [ "$1" = "--version" ]; then printf 'Hermes Agent v0.20.5 (2026.8.19)\n'; exit 0; fi
 `
 	cases := []struct {
 		name        string
@@ -132,7 +132,7 @@ func TestSinkClassificationTable(t *testing.T) {
 func TestSinkOversizedManifestRejectedAtSubmit(t *testing.T) {
 	dir := t.TempDir()
 	counter := filepath.Join(dir, "invoked")
-	bin := newStubHermes(t, `if [ "$1" = "--version" ]; then printf 'Hermes Agent v0.19.1 (2026.7.30)\n'; exit 0; fi
+	bin := newStubHermes(t, `if [ "$1" = "--version" ]; then printf 'Hermes Agent v0.20.5 (2026.8.19)\n'; exit 0; fi
 printf x >> "`+counter+`"; exit 0`)
 	sink, err := NewSink("t", bin, "", "b", ProcessLimits{}, 64)
 	if err != nil {
@@ -262,7 +262,7 @@ func TestSinkTargetObservedAtRendering(t *testing.T) {
 // reconciliation service conservatively treats as ambiguous) rather
 // than a found or absent proof.
 func TestSinkLookupTransportFailureIsError(t *testing.T) {
-	versionOK := `if [ "$1" = "--version" ]; then printf 'Hermes Agent v0.19.1 (2026.7.30)\n'; exit 0; fi
+	versionOK := `if [ "$1" = "--version" ]; then printf 'Hermes Agent v0.20.5 (2026.8.19)\n'; exit 0; fi
 `
 	bin := newStubHermes(t, versionOK+`sleep 30`)
 	sink := sinkFixture(t, bin)
@@ -323,7 +323,7 @@ func TestSinkExecutableSwapDetectedAtSubmission(t *testing.T) {
 	dir := t.TempDir()
 	exe := filepath.Join(dir, "hermes")
 	good := `#!/bin/sh
-if [ "$1" = "--version" ]; then printf 'Hermes Agent v0.19.1 (2026.7.30)
+if [ "$1" = "--version" ]; then printf 'Hermes Agent v0.20.5 (2026.8.19)
 '; exit 0; fi; exit 3`
 	bad := `#!/bin/sh
 if [ "$1" = "--version" ]; then printf 'Hermes Agent v0.18.0 (2026.5.1)

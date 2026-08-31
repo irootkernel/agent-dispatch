@@ -96,6 +96,6 @@ state: every mutating action stays an explicit operator command.
 ## Compatibility
 
 Agent Dispatch v0.1.5 (notifications, multi-destination fan-out, and
-work-receipt/v2 included) with Hermes 0.19.1 or newer (compatibility is
+work-receipt/v2 included) with Hermes 0.20.5 or newer (compatibility is
 probed; there is no maximum). Install the matching agent-dispatch
 binary first; this skill assumes it on PATH.

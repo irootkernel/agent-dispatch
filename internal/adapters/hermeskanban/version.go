@@ -22,12 +22,19 @@ func (v Version) String() string {
 	return fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch)
 }
 
-// MinimumEligibleVersion is the v0.1.5 eligibility floor (ADR-0017,
-// HER-011): Hermes 0.19.1 and every later version are probe-eligible;
-// there is no fixed maximum and no per-version source allowlist. The
-// frozen 0.19.1 interface remains the verified fixture (TST-012); a
-// newer Hermes is accepted only through the same probe path.
-var MinimumEligibleVersion = Version{Major: 0, Minor: 19, Patch: 1, BuildDate: "2026.7.30"}
+// MinimumEligibleVersion is the product support floor (E15-T2,
+// ADR-0021, HER-011): Hermes 0.20.5 and every later version are
+// probe-eligible; there is no fixed maximum and no per-version source
+// allowlist. 0.20.5 carries the durable delivery surfaces without
+// --mutex-key, so it is the normal agent-dispatch-group-enforced floor;
+// a later Hermes is accepted only through the same probe path.
+var MinimumEligibleVersion = func() Version {
+	t, err := records.ParseVersionTriple("0.20.5")
+	if err != nil {
+		panic("the product floor literal is not a version triple: " + err.Error())
+	}
+	return Version{Major: t.Major, Minor: t.Minor, Patch: t.Patch, BuildDate: "2026.8.19"}
+}()
 
 // Eligible reports whether v meets the given minimum. The build date is
 // recorded evidence, not the gate: the dotted triple is the identity.
@@ -103,9 +110,9 @@ func ParseMinimumVersion(text string) (Version, error) {
 }
 
 // CheckVersionEligible gates one discovered version against the
-// configured floor (HER-011: below 0.19.1 is rejected; every later
-// version is probe-eligible with no maximum). An eligibility failure
-// must fail before any task submission.
+// configured floor (HER-011: below the configured floor is rejected;
+// every later version is probe-eligible with no maximum). An
+// eligibility failure must fail before any task submission.
 func CheckVersionEligible(v, minimum Version) error {
 	if v.Eligible(minimum) {
 		return nil

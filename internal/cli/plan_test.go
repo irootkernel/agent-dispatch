@@ -35,7 +35,7 @@ resources:
 hermes_targets:
   hermes-main:
     board: agent-dispatch
-    minimum_version: 0.19.1
+    minimum_version: 0.20.5
     compatibility: capability_probe
     executable: ` + filepath.Join(dir, "hermes-stub") + `
 routes:

@@ -31,7 +31,7 @@ agent-dispatch version
 agent-dispatch init
 agent-dispatch config validate|show
 agent-dispatch setup wiki
-agent-dispatch hermes probe|capabilities|profiles
+agent-dispatch hermes probe|capabilities|profiles|set-minimum-version
 agent-dispatch route list|show|plan|enable|disable|stale|preflight|set-profile|set-skills
 agent-dispatch watchman install|status|remove|test
 agent-dispatch dispatch
@@ -351,6 +351,7 @@ agent-dispatch setup wiki
 agent-dispatch hermes probe [--target <id>] [--profile <profile>]
 agent-dispatch hermes capabilities [--refresh] [--target <id>] [--profile <profile>]
 agent-dispatch hermes profiles [--target <id>]
+agent-dispatch hermes set-minimum-version <target> <version>
 agent-dispatch route preflight --route <id>
 agent-dispatch route set-profile <route>:<destination> <profile>
 agent-dispatch route set-skills <route>:<destination> <skill>...
@@ -426,7 +427,28 @@ re-probing transparently when the cache is missing or stale and with
 `config_capability_missing` at exit 3 naming the missing capability.
 Route activation binds the record's fingerprint beside the acknowledged
 revision, and the submit path re-proves it against the live executable
-before any side effect (HER-018, AC-703).
+before any side effect (HER-018, AC-703). Since E15-T2 the probe
+contract is v3 and every record certifies one effective serialization
+mode (HER-020) — `agent-dispatch-group-enforced` (the normal posture of
+a target without `--mutex-key`, never a failure), 
+`agent-dispatch-group-plus-target-mutex` (the renderer then sends the
+effective serialization group as the complementary target mutex), or
+`unsupported-unsafe` (fail closed before any side effect) — reported by
+`hermes probe` and `hermes capabilities` and consumed identically by
+preflight, enablement, rendering, and submission revalidation; the
+product floor is 0.20.5 and an omitted configured floor fails closed
+without rewriting (AC-1107).
+
+`hermes set-minimum-version <target> <version>` (E15-T2, CLI-019) is
+the atomic target-floor helper: it accepts only versions at or above
+0.20.5, validates the candidate, and replaces the configuration file
+atomically so that only the selected target's `minimum_version`
+changes and every unrelated route and target keeps its bytes. The
+floor joins the route revision through the target projection, so the
+result names every affected route with its before/after revision and
+the fresh probe, preflight, and production re-acknowledgement it now
+owes; a below-floor version, an unknown target, or an unchanged floor
+refuses with `config_invalid` at exit 3 leaving the file untouched.
 
 `setup wiki` is an interactive walkthrough (shipped with E11-T4,
 route-correct and rerunnable since E14): with an explicitly named

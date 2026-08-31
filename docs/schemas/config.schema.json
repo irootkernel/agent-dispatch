@@ -170,6 +170,7 @@
       "required": [
         "executable",
         "board",
+        "minimum_version",
         "compatibility"
       ],
       "properties": {
@@ -185,8 +186,7 @@
         },
         "minimum_version": {
           "$ref": "#/$defs/version",
-          "default": "0.19.1",
-          "description": "Eligibility floor; at least 0.19.1 with no maximum (HER-011)."
+          "description": "Explicit eligibility floor; at least 0.20.5 with no maximum. An omitted floor fails closed and is never defaulted or rewritten implicitly (HER-011, E15-T2)."
         },
         "compatibility": {
           "const": "capability_probe",

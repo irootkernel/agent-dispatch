@@ -391,16 +391,21 @@ func resolveSink(cfg *config.Config, routeID string, log *observability.Logger) 
 			return nil, err
 		}
 		sink.Log, sink.TraceID = log, globalTraceID
-		// E11-T2/E8-T3 (M-6): the fresh per-executable capability record
-		// owns the resource-mutex posture — a probed create surface
-		// missing --mutex-key downgrades resource_mutex and the renderer
-		// must suppress the key for a target that cannot honor it. A
-		// missing or stale record keeps the frozen-interface default; the
-		// submit path's fingerprint re-proof still blocks a changed
-		// executable before any side effect.
+		// E15-T2 (HER-020): the fresh per-executable capability record
+		// certifies one effective serialization mode and owns the
+		// resource-mutex posture — the renderer sends the effective
+		// serialization group as the complementary target mutex exactly
+		// in agent-dispatch-group-plus-target-mutex mode and suppresses
+		// the flag otherwise (the normal 0.20.5 group-enforced posture,
+		// never a failure). A missing or stale record keeps the
+		// frozen-interface default; the submit path's fingerprint
+		// re-proof still blocks a changed executable before any side
+		// effect, and revalidation cannot change or bypass the certified
+		// mode because the mode is derived from the same evidence the
+		// fingerprint binds.
 		if record, rerr := hermeskanban.LoadCapabilityRecord(capabilityCachePath(dest.Target)); rerr == nil {
 			if digest, derr := hermeskanban.ExecutableDigest(t.Executable); derr == nil && record.StaleReasonForProfile(t.Executable, digest, "", "") == "" {
-				sink.SetResourceMutexSupported(record.CapabilitiesIncludeMutex())
+				sink.SetResourceMutexSupported(record.EffectiveSerializationMode() == hermeskanban.SerializationModeGroupPlusTargetMutex)
 			}
 		}
 		// HER-018: bind the activation-accepted capability fingerprint

@@ -95,7 +95,7 @@ resources:
 hermes_targets:
   hermes-main:
     board: agent-dispatch-test
-    minimum_version: 0.19.1
+    minimum_version: 0.20.5
     compatibility: capability_probe
     executable: ` + stubhermes.Write(t) + `
     submit_timeout: 30s
@@ -251,7 +251,7 @@ func TestDispatchUnusableTargetFailsClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	updated := bytes.Replace(raw, []byte("minimum_version: 0.19.1"), []byte("minimum_version: 0.19.0.9"), 1)
+	updated := bytes.Replace(raw, []byte("minimum_version: 0.20.5"), []byte("minimum_version: 0.19.0.9"), 1)
 	if err := os.WriteFile(configPath, updated, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestDispatchAmbiguousRecoveryLoop(t *testing.T) {
 	}
 	bad := filepath.Join(dir, "hermes-bad")
 	badScript := `#!/bin/sh
-if [ "$1" = "--version" ]; then printf 'Hermes Agent v0.19.1 (2026.7.30)\n'; exit 0; fi
+if [ "$1" = "--version" ]; then printf 'Hermes Agent v0.20.5 (2026.8.19)\n'; exit 0; fi
 if [ -f "` + sabotage + `" ]; then sleep 30; exit 0; fi
 exec "` + good + `" "$@"
 `
@@ -581,7 +581,7 @@ func TestReconcileSkipsRepointedScope(t *testing.T) {
 	dir := t.TempDir()
 	good := stubhermes.Write(t)
 	bad := filepath.Join(dir, "hermes-ambiguous")
-	script := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf 'Hermes Agent v0.19.1 (2026.7.30)\\n'; exit 0; fi\nsleep 60\n"
+	script := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf 'Hermes Agent v0.20.5 (2026.8.19)\\n'; exit 0; fi\nsleep 60\n"
 	if err := os.WriteFile(bad, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -763,7 +763,7 @@ func TestReconcilePreV3EmptyScopeWarnsAndProceeds(t *testing.T) {
 	dir := t.TempDir()
 	good := stubhermes.Write(t)
 	bad := filepath.Join(dir, "hermes-ambiguous")
-	script := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf 'Hermes Agent v0.19.1 (2026.7.30)\\n'; exit 0; fi\nsleep 60\n"
+	script := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf 'Hermes Agent v0.20.5 (2026.8.19)\\n'; exit 0; fi\nsleep 60\n"
 	if err := os.WriteFile(bad, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}

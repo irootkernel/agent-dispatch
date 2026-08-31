@@ -129,7 +129,7 @@ func TestE11T1NormalizedShowsDestinations(t *testing.T) {
 	for _, want := range []string{
 		`"fanout_mode":"all"`,
 		`"hermes_targets"`,
-		`"minimum_version":"0.19.1"`,
+		`"minimum_version":"0.20.5"`,
 		`"compatibility":"capability_probe"`,
 		`"destinations":[{"id":"indexing"`,
 		`"notifications"`,

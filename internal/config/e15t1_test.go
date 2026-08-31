@@ -27,7 +27,7 @@ hermes_targets:
   hermes-main:
     board: agent-dispatch
     executable: hermes
-    minimum_version: 0.19.1
+    minimum_version: 0.20.5
     compatibility: capability_probe
 routes:
   wiki-maintenance:

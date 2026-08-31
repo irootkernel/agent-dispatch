@@ -40,7 +40,7 @@ func TestE9T6RevisionCoversWebhookDeliveryEvidence(t *testing.T) {
 		"secret reference":     strings.Replace(string(e9t6WebhookYAML(t)), "secret_ref: env:TEST_TOKEN", "secret_ref: env:OTHER_TOKEN", 1),
 		"idempotency header":   strings.Replace(string(e9t6WebhookYAML(t)), "endpoint: https://example.invalid/hook", "endpoint: https://example.invalid/hook\n    idempotency_header: X-Dedup-Key", 1),
 		"lookup timeout":       strings.Replace(string(minimalYAML(t)), "compatibility: capability_probe", "compatibility: capability_probe\n    lookup_timeout: 45s", 1),
-		"eligibility floor":    strings.Replace(string(minimalYAML(t)), "minimum_version: 0.19.1", "minimum_version: 0.19.2", 1),
+		"eligibility floor":    strings.Replace(string(minimalYAML(t)), "minimum_version: 0.20.5", "minimum_version: 0.21.0", 1),
 	} {
 		cfgC, err := Parse([]byte(changed))
 		if err != nil {

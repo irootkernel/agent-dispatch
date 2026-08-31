@@ -23,7 +23,7 @@ func Write(t *testing.T) string {
 	script := `#!/bin/sh
 DIR="` + filepath.Join(dir, "state") + `"
 mkdir -p "$DIR"
-if [ "$1" = "--version" ]; then printf 'Hermes Agent v0.19.1 (2026.7.30)\n'; exit 0; fi
+if [ "$1" = "--version" ]; then printf 'Hermes Agent v0.20.5 (2026.8.19)\n'; exit 0; fi
 
 # Read-only probe surfaces first (argv: skills list --enabled-only,
 # optionally -p <profile> skills list --enabled-only).
@@ -118,8 +118,8 @@ func WriteVersioned(t *testing.T, versionLine string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rewritten := strings.Replace(string(raw), "Hermes Agent v0.19.1 (2026.7.30)", versionLine, 1)
-	if rewritten == string(raw) && versionLine != "Hermes Agent v0.19.1 (2026.7.30)" {
+	rewritten := strings.Replace(string(raw), "Hermes Agent v0.20.5 (2026.8.19)", versionLine, 1)
+	if rewritten == string(raw) && versionLine != "Hermes Agent v0.20.5 (2026.8.19)" {
 		t.Fatal("stub does not carry the frozen version line")
 	}
 	if err := os.WriteFile(bin, []byte(rewritten), 0o755); err != nil {

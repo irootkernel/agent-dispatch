@@ -19,11 +19,32 @@ import (
 // ProbeContractVersion names the probe contract this build speaks: the
 // read-only shape checks below and their parsing rules (ADR-0017,
 // HER-012). A record probed under a different contract version is
-// stale (HER-013).
-const ProbeContractVersion = "agent-dispatch.hermes-probe/v2"
+// stale (HER-013). v3 (E15-T2, ADR-0021) adds the effective
+// serialization mode to the evidence — every v2 record is stale and
+// re-probes.
+const ProbeContractVersion = "agent-dispatch.hermes-probe/v3"
 
 // CapabilityRecordSchema is the cached record's schema identity.
-const CapabilityRecordSchema = "agent-dispatch.hermes-capability-evidence/v2"
+const CapabilityRecordSchema = "agent-dispatch.hermes-capability-evidence/v3"
+
+// The effective serialization modes every surface must agree on
+// (HER-020, ADR-0021): the local group slot is always mandatory; the
+// target mutex is optional defense-in-depth that complements, never
+// replaces, it.
+const (
+	// SerializationModeGroupEnforced: the target passes every required
+	// capability shape but lacks --mutex-key — the normal Hermes 0.20.5
+	// posture (AC-1101), not a failure.
+	SerializationModeGroupEnforced = "agent-dispatch-group-enforced"
+	// SerializationModeGroupPlusTargetMutex: the target passes every
+	// required shape and carries --mutex-key, so the renderer sends the
+	// effective serialization group as the complementary target mutex.
+	SerializationModeGroupPlusTargetMutex = "agent-dispatch-group-plus-target-mutex"
+	// SerializationModeUnsupportedUnsafe: at least one required
+	// capability shape failed — fail closed before any side effect
+	// (HER-014); the mode name is the operator-facing posture.
+	SerializationModeUnsupportedUnsafe = "unsupported-unsafe"
+)
 
 // CapabilityRecord is the inspectable cached probe evidence: the probe
 // inputs it was keyed by (executable path and digest, reported version,
@@ -52,7 +73,14 @@ type CapabilityRecord struct {
 	EnabledSkills *[]string   `json:"enabled_skills,omitempty"`
 	Shapes        ProbeShapes `json:"shapes"`
 	MissingFlags  []string    `json:"missing_create_flags,omitempty"`
-	Fingerprint   string      `json:"fingerprint"`
+	// SerializationMode is the effective serialization mode this
+	// evidence certifies (HER-020): one of
+	// agent-dispatch-group-enforced, agent-dispatch-group-plus-target-
+	// mutex, or unsupported-unsafe. It is a pure function of the shape
+	// outcomes, so a fresh record always carries it and every consumer
+	// derives the same value.
+	SerializationMode string `json:"serialization_mode"`
+	Fingerprint       string `json:"fingerprint"`
 }
 
 // ProbeShapes carries each bounded shape probe's outcome. A shape
@@ -182,6 +210,7 @@ func (p *Prober) Probe(ctx context.Context) (*CapabilityRecord, error) {
 		rec.Shapes.SkillTable = ProbeShape{Ran: true, Passed: true, Detail: fmt.Sprintf("%d enabled skills", len(skills))}
 	}
 
+	rec.SerializationMode = rec.EffectiveSerializationMode()
 	rec.Fingerprint = rec.computeFingerprint()
 	return rec, nil
 }
@@ -241,6 +270,24 @@ func DeriveFingerprint(schema, contract, executablePath, executableDigest, herme
 		schema, contract, executablePath, executableDigest, hermesVersion,
 	}, "\x00")))
 	return "cap:" + hex.EncodeToString(sum[:16])
+}
+
+// EffectiveSerializationMode derives the one effective serialization
+// mode this record certifies (HER-020): every required shape passing
+// with --mutex-key present is agent-dispatch-group-plus-target-mutex,
+// every required shape passing without it is
+// agent-dispatch-group-enforced (the normal 0.20.5 posture), and any
+// required-shape failure is unsupported-unsafe. Deriving — never
+// trusting a stored string alone — keeps old consumers and the record
+// in agreement even if the file is hand-edited.
+func (r *CapabilityRecord) EffectiveSerializationMode() string {
+	if !r.AllRequiredPassed() {
+		return SerializationModeUnsupportedUnsafe
+	}
+	if r.CapabilitiesIncludeMutex() {
+		return SerializationModeGroupPlusTargetMutex
+	}
+	return SerializationModeGroupEnforced
 }
 
 // AllRequiredPassed reports whether every capability-relevant probed
@@ -335,7 +382,7 @@ func LoadCapabilityRecord(path string) (*CapabilityRecord, error) {
 		return nil, fmt.Errorf("capability evidence %s: %w", path, err)
 	}
 	if rec.SchemaVersion != CapabilityRecordSchema {
-		return nil, fmt.Errorf("capability evidence %s: schema %q is not the v2 probe record", path, rec.SchemaVersion)
+		return nil, fmt.Errorf("capability evidence %s: schema %q is not the v3 probe record", path, rec.SchemaVersion)
 	}
 	return &rec, nil
 }

@@ -38,7 +38,8 @@ Commands:
   status         Route, queue, quarantine, target, and drift snapshot.
   doctor         Findings examination over configuration, store, and integrations.
   maintenance    backup, integrity, prune.
-  hermes         probe, capabilities, profiles — the public-interface probes.
+  hermes         probe, capabilities, profiles, set-minimum-version — the
+                 public-interface probes and the atomic floor helper.
   setup          wiki — the guided disabled setup walkthrough.
   completion     Emit the shell completion script.
 
@@ -391,20 +392,28 @@ Example:
 Next safe command: agent-dispatch maintenance integrity --full`,
 	"hermes": `hermes — the public-interface probes
 
-Usage: agent-dispatch hermes <probe|capabilities|profiles> [flags]
+Usage: agent-dispatch hermes <probe|capabilities|profiles|set-minimum-version> [flags]
 
 Subcommands:
   probe          Run every shape probe and write the evidence cache
-                 (--target <id>, --profile <profile>).
+                 (--target <id>, --profile <profile>); the record
+                 carries the certified effective serialization mode.
   capabilities   Print the cached record (--refresh re-probes).
   profiles       List the public profiles with on-disk status
                  (--target <id>).
+  set-minimum-version <target> <version>
+                 Atomically raise one target's floor to a version at or
+                 above 0.20.5; every affected route revision pauses for
+                 fresh probe, preflight, and production
+                 re-acknowledgement.
 
 Exit codes: 0; 2 usage (--refresh belongs to capabilities); 3
-configuration (incomplete evidence); 11 target unavailable.
+configuration (incomplete evidence, below-floor or refused candidate);
+11 target unavailable.
 
 Side effects: probe/capabilities write the owner-only machine-local
-evidence cache; no Hermes state is ever touched.
+evidence cache; set-minimum-version atomically replaces the
+configuration file; no Hermes state is ever touched.
 
 Example:
   agent-dispatch hermes probe --profile wiki-maintainer

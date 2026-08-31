@@ -86,7 +86,7 @@ SinkLimits {
 }
 ```
 
-Since the v0.1.5 destinations cutover (E11-T1), hermes compatibility is gated by the `minimum_version` eligibility floor with the capability probe pending (E11-T2 restores per-executable shape evidence and binds activation to its fingerprint); the frozen 0.19.1 interface is the interim truth source for the unconditional delivery-evidence set. The `required_capabilities` comparison applies to webhook targets only: a required capability the static webhook declaration does not provide is a configuration error.
+Since the v0.1.5 destinations cutover (E11-T1) and the E15-T2 floor raise, hermes compatibility is gated by an explicit `minimum_version` floor — at least 0.20.5, never omitted — proven per executable by the capability probe whose record certifies one effective serialization mode and binds activation to its fingerprint (HER-011, HER-018, HER-020). The `required_capabilities` comparison applies to webhook targets only: a required capability the static webhook declaration does not provide is a configuration error.
 
 ## 5. Logical Kanban Request
 
@@ -193,7 +193,7 @@ A future optional plugin may expose Agent Dispatch status, route pause/resume, q
 ## 12. v0.1.5 Capability and Destination Target
 
 ADR-0017 replaces the exact-version production gate with minimum-version
-eligibility followed by capability probing. Versions below 0.19.1 fail before
+eligibility followed by capability probing. Versions below the configured floor fail before
 probing; later versions have no fixed maximum. A route is compatible only when
 the public command and response shapes needed by every configured destination
 are usable under the process bounds in §3.

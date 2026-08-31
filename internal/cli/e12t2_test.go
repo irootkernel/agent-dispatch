@@ -476,7 +476,7 @@ func TestE12T2DifferingTargetsRefused(t *testing.T) {
 	updated := string(raw)
 	// A second hermes target beside the fixture's own.
 	marker := "routes:\n"
-	secondTarget := "  hermes-secondary:\n    board: agent-dispatch-test\n    minimum_version: 0.19.1\n    compatibility: capability_probe\n    executable: " + stubExeOf(t, configPath) + "\n    submit_timeout: 30s\n    lookup_timeout: 30s\n    environment_allowlist: [PATH, HOME]\n"
+	secondTarget := "  hermes-secondary:\n    board: agent-dispatch-test\n    minimum_version: 0.20.5\n    compatibility: capability_probe\n    executable: " + stubExeOf(t, configPath) + "\n    submit_timeout: 30s\n    lookup_timeout: 30s\n    environment_allowlist: [PATH, HOME]\n"
 	i := strings.Index(updated, marker)
 	if i < 0 {
 		t.Fatal("fixture no longer carries the routes block")

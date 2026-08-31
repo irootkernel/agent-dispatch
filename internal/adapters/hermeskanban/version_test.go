@@ -17,13 +17,13 @@ func TestParseVersionTable(t *testing.T) {
 		want    Version
 		wantErr bool
 	}{
-		{"documented line", "Hermes Agent v0.19.1 (2026.7.30)", Version{0, 19, 1, "2026.7.30"}, false},
-		{"multi-line output keeps first line", "Hermes Agent v0.19.1 (2026.7.30)\nInstall directory: ~/.hermes/hermes-agent\nPython: 3.11.15\n", Version{0, 19, 1, "2026.7.30"}, false},
+		{"documented line", "Hermes Agent v0.20.5 (2026.8.19)", Version{0, 20, 5, "2026.8.19"}, false},
+		{"multi-line output keeps first line", "Hermes Agent v0.20.5 (2026.8.19)\nInstall directory: ~/.hermes/hermes-agent\nPython: 3.11.15\n", Version{0, 20, 5, "2026.8.19"}, false},
 		{"older patch", "Hermes Agent v0.19.0 (2026.7.01)", Version{0, 19, 0, "2026.7.01"}, false},
 		{"newer minor", "Hermes Agent v0.20.0 (2026.8.10)", Version{0, 20, 0, "2026.8.10"}, false},
 		{"garbage", "hermes version 19.1", Version{}, true},
 		{"empty", "", Version{}, true},
-		{"missing build date", "Hermes Agent v0.19.1", Version{}, true},
+		{"missing build date", "Hermes Agent v0.20.5", Version{}, true},
 		{"absurd component", "Hermes Agent v9999999999.0.0 (x)", Version{}, true},
 	}
 	for _, c := range cases {
@@ -55,9 +55,9 @@ func TestParseVersionFixture(t *testing.T) {
 
 func TestVersionEligibilityGate(t *testing.T) {
 	eligible := []Version{
-		{0, 19, 1, "2026.7.30"},
-		{0, 19, 1, "some-other-build"},
-		{0, 20, 0, "2026.8.10"},
+		{0, 20, 5, "2026.8.19"},
+		{0, 20, 5, "some-other-build"},
+		{0, 21, 0, "2026.9.10"},
 		{1, 0, 0, "future"},
 	}
 	for _, v := range eligible {
@@ -66,8 +66,8 @@ func TestVersionEligibilityGate(t *testing.T) {
 		}
 	}
 	belowFloor := []Version{
-		{0, 19, 0, "2026.7.01"},
-		{0, 18, 9, "old"},
+		{0, 20, 4, "2026.8.18"},
+		{0, 19, 1, "old"},
 	}
 	for _, v := range belowFloor {
 		err := CheckVersionEligible(v, MinimumEligibleVersion)

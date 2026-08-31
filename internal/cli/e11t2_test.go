@@ -35,7 +35,7 @@ resources:
 hermes_targets:
   hermes-main:
     board: agent-dispatch-test
-    minimum_version: 0.19.1
+    minimum_version: 0.20.5
     compatibility: capability_probe
     executable: ` + bin + `
     submit_timeout: 30s

@@ -135,7 +135,7 @@ func TestRefreshMalformedStatusPersistsUnavailable(t *testing.T) {
 	good := stubhermes.Write(t)
 	bad := filepath.Join(dir, "hermes-bad")
 	script := `#!/bin/sh
-if [ "$1" = "--version" ]; then printf 'Hermes Agent v0.19.1 (2026.7.30)\n'; exit 0; fi
+if [ "$1" = "--version" ]; then printf 'Hermes Agent v0.20.5 (2026.8.19)\n'; exit 0; fi
 case "$4" in
   create) exec "` + good + `" "$@" ;;
   show) printf '{"task":{"id":"%s","title":"t","status":"exploded","created_at":1787142146}}' "$5" ;;

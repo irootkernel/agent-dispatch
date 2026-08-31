@@ -232,7 +232,7 @@ func runSetupWiki(command string, args []string, ui *setupUI) int {
 	probeCode := step([]string{"hermes", "probe", "--config", configPath})
 	if probeCode != 0 {
 		writeError(ui.stderr, command, "config_capability_missing", "configuration",
-			"the Hermes probes failed; install a Hermes at or above 0.19.1, create the board, and re-run setup wiki")
+			"the Hermes probes failed; install a Hermes at or above 0.20.5, create the board, and re-run setup wiki")
 		return 3
 	}
 	preflightCode := step([]string{"route", "preflight", "--config", configPath, "--route", routeID})

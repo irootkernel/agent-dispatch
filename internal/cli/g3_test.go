@@ -182,7 +182,7 @@ resources:
 hermes_targets:
   hermes-main:
     board: %s
-    minimum_version: 0.19.1
+    minimum_version: 0.20.5
     compatibility: capability_probe
     executable: %s
     submit_timeout: 30s
@@ -464,7 +464,7 @@ func TestG3AC303DowntimeAndRestart(t *testing.T) {
 	// Downtime: a present but failing Hermes (a server-down stand-in
 	// that answers the version gate and then rejects every command).
 	down := filepath.Join(h.stateDir, "hermes-down")
-	downScript := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf 'Hermes Agent v0.19.1 (2026.7.30)\\n'; exit 0; fi\necho 'hermes server is down' >&2; exit 7\n"
+	downScript := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf 'Hermes Agent v0.20.5 (2026.8.19)\\n'; exit 0; fi\necho 'hermes server is down' >&2; exit 7\n"
 	if err := os.WriteFile(down, []byte(downScript), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -590,7 +590,7 @@ func TestG3AC304AmbiguousUnknownNoFallback(t *testing.T) {
 	// Ambiguity: a hermes look-alike that answers the version gate and
 	// then never answers the create.
 	stub := filepath.Join(h.stateDir, "hermes-ambiguous")
-	script := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf 'Hermes Agent v0.19.1 (2026.7.30)\\n'; exit 0; fi\nsleep 60\n"
+	script := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf 'Hermes Agent v0.20.5 (2026.8.19)\\n'; exit 0; fi\nsleep 60\n"
 	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}

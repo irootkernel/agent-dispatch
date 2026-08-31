@@ -45,17 +45,32 @@ func SemanticValidate(cfg *Config) (errs []error, warnings []string) {
 	return errs, warnings
 }
 
-// MinimumEligibleHermesVersion is the v0.1.5 eligibility floor (ADR-0017,
-// HER-011): Hermes below 0.19.1 is rejected, with no fixed maximum. A
-// hermes target may declare a higher floor, never a lower one.
-const MinimumEligibleHermesVersion = "0.19.1"
+// MinimumEligibleHermesVersion is the product support floor (E15-T2,
+// ADR-0021, HER-011): Hermes below 0.20.5 is rejected, with no fixed
+// maximum. A hermes target may declare a higher floor, never a lower
+// one, and an omitted floor fails closed instead of defaulting.
+const MinimumEligibleHermesVersion = "0.20.5"
+
+// productFloorTriple is the parsed support floor, verified once at
+// package init so no caller ever bridges the literal through an
+// error-ignoring parse (E15-T2 round-1 F002); the hermeskanban
+// adapter's floor struct is pinned to this literal by test.
+var productFloorTriple = func() records.VersionTriple {
+	t, err := records.ParseVersionTriple(MinimumEligibleHermesVersion)
+	if err != nil {
+		panic("MinimumEligibleHermesVersion is not a version triple: " + err.Error())
+	}
+	return t
+}()
 
 // validateHermesTargets enforces the hermes_targets contract (§14): a
-// non-empty board, a parseable minimum_version at or above the 0.19.1
-// eligibility floor (HER-011), and exactly the capability_probe
-// compatibility mode (ADR-0017). Map keys must match the destination-ID
-// pattern: the key names the capability-cache file, so a path separator
-// or traversal segment in a key must never reach a file-path join.
+// non-empty board, an EXPLICIT parseable minimum_version at or above
+// the 0.20.5 support floor (HER-011 — an omitted floor fails closed
+// without implicit rewriting, AC-1107), and exactly the
+// capability_probe compatibility mode (ADR-0017). Map keys must match
+// the destination-ID pattern: the key names the capability-cache file,
+// so a path separator or traversal segment in a key must never reach a
+// file-path join.
 func validateHermesTargets(cfg *Config) []error {
 	ids := make([]string, 0, len(cfg.HermesTargets))
 	for id := range cfg.HermesTargets {
@@ -71,18 +86,17 @@ func validateHermesTargets(cfg *Config) []error {
 		if strings.TrimSpace(t.Board) == "" {
 			errs = append(errs, fmt.Errorf("hermes_targets.%s.board must be non-empty", id))
 		}
-		minimum := t.MinimumVersion
-		if minimum == "" {
-			minimum = MinimumEligibleHermesVersion
+		if t.MinimumVersion == "" {
+			errs = append(errs, fmt.Errorf("hermes_targets.%s.minimum_version must be declared explicitly at or above %s; an omitted floor fails closed and is never rewritten implicitly (HER-011)", id, MinimumEligibleHermesVersion))
+			continue
 		}
-		parsed, err := records.ParseVersionTriple(minimum)
+		parsed, err := records.ParseVersionTriple(t.MinimumVersion)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("hermes_targets.%s.minimum_version: %v", id, err))
 			continue
 		}
-		floor, _ := records.ParseVersionTriple(MinimumEligibleHermesVersion)
-		if parsed.Less(floor) {
-			errs = append(errs, fmt.Errorf("hermes_targets.%s.minimum_version %s is below the v0.1.5 eligibility floor %s (HER-011)", id, minimum, MinimumEligibleHermesVersion))
+		if parsed.Less(productFloorTriple) {
+			errs = append(errs, fmt.Errorf("hermes_targets.%s.minimum_version %s is below the support floor %s (HER-011)", id, t.MinimumVersion, MinimumEligibleHermesVersion))
 		}
 		if t.Compatibility != "capability_probe" {
 			errs = append(errs, fmt.Errorf("hermes_targets.%s.compatibility must be capability_probe in v0.1.5 (got %q)", id, t.Compatibility))

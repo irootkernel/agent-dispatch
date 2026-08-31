@@ -1,10 +1,10 @@
 {
-  "schema_version": "agent-dispatch.hermes-capability-evidence/v2",
-  "probe_contract": "agent-dispatch.hermes-probe/v2",
+  "schema_version": "agent-dispatch.hermes-capability-evidence/v3",
+  "probe_contract": "agent-dispatch.hermes-probe/v3",
   "probed_at": "2026-08-28T07:30:00Z",
   "executable_path": "hermes",
   "executable_sha256": "sha256:e968ae4eeee62de7e0cae0a4abe3b68dfa253ad20eabab180bf90f3f76573d91",
-  "hermes_version": "0.19.1",
+  "hermes_version": "0.20.5",
   "profile": "wiki-maintainer",
   "enabled_skills": [
     "agent-dispatch-wiki-maintenance",
@@ -14,7 +14,7 @@
     "version": {
       "ran": true,
       "passed": true,
-      "detail": "0.19.1"
+      "detail": "0.20.5"
     },
     "assignees_json": {
       "ran": true,
@@ -29,7 +29,7 @@
     "create_surface": {
       "ran": true,
       "passed": true,
-      "detail": "required create flags present"
+      "detail": "missing create flags: --mutex-key"
     },
     "skill_table": {
       "ran": true,
@@ -37,5 +37,9 @@
       "detail": "2 enabled skills"
     }
   },
+  "missing_create_flags": [
+    "--mutex-key"
+  ],
+  "serialization_mode": "agent-dispatch-group-enforced",
   "fingerprint": "cap:ad2348e12dcc70db3cf49d2976bb2c9c"
 }

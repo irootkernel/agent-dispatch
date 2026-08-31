@@ -108,3 +108,63 @@ func atomicReplace(path string, data []byte) error {
 	}
 	return nil
 }
+
+// MutateHermesTarget applies one hermes-target-qualified mutation
+// (E15-T2, CLI-019): the mutation receives the exact target identified
+// by targetID and may modify only that target's fields. Values outside
+// the target are preserved, though the document is re-serialized by the
+// atomic replacement (layout and comments may normalize). A target
+// floor edit is behavior-affecting and joins the route revision through
+// routeTargetsProjection, so every route binding the target pauses its
+// production acknowledgement.
+func MutateHermesTarget(path, targetID string, mutate func(*HermesTarget) error) error {
+	return MutateFile(path, func(cfg *Config) error {
+		target, ok := cfg.HermesTargets[targetID]
+		if !ok {
+			return fmt.Errorf("hermes target %q is not declared under hermes_targets", targetID)
+		}
+		if err := mutate(&target); err != nil {
+			return err
+		}
+		cfg.HermesTargets[targetID] = target
+		return nil
+	})
+}
+
+// MutateHermesTargetRepair is the bounded repair path of the floor
+// helper (E15-T2 round-1 F005, CLI-019): the current document is
+// decoded WITHOUT the schema and semantic gates so a configuration
+// whose floor predates the 0.20.5 product floor — a below-floor value
+// or an omitted field — can still be remediated; the mutation then runs
+// and the CANDIDATE must pass every gate before the atomic replacement,
+// so repair never weakens validation and a refused candidate leaves
+// the original untouched.
+func MutateHermesTargetRepair(path, targetID string, mutate func(*HermesTarget) error) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read config: %w", err)
+	}
+	cfg, err := ParseDecoded(data)
+	if err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	target, ok := cfg.HermesTargets[targetID]
+	if !ok {
+		return fmt.Errorf("hermes target %q is not declared under hermes_targets", targetID)
+	}
+	if err := mutate(&target); err != nil {
+		return err
+	}
+	cfg.HermesTargets[targetID] = target
+	if err := SchemaValidate(cfg); err != nil {
+		return fmt.Errorf("candidate failed schema validation; nothing was written: %w", err)
+	}
+	if errs, _ := SemanticValidate(cfg); len(errs) > 0 {
+		return fmt.Errorf("candidate failed semantic validation; nothing was written: semantic: %s", joinErrors(errs))
+	}
+	out, err := MarshalYAML(cfg)
+	if err != nil {
+		return err
+	}
+	return atomicReplace(path, out)
+}

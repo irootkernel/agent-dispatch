@@ -102,7 +102,7 @@ routes:
 // floorValue renders the configured floor for the fixture.
 func floorValue(floor string) string {
 	if floor == "" {
-		return "0.19.1"
+		return "0.20.5"
 	}
 	return floor
 }
@@ -111,7 +111,7 @@ func floorValue(floor string) string {
 // available and reports the eight HER-004 declarations (cli-spec §3).
 func TestConfigValidateProbeTargetsAvailable(t *testing.T) {
 	dir := t.TempDir()
-	bin := e4t1StubHermes(t, dir, "Hermes Agent v0.19.1 (2026.7.30)")
+	bin := e4t1StubHermes(t, dir, "Hermes Agent v0.20.5 (2026.8.19)")
 	configPath := e4t1ProbeConfig(t, dir, bin, "")
 	t.Setenv("AGENT_DISPATCH_STATE_DIR", dir)
 	var out, errb bytes.Buffer
@@ -128,7 +128,7 @@ func TestConfigValidateProbeTargetsAvailable(t *testing.T) {
 		t.Fatalf("probe_targets missing: %v", res["probe_targets"])
 	}
 	entry, _ := probes[0].(map[string]any)
-	if entry["state"] != "available" || entry["hermes_version"] != "0.19.1" {
+	if entry["state"] != "available" || entry["hermes_version"] != "0.20.5" {
 		t.Fatalf("probe entry wrong: %v", entry)
 	}
 	// The capability declarations return with the E11-T2 probe's cached
@@ -143,11 +143,11 @@ func TestConfigValidateProbeTargetsAvailable(t *testing.T) {
 // the stable config_capability_missing code and exit 3 (HER-005).
 func TestConfigValidateProbeTargetsBelowDeclaredFloor(t *testing.T) {
 	dir := t.TempDir()
-	bin := e4t1StubHermes(t, dir, "Hermes Agent v0.19.1 (2026.7.30)")
+	bin := e4t1StubHermes(t, dir, "Hermes Agent v0.20.5 (2026.8.19)")
 	// A declared floor above the installed version: the configuration
 	// document is valid (the mismatch rides the probe as a warning,
 	// state version_unsupported) and the enable/submit gates refuse.
-	configPath := e4t1ProbeConfig(t, dir, bin, "0.19.2")
+	configPath := e4t1ProbeConfig(t, dir, bin, "0.21.0")
 	t.Setenv("AGENT_DISPATCH_STATE_DIR", dir)
 	var out, errb bytes.Buffer
 	code := Run([]string{"config", "validate", "--probe-targets", "--config", configPath}, &out, &errb)
@@ -215,7 +215,7 @@ func TestConfigValidateProbeTargetsUnavailable(t *testing.T) {
 // capability report are operator errors, never reduced guarantees.
 func TestConfigValidateProbeTargetsConfigErrors(t *testing.T) {
 	dir := t.TempDir()
-	bin := e4t1StubHermes(t, dir, "Hermes Agent v0.19.1 (2026.7.30)")
+	bin := e4t1StubHermes(t, dir, "Hermes Agent v0.20.5 (2026.8.19)")
 	cases := []struct {
 		name  string
 		floor string
@@ -252,7 +252,7 @@ func TestConfigValidateProbeTargetsConfigErrors(t *testing.T) {
 // schema's whole-day unit is accepted.
 func TestConfigValidateProbeTargetsInvalidTimeouts(t *testing.T) {
 	dir := t.TempDir()
-	bin := e4t1StubHermes(t, dir, "Hermes Agent v0.19.1 (2026.7.30)")
+	bin := e4t1StubHermes(t, dir, "Hermes Agent v0.20.5 (2026.8.19)")
 	for _, bad := range []string{"banana", "0s", "-5s", "5"} {
 		t.Run(bad, func(t *testing.T) {
 			configPath := e4t1ProbeConfig(t, dir, bin, "")
@@ -296,7 +296,7 @@ func TestConfigValidateProbeTargetsInvalidTimeouts(t *testing.T) {
 // when states are mixed.
 func TestConfigValidateProbeTargetsMultipleTargets(t *testing.T) {
 	dir := t.TempDir()
-	good := e4t1StubHermes(t, dir, "Hermes Agent v0.19.1 (2026.7.30)")
+	good := e4t1StubHermes(t, dir, "Hermes Agent v0.20.5 (2026.8.19)")
 	bad := filepath.Join(dir, "absent-hermes")
 	_ = good
 	cfg := `version: 1
@@ -310,12 +310,12 @@ resources:
 hermes_targets:
   a-target:
     board: agent-dispatch
-    minimum_version: 0.19.1
+    minimum_version: 0.20.5
     compatibility: capability_probe
     executable: ` + bad + `
   b-target:
     board: agent-dispatch
-    minimum_version: 0.19.1
+    minimum_version: 0.20.5
     compatibility: capability_probe
     executable: ` + good + `
 routes:

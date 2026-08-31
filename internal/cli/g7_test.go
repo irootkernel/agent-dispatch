@@ -32,7 +32,7 @@ func g7Config(t *testing.T, bin string) string {
 // product command, the same probe path (TST-012).
 func TestG7AC701SameProbePathBothInterfaces(t *testing.T) {
 	for _, versionLine := range []string{
-		"Hermes Agent v0.19.1 (2026.7.30)",
+		"Hermes Agent v0.20.5 (2026.8.19)",
 		"Hermes Agent v0.21.0 (2026.10.1)",
 	} {
 		t.Run(versionLine, func(t *testing.T) {

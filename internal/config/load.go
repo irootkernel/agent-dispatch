@@ -55,6 +55,31 @@ func Parse(data []byte) (*Config, error) {
 	return &cfg, nil
 }
 
+// ParseDecoded decodes configuration bytes through the same retired-
+// shape refusal and strict YAML decoding as Parse, but defers the
+// schema and semantic gates to the caller: the bounded repair path for
+// a document whose current floor predates the 0.20.5 product floor
+// (E15-T2 round-1 F005, CLI-019's remediation purpose). The mutation
+// that follows must re-validate the CANDIDATE against every gate before
+// any write, so a candidate that still fails leaves the original
+// untouched — repair never means a weaker gate.
+func ParseDecoded(data []byte) (*Config, error) {
+	var probe yaml.Node
+	if err := yaml.Unmarshal(data, &probe); err != nil {
+		return nil, fmt.Errorf("yaml: %w", err)
+	}
+	if legacy := detectLegacyShape(&probe); legacy != nil {
+		return nil, legacy
+	}
+	var cfg Config
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(&cfg); err != nil {
+		return nil, fmt.Errorf("yaml: %w", err)
+	}
+	return &cfg, nil
+}
+
 func joinErrors(errs []error) string {
 	var b bytes.Buffer
 	for i, e := range errs {

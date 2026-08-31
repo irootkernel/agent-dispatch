@@ -19,21 +19,21 @@ func stubVersionHermes(t *testing.T, versionLine string) string {
 }
 
 // TestProbeEligibleFloor proves the read-only eligibility gate: the
-// frozen 0.19.1 interface passes, every later version passes with no
-// maximum (HER-011, ADR-0017), and only a below-floor version fails.
+// 0.20.5 support floor passes, every later version passes with no
+// maximum (HER-011, ADR-0021), and only a below-floor version fails.
 func TestProbeEligibleFloor(t *testing.T) {
-	t.Run("frozen floor version", func(t *testing.T) {
-		bin := stubVersionHermes(t, "Hermes Agent v0.19.1 (2026.7.30)")
+	t.Run("floor version", func(t *testing.T) {
+		bin := stubVersionHermes(t, "Hermes Agent v0.20.5 (2026.8.19)")
 		adapter, err := New("hermes-kanban-main", bin, "", ProcessLimits{})
 		if err != nil {
 			t.Fatal(err)
 		}
 		if _, err := adapter.Probe(context.Background()); err != nil {
-			t.Fatalf("the frozen 0.19.1 interface must be eligible: %v", err)
+			t.Fatalf("the 0.20.5 floor interface must be eligible: %v", err)
 		}
 	})
 	t.Run("later version with no maximum", func(t *testing.T) {
-		bin := stubVersionHermes(t, "Hermes Agent v0.20.0 (2026.8.10)")
+		bin := stubVersionHermes(t, "Hermes Agent v0.21.0 (2026.9.10)")
 		adapter, err := New("t", bin, "", ProcessLimits{})
 		if err != nil {
 			t.Fatal(err)
@@ -43,7 +43,7 @@ func TestProbeEligibleFloor(t *testing.T) {
 		}
 	})
 	t.Run("below floor", func(t *testing.T) {
-		bin := stubVersionHermes(t, "Hermes Agent v0.19.0 (2026.7.01)")
+		bin := stubVersionHermes(t, "Hermes Agent v0.20.4 (2026.8.18)")
 		adapter, err := New("t", bin, "", ProcessLimits{})
 		if err != nil {
 			t.Fatal(err)
@@ -55,8 +55,8 @@ func TestProbeEligibleFloor(t *testing.T) {
 		}
 	})
 	t.Run("declared higher floor", func(t *testing.T) {
-		bin := stubVersionHermes(t, "Hermes Agent v0.19.1 (2026.7.30)")
-		adapter, err := New("t", bin, "0.19.2", ProcessLimits{})
+		bin := stubVersionHermes(t, "Hermes Agent v0.20.5 (2026.8.19)")
+		adapter, err := New("t", bin, "0.21.0", ProcessLimits{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -67,7 +67,7 @@ func TestProbeEligibleFloor(t *testing.T) {
 		}
 	})
 	t.Run("adapter identity", func(t *testing.T) {
-		bin := stubVersionHermes(t, "Hermes Agent v0.19.1 (2026.7.30)")
+		bin := stubVersionHermes(t, "Hermes Agent v0.20.5 (2026.8.19)")
 		adapter, err := New("hermes-kanban-main", bin, "", ProcessLimits{})
 		if err != nil {
 			t.Fatal(err)
@@ -98,12 +98,12 @@ func TestProbeFailsClosedOnUnparsableVersion(t *testing.T) {
 // shape fails closed.
 func TestParseMinimumVersion(t *testing.T) {
 	if v, err := ParseMinimumVersion(""); err != nil || v != MinimumEligibleVersion {
-		t.Fatalf("empty floor must mean the default 0.19.1, got %v err=%v", v, err)
+		t.Fatalf("empty floor must mean the default 0.20.5, got %v err=%v", v, err)
 	}
 	if v, err := ParseMinimumVersion("1.2.3"); err != nil || v.String() != "1.2.3" {
 		t.Fatalf("canonical triple must parse, got %v err=%v", v, err)
 	}
-	for _, bad := range []string{"0.19", "0.19.1.2", "v0.19.1", "0.19.1-beta", "01.2.3", "0.19.x", "0.19.9999999999"} {
+	for _, bad := range []string{"0.20", "0.20.5.2", "v0.20.5", "0.20.5-beta", "01.2.3", "0.20.x", "0.20.9999999999"} {
 		if _, err := ParseMinimumVersion(bad); err == nil {
 			t.Fatalf("floor %q must fail closed", bad)
 		}
@@ -136,13 +136,13 @@ func TestProbeVerboseStates(t *testing.T) {
 		}
 	})
 	t.Run("available", func(t *testing.T) {
-		bin := stubVersionHermes(t, "Hermes Agent v0.19.1 (2026.7.30)")
+		bin := stubVersionHermes(t, "Hermes Agent v0.20.5 (2026.8.19)")
 		adapter, err := New("t", bin, "", ProcessLimits{})
 		if err != nil {
 			t.Fatal(err)
 		}
 		summary, _, err := adapter.ProbeVerbose(context.Background())
-		if err != nil || summary.State != "available" || summary.Version != "0.19.1" {
+		if err != nil || summary.State != "available" || summary.Version != "0.20.5" {
 			t.Fatalf("state=%q err=%v", summary.State, err)
 		}
 	})
@@ -179,7 +179,7 @@ func TestRealHermesProbeIfAvailable(t *testing.T) {
 func TestProbeDiscoversVersionOnce(t *testing.T) {
 	dir := t.TempDir()
 	counter := filepath.Join(dir, "count")
-	bin := newStubHermes(t, `if [ "$1" = "--version" ]; then printf x >> "`+counter+`"; printf 'Hermes Agent v0.19.1 (2026.7.30)\n'; exit 0; fi; exit 3`)
+	bin := newStubHermes(t, `if [ "$1" = "--version" ]; then printf x >> "`+counter+`"; printf 'Hermes Agent v0.20.5 (2026.8.19)\n'; exit 0; fi; exit 3`)
 	readCount := func() string {
 		raw, err := os.ReadFile(counter)
 		if err != nil {

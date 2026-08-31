@@ -111,7 +111,7 @@ func TestE8T3EnableGateRefusesBelowFloorAndEnablesCleanly(t *testing.T) {
 	}
 	// The frozen floor version enables cleanly (the stub is rewritten in
 	// place; the configuration already points at it).
-	pointExecutableAt("Hermes Agent v0.19.1 (2026.7.30)")
+	pointExecutableAt("Hermes Agent v0.20.5 (2026.8.19)")
 	if code, stderr := enable(); code != 0 {
 		t.Fatalf("the eligible target must enable: %d %s", code, stderr)
 	}

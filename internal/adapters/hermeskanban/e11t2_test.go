@@ -32,7 +32,7 @@ func TestE11T2ProbePassesFrozenInterface(t *testing.T) {
 	if !record.AllRequiredPassed() {
 		t.Fatalf("the frozen interface must pass every shape probe: %+v", record.Shapes)
 	}
-	if record.HermesVersion != "0.19.1" || record.Fingerprint == "" || !strings.HasPrefix(record.Fingerprint, "cap:") {
+	if record.HermesVersion != "0.20.5" || record.Fingerprint == "" || !strings.HasPrefix(record.Fingerprint, "cap:") {
 		t.Fatalf("record identity wrong: %+v", record)
 	}
 	caps, cerr := record.Capabilities()
@@ -223,7 +223,7 @@ func TestE11T2SamePathFrozenAndNewer(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !frozenRecord.AllRequiredPassed() {
-		t.Fatalf("frozen 0.19.1 must pass: %+v", frozenRecord.Shapes)
+		t.Fatalf("the 0.20.5 floor interface must pass: %+v", frozenRecord.Shapes)
 	}
 	// A newer Hermes with the same shapes passes through the same code
 	// path with no source allowlist edit (HER-011, AC-701/702).
@@ -248,7 +248,7 @@ func stubWithVersion(t *testing.T, versionLine string) string {
 	t.Helper()
 	bin := stubFull(t)
 	raw := readFileOr(t, bin)
-	rewritten := strings.Replace(string(raw), "Hermes Agent v0.19.1 (2026.7.30)", versionLine, 1)
+	rewritten := strings.Replace(string(raw), "Hermes Agent v0.20.5 (2026.8.19)", versionLine, 1)
 	if rewritten == string(raw) {
 		t.Fatal("stub does not carry the frozen version line")
 	}
@@ -318,7 +318,7 @@ func TestE11T2CapabilityRecordInventoryContract(t *testing.T) {
 			Contract:         ProbeContractVersion,
 			ExecutablePath:   filepath.Join(dir, "hermes"),
 			ExecutableDigest: "sha256:" + strings.Repeat("a", 64),
-			HermesVersion:    "0.19.1",
+			HermesVersion:    "0.20.5",
 			Shapes: ProbeShapes{
 				Version:       passedShape,
 				AssigneesJSON: passedShape,
@@ -391,7 +391,7 @@ func TestE11T2CapabilityRecordInventoryContract(t *testing.T) {
 	if err := os.WriteFile(foreign, []byte(`{"schema_version":"other","probe_contract":"x"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := LoadCapabilityRecord(foreign); err == nil || !strings.Contains(err.Error(), "not the v2 probe record") {
+	if _, err := LoadCapabilityRecord(foreign); err == nil || !strings.Contains(err.Error(), "not the v3 probe record") {
 		t.Fatalf("a foreign-schema record must fail closed naming the schema, got %v", err)
 	}
 }

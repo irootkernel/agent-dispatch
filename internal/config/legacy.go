@@ -44,7 +44,7 @@ func (e *LegacyShapeError) RegenerationPath() string {
 		"also requires profile and a non-empty skills list, while workspace, " +
 		"serialization_group (or the deprecated mutex_key alias), and execution_hints are " +
 		"optional, as are closed conditions), move the Hermes Kanban target to " +
-		"`hermes_targets` with board, executable, minimum_version (default 0.19.1), and " +
+		"`hermes_targets` with board, executable, an explicit minimum_version at or above 0.20.5, and " +
 		"compatibility: capability_probe, keep webhook targets under `targets`, and move " +
 		"submission_retry, latest_state, failure_budget, and active_stale_after to the route. " +
 		"See docs/contracts/configuration-spec.md and docs/examples/config.yaml."

@@ -231,7 +231,12 @@ func runRoutePreflight(command string, args []string, stdout, stderr io.Writer) 
 		// mirroring the enable gate instead of deferring the defect to
 		// the production gate after a green preflight. A mutex-only
 		// downgrade stays the warn below.
-		floor, _ := hermeskanban.ParseMinimumVersion(orDefault(t.MinimumVersion, config.MinimumEligibleHermesVersion))
+		floor, ferr := hermeskanban.ParseMinimumVersion(t.MinimumVersion)
+		if ferr != nil {
+			block("target", fmt.Sprintf("destination %q: the configured floor is unparseable: %v", dest.ID, ferr),
+				"set a dotted-triple minimum_version at or above "+config.MinimumEligibleHermesVersion+" with 'agent-dispatch hermes set-minimum-version "+dest.Target+" <version>'", nil)
+			continue
+		}
 		if !record.Shapes.Version.Passed {
 			block("capability", fmt.Sprintf("destination %q: the version probe did not pass (%s)", dest.ID, record.Shapes.Version.Detail),
 				"run 'agent-dispatch hermes probe --target "+dest.Target+"' and resolve the named failure", nil)
@@ -278,21 +283,24 @@ func runRoutePreflight(command string, args []string, stdout, stderr io.Writer) 
 
 		// Workspace, serialization group, and hints are validated at
 		// configuration load; the preflight restates them as the
-		// reviewed envelope. An explicitly declared group on a create
-		// surface without --mutex-key is the E15 posture: the group is
-		// enforced locally and the flag is suppressed at submit — a
-		// warn, never a compatibility failure (AC-1101).
+		// reviewed envelope. The check names the certified effective
+		// serialization mode (HER-020): a target without --mutex-key is
+		// the normal agent-dispatch-group-enforced posture of the 0.20.5
+		// floor — a warn, never a compatibility failure (AC-1101) — and
+		// a mutex-capable target adds the complementary mutex without
+		// ever replacing the local group slot.
 		pass("workspace", fmt.Sprintf("destination %q: workspace %q", dest.ID, workspaceOf(dest, cfg.Resources[route.Source.Resource].Root)))
-		if dest.MutexKey != "" || dest.SerializationGroup != "" {
+		mode := record.EffectiveSerializationMode()
+		if mode != hermeskanban.SerializationModeUnsupportedUnsafe {
 			group := config.EffectiveSerializationGroup(route.Source.Resource, dest)
-			if !record.CapabilitiesIncludeMutex() {
+			if mode == hermeskanban.SerializationModeGroupPlusTargetMutex {
+				pass("serialization", fmt.Sprintf("destination %q: mode %s; effective serialization group %q rendered as the complementary target mutex; the local group slot is never replaced", dest.ID, mode, group))
+			} else {
 				checks = append(checks, map[string]any{
 					"check": "serialization", "state": "warn",
-					"detail":      fmt.Sprintf("destination %q: effective serialization group %q; the create surface lacks --mutex-key, so the group is enforced locally and the flag is suppressed at submit", dest.ID, group),
-					"remediation": "no action required for local enforcement; upgrade Hermes to a release carrying --mutex-key to add the complementary target mutex",
+					"detail":      fmt.Sprintf("destination %q: mode %s; effective serialization group %q is enforced locally and --mutex-key is suppressed at submit — the normal posture of a target without the flag", dest.ID, mode, group),
+					"remediation": "no action required for local enforcement; a later Hermes carrying --mutex-key adds the complementary target mutex through the same probe",
 				})
-			} else {
-				pass("serialization", fmt.Sprintf("destination %q: effective serialization group %q rendered as the complementary target mutex; the local group slot is never replaced", dest.ID, group))
 			}
 		}
 		pass("hints", fmt.Sprintf("destination %q: execution hints max_runtime=%s max_attempts=%d", dest.ID, dest.ExecutionHints.MaxRuntime, dest.ExecutionHints.MaxAttempts))
@@ -443,26 +451,40 @@ func destinationIDs(route config.Route) string {
 	return strings.Join(ids, ", ")
 }
 
+// scanPositionals separates positional arguments from the known valued
+// flags (both the "--flag value" and "--flag=value" forms), rejecting
+// any other flag at the documented usage exit: ONE scanner for the
+// selector commands and the floor helper so the shared parser's
+// convention cannot drift between copies (E15-T2 round-1 F004).
+func scanPositionals(command string, args []string, valued map[string]bool, stderr io.Writer) ([]string, int) {
+	var positional []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if !strings.HasPrefix(arg, "--") {
+			positional = append(positional, arg)
+			continue
+		}
+		name := arg
+		if eq := strings.IndexByte(arg, '='); eq >= 0 {
+			name = arg[:eq]
+		}
+		if !valued[name] {
+			return nil, usageError(stderr, command, fmt.Sprintf("unknown argument %q", arg))
+		}
+		if !strings.Contains(arg, "=") {
+			i++
+		}
+	}
+	return positional, 0
+}
+
 // splitSelectorArgs separates the destination selector from the value
 // arguments, leaving any --flag value pairs out of the positional
 // stream (the mutation commands accept flags in any position).
 func splitSelectorArgs(command string, args []string, stderr io.Writer) (string, []string, int) {
-	var positional []string
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if strings.HasPrefix(arg, "--") {
-			// Skip the flag's value for the known valued flags, in both
-			// the space and = forms (the shared parser's convention).
-			switch {
-			case arg == "--config" || arg == "--route":
-				i++
-			case strings.HasPrefix(arg, "--config=") || strings.HasPrefix(arg, "--route="):
-			default:
-				return "", nil, usageError(stderr, command, fmt.Sprintf("unknown argument %q", arg))
-			}
-			continue
-		}
-		positional = append(positional, arg)
+	positional, code := scanPositionals(command, args, map[string]bool{"--config": true, "--route": true}, stderr)
+	if code != 0 {
+		return "", nil, code
 	}
 	if len(positional) < 1 {
 		return "", nil, usageError(stderr, command, "the destination selector <route>:<destination> is required")

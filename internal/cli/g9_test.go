@@ -373,7 +373,7 @@ resources:
 hermes_targets:
   hermes-main:
     board: %[3]s
-    minimum_version: 0.19.1
+    minimum_version: 0.20.5
     compatibility: capability_probe
     executable: %[4]s
     submit_timeout: 30s

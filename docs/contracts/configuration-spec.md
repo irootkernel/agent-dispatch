@@ -85,7 +85,7 @@ hermes_targets:
   hermes-main:
     board: agent-dispatch
     executable: hermes
-    minimum_version: 0.19.1
+    minimum_version: 0.20.5
     compatibility: capability_probe
     submit_timeout: 30s
     lookup_timeout: 15s
@@ -94,7 +94,7 @@ hermes_targets:
       - PATH
 ```
 
-`board` names the Hermes kanban board the destinations submit to. `submit_timeout` defaults to 30s; the core's attempt lease TTL is derived from it (the configured timeout plus a 30 s margin, E8-T2/M-1), so a live submitter inside the operator-approved window can never have its lease stolen by a recovery sweep. The operator creates it once with the public `hermes kanban boards create <slug>` command; Agent Dispatch never creates, renames, or deletes boards. `minimum_version` is the eligibility floor — at least 0.19.1, with no maximum (HER-011, ADR-0017); the empty value means the 0.19.1 default and a floor below 0.19.1 fails validation. `compatibility` is `capability_probe` in v0.1.5: compatibility is proven against the public interface, not an operator-authored file. The E0-T4 `capability_report` and `required_capabilities` fields are retired with the cutover: the frozen 0.19.1 runtime-verified interface (docs/integrations/hermes-capability-report.json) is the interim truth source for the unconditional delivery-evidence set — durable acceptance, idempotent submission, external-reference reconciliation — until the E11-T2 capability probe records it per executable and binds activation to the evidence fingerprint (HER-012, HER-018). Exact command mapping is compiled into or versioned with the adapter after verification; it is not supplied by untrusted route data.
+`board` names the Hermes kanban board the destinations submit to. `submit_timeout` defaults to 30s; the core's attempt lease TTL is derived from it (the configured timeout plus a 30 s margin, E8-T2/M-1), so a live submitter inside the operator-approved window can never have its lease stolen by a recovery sweep. The operator creates it once with the public `hermes kanban boards create <slug>` command; Agent Dispatch never creates, renames, or deletes boards. `minimum_version` is the explicit eligibility floor — at least 0.20.5, with no maximum (HER-011, ADR-0021); the value is required, an omitted floor fails closed and is never defaulted or implicitly rewritten (AC-1107), and a floor below 0.20.5 fails validation. `compatibility` is `capability_probe` in v0.1.5: compatibility is proven against the public interface, not an operator-authored file. The E0-T4 `capability_report` and `required_capabilities` fields are retired with the cutover: the frozen 0.19.1 runtime-verified interface (docs/integrations/hermes-capability-report.json) is the interim truth source for the unconditional delivery-evidence set — durable acceptance, idempotent submission, external-reference reconciliation — until the E11-T2 capability probe records it per executable and binds activation to the evidence fingerprint (HER-012, HER-018). Exact command mapping is compiled into or versioned with the adapter after verification; it is not supplied by untrusted route data.
 
 ### Hermes Webhook
 
@@ -258,7 +258,7 @@ Beyond schema validation, the validator must check:
 - the map keys for resources, hermes_targets, targets, and routes follow the identifier grammar (E8-T5);
 - `limits.max_hash_file_bytes` is positive when set (E8-T5);
 - state directory is local and outside governed roots by default;
-- each hermes target declares a non-empty board, a canonical `minimum_version` at or above the 0.19.1 eligibility floor, and exactly the `capability_probe` compatibility mode (E11-T1, HER-011); the E11-T2 capability probe proves the shape evidence, `route enable` binds its fingerprint, and the submit path re-proves it live (the retired operator-authored report never returns);
+- each hermes target declares a non-empty board, an explicit canonical `minimum_version` at or above the 0.20.5 support floor (an omitted floor fails closed), and exactly the `capability_probe` compatibility mode (E11-T1, HER-011); the E11-T2 capability probe proves the shape evidence, `route enable` binds its fingerprint, and the submit path re-proves it live (the retired operator-authored report never returns);
 - every destination resolves to a declared hermes or webhook target, and a webhook destination carries no profile, skills, workspace, or mutex (E11-T1);
 - webhook-target required capabilities are available (the static declaration must carry every capability a webhook destination names; hermes capability truth is probed, not declared);
 - profile, skills, mutex, workstream, and target are operator-owned fixed values;
@@ -324,7 +324,7 @@ hermes_targets:
   hermes-main:
     board: agent-dispatch
     executable: hermes
-    minimum_version: 0.19.1
+    minimum_version: 0.20.5
     compatibility: capability_probe
 ```
 

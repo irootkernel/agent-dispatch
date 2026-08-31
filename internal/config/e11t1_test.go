@@ -330,8 +330,8 @@ func TestE11T1HermesTargetFloorValidation(t *testing.T) {
 	if _, err := Parse([]byte(mutate(func(tg *HermesTarget) { tg.Board = "" }))); err == nil {
 		t.Fatal("a missing board must fail validation")
 	}
-	if _, err := Parse([]byte(mutate(func(tg *HermesTarget) { tg.MinimumVersion = "0.18.0" }))); err == nil || !strings.Contains(err.Error(), "eligibility floor") {
-		t.Fatalf("a floor below 0.19.1 must fail (HER-011): %v", err)
+	if _, err := Parse([]byte(mutate(func(tg *HermesTarget) { tg.MinimumVersion = "0.20.4" }))); err == nil || !strings.Contains(err.Error(), "support floor") {
+		t.Fatalf("a floor below 0.20.5 must fail (HER-011): %v", err)
 	}
 	if _, err := Parse([]byte(mutate(func(tg *HermesTarget) { tg.Compatibility = "vendor-pinned" }))); err == nil || !strings.Contains(err.Error(), "capability_probe") {
 		t.Fatalf("a non-probe compatibility mode must fail: %v", err)
@@ -339,8 +339,14 @@ func TestE11T1HermesTargetFloorValidation(t *testing.T) {
 	if _, err := Parse([]byte(mutate(func(tg *HermesTarget) { tg.MinimumVersion = "1.2.3" }))); err != nil {
 		t.Fatalf("a higher declared floor must pass: %v", err)
 	}
-	if _, err := Parse([]byte(mutate(func(tg *HermesTarget) { tg.MinimumVersion = "0.19" }))); err == nil || !strings.Contains(err.Error(), "minimum_version") {
+	if _, err := Parse([]byte(mutate(func(tg *HermesTarget) { tg.MinimumVersion = "0.20" }))); err == nil || !strings.Contains(err.Error(), "minimum_version") {
 		t.Fatalf("an unparseable floor must fail naming the field: %v", err)
+	}
+	// E15-T2 (AC-1107): an omitted floor fails closed — the schema (and,
+	// for direct SemanticValidate callers, the semantic layer) never
+	// silently defaults or rewrites it.
+	if _, err := Parse([]byte(mutate(func(tg *HermesTarget) { tg.MinimumVersion = "" }))); err == nil || !strings.Contains(err.Error(), "minimum_version") {
+		t.Fatalf("an omitted floor must fail closed without rewriting (HER-011): %v", err)
 	}
 	// A hermes_targets key outside the destination-ID pattern is refused:
 	// the key names the capability-cache file, so a traversal segment

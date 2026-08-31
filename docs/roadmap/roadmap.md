@@ -15,9 +15,9 @@
 | Release target | v0.1.6 (planned) |
 | Current epic | E15 In Progress |
 | Current active task | None |
-| Next task | E15-T2 |
-| Completed tasks | 79 / 89 |
-| Planned tasks | 10 / 89 |
+| Next task | E15-T3 |
+| Completed tasks | 80 / 89 |
+| Planned tasks | 9 / 89 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -135,7 +135,7 @@
 | 77 | E14-T2 | Completed | Disabled baseline-only reconciliation and persistence |
 | 78 | E14-T3 | Completed | Rerunnable setup, five-state summary, and G10 |
 | 79 | E15-T1 | Completed | Serialization configuration, revisions, and migration |
-| 80 | E15-T2 | Planned | Consistent local serialization and optional target mutex contract |
+| 80 | E15-T2 | Completed | Consistent local serialization and optional target mutex contract |
 | 81 | E15-T3 | Planned | Group slot enforcement and bounded follow-up |
 | 82 | E15-T4 | Planned | Hermes v0.20.5+ compatibility gate G11 |
 | 83 | E16-T1 | Planned | Drain policy, leases, and forward migration |
@@ -3661,7 +3661,7 @@ remediated; `make verify` is green.
 
 ## E15-T2: Consistent Local Serialization and Optional Target Mutex Contract
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -3698,7 +3698,48 @@ E15-T1 Completed.
 
 ### Evidence
 
-Planned; none.
+Completed 2026-08-31. The product floor is exactly 0.20.5 (HER-011): an
+omitted configured floor now fails closed naming the required explicit
+declaration, a configured floor below 0.20.5 fails validation, and an
+installed version below the configured floor keeps failing before any
+side effect — never implicitly rewritten (AC-1107). The probe contract
+advanced to v3 and every capability record certifies one effective
+serialization mode (HER-020): agent-dispatch-group-enforced (the normal
+0.20.5 posture without --mutex-key, a warn never a failure — AC-1101),
+agent-dispatch-group-plus-target-mutex, or unsupported-unsafe, derived
+authoritatively from the shape outcomes so a stored string can never
+upgrade the certified mode. `hermes probe` and `hermes capabilities`
+report the mode; preflight's serialization check names it; the submit
+path drives the renderer's complementary mutex from it and executable
+revalidation still re-proves the fingerprint the mode derives from, so
+revalidation cannot change or bypass the certified mode. The atomic
+`hermes set-minimum-version <target> <version>` helper (CLI-019)
+accepts only floors at or above 0.20.5, updates only the selected
+target through the validated atomic replacement, preserves every
+unrelated route and target, and names each affected route's
+before/after revision with the owed re-probe, preflight, and
+re-acknowledgement; refused candidates leave the file untouched.
+e15t2_test.go in hermeskanban and cli covers mode derivation (including
+the hand-edited-record guard), the v3 contract invalidating v2 records,
+the omitted/below-floor fail-closed postures, mode agreement across the
+probe and capabilities surfaces, and the helper's refusals, atomic
+update, affected-route pause, and untouched-file atomicity; the
+configuration-spec floor statements, cli-spec command contract, config
+and evidence schemas (v3 with the required serialization_mode), and the
+example evidence document follow the new truth; review round 1
+(remediation-eligible, r_01a05792-2c82-7a0e-be6d-b29d96078ca0)
+published committed with complete coverage and CI pass, and its six
+findings — the runbook and operator skill teaching the retired floor,
+the error-ignoring bridge between the two floor definitions, the
+architecture doc's old eligibility rule, the duplicated valued-flag
+scan, the helper's inability to remediate a legacy below-floor or
+omitted-floor document, and the overstated byte-preservation claim —
+were verified valid and remediated (the repair path decodes without the
+gates and re-validates the candidate against every gate before the
+atomic replacement); review round 2
+(r_01a057a7-4e22-7cdc-987f-259d342dd401) then published committed with
+complete coverage, CI pass, and ZERO unresolved findings — the task is
+Mulgae-approved outright with no deferral; `make verify` is green.
 
 ## E15-T3: Group Slot Enforcement and Bounded Follow-Up
 

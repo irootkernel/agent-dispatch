@@ -255,7 +255,7 @@ targets:
 hermes_targets:
   hermes-kanban-main:
     board: agent-dispatch
-    minimum_version: 0.19.1
+    minimum_version: 0.20.5
     compatibility: capability_probe
     executable: hermes
 routes:

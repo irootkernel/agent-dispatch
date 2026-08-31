@@ -6,7 +6,7 @@
 2. Confirm `agent-dispatch version --output json`.
 3. Create a disabled config with `agent-dispatch init`.
 4. Set the Obsidian vault as a named resource.
-5. Declare each Hermes target under `hermes_targets` with its board, `minimum_version` (at least 0.19.1), and `compatibility: capability_probe` — the operator-authored capability report is retired (E11-T1; per-executable shape evidence arrives with the E11-T2 probe).
+5. Declare each Hermes target under `hermes_targets` with its board, an explicit `minimum_version` (at least 0.20.5; omitting it fails closed), and `compatibility: capability_probe` — compatibility is proven by the per-executable capability probe whose record certifies one effective serialization mode (E11-T2, E15-T2).
 6. Run `agent-dispatch config validate --probe-targets`.
 7. Run `agent-dispatch doctor --probe-targets`.
 8. Run fixture-based `route plan`.

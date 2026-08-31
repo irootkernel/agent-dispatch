@@ -327,3 +327,55 @@ func TestG10AC1005EnableCommandRenderedNotExecuted(t *testing.T) {
 	}
 	g10AssertControlsOff(t, configPath)
 }
+
+// TestG10FreshGenerateWithoutVaultRootStopsAtBaseline pins the first-use
+// posture the walkthrough's own generate path invites: a host with no
+// configuration names a vault root that does not exist yet. Setup never
+// creates the operator's vault, so the missing root is a genuine finding
+// and the walkthrough stops at the baseline step — exit 3 with the
+// re-run guidance — before the five-state summary, leaving the generated
+// disabled configuration in place so the rerun after the vault exists
+// converges (E14-T3; cold-validation round-1 F001).
+func TestG10FreshGenerateWithoutVaultRootStopsAtBaseline(t *testing.T) {
+	bin := stubhermes.Write(t)
+	// The generated example resolves its Hermes through PATH as the
+	// bare `hermes` command.
+	stubDir := t.TempDir()
+	if err := os.Symlink(bin, filepath.Join(stubDir, "hermes")); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", stubDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	setPlanEnv(t, "/tmp", false)
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "agent-dispatch.yaml")
+	missingRoot := filepath.Join(dir, "vault-that-does-not-exist")
+	var out, errb bytes.Buffer
+	var code int
+	withStdin(t, missingRoot+"\n", func() {
+		code = Run([]string{"setup", "wiki", "--config", configPath}, &out, &errb)
+	})
+	if code != 3 {
+		t.Fatalf("the missing-root walkthrough must stop at the baseline step with exit 3: %d %s", code, errb.String())
+	}
+	combined := out.String() + errb.String()
+	if strings.Contains(combined, "production-gate summary:") {
+		t.Fatalf("the walkthrough must not reach the gate summary:\n%s", combined)
+	}
+	if !strings.Contains(errb.String(), "the initial baseline did not complete") {
+		t.Fatalf("the stop must carry the re-run guidance:\n%s", errb.String())
+	}
+	// The generated configuration is written disabled and stays for the
+	// rerun once the vault exists.
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Routes) != 1 {
+		t.Fatalf("the generated example must carry its single route: %d", len(cfg.Routes))
+	}
+	for id, route := range cfg.Routes {
+		if route.Enabled {
+			t.Fatalf("the generated route %s must stay disabled", id)
+		}
+	}
+}

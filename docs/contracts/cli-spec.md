@@ -433,7 +433,11 @@ route-correct and rerunnable since E14): with an explicitly named
 configuration it uses a disabled base in place (an enabled base becomes
 a disabled draft beside it, re-runnable across setup attempts); without
 one it generates a fresh disabled example after prompting for the vault
-root. The route is chosen explicitly (E14-T1): `--route <id>` names a
+root, which must already exist — the walkthrough never creates the
+operator's vault, and a missing root is a genuine finding that stops at
+the baseline step (exit 3 with the re-run guidance) before the gate
+summary, leaving the generated disabled configuration in place for a
+converging rerun. The route is chosen explicitly (E14-T1): `--route <id>` names a
 declared route, a single-route configuration selects its only route,
 and multiple routes require the flag or an explicit interactive choice —
 a non-interactive multi-route invocation fails rather than choosing one

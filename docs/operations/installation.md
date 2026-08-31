@@ -169,3 +169,9 @@ command. Every non-production rerun posture converges: a clean host, a
 host with the Watchman trigger installed, a materialized disabled
 runtime row, an unchanged rerun, and a walkthrough interrupted inside
 the baseline all reach the same disabled gate summary (gate G10).
+
+The prompted vault root must already exist on a first run: `setup wiki`
+never creates the operator's vault, and a fresh-generate walkthrough
+whose named root is missing stops at the baseline step (exit 3) with the
+re-run guidance — create or point at an existing vault, then re-run
+`setup wiki`, which converges on the established baseline.

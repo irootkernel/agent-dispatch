@@ -3426,7 +3426,7 @@ verification before any publication.
 **Epic status:** Completed
 **Purpose:** Make the disabled Wiki setup path route-correct, safely rerunnable, and explicit about every production-gate state.
 **Gate:** G10
-**Detailed SOT:** [v0.1.6 operational follow-up](../specs/v0.1.6-operational-follow-up.md)
+**Canonical Outcomes:** [Guided setup and baseline requirements](../specs/required-spec.md) · [Reconcile and setup command contracts](../contracts/cli-spec.md) · [Gate G10 evidence](../VALIDATION.md) · [Setup and rollback architecture](../architecture/multi-destination-operational-loop.md)
 
 ## E14-T1: Explicit Setup Route Selection and Propagation
 

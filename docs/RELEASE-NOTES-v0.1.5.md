@@ -31,7 +31,7 @@ of this release.
   through a forward migration; the route revision covers every
   behavior-affecting field including the destination projections.
 - **Capability-driven preflight.** `hermes probe` records the frozen
-  0.19.1 interface and the installed newer Hermes through one bounded
+  the baseline interface and the installed newer Hermes through one bounded
   public-interface probe set (TST-012); `route preflight` validates the
   declared profiles and skills against that evidence and the submit
   path re-proves the executable identity before any side effect.

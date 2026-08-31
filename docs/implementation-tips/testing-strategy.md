@@ -166,7 +166,7 @@ Coverage percentage is secondary to state and failure-path completeness. Require
 ## 12. v0.1.5 Gate Strategy
 
 G6 races real SQLite path-fact writers against full enumeration and uses a real
-disposable Watchman ancestor/subtree. G7 replays the frozen real Hermes 0.19.1
+disposable Watchman ancestor/subtree. G7 replays the frozen real Hermes baseline
 evidence and probes the currently installed newer public CLI through the same
 adapter; neither Hermes source nor private state is changed. G8 uses deterministic
 fake sinks for concurrency and idempotency plus an isolated `HERMES_HOME` and

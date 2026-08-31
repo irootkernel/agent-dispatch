@@ -11,7 +11,7 @@ import (
 // Kanban destination depends on (durable acceptance, idempotent
 // submission, external-reference reconciliation). Since the v0.1.5
 // cutover it is a contract constant rather than a per-route
-// configuration list: the frozen 0.19.1 runtime-verified interface is
+// configuration list: the frozen 0.20.5 runtime-verified interface is
 // its interim truth source until the E11-T2 probe proves the shapes per
 // executable.
 var UnconditionalCapabilities = []string{"durable_acceptance", "submit_idempotency_key", "lookup_by_external_ref"}
@@ -32,7 +32,7 @@ type Adapter struct {
 
 // New builds the adapter for one configured hermes target. executable is
 // the verified public CLI and minimumVersion the declared eligibility
-// floor ("" means the 0.19.1 default; the loader already rejects a floor
+// floor ("" is accepted only from pre-validation callers; the loader rejects an omitted
 // below it).
 func New(targetID, executable, minimumVersion string, limits ProcessLimits) (*Adapter, error) {
 	minimum, err := ParseMinimumVersion(minimumVersion)

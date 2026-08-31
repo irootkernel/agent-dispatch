@@ -1,14 +1,14 @@
 {
   "schema_version": "agent-dispatch.hermes-capabilities/v1",
-  "probed_at": "2026-08-19T21:25:24+09:00",
-  "hermes_version": "0.19.1 (2026.7.30)",
+  "probed_at": "2026-08-31T22:15:00+09:00",
+  "hermes_version": "0.20.5 (2026.8.19)",
   "interface": "public_cli",
   "capabilities": {
     "durable_acceptance": true,
     "submit_idempotency_key": true,
     "lookup_by_idempotency_key": false,
     "lookup_by_external_ref": true,
-    "resource_mutex": true,
+    "resource_mutex": false,
     "execution_status": true,
     "cancellation": true,
     "result_receipt": true
@@ -68,12 +68,12 @@
     },
     {
       "capability": "resource_mutex",
-      "grade": "help-verified",
+      "grade": "help-refuted-at-baseline",
       "commands": [
         "hermes kanban create --help"
       ],
       "fixtures": [],
-      "observation": "--mutex-key serializes a task with other running tasks using the same explicit board-local key. Not exercised at runtime because observing contention requires dispatching real workers; adapter must treat board-local key scope as the verified contract boundary."
+      "observation": "The 0.20.5 baseline create surface carries no --mutex-key flag (re-verified 2026-08-31 by the E15-T4 G11 probe: the only missing required flag). Serialization is therefore Agent Dispatch's local group slot; a later Hermes re-exposing the flag re-earns the complementary target mutex through the same probe. See docs/integrations/hermes-v0.20.5-g11-evidence.md."
     },
     {
       "capability": "execution_status",
@@ -112,9 +112,9 @@
     }
   ],
   "notes": [
-    "Compatibility decision: supported. All capabilities required by the durable Kanban contract are present through the public CLI; no reduced guarantee is needed for v0.19.1.",
-    "Supported Hermes version range: exactly 0.19.1 as verified on 2026-08-19. The adapter may treat >=0.19.1 <0.20.0 as the candidate range only after re-running this probe against each new version; any other version must fail route validation per HER-002/HER-005.",
-    "Version discovery is human text only: `hermes --version` prints 'Hermes Agent v0.19.1 (2026.7.30)' with no JSON mode; `hermes kanban` JSON responses do not include a version field. The adapter must gate versions by invoking `hermes --version` and matching the documented first-line format, or by configuration.",
+    "Compatibility decision: supported. All capabilities required by the durable Kanban contract are present through the public CLI; no reduced guarantee is needed for the baseline.",
+    "Supported Hermes version range: exactly 0.20.5 as verified on 2026-08-31 (E15-T4). Later releases are probe-eligible with no fixed maximum through the same bounded probe; any version below the configured floor must fail route validation per HER-002/HER-005.",
+    "Version discovery is human text only: `hermes --version` prints the documented first line with no JSON mode; `hermes kanban` JSON responses do not include a version field. The adapter must gate versions by invoking `hermes --version` and matching the documented first-line format, or by configuration.",
     "Idempotency keys are not unique forever: dedup applies only while a non-archived task holds the key. Agent Dispatch must persist the returned external task id immediately after acceptance and must not rely on key-based lookup after archival.",
     "--assignee is not validated at create time: an unknown profile name is accepted. Validate profiles first via `hermes kanban assignees --json` (on_disk flag) or `hermes profile list`.",
     "Runtime and retry hints: --max-runtime (seconds or durations; the dispatcher SIGTERMs then SIGKILLs and re-queues on overrun) and --max-retries (consecutive-failure circuit breaker, default 2) are per-task public fields. max-runtime acts as an enforced cap; max-retries bounds automatic retries.",
@@ -125,6 +125,7 @@
     "Webhook capabilities were inspected separately without implementation: `hermes webhook subscribe|list|remove|test` manages inbound event-driven agent activation subscriptions with an HMAC secret, event filters, optional script filter, and delivery targets; in this installation the webhook receiving platform is not enabled and `hermes webhook list` prints setup guidance. Outbound delivery adaptation remains E6-T1 scope.",
     "All probes ran against the disposable board agent-dispatch-e0t4-probe, which was hard-deleted after evidence capture; the user's active board selection was never changed and only public CLI commands were used. The per-board kanban.db path was disclosed by public CLI output but never opened or read directly.",
     "Task ids observed in fixtures (t_6253023d, t_d191d897, t_c3385bd7) belonged to the deleted probe board and no longer exist.",
-    "E6-T1 added the outbound hermes-webhook sink adapter from the E0-T4 public interface report's s9 evidence (hermes-public-interface-report.md, 'Webhook Capabilities (Inspected Only, Not Implemented)'): the declared capability set is static and offline (durable_acceptance false, submit_idempotency_key true, all lookups/execution/cancellation/result_receipt false, maximum_request_bytes 262144), because the receiving platform is inbound-only and not enabled in the probed installation, so no response contract proves durable acceptance; a 2xx therefore maps to transport acceptance only and reachability is proven solely by submission."
+    "E6-T1 added the outbound hermes-webhook sink adapter from the E0-T4 public interface report's s9 evidence (hermes-public-interface-report.md, 'Webhook Capabilities (Inspected Only, Not Implemented)'): the declared capability set is static and offline (durable_acceptance false, submit_idempotency_key true, all lookups/execution/cancellation/result_receipt false, maximum_request_bytes 262144), because the receiving platform is inbound-only and not enabled in the probed installation, so no response contract proves durable acceptance; a 2xx therefore maps to transport acceptance only and reachability is proven solely by submission.",
+    "Session history: the durable-delivery shapes were verified 2026-08-19 against the then-baseline Hermes on the disposable board named in the evidence commands; this corpus was re-verified 2026-08-31 against Hermes 0.20.5 by the E15-T4 G11 probe over a fresh disposable board, which also proved the 0.20.5 create surface carries no --mutex-key. See docs/integrations/hermes-v0.20.5-g11-evidence.md."
   ]
 }

@@ -138,7 +138,7 @@ func g3Setup(t *testing.T) *g3 {
 		t.Skip("hermes binary not available (environment-dependent evidence gap)")
 	}
 	probe, err := g3Hermes(t, "--version")
-	if err != nil || !strings.Contains(probe, "v0.19.1") {
+	if err != nil || !strings.Contains(probe, "v0.20.5") {
 		t.Skipf("installed hermes is outside the verified set: %q", probe)
 	}
 
@@ -158,6 +158,22 @@ func g3Setup(t *testing.T) *g3 {
 	hermes, err := exec.LookPath("hermes")
 	if err != nil {
 		t.Fatal(err)
+	}
+	// The gate runs against the real installed Hermes with a disposable
+	// profile prepared through the public CLI (E15-T4): the wiki-maintainer
+	// destination profile is created and board-registered inside a
+	// throwaway HOME, so the gate never depends on the operator's own
+	// profiles and leaves the real ~/.hermes untouched.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	for _, argv := range [][]string{
+		{"profile", "create", "wiki-maintainer"},
+		{"profile", "use", "wiki-maintainer"},
+		{"config", "set", "default_model", "gpt-5.2", "--force"},
+	} {
+		if out, err := g3Hermes(t, argv...); err != nil {
+			t.Fatalf("disposable profile setup %v: %v: %s", argv, err, out)
+		}
 	}
 	if out, err := g3Hermes(t, "kanban", "boards", "create", h.board); err != nil {
 		t.Fatalf("boards create: %v: %s", err, out)

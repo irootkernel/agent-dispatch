@@ -22,7 +22,6 @@
   "model_override": null,
   "provider_override": null,
   "session_id": null,
-  "mutex_key": "jjukkumi-vault-maintenance",
   "workflow_type": null,
   "workflow_template_id": null,
   "current_step_key": null

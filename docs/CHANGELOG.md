@@ -9,7 +9,7 @@ planned work:
   step, disabled baseline-only reconciliation, rerun safety, and gate G10;
 - E15 owns optional Hermes `--mutex-key` capability handling, Agent Dispatch
   serialization groups, revision/acknowledgement invalidation, concurrency
-  enforcement, Hermes v0.20.5 and v0.19.1 evidence, and gate G11;
+  enforcement, Hermes v0.20.5 and the then-baseline version evidence, and gate G11;
 - E16 owns manual, after-command, and scheduled notification-drain policies,
   durable leases, post-commit bounded draining, launchd rendering, status and
   doctor visibility, and gate G12;
@@ -150,7 +150,7 @@ CLI-012, NTF-*, TST-012 through TST-014):
   receipt to the delivered notification, managed-trigger removal
   afterwards) is skip-guarded as the documented TST-007
   environment-dependent evidence gap where the installed Hermes
-  create surface drifts from the frozen 0.19.1 flags — the
+  create surface drifts from the frozen baseline flags — the
   deterministic legs own the gate;
 - review round 1 hardening: the G9 suite shares the E13-T2 capture
   fixture (one parameterized loopback-TLS scaffolding instead of two),
@@ -651,7 +651,7 @@ HER-014, HER-018, SEC-004, SEC-014, TST-012):
   a profile-scoped read, activation probes with the destination's
   profile, and a lone `--mutex-key` loss downgrades the resource_mutex
   capability instead of failing the target;
-- the frozen 0.19.1 interface fixture and a compatible newer Hermes
+- the frozen baseline interface fixture and a compatible newer Hermes
   traverse the same probe path with no source allowlist edit
   (TST-012), the stub Hermes carries every probe surface, and the
   schema/example pair for the v2 evidence record joins the SOT package.
@@ -668,10 +668,10 @@ FAN-011, FAN-012, CLI-015):
   `fanout_mode: all` the only v0.1.5 mode and declaration order
   non-semantic in revision, selection, and display;
 - Hermes Kanban targets move to `hermes_targets` with the eligibility
-  contract (`minimum_version` at or above 0.19.1, no maximum,
+  contract (`minimum_version` at or above the then-floor, no maximum,
   `compatibility: capability_probe`); the operator-authored capability
   report and per-route required-capability lists retire, the frozen
-  0.19.1 interface remains the interim truth source, submission gates on
+  the baseline interface remains the interim truth source, submission gates on
   live minimum-version eligibility on every attempt, and enablement
   refuses a below-floor target while warning and deferring on an
   unreachable one, until the E11-T2 capability probe restores
@@ -833,7 +833,7 @@ E9-T6: submission-gate revision and capability-report integrity:
 - the computed route revision covers the webhook delivery-evidence surface (auth type, secret reference, auth header name, idempotency header, lookup timeout, capability-report path) and, by explicit disposition, the reconciliation block in and the retention block out (pruning bounds never change submission behavior); configuration-spec §13 states the complete rule including the E9-T3 transport fields;
 - `route enable` requires the capability report in every target-liveness state: the os.Stat guard is gone, a missing, unreadable, or unsupported-version report refuses at exit 3 while an unreachable executable stays a warning, and a report recording a Hermes outside the runtime-verified set refuses without a live target (Report.RecordedVersionSupported — the supported set is build-time evidence); only freshness against the installed binary rides the probe;
 - the unconditional durable/idempotency refusal is one shared closure across the probe branches; the cli-spec `route enable` contract states the precise liveness semantics;
-- the real-Hermes environment tests skip under TST-007 when the installed Hermes is outside the verified set (the host moved to 0.20.5 against the verified 0.19.1; widening is a fresh E0-T4 probe, not a test override).
+- the real-Hermes environment tests skip under TST-007 when the installed Hermes is outside the verified set (the host had moved beyond the then-verified baseline; widening is a fresh E0-T4 probe, not a test override).
 ## 1.0.43 - 2026-08-25
 
 D-023 registration (E9 reopened for the external compliance review):
@@ -1129,7 +1129,7 @@ E6-T4: v0.1.0 verification and release:
 - the upgrade-and-backup rehearsal is executable: built-in backup with verification, doctor, full integrity, one reconciliation, and a standalone restore that carries the lineage;
 - docs/VALIDATION.md gains the Gate G5 evidence table (G0–G5 now closed) and docs/RELEASE-NOTES-v0.1.0.md ships as the release notes artifact;
 - the requirement traceability matrix regenerates with every requirement resolved to its owning and verifying tasks (33 tasks, 15 groups);
-- compatibility is frozen and reported: config version 1, schema range 1-4, record payload versions, adapter profiles hermes 0.19.1 and watchman 2026.07.27.00;
+- compatibility is frozen and reported: config version 1, schema range 1-4, record payload versions, adapter profiles the then-baseline hermes and watchman 2026.07.27.00;
 - the roadmap records all 33 tasks Completed with the v0.1 sequence complete; the deferred future work stays apart (no partially enabled feature), the Hermes plugin remains absent, and production enablement stays the explicit computed-revision operator action.
 
 Review round 1 remediations (all roles, reports_only):

@@ -107,7 +107,7 @@ The release gate is cumulative. A later gate cannot pass while an earlier gate i
 
 | ID | Given / When / Then |
 |---|---|
-| AC-701 | Given the frozen real Hermes 0.19.1 interface and the installed newer Hermes interface, when probed through the same product command, then each is accepted only if every required public capability shape is usable. |
+| AC-701 | Given the frozen real Hermes baseline interface and the installed newer Hermes interface, when probed through the same product command, then each is accepted only if every required public capability shape is usable. |
 | AC-702 | Given a future Hermes version above the minimum with compatible public shapes, when probed, then it works without a source allowlist edit; an incompatible shape fails with the exact missing capability. |
 | AC-703 | Given the executable content, path, reported version, or probe contract changes, when cached evidence is read, then it is invalidated before submission. |
 | AC-704 | Given a missing on-disk profile, when route preflight or enable runs, then it fails before task creation and lists available profiles. |

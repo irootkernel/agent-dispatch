@@ -75,7 +75,7 @@ func TestHermesCompanionSkillValidated(t *testing.T) {
 		t.Skip("hermes binary not available (environment-dependent evidence gap)")
 	}
 	probe, err := e5t2Hermes(t, os.Getenv("HOME"), "--version")
-	if err != nil || !strings.Contains(probe, "v0.19.1") {
+	if err != nil || !strings.Contains(probe, "v0.20.5") {
 		t.Skipf("installed hermes is outside the verified set: %q", probe)
 	}
 

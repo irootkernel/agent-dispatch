@@ -28,7 +28,7 @@ import (
 // completion contract are closed end to end (AC-801 through AC-806,
 // FAN-*, CON-001, CON-007 through CON-010, FBK-009 through FBK-012).
 // Every criterion drives the real CLI surface over the deterministic
-// stub Hermes (the frozen 0.19.1 interface, TST-012); the migration,
+// stub Hermes (the frozen 0.20.5 interface, TST-012); the migration,
 // crash, and race evidence is the existing suite cited per criterion,
 // not duplicated here; and the isolated real-Hermes walkthrough is the
 // skip-guarded TST-007 leg at the bottom of this file.
@@ -884,11 +884,11 @@ func TestG8RealHermesTwoDestinationWalkthrough(t *testing.T) {
 		out, err := cmd.CombinedOutput()
 		return strings.TrimSpace(string(out)), err
 	}
-	// The frozen 0.19.1 create surface: a drifted surface is the E11-T2
+	// The frozen mutex-capable create surface: a drifted surface is the E11-T2
 	// capability probe's detection, not this walkthrough's (same posture
 	// as the adapter's realboard test).
 	if help, herr := g3Hermes(t, "kanban", "create", "-h"); herr != nil || !strings.Contains(help, "--mutex-key") {
-		t.Skipf("installed hermes create surface drifted from the frozen 0.19.1 flags; the capability probe owns shape detection: %s", help)
+		t.Skipf("installed hermes create surface drifted from the frozen mutex-capable flags; the capability probe owns shape detection: %s", help)
 	}
 	// The disposable board is uniquely generated (nanosecond tag) and the
 	// cleanup deletes exactly that one board by name — never a wildcard or

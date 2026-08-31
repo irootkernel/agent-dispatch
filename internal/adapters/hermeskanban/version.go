@@ -97,7 +97,9 @@ func ParseVersionOutput(output string) (Version, error) {
 // ParseMinimumVersion parses a configured minimum-version floor
 // (configuration-spec §14) through the one shared domain parser, so
 // load-time validation and the run-time gate accept exactly the same
-// grammar; the empty value means the 0.19.1 default.
+// grammar. The empty value resolves to the product floor for internal
+// pre-validation callers only; the configuration contract requires an
+// explicit floor and never defaults one (AC-1107).
 func ParseMinimumVersion(text string) (Version, error) {
 	if text == "" {
 		return MinimumEligibleVersion, nil

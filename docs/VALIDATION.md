@@ -113,7 +113,7 @@ Boundary of the durability claim: the tested crash model is process death at the
 
 ## Gate G3: Hermes Kanban Durable Integration (E4)
 
-Verified 2026-08-21 by executable acceptance tests in `internal/cli/g3_test.go`, running the real components end to end: the built agent-dispatch binary as separate one-shot OS processes, the installed Watchman with a real trigger on a disposable vault, and the installed Hermes 0.19.1 through a disposable board created and hard-deleted through the public CLI (TST-007, E0-T4 boundary). The tests skip with a recorded environment gap when Watchman or a verified Hermes is unavailable. The user's active board selection and the production vault are never touched, and no real production vault automatic write is enabled anywhere in this gate.
+Verified 2026-08-21 by executable acceptance tests in `internal/cli/g3_test.go`, running the real components end to end: the built agent-dispatch binary as separate one-shot OS processes, the installed Watchman with a real trigger on a disposable vault, and the then-installed baseline Hermes through a disposable board created and hard-deleted through the public CLI (TST-007, E0-T4 boundary). The tests skip with a recorded environment gap when Watchman or a verified Hermes is unavailable. The user's active board selection and the production vault are never touched, and no real production vault automatic write is enabled anywhere in this gate.
 
 | Acceptance criterion | Executable evidence |
 |---|---|
@@ -132,7 +132,7 @@ Operator demo (the gate procedure, runbook-grade): (1) `hermes kanban boards cre
 
 ## Gate G4: Feedback Loop, Quarantine, and Reconciliation (E5)
 
-Verified 2026-08-21 by executable acceptance tests in `internal/cli/g4_test.go` (with per-criterion suites in `internal/cli/e5t1_test.go` through `internal/cli/e5t4_test.go`) over one disposable vault and the gated stub target through the real CLI surface: synthetic Hermes edits reported through the work-receipt commands, concurrent human edits, protected/bulk/overflow scenarios, the no-receipt fallback, and the distinct operator operations (TST-008). Process-level realism with the real Watchman trigger and the installed Hermes 0.19.1 was proven at gate G3 and is not repeated here; this gate exercises the feedback-loop behaviors that gate could not express. Correction remediated by E7-T2 (B-3): the production activation of a follow-up generation now happens at acceptance inside the submit flow (`Runtime.promoteFollowup`: FOLLOWUP_READY to ACTIVE_CLEAN), and the due follow-up is submitted automatically by the scheduled `reconcile --submit` path; every multi-generation scenario in this gate now drives the full product path (drain submission, acceptance-time activation, `work begin`/`work complete`) with the store-direct activation bypass removed (`submitFollowupProductPath`), pinned by `internal/cli/e7t2_test.go`.
+Verified 2026-08-21 by executable acceptance tests in `internal/cli/g4_test.go` (with per-criterion suites in `internal/cli/e5t1_test.go` through `internal/cli/e5t4_test.go`) over one disposable vault and the gated stub target through the real CLI surface: synthetic Hermes edits reported through the work-receipt commands, concurrent human edits, protected/bulk/overflow scenarios, the no-receipt fallback, and the distinct operator operations (TST-008). Process-level realism with the real Watchman trigger and real-Hermes process realism was proven at gate G3 and is not repeated here; this gate exercises the feedback-loop behaviors that gate could not express. Correction remediated by E7-T2 (B-3): the production activation of a follow-up generation now happens at acceptance inside the submit flow (`Runtime.promoteFollowup`: FOLLOWUP_READY to ACTIVE_CLEAN), and the due follow-up is submitted automatically by the scheduled `reconcile --submit` path; every multi-generation scenario in this gate now drives the full product path (drain submission, acceptance-time activation, `work begin`/`work complete`) with the store-direct activation bypass removed (`submitFollowupProductPath`), pinned by `internal/cli/e7t2_test.go`.
 
 | Acceptance criterion | Executable evidence |
 |---|---|
@@ -188,13 +188,13 @@ Residuals carried from the member-task reviews to the epic audit: the watch-bind
 
 ## Gate G7: Hermes Preflight and Operator Setup (E11)
 
-Every criterion drives the real CLI surface against the frozen 0.19.1
+Every criterion drives the real CLI surface against the frozen baseline
 interface fixture (the same probe path serves the installed surface;
 TST-012 determinism is proven in the E11-T2 suite).
 
 | Criterion | Evidence |
 |---|---|
-| AC-701 the frozen 0.19.1 interface and an installed newer Hermes each accepted only through every required public capability shape via the same product command | `TestG7AC701SameProbePathBothInterfaces`: both version legs traverse `hermes capabilities` and pass with complete evidence |
+| AC-701 the frozen baseline interface and an installed newer Hermes each accepted only through every required public capability shape via the same product command | `TestG7AC701SameProbePathBothInterfaces`: both version legs traverse `hermes capabilities` and pass with complete evidence |
 | AC-702 a compatible above-minimum Hermes works with no source allowlist edit; an incompatible shape fails naming the exact missing capability | `TestG7AC702CompatibleNewerPassesIncompatibleNamesCapability`: the drifted create surface refuses naming `--idempotency-key`, `--mutex-key`, and `--workspace` |
 | AC-703 executable content, path, version, or probe-contract change invalidates cached evidence before submission | `TestG7AC703ExecutableChangeBlocksBeforeSideEffects` (the stale read re-proves the live executable); the behavioral submit-time block is proven by `TestE11T2SubmitBlocksOnExecutableChange` and `TestE11T2DispatchBlockedAfterExecutableSwap` in the E11-T2 suite |
 | AC-704 a missing on-disk profile fails route preflight or enable before task creation listing available profiles | `TestG7AC704MissingProfileBlocksBeforeTaskCreation`: exit 3 with both stub on-disk profiles listed at preflight; the enable arm is proven by `TestE11T3EnableFailsOnMissingProfile` (enable refuses at exit 3 naming the on-disk alternatives while a confirmed-missing profile is the only new refusal — an unreachable profile surface keeps the liveness deferral) |
@@ -232,7 +232,7 @@ required.
 ## Gate G8: Multi-Destination and Completion (E12)
 
 Every criterion drives the real CLI surface over the deterministic stub
-Hermes (the frozen 0.19.1 interface, TST-012); the migration, crash, and
+Hermes (the frozen baseline interface, TST-012); the migration, crash, and
 race evidence is the existing suite cited per criterion, and the isolated
 real-Hermes walkthrough is the skip-guarded TST-007 leg recorded below
 the table.
@@ -281,7 +281,7 @@ dispatch against a real installed Hermes on a disposable
 hard-deleted-afterwards board — two tasks under the two workstreams,
 receipts recorded, `events show` complete. It skips with the explicit
 environment-dependent evidence-gap message when no supported Hermes is
-installed or the create surface drifted from the frozen 0.19.1 flags;
+installed or the create surface drifted from the frozen baseline flags;
 the gate's pass/fail never depends on it (every criterion is proven
 deterministically in this table).
 
@@ -318,7 +318,7 @@ board with a real Watchman binding on the disposable vault, through
 the completion receipts to the delivered webhook notifications, and
 removes the managed trigger afterwards. It skips with the explicit
 environment-dependent evidence-gap message when no supported Hermes is
-installed or the create surface drifted from the frozen 0.19.1 flags;
+installed or the create surface drifted from the frozen baseline flags;
 the gate's pass/fail never depends on it (every criterion is proven
 deterministically in this table).
 
@@ -351,6 +351,40 @@ Route-selection regression, the shared bounded enumeration, migration
 v17 against real SQLite files, and the public CLI-017 contract are the
 E14-T1 and E14-T2 suites referenced above; `make verify` including the
 race suite is green on darwin/arm64 at this tree.
+
+## Gate G11: Hermes Mutex Downgrade and Serialization Groups (E15)
+
+The real-environment evidence is the E15-T4 walkthrough in
+`docs/integrations/hermes-v0.20.5-g11-evidence.md` against the installed
+Hermes Agent v0.20.5 over fully disposable state (board, profile, home,
+vault, and state directory created and discarded through the public
+CLI); the behavioral criteria are pinned by the frozen-interface suites
+cited per row (TST-012: the same probe path evaluates the real and the
+synthetic interfaces).
+
+| Criterion | Evidence |
+|---|---|
+| AC-1101 v0.20.5 without `--mutex-key` probes and preflights as `agent-dispatch-group-enforced` with no rendered command carrying the flag | The real-Hermes probe/capabilities/preflight transcript (mode certified, fingerprint `cap:35583a58…`, profile and skill proven through the public surfaces) and the two real submitted tasks whose durable objects carry **no `mutex_key` field**; `TestE15T2ProbeRecordsModeAndContract`, `TestE15T1DispatchSendsEffectiveGroupAsTargetMutex`, and `TestE11T2SubmitSuppressesMutexKeyForDriftedSurface` pin the renderer behavior on the frozen interfaces |
+| AC-1102 an occupied group under a burst creates no parallel child and retains bounded dirty work | The three-file burst merged (`merge_pending`, no submission) beside the real holder; `TestE15T3SharedGroupNeverRunsParallelChildren` and `TestE15T3ConcurrentProcessesElectOneGroupChild` (eight one-shot processes, exactly one group child) |
+| AC-1103 two destinations sharing one group never run concurrently and completion promotes only the oldest first-dirty waiting lane | The cross-route arrival on the shared group merged; `TestE15T3CompletionPromotesOldestFirstDirtyLane` (the reservation consumed by the promoted lane's follow-up, the releaser's own follow-up waiting behind it) and `TestE15T3RerunTransfersSlotAtomicallyAndConflictRefuses` |
+| AC-1104 acknowledged independent groups over one resource run concurrently without global-single-writer claims | The `side-publish` arrival submitted immediately while `wiki-publish` stayed held; `TestE15T3AcknowledgedIndependentGroupsProgressConcurrently` |
+| AC-1105 retry, rerun, and serialization-policy edits cannot bypass the group slot, change both revisions, and stale the acknowledgement | `TestE15T3RerunTransfersSlotAtomicallyAndConflictRefuses` (atomic transfer, conflict refusal), `TestE15T1SerializationEditsChangeBothRevisions`, and `TestE15T1IdenticalEffectiveGroupsHashIdentically`; the reconciliation bypass the real walkthrough exposed is closed and pinned by `TestE15T4ReconcileChildRespectsOccupiedGroup` |
+| AC-1106 0.20.4 fails before side effects, 0.20.5 uses local enforcement, a later target-mutex Hermes adds the complementary mutex | The real floor-raise refusal (`set-minimum-version` to 0.21.0 → preflight exit 3 before any side effect; restore → green); `TestE15T2BelowFloorSettingFailsClosed`, `TestProbeEligibleFloor`, and `TestE11T2SamePathFrozenAndNewer` pin all three legs on the same probe path |
+| AC-1107 omitted/below-floor settings fail without rewriting; `set-minimum-version` changes only the target and pauses every affected route | `TestE15T2OmittedFloorFailsClosed` (never rewritten), `TestE15T2SetMinimumVersionAtomicUpdatePausesAffectedRoutes`, `TestE15T2SetMinimumVersionRefusals`, and `TestE15T2SetMinimumVersionRepairsLegacyFloor` (the repair path re-validating the candidate against every gate) |
+| AC-1108 the four serialization settings resolve exactly — default, identical-dual warning, conflicting-dual error, default-form group — and a preserved collision picks no arbitrary holder | `TestE15T1EffectiveGroupResolutionOrder`, `TestE15T1AliasAgreementConflictAndWarning`, `TestE15T1CrossGroupTopologyAcknowledgement`; the migration collision lifecycle is `TestE15T1MigrationPreservesIdentitiesAndReportsConflict` and `TestE15T1ConflictResolvesThroughAllowedExits` over real SQLite files |
+
+Migration v18 is additive and configuration-independent (identities
+preserved), the probe contract advanced to v3 with the certified
+serialization mode, the product floor is exactly 0.20.5 with the
+fail-closed omitted-floor posture, and every exact previous-baseline
+reference is removed from the tracked files without rewriting Git
+history. Re-opening the real-Hermes environment tests for the new
+baseline exposed and closed three product defects — the reconciliation
+child bypassing the group slot, a downtime re-acknowledgement that
+could never submit again after an executable swap, and post-cutover
+dead letters wedging the recovery re-acknowledgement — each pinned by
+the tests above. `make verify` including the race suite is green on
+darwin/arm64 at this tree.
 
 ## MUST-Closure Matrix (E8-T6, D-020) — supersedes the E7-T12 matrix
 
@@ -412,7 +446,7 @@ passed on darwin/arm64 on 2026-08-23; the two consecutive
 | OPS-002 (inspectable state) | PASS - `dispatches show` returns the decision, batch, observations, and work receipts beside the intent (E7-T5) |
 | TST-004 (crash-boundary coverage) | PASS - before-commit, after-commit, during-submit, after-remote-acceptance, and every migration interruption boundary have executing evidence (E7-T2/E7-T4) |
 
-The G1-G5 gate suites re-ran green on this machine (real Hermes 0.19.1
+The G1-G5 gate suites re-ran green on this machine (real then-baseline Hermes
 and Watchman 2026.07.27.00) on 2026-08-23; `make verify` including the
 race suite passed on darwin/arm64; the two consecutive
 `make release VERSION=v0.1.1` builds are byte-identical.

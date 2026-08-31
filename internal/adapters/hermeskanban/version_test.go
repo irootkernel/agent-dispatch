@@ -48,7 +48,7 @@ func TestParseVersionFixture(t *testing.T) {
 	if err != nil {
 		t.Fatalf("frozen fixture must parse: %v", err)
 	}
-	if v.String() != "0.19.1" {
+	if v.String() != "0.20.5" {
 		t.Fatalf("fixture version = %q", v.String())
 	}
 }

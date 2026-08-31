@@ -11,7 +11,7 @@ tasks, bounded completion evidence, aggregate status, and deduplicated operator
 notifications. The request defines eight inseparable functional areas:
 
 1. correct nested Watchman root binding and route-relative exclusions;
-2. Hermes 0.19.1+ eligibility followed by public-interface capability probing;
+2. the then-baseline Hermes+ eligibility followed by public-interface capability probing;
 3. per-destination Hermes profile, skill, workspace, mutex, and hint validation;
 4. separate operator and worker companion skills;
 5. discoverable help and a guided `setup wiki` flow;

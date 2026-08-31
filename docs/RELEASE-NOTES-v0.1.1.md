@@ -26,7 +26,7 @@ a recorded disposition (the finding index is recorded in D-019).
   honest notes); the repository is MIT-licensed with a 39-module
   dependency-license review.
 - **Verification.** `make verify` passes on darwin/arm64 including the
-  race suite; gates G1-G5 re-ran green on the real Hermes 0.19.1 and
+  race suite; gates G1-G5 re-ran green on the then-baseline real Hermes and
   Watchman 2026.07.27.00; the two consecutive `make release` builds are
   byte-identical.
 

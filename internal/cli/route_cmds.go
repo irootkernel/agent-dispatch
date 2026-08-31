@@ -314,11 +314,38 @@ func routeEnableGate(command string, cfg *config.Config, routeID, revision strin
 		// now; an unprobeable executable keeps the liveness deferral
 		// with an empty fingerprint (the submit path re-proves it
 		// before any side effect).
-		fingerprint, ferr := currentCapabilityFingerprint(cfg, resolved, profile, limits)
+		binding, ferr := currentCapabilityFingerprint(cfg, resolved, profile, limits)
 		if ferr != nil {
 			return "", planErr(stderr, command, "config_capability_missing", "configuration", ferr.Error(), 3)
 		}
-		return fingerprint, 0
+		if binding.fingerprint == "" {
+			// The liveness deferral distinguishes an outage of the SAME
+			// executable (the previous cached evidence names the
+			// configured executable — the stored binding still covers
+			// it, keep it) from a freshly acknowledged executable SWAP
+			// (the previous evidence names the retired executable —
+			// retire the binding explicitly, or the acknowledged state
+			// could never submit again; AC-303, the E15-T4 real-Hermes
+			// gate). A transient store read NEVER retires a valid
+			// binding: an unreadable route state preserves it (the
+			// submit path re-proves the live identity anyway).
+			if binding.previousExecutable == resolved.Hermes.Executable && binding.previousExecutable != "" {
+				snap, serr := store.LoadRouteState(requestCtx(), routeID)
+				if serr != nil {
+					fmt.Fprintf(stderr, "warning: hermes_targets.%s probes partially and the stored capability binding could not be read (%v); the binding is preserved and the submit path re-proves it at run time\n", resolved.ID, serr)
+					return "", 0
+				}
+				return snap.CapabilityFingerprint, 0
+			}
+			if binding.previousExecutable != "" && binding.previousExecutable != resolved.Hermes.Executable {
+				fmt.Fprintf(stderr, "warning: hermes_targets.%s probes partially after an executable change (%s to %s); the previous capability binding is retired and the submit path re-proves the new executable at run time\n", resolved.ID, binding.previousExecutable, resolved.Hermes.Executable)
+			}
+			return sqlite.CapabilityFingerprintClear, 0
+		}
+		if binding.partial {
+			fmt.Fprintf(stderr, "warning: hermes_targets.%s probes partially: %s\n", resolved.ID, binding.partialDetail)
+		}
+		return binding.fingerprint, 0
 	case "version_unsupported":
 		return "", planErr(stderr, command, "config_invalid", "configuration",
 			fmt.Sprintf("hermes_targets.%s probes version_unsupported: %s; a production route cannot be enabled against it", resolved.ID, summary.Detail), 3)
@@ -358,33 +385,60 @@ func routeEnableGate(command string, cfg *config.Config, routeID, revision strin
 // cached record is bound as-is; anything else is probed now and the
 // cache refreshed, so activation always names evidence this build can
 // re-verify at submission time.
-func currentCapabilityFingerprint(cfg *config.Config, resolved config.ResolvedTarget, profile string, limits hermeskanban.ProcessLimits) (string, error) {
+// capabilityFingerprintResult carries the binding decision beside the
+// executable identity the PREVIOUS cached evidence named: when a fresh
+// probe is only partial (target downtime), that identity is the witness
+// separating an outage of the same executable from a freshly
+// acknowledged executable swap (AC-303, the E15-T4 real-Hermes gate).
+type capabilityFingerprintResult struct {
+	fingerprint        string
+	previousExecutable string
+	partial            bool
+	partialDetail      string
+}
+
+func currentCapabilityFingerprint(cfg *config.Config, resolved config.ResolvedTarget, profile string, limits hermeskanban.ProcessLimits) (capabilityFingerprintResult, error) {
 	t := resolved.Hermes
 	cachePath := capabilityCachePath(resolved.ID)
+	out := capabilityFingerprintResult{}
 	if record, err := hermeskanban.LoadCapabilityRecord(cachePath); err == nil {
+		out.previousExecutable = record.ExecutablePath
 		if digest, derr := hermeskanban.ExecutableDigest(t.Executable); derr == nil {
 			if stale := record.StaleReasonForProfile(t.Executable, digest, "", profile); stale == "" && record.AllRequiredPassed() {
-				return record.Fingerprint, nil
+				out.fingerprint = record.Fingerprint
+				return out, nil
 			}
 		}
 	}
 	prober, err := hermeskanban.NewProber(resolved.ID, t.Executable, t.MinimumVersion, t.Board, profile, limits)
 	if err != nil {
-		return "", err
+		return out, err
 	}
 	record, err := prober.Probe(requestCtx())
 	if err != nil {
-		return "", err
-	}
-	if !record.AllRequiredPassed() {
-		if _, cerr := record.Capabilities(); cerr != nil {
-			return "", cerr
-		}
+		return out, err
 	}
 	if werr := hermeskanban.WriteCapabilityRecord(record, cachePath); werr != nil {
-		return "", fmt.Errorf("write capability evidence: %w", werr)
+		return out, fmt.Errorf("write capability evidence: %w", werr)
 	}
-	return record.Fingerprint, nil
+	if !record.AllRequiredPassed() {
+		// A PARTIAL record — the executable answers the version gate but
+		// a delivery surface failed — is treated as target downtime, not
+		// a configuration defect (AC-303: the operator re-acknowledges a
+		// revision change during an outage; an outage must not hold
+		// re-acknowledgement hostage). The incomplete record is kept
+		// owner-only for inspection but binds no fingerprint: the enable
+		// proceeds with the liveness posture and the caller warns —
+		// downtime and a shape-incompatible Hermes stay distinguishable
+		// to the operator — while the submit path's live re-proof gates
+		// the eventual recovery.
+		out.partial = true
+		out.partialDetail = fmt.Sprintf("capability evidence incomplete (version=%t assignees_json=%t list_json=%t create_surface=%t); enabling with the liveness posture — resolve the named failures if the target is up, or let recovery re-probe",
+			record.Shapes.Version.Passed, record.Shapes.AssigneesJSON.Passed, record.Shapes.ListJSON.Passed, record.Shapes.CreateSurface.Passed)
+		return out, nil
+	}
+	out.fingerprint = record.Fingerprint
+	return out, nil
 }
 
 func runRouteDisable(command string, args []string, stdout, stderr io.Writer) int {

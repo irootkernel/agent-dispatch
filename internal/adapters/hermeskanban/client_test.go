@@ -36,8 +36,12 @@ func TestDecodeFrozenFixtures(t *testing.T) {
 	if task.ID != "t_6253023d" || task.Status != "ready" || task.CreatedAt != 1787142146 {
 		t.Fatalf("create fixture decoded wrong: %+v", task)
 	}
-	if task.MutexKey == nil || *task.MutexKey != "jjukkumi-vault-maintenance" {
-		t.Fatalf("mutex echo missing: %+v", task)
+	// The 0.20.5 baseline create surface carries no --mutex-key, so the
+	// created task records no mutex echo (E15-T4 advanced the fixture to
+	// the re-verified shape; a later Hermes re-exposing the flag re-earns
+	// the complementary target mutex through the same probe).
+	if task.MutexKey != nil {
+		t.Fatalf("the baseline create response carries no mutex echo: %+v", task)
 	}
 
 	shown, err := decodeShow(load("show-response.json"))

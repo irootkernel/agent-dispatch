@@ -584,5 +584,14 @@ func (s *Store) CommitReconcileIntent(ctx context.Context, intent ports.IntentIn
 		intent.DispatchID, intent.RouteID, lane, intent.DispatchID); err != nil {
 		return err
 	}
+	// E15-T3/T4 (CON-011): the reconciliation child takes the group slot
+	// in the SAME transaction — an occupied group refuses the whole
+	// commit (the pending reconciliation stays owed and a later retry
+	// delivers it once the group frees), never a second parallel child.
+	// The refusal surfaced in the real-Hermes G11 walkthrough, where a
+	// reconcile child activated beside the group holder's active child.
+	if err := s.acquireGroupSlotTx(tx, intent.RouteID, lane, intent.DispatchID, actor, now); err != nil {
+		return err
+	}
 	return tx.Commit()
 }

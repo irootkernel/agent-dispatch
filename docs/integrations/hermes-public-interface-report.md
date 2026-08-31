@@ -2,10 +2,14 @@
 
 > **Task:** E0-T4, Verify Hermes Public Interface and Freeze Capability Baseline
 > **Probed:** 2026-08-19 (KST) on macOS (Apple Silicon)
-> **Hermes version:** `Hermes Agent v0.19.1 (2026.7.30)` (`hermes --version`)
+> **Hermes version:** `Hermes Agent v0.20.5 (2026.8.19)` (`hermes --version`; the durable-delivery
+> shapes below were verified 2026-08-19 against the then-baseline Hermes and re-verified
+> 2026-08-31 against 0.20.5 by the E15-T4 G11 probe — see
+> `hermes-v0.20.5-g11-evidence.md`; the one baseline difference, the absent `--mutex-key`
+> create flag, is recorded in §7 and §10)
 > **Machine capability record:** [`hermes-capability-report.json`](hermes-capability-report.json)
 > **Fixtures:** [`fixtures/hermes/`](fixtures/hermes/)
-> **Compatibility decision:** **Supported** for Hermes `0.19.1` exactly; see §10.
+> **Compatibility decision:** **Supported** for Hermes `0.20.5` as the floor; see §10.
 
 ## 1. Method and Boundary
 
@@ -186,9 +190,9 @@ reconciliation via dedup create, external-ref lookup, board-local mutex,
 portable execution status, cancellation for not-yet-running tasks
 (block + archive), and a readable result/completed_at projection.
 
-**Supported version range: `0.19.1` exactly** (the only runtime-verified
-version, build date 2026.7.30). The adapter may widen to
-`>=0.19.1 <0.20.0` only after re-running this probe against each additional
+**Supported version range: `0.20.5` and later probe-eligible releases** (the runtime-verified
+version, build date 2026.8.19). The adapter may widen to
+later releases only after re-running this probe against each additional
 version; any version outside the verified set must fail route validation
 (HER-002, HER-005, AC-002, AC-306).
 

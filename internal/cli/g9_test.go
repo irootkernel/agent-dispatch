@@ -334,7 +334,7 @@ func TestG9RealHermesNotificationWalkthrough(t *testing.T) {
 		return strings.TrimSpace(string(out)), err
 	}
 	if help, herr := cleanupEnv("kanban", "create", "-h"); herr != nil || !strings.Contains(help, "--mutex-key") {
-		t.Skipf("installed hermes create surface drifted from the frozen 0.19.1 flags: %s", help)
+		t.Skipf("installed hermes create surface drifted from the frozen 0.20.5 flags: %s", help)
 	}
 	board := fmt.Sprintf("agent-dispatch-g9-%d", time.Now().UnixNano())
 	if out, err := cleanupEnv("kanban", "boards", "create", board); err != nil {

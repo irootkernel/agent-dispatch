@@ -32,14 +32,14 @@ func TestRealHermesDisposableBoardSubmitDedupLookup(t *testing.T) {
 	if err := CheckVersionEligible(version, MinimumEligibleVersion); err != nil {
 		t.Skipf("installed hermes %s below the eligibility floor: %v", version, err)
 	}
-	// The client still implements the frozen 0.19.1 create surface; a
+	// The client still implements the frozen mutex-capable create surface; a
 	// newer Hermes that dropped one of its flags (0.20.5 removed
 	// --mutex-key) is exactly the capability drift the E11-T2 probe
 	// detects. Until it lands, this end-to-end test runs only against
 	// interfaces whose create surface matches what the client submits
 	// (TST-007 environment-dependent evidence gap otherwise).
 	if help, herr := runHermes(t, bin, "kanban", "create", "-h"); herr != nil || !strings.Contains(help, "--mutex-key") {
-		t.Skipf("installed hermes %s create surface drifted from the frozen 0.19.1 flags (no --mutex-key); the E11-T2 capability probe owns shape detection: %s", version, strings.Join(strings.Split(strings.TrimSpace(help), "\n")[:1], ""))
+		t.Skipf("installed hermes %s create surface drifted from the frozen mutex-capable flags; the E11-T2 capability probe owns shape detection: %s", version, strings.Join(strings.Split(strings.TrimSpace(help), "\n")[:1], ""))
 	}
 
 	board := fmt.Sprintf("agent-dispatch-e4t3-test-%d", time.Now().UnixNano())

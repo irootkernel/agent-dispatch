@@ -21,7 +21,7 @@ func e11t2Prober(t *testing.T, bin string) *Prober {
 }
 
 // TestE11T2ProbePassesFrozenInterface proves the full probe set passes
-// against the frozen 0.19.1 interface fixture with a complete record
+// against the frozen 0.20.5 interface fixture with a complete record
 // and a stable fingerprint (HER-012).
 func TestE11T2ProbePassesFrozenInterface(t *testing.T) {
 	bin := stubVersionFull(t)
@@ -213,7 +213,7 @@ exit 3
 }
 
 // TestE11T2SamePathFrozenAndNewer proves TST-012: the frozen real
-// 0.19.1 interface fixture and a newer synthetic Hermes traverse the
+// 0.20.5 interface fixture and a newer synthetic Hermes traverse the
 // same probe path — the newer one fails only on the shapes that
 // actually drifted.
 func TestE11T2SamePathFrozenAndNewer(t *testing.T) {

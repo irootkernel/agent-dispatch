@@ -15,7 +15,7 @@ import (
 // Gate G7 (E11-T4): Hermes compatibility, destination preflight, and
 // disabled setup are usable without modifying Hermes (AC-701 through
 // AC-706). Every criterion drives the real CLI surface; the frozen
-// 0.19.1 interface fixture stands in for the real Hermes so the suite
+// 0.20.5 interface fixture stands in for the real Hermes so the suite
 // is deterministic, and the same probe path serves the installed
 // surface (TST-012, proven in the E11-T2 suite).
 
@@ -27,7 +27,7 @@ func g7Config(t *testing.T, bin string) string {
 }
 
 // TestG7AC701SameProbePathBothInterfaces proves AC-701: the frozen
-// 0.19.1 interface and a newer compatible Hermes are each accepted
+// 0.20.5 interface and a newer compatible Hermes are each accepted
 // only through every required public capability shape — the same
 // product command, the same probe path (TST-012).
 func TestG7AC701SameProbePathBothInterfaces(t *testing.T) {

@@ -643,6 +643,11 @@ func (s *Store) transitionWithin(ctx context.Context, tx *sql.Tx, dispatchID str
 // later behavior-sensitive revision change or an executable identity
 // change requires a fresh acknowledgement; disable preserves
 // observations, active work, and dirty state.
+// CapabilityFingerprintClear is the explicit enable-gate sentinel that
+// retires a stored capability binding (an executable change the operator
+// just re-acknowledged); an EMPTY string preserves the binding instead.
+const CapabilityFingerprintClear = "\x00clear"
+
 func (s *Store) SetRouteActivation(ctx context.Context, routeID, activation, acknowledgeRevision, capabilityFingerprint, now string) error {
 	if activation != "enabled" && activation != "disabled" && activation != "paused" {
 		return fmt.Errorf("unknown activation state %q", activation)
@@ -654,12 +659,21 @@ func (s *Store) SetRouteActivation(ctx context.Context, routeID, activation, ack
 		// (target unavailable): the previously accepted binding stays
 		// put instead of being erased — a re-acknowledgement during an
 		// outage must not silently disable the submit-time
-		// executable-change block (E11-T2 round-1 review).
+		// executable-change block (E11-T2 round-1 review). The explicit
+		// CapabilityFingerprintClear sentinel is the one way the gate
+		// retires a binding: the executable changed under a fresh
+		// acknowledgement (the executable joins the revision
+		// projection), so the stale binding must not outlive the
+		// acknowledged state and wedge recovery (AC-303, the E15-T4
+		// real-Hermes gate).
 		res, err = s.ExecContext(ctx, `UPDATE route_runtime_state
 			SET activation_state = 'enabled', acknowledged_revision = ?,
-			capability_fingerprint = CASE WHEN ? = '' THEN capability_fingerprint ELSE ? END,
+			capability_fingerprint = CASE WHEN ? = '' THEN capability_fingerprint
+			                               WHEN ? = ? THEN ''
+			                               ELSE ? END,
 			last_reconciled_at = ?, version = version + 1
-			WHERE route_id = ?`, acknowledgeRevision, capabilityFingerprint, capabilityFingerprint, now, routeID)
+			WHERE route_id = ?`, acknowledgeRevision, capabilityFingerprint,
+			capabilityFingerprint, CapabilityFingerprintClear, capabilityFingerprint, now, routeID)
 	} else {
 		res, err = s.ExecContext(ctx, `UPDATE route_runtime_state
 			SET activation_state = ?, version = version + 1
@@ -1029,9 +1043,19 @@ func (s *Store) UnresolvedLegacyWork(ctx context.Context, routeID, currentRevisi
 		}
 		return nil
 	}
-	if err := count("unresolved intents (unknown, retry-wait, reconciling, submitting, ready, or dead-lettered)",
-		`SELECT COUNT(*) FROM dispatch_intents
-		WHERE route_id = ? AND route_revision != ? AND state IN ('unknown','retry_wait','reconciling','submitting','ready','dead_lettered')`,
+	// DAT-013's legacy marker is the absence of a destinations-contract
+	// child row (migration v12): pre-cutover work blocks enablement under
+	// the new contract, while post-cutover residue under an older
+	// revision — the dead letters an executable-swap downtime leaves —
+	// resolves through the documented retry/discard exits AFTER the
+	// operator re-acknowledges the swap (E9-T3/T3-F006 made every swap a
+	// re-acknowledge boundary; the E15-T4 real-Hermes gate proved
+	// enable-then-retry must not wedge recovery).
+	if err := count("unresolved legacy intents (unknown, retry-wait, reconciling, submitting, ready, or dead-lettered)",
+		`SELECT COUNT(*) FROM dispatch_intents i
+		LEFT JOIN child_dispatches c ON c.dispatch_id = i.dispatch_id
+		WHERE i.route_id = ? AND i.route_revision != ? AND c.dispatch_id IS NULL
+		  AND i.state IN ('unknown','retry_wait','reconciling','submitting','ready','dead_lettered')`,
 		routeID, currentRevision); err != nil {
 		return 0, "", err
 	}

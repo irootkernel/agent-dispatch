@@ -308,7 +308,7 @@ func TestE11T1WebhookEndpointQueryIsRevisionSensitive(t *testing.T) {
 }
 
 // TestE11T1HermesTargetFloorValidation proves the hermes_targets
-// contract: a missing board, a floor below 0.19.1, a non-capability_probe
+// contract: a missing board, a floor below 0.20.5, a non-capability_probe
 // mode, and an unparseable floor all fail validation; a higher declared
 // floor passes.
 func TestE11T1HermesTargetFloorValidation(t *testing.T) {

@@ -23,7 +23,7 @@ func e4t1StubHermes(t *testing.T, dir, versionLine string) string {
 
 // e4t1ProbeConfig writes a one-target configuration pointing at the
 // given executable with the given eligibility floor ("" keeps the
-// 0.19.1 default). The lookup budget is deliberately generous — these
+// 0.20.5 default). The lookup budget is deliberately generous — these
 // tests assert probe verdicts, and a transient host stall must not
 // flip them to the unavailable path — while submit_timeout stays 5s
 // because TestConfigValidateProbeTargetsInvalidTimeouts rewrites that

@@ -108,7 +108,7 @@ Agent Dispatch v0.1 is complete when all release acceptance cases pass on macOS 
 ## 8.1 Success Definition for v0.1.5
 
 v0.1.5 is complete only when a nested configured Wiki is scoped correctly,
-reconciliation cannot erase newer facts, Hermes 0.19.1+ compatibility is
+reconciliation cannot erase newer facts, Hermes compatibility is
 capability-probed without modifying Hermes, profiles and skills preflight, one
 event can fan out to independent destination lanes, bounded receipts distinguish
 completed/partial/blocked/failed work, and configured notifications are durable

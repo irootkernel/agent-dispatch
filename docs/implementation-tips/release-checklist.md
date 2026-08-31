@@ -29,7 +29,7 @@
 - [x] JSON Schemas parse and examples validate (make schema-validation, 12 schemas).
 - [x] All G0-G5 acceptance scenarios pass (re-verified on the reopened delta 2026-08-25; AC-505's Linux-host scenario is superseded by D-023 with its D-020 closure standing as history).
 - [x] Real Watchman test passes (2026.07.27.00).
-- [x] Real disposable Hermes Kanban test passes (0.19.1, disposable boards; under an installed Hermes outside the verified set the real-environment legs skip as TST-007 evidence gaps — E9-T6).
+- [x] Real disposable Hermes Kanban test passes (0.20.5, disposable boards; under an installed Hermes outside the verified set the real-environment legs skip as TST-007 evidence gaps — E9-T6).
 - [x] Webhook fake/contract tests pass (TLS conformance suite).
 - [x] No production vault was used for destructive tests.
 
@@ -89,7 +89,7 @@ G6 through G9 executable evidence E13-T4 closed them with:
       (E10-T2/E10-T3, G6 rows in VALIDATION.md).
 - [x] Reconciliation fence and bounded-growing-file evidence (E10-T1/E10-T3,
       G6 rows in VALIDATION.md).
-- [x] Frozen real Hermes 0.19.1 plus installed newer-version probe evidence,
+- [x] Frozen real Hermes 0.20.5 plus installed newer-version probe evidence,
       with no Hermes source/private-state modification (E11-T2, TST-012;
       the G8/G9 real legs skip-guarded under TST-007).
 - [x] Destination config/schema migration, multi-profile/workstream fan-out,

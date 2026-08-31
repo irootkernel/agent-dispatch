@@ -78,7 +78,7 @@ cannot reuse an incompatible accepted child.
 
 ## 5. Hermes Capability and Preflight
 
-Hermes versions below 0.19.1 are ineligible. Later versions have no fixed upper
+Hermes versions below the configured floor (at least 0.20.5) are ineligible. Later versions have no fixed upper
 bound but are not trusted by version alone. The probe executes only public CLI
 commands with an allowlisted environment, closed stdin, bounded output, a
 controlled working directory, and a deadline.

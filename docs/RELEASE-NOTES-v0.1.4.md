@@ -51,7 +51,7 @@ compliance review remediation (D-023, closed by D-024).
 
 ## Known state
 
-- The runtime-verified Hermes set remains exactly 0.19.1. On hosts
+- The runtime-verified Hermes set remains exactly the then-baseline. On hosts
   with a newer installed Hermes (for example 0.20.5), the
   real-environment test legs skip as TST-007 evidence gaps and the
   enable gate refuses reports recording unsupported versions; widening

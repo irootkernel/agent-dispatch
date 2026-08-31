@@ -1,4 +1,4 @@
-# Hermes kanban public CLI error behavior, observed 2026-08-19 (Hermes Agent v0.19.1)
+# Hermes kanban public CLI error behavior, observed 2026-08-19 (Hermes Agent the then-baseline version)
 # All commands run against the disposable probe board; exit codes measured directly.
 
 $ hermes kanban --board jjukkumi-e0t4-probe show t_nonexistent00 --json

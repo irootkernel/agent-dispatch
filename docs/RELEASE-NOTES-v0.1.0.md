@@ -1,7 +1,7 @@
 # Agent Dispatch v0.1.0 Release Notes
 
 Release target: v0.1.0 · SOT package version 1.0.x · schema range 1-4 ·
-config version 1 · Hermes adapter 0.19.1 · Watchman verified
+config version 1 · Hermes adapter baseline · Watchman verified
 2026.07.27.00.
 
 ## What this release is

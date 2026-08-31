@@ -482,3 +482,65 @@ func TestE15T3ConcurrentProcessesElectOneGroupChild(t *testing.T) {
 		t.Fatalf("losers merge durably (one dirty lane per route), got %d", dirty)
 	}
 }
+
+func TestE15T4ReconcileChildRespectsOccupiedGroup(t *testing.T) {
+	// The G11 real-Hermes walkthrough exposed the bypass: a reconcile
+	// child activated beside the group holder's active child because
+	// CommitReconcileIntent applied the lane activation without the
+	// group gate. The gate now refuses the whole commit, the pending
+	// reconciliation stays owed, and a later retry delivers once the
+	// group frees.
+	s := e15t3Store(t)
+	c := newCoordinator(s)
+	ctx := context.Background()
+
+	// The audit lane's child holds the shared group.
+	if _, err := c.Arrival(ctx, e15t3Lineage(t, 501, "audit")); err != nil {
+		t.Fatal(err)
+	}
+	// A reconciliation child for the wiki lane cannot commit while the
+	// group is held: the typed refusal rolls everything back. The
+	// reconcile flow commits its own decision first (full.go), so the
+	// fixture carries one beside the intent.
+	lin502 := e15t3Lineage(t, 502, "wiki")
+	if err := s.SaveDecision(nil, sqlite.DecisionRecord{
+		DecisionID: "dec-reconcile-e15t4", RouteID: "wiki",
+		RouteRevision: "route-rev-1", PolicyRevision: "policy-rev-1", Disposition: "dispatch",
+		GenerationLineageJSON: `{"generations":[]}`,
+		Classification:        "normal", ReasonCodesJSON: `["reconcile"]`, CreatedAt: "2026-08-20T01:59:00Z", Actor: "reconcile",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	reconcileChild := lin502.Intent
+	reconcileChild.DecisionID = "dec-reconcile-e15t4"
+	if err := s.CommitReconcileIntent(ctx, reconcileChild, "reconcile", "2026-08-20T02:00:00Z"); err == nil {
+		t.Fatal("a reconcile child must not activate beside the group holder")
+	} else if !strings.Contains(err.Error(), "serialization group slot held") && !strings.Contains(err.Error(), "preserved conflict") {
+		t.Fatalf("the refusal must be the typed group error: %v", err)
+	}
+	var active int
+	if err := s.QueryRow(`SELECT COUNT(*) FROM destination_lane_state l
+		JOIN serialization_group_members m ON m.route_id = l.route_id AND l.destination_id = m.destination_id
+		WHERE m.group_id = 'shared' AND l.lane_state IN ('ACTIVE_CLEAN','ACTIVE_DIRTY')`).Scan(&active); err != nil {
+		t.Fatal(err)
+	}
+	if active != 1 {
+		t.Fatalf("exactly one active child remains in the shared group, got %d", active)
+	}
+	var intents int
+	if err := s.QueryRow(`SELECT COUNT(*) FROM dispatch_intents WHERE dispatch_id = ?`, reconcileChild.DispatchID).Scan(&intents); err != nil {
+		t.Fatal(err)
+	}
+	if intents != 0 {
+		t.Fatal("the refused reconcile child must not stay committed")
+	}
+	// Once the group frees, the same child commits.
+	if _, err := s.CompleteActive(ctx, ports.ActiveCompletion{
+		RouteID: "audit", DispatchID: "dispatch-501", ReceiptRef: "wr-501", Actor: "test", Now: "2026-08-20T03:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CommitReconcileIntent(ctx, reconcileChild, "reconcile", "2026-08-20T04:00:00Z"); err != nil {
+		t.Fatalf("the reconcile child commits once the group is free: %v", err)
+	}
+}

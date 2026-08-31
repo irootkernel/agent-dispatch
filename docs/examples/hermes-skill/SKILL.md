@@ -1,6 +1,6 @@
 # Agent Dispatch LLM Wiki Maintenance Companion
 
-> Format status: validated against the real Hermes 0.19.1 skills surface (E5-T2; the E0-T4 verification closed 2026-08-21).
+> Format status: validated against the real Hermes skills surface (E5-T2, re-verified against the 0.20.5 baseline by E15-T4).
 
 ## Purpose
 

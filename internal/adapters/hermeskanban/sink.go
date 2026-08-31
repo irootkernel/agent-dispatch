@@ -77,7 +77,7 @@ func NewSink(targetID, executable, minimumVersion string, board string, limits P
 			MaxManifestBytes: maxManifestBytes,
 			// resource_mutex is consulted before --mutex-key is ever sent
 			// (E8-T3, M-6): a target that does not honor the flag never
-			// receives it. The default is the frozen 0.19.1 runtime-
+			// receives it. The default is the frozen 0.20.5 runtime-
 			// verified interface; the CLI replaces it with the fresh
 			// per-executable probe truth through SetResourceMutexSupported
 			// (E11-T2) whenever the capability record is current.
@@ -233,7 +233,7 @@ func (s *Sink) LookupByIdempotencyKey(ctx context.Context, key string) (ports.Lo
 // `no such task` behavior is the deterministic absence proof (DUR-006);
 // any transport failure proves nothing and reports ambiguous. The
 // lookup_by_external_ref capability's interim truth source is the frozen
-// 0.19.1 runtime-verified interface plus the eligibility probe (E11-T2's
+// 0.20.5 runtime-verified interface plus the eligibility probe (E11-T2's
 // capability probe restores per-executable shape proof).
 func (s *Sink) LookupByExternalRef(ctx context.Context, ref string) (ports.LookupResult, error) {
 	if _, err := s.adapter.Probe(ctx); err != nil {

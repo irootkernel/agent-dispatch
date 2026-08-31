@@ -13,11 +13,11 @@
 | Shipped release | v0.1.5 (published 2026-08-30) |
 | Planned SOT baseline | 1.2.0 ([D-027](../specs/decision-log.md)) |
 | Release target | v0.1.6 (planned) |
-| Current epic | E15 In Progress |
+| Current epic | E15 Completed (G11 evidenced); next E16 |
 | Current active task | None |
-| Next task | E15-T4 |
-| Completed tasks | 81 / 89 |
-| Planned tasks | 8 / 89 |
+| Next task | E16-T1 |
+| Completed tasks | 82 / 89 |
+| Planned tasks | 7 / 89 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -120,7 +120,7 @@
 | 62 | E10-T2 | Completed | Effective Watchman binding and route-relative exclusions |
 | 63 | E10-T3 | Completed | Source/reconciliation integrity gate G6 |
 | 64 | E11-T1 | Completed | Config v1 destination cutover and forward migration |
-| 65 | E11-T2 | Completed | Hermes 0.19.1+ capability probe and evidence cache |
+| 65 | E11-T2 | Completed | Hermes capability probe and evidence cache |
 | 66 | E11-T3 | Completed | Destination profile/skill validation and route preflight |
 | 67 | E11-T4 | Completed | Discoverable CLI, guided setup, operator skill, and G7 |
 | 68 | E12-T1 | Completed | Aggregate event and destination child persistence |
@@ -137,7 +137,7 @@
 | 79 | E15-T1 | Completed | Serialization configuration, revisions, and migration |
 | 80 | E15-T2 | Completed | Consistent local serialization and optional target mutex contract |
 | 81 | E15-T3 | Completed | Group slot enforcement and bounded follow-up |
-| 82 | E15-T4 | Planned | Hermes v0.20.5+ compatibility gate G11 |
+| 82 | E15-T4 | Completed | Hermes v0.20.5+ compatibility gate G11 |
 | 83 | E16-T1 | Planned | Drain policy, leases, and forward migration |
 | 84 | E16-T2 | Planned | Lease-safe bounded notification delivery |
 | 85 | E16-T3 | Planned | Post-commit after-command integration |
@@ -294,7 +294,7 @@ E0-T3 Completed.
 
 ### Evidence
 
-`docs/integrations/hermes-public-interface-report.md`, validated `docs/integrations/hermes-capability-report.json`, and sanitized fixtures under `docs/integrations/fixtures/hermes/`, produced against Hermes 0.19.1 on 2026-08-19 using only the public CLI and a disposable, deleted probe board. Compatibility decision: supported.
+`docs/integrations/hermes-public-interface-report.md`, validated `docs/integrations/hermes-capability-report.json`, and sanitized fixtures under `docs/integrations/fixtures/hermes/`, produced against the then-baseline Hermes on 2026-08-19 using only the public CLI and a disposable, deleted probe board; superseded by the 0.20.5 baseline evidence of E15-T4. Compatibility decision: supported.
 
 ### Out of Scope
 
@@ -1002,13 +1002,13 @@ E3-T5 Completed.
 
 ### Evidence
 
-- `internal/adapters/hermeskanban/version.go`: the exact-version gate. `ParseVersionOutput` matches the documented `hermes --version` first line only (E0-T4 §2; anything else fails closed), and `CheckVersionSupported` admits exactly the runtime-verified set (0.19.1; the build date is recorded evidence, not the gate) with `VersionUnsupportedError` + remediation, so an unsupported Hermes version fails route validation before any task submission (HER-002, HER-005).
+- `internal/adapters/hermeskanban/version.go`: the exact-version gate. `ParseVersionOutput` matches the documented `hermes --version` first line only (E0-T4 §2; anything else fails closed), and `CheckVersionSupported` admits exactly the runtime-verified set (the baseline; the build date is recorded evidence, not the gate) with `VersionUnsupportedError` + remediation, so an unsupported Hermes version fails route validation before any task submission (HER-002, HER-005).
 - `internal/adapters/hermeskanban/report.go`: the capability authority. `LoadReport` fails closed on the wrong `agent-dispatch.hermes-capabilities/v1` schema version, a non-`public_cli` interface, or a missing version; `PortCapabilities` maps the frozen report onto the eight HER-004 declarations with an absent name reading false (nothing is assumed beyond the report); `VersionMatchsWith` enforces capability-report freshness against the discovered installation; `ValidateRequired` turns a missing required capability into the typed `CapabilityError` and an unknown name into a configuration defect (never a silent reduced guarantee).
 - `internal/adapters/hermeskanban/runner.go`: controlled execution (SEC-004/SEC-005). Argument arrays only — no shell, no interpolation; the child receives exactly the allowlisted environment (PATH/HOME always), a controlled working directory (never a vault root), /dev/null stdin, stdout/stderr captured through write-side-bounded sinks (a stream exceeding the configured byte bound fails the invocation as excessive output — an ambiguous outcome — instead of growing an unbounded capture file), a per-call deadline, and process-group SIGKILL cleanup via `CommandContext` + `Setpgid`. A deadline that elapses only after a completed zero exit never discards a valid result (the deterministic classification property is unit-tested), and any Wait failure coinciding with a done context is the ambiguous deadline outcome while definite exit codes without it stay definite. `ExecutableMissingError` is the definite pre-submit failure with remediation.
 - `internal/adapters/hermeskanban/client.go` + `dto.go` + `errors.go`: the typed transport. `DiscoverVersion`, `Create`, `Show`, `List`, and `Assignees` build documented argv arrays — the runtime-verified create surface (title, body, assignee, skills, workspace, mutex key, max-runtime, max-retries, idempotency key, priority, created-by; the help-verified `--model`/`--provider` pinning flags are not mapped by the v1 logical contract and stay unused) with the idempotency key transmitted verbatim — and decide outcomes only from exit 0 plus successfully typed `--json` records: create additionally requires the acceptance-proof members (`t_` + 8 lowercase hex id, status, created_at; E0-T4 §4). Frozen exit-1 stderr shapes classify `no such task` / unknown-board for lookup semantics, exit 2 classifies as definite argument rejection, everything else stays a bounded generic failure; timeout, excessive output, and malformed output carry explicit ambiguous-outcome errors (DUR-005 posture). Option-like values beginning with `-` are refused before any invocation on every rendered value slot — create options and the lookup surfaces (board, task reference, status, sort) alike. All diagnostics, including malformed-output reasons and version-parse fragments, are scrubbed of allowlisted environment values and bounded (error-model §6). `ProfileOnDisk` provides the assignee validation E0-T4 §7 requires before route enablement.
 - `internal/adapters/hermeskanban/adapter.go`: the read-only probe facade. `Probe` discovers the version once, gates it, loads the frozen report, requires report/installation version agreement, and validates required capabilities; `ProbeVerbose` drives the same single-discovery path and classifies available / version_unsupported / unavailable / capability_mismatch / config_error for the validation surface — persistent configuration defects (unreadable or stale report, unknown required-capability name) fail validation rather than downgrading to a warning. HER-010: only public CLI commands are used; no Hermes database or private API is touched.
 - `internal/cli/config.go`: `config validate --probe-targets` replaces the placeholder with real probing (cli-spec §3): every hermes-kanban target is probed so the summary stays complete, reporting per-target state, version, and capability summary through the single name↔field mapping on `ports.Capabilities`; a capability mismatch fails validation with the stable `config_capability_missing` code and exit 3 (HER-005, AC-306 posture) and a configuration defect with `config_invalid`/exit 3, while an unusable or version-unsupported target stays a warning because the configuration document itself is valid and the adapter gates submissions again at run time. Target durations parse through the one schema-exact parser exported from internal/config (whole-day units included). `internal/cli/state.go` and `internal/version` now describe the delivered transport surface (durable submit wiring arrives with E4-T3; no fallback target exists, DUR-008).
-- Tests: frozen-fixture conformance for every response shape (create, show, list, assignees, duplicate-dedup returns the original task, unvalidated assignee echo); the malformed-acceptance table (missing id/status/created_at or a non-`t_<8 hex>` id never counts as acceptance); the frozen error behaviors through stub binaries (unknown task, unknown board, argparse exit 2, generic exit, timeout-ambiguous on both the submit and lookup surfaces, excessive output, malformed output); runner conformance (environment allowlist exclusion with a poisoned variable and pass-through of an operator-added entry, controlled cwd, write-side output bound, deadline + process-group cleanup, closed stdin, missing executable); profile validation (on-disk, absent, prefix-collision); hostile-value verbatim argv round trip and the leading-dash refusal table; allowlisted secret scrubbing from diagnostics; probe scenarios (happy path, unsupported version, unparsable version, capability mismatch without emulation, stale report, all verbose states); CLI suites for the probe-targets outcomes (available with eight capabilities, capability mismatch → `config_capability_missing`/exit 3, unknown capability name and unreadable report → `config_invalid`/exit 3, version_unsupported and unavailable as warnings, invalid and day-unit timeouts, mixed-state multi-target summaries in deterministic order); single version discovery per probe with an invocation-counting stub; the lookup-surface leading-dash refusal table; version-diagnostic redaction; and a skip-guarded probe of the real installed Hermes (TST-007 posture). `make verify` green including the real Hermes 0.19.1 probe against `docs/integrations/hermes-capability-report.json`.
+- Tests: frozen-fixture conformance for every response shape (create, show, list, assignees, duplicate-dedup returns the original task, unvalidated assignee echo); the malformed-acceptance table (missing id/status/created_at or a non-`t_<8 hex>` id never counts as acceptance); the frozen error behaviors through stub binaries (unknown task, unknown board, argparse exit 2, generic exit, timeout-ambiguous on both the submit and lookup surfaces, excessive output, malformed output); runner conformance (environment allowlist exclusion with a poisoned variable and pass-through of an operator-added entry, controlled cwd, write-side output bound, deadline + process-group cleanup, closed stdin, missing executable); profile validation (on-disk, absent, prefix-collision); hostile-value verbatim argv round trip and the leading-dash refusal table; allowlisted secret scrubbing from diagnostics; probe scenarios (happy path, unsupported version, unparsable version, capability mismatch without emulation, stale report, all verbose states); CLI suites for the probe-targets outcomes (available with eight capabilities, capability mismatch → `config_capability_missing`/exit 3, unknown capability name and unreadable report → `config_invalid`/exit 3, version_unsupported and unavailable as warnings, invalid and day-unit timeouts, mixed-state multi-target summaries in deterministic order); single version discovery per probe with an invocation-counting stub; the lookup-surface leading-dash refusal table; version-diagnostic redaction; and a skip-guarded probe of the real installed Hermes (TST-007 posture). `make verify` green including the real-Hermes probe against `docs/integrations/hermes-capability-report.json`.
 
 ## E4-T2: Implement Safe Hermes Task Request Renderer
 
@@ -1257,7 +1257,7 @@ E5-T1 Completed.
 
 - `docs/skills/agent-dispatch-wiki-maintenance/SKILL.md`: the production companion skill packaged from the E0-era example — Hermes skill frontmatter (name, description, version, platforms), the task-variable mapping table (DISPATCH_ID, RESOURCE_ID, HERMES_TASK_ID, RUN_ID, workspace, each mapped to its trusted source), the required behavior (register the run, process latest state under the llm-wiki SOT, track canonical vault-relative paths with before/after digests, submit bounded complete/fail receipts), the explicit no-receipt fallback (the CLI is cooperation, not a dependency: domain success never depends on receipt submission, failures are reported in the visible task result, and Agent Dispatch stays conservative without provenance), and the safety rules (no note bodies in receipts, no invented changes, no permission or Hermes-configuration mutation).
 - `docs/skills/agent-dispatch-wiki-maintenance/INSTALL.md`: installation through the public Hermes skill mechanism only — local copy into the skills directory or `hermes skills install <url>`, verification through `hermes skills list`/`inspect`, uninstall, and the explicit statement that the skill grants no permissions and is optional for Agent Dispatch correctness.
-- Tests (`internal/cli/e5t2_test.go`): the packaging assertions (required rules present, no permission or plugin surfaces) and the disposable validation against the real installed Hermes 0.19.1 — a throwaway HOME receives the skill by the documented local-copy mechanism, the public skills surface lists and inspects it, a disposable board task created with the public `--skill` selection carries the skill in its durable record (create JSON and public show), and the board is hard-deleted afterwards, leaving the real profile untouched. `make verify` green.
+- Tests (`internal/cli/e5t2_test.go`): the packaging assertions (required rules present, no permission or plugin surfaces) and the disposable validation against the then-installed baseline real Hermes — a throwaway HOME receives the skill by the documented local-copy mechanism, the public skills surface lists and inspects it, a disposable board task created with the public `--skill` selection carries the skill in its durable record (create JSON and public show), and the board is hard-deleted afterwards, leaving the real profile untouched. `make verify` green.
 
 ## E5-T3: Implement Exact Self-Change Suppression and Mixed-Change Handling
 
@@ -1553,7 +1553,7 @@ E6-T3 Completed.
 
 ### Evidence
 
-Delivered as the release-verification surface: the executable G5 acceptance suite (`internal/cli/e6t4_test.go`: AC-501 through AC-506 — the webhook route's auth-without-persistence, transport-vs-durable distinction, and no-fallback proof; doctor's actionable stable-coded findings; prune's resolved-expired removal preserving unresolved lineage and the append-only audit; the clean-host macOS install→dispatch→scheduled-reconciliation→doctor flow with the production-gate acknowledgement; the release-way build with the version envelope and artifact set; plus the upgrade-and-backup rehearsal restoring the snapshot standalone with its lineage), the Gate G5 evidence table in `docs/VALIDATION.md` (closing G0–G5: G0 by E0-T5, G1–G4 previously, G5 here), the regenerated requirement traceability matrix (`make traceability`, 33 tasks, 15 groups, every requirement ID resolved to its owning and verifying tasks), the release artifacts (`make release VERSION=v0.1.0`: byte-reproducible darwin/arm64 and linux/amd64 binaries with SHA256SUMS; `docs/RELEASE-NOTES-v0.1.0.md`; the SOT package manifest-verified; schemas, examples, and the companion skill in place), and the security/architecture review posture carried by the per-task Mulgae rounds and the frozen ADR set. Compatibility is frozen (config version 1, schema range 1-4, record payload versions, adapter profiles 0.19.1/2026.07.27.00 — `agent-dispatch version` reports every axis); no deferred feature is partially enabled (the future-work list stands apart); the Hermes plugin remains absent; production enablement stays the explicit computed-revision operator action. Verified by `make verify` on the release tree (darwin/arm64 only; no successful Linux run is recorded: the 2026-08-22 review's diagnostic linux/arm64 container runs failed with exit 2, and the AC-505 verification is the SCP-008 exception under D-017). Reviewed through two full-target Mulgae rounds (r_01a0277c and r_01a02791, both remediated in place: the delivered webhook adapter entry in `agent-dispatch version`, the doctor stable-nonzero contract with the `doctor_findings_present` registry code, the real production-gate enablement and uninstall ordering in the AC-504 evidence, the computed-revision rehearsal enable, the monotonic audit assertion, the webhook target-type and v0.1.0 version assertions, the unified doctor emission with the version adapter pin, and the documentation corrections); the epic validation audit reconciles the member-task hardening deferrals (r_01a026d2, r_01a0270a, r_01a0274b) and this task's round-2 residuals under run r_01a02791. Changelog 1.0.11.
+Delivered as the release-verification surface: the executable G5 acceptance suite (`internal/cli/e6t4_test.go`: AC-501 through AC-506 — the webhook route's auth-without-persistence, transport-vs-durable distinction, and no-fallback proof; doctor's actionable stable-coded findings; prune's resolved-expired removal preserving unresolved lineage and the append-only audit; the clean-host macOS install→dispatch→scheduled-reconciliation→doctor flow with the production-gate acknowledgement; the release-way build with the version envelope and artifact set; plus the upgrade-and-backup rehearsal restoring the snapshot standalone with its lineage), the Gate G5 evidence table in `docs/VALIDATION.md` (closing G0–G5: G0 by E0-T5, G1–G4 previously, G5 here), the regenerated requirement traceability matrix (`make traceability`, 33 tasks, 15 groups, every requirement ID resolved to its owning and verifying tasks), the release artifacts (`make release VERSION=v0.1.0`: byte-reproducible darwin/arm64 and linux/amd64 binaries with SHA256SUMS; `docs/RELEASE-NOTES-v0.1.0.md`; the SOT package manifest-verified; schemas, examples, and the companion skill in place), and the security/architecture review posture carried by the per-task Mulgae rounds and the frozen ADR set. Compatibility is frozen (config version 1, schema range 1-4, record payload versions, adapter profiles baseline-hermes/2026.07.27.00 — `agent-dispatch version` reports every axis); no deferred feature is partially enabled (the future-work list stands apart); the Hermes plugin remains absent; production enablement stays the explicit computed-revision operator action. Verified by `make verify` on the release tree (darwin/arm64 only; no successful Linux run is recorded: the 2026-08-22 review's diagnostic linux/arm64 container runs failed with exit 2, and the AC-505 verification is the SCP-008 exception under D-017). Reviewed through two full-target Mulgae rounds (r_01a0277c and r_01a02791, both remediated in place: the delivered webhook adapter entry in `agent-dispatch version`, the doctor stable-nonzero contract with the `doctor_findings_present` registry code, the real production-gate enablement and uninstall ordering in the AC-504 evidence, the computed-revision rehearsal enable, the monotonic audit assertion, the webhook target-type and v0.1.0 version assertions, the unified doctor emission with the version adapter pin, and the documentation corrections); the epic validation audit reconciles the member-task hardening deferrals (r_01a026d2, r_01a0270a, r_01a0274b) and this task's round-2 residuals under run r_01a02791. Changelog 1.0.11.
 
 ---
 
@@ -1981,7 +1981,7 @@ E7-T11 Completed.
 
 ### Evidence
 
-Delivered as the closeout verification: `make verify` passed on darwin/arm64 including the race suite (2026-08-23); the G1-G5 gate suites re-ran green on the real Hermes 0.19.1 and Watchman 2026.07.27.00; the MUST-closure matrix is recorded in `docs/VALIDATION.md` (thirteen of the fourteen GAP requirements PASS through the E7 remediation; SCP-008 carries the explicit D-017 exception); `make release VERSION=v0.1.1` ran twice with byte-identical `dist/SHA256SUMS` (darwin/arm64 `170b8984...`, linux-amd64 `c21ce0b5...`); and `docs/RELEASE-NOTES-v0.1.1.md` discloses the Linux verification exception beside the delivered remediation. Changelog 1.0.25.
+Delivered as the closeout verification: `make verify` passed on darwin/arm64 including the race suite (2026-08-23); the G1-G5 gate suites re-ran green on the then-baseline real Hermes and Watchman 2026.07.27.00; the MUST-closure matrix is recorded in `docs/VALIDATION.md` (thirteen of the fourteen GAP requirements PASS through the E7 remediation; SCP-008 carries the explicit D-017 exception); `make release VERSION=v0.1.1` ran twice with byte-identical `dist/SHA256SUMS` (darwin/arm64 `170b8984...`, linux-amd64 `c21ce0b5...`); and `docs/RELEASE-NOTES-v0.1.1.md` discloses the Linux verification exception beside the delivered remediation. Changelog 1.0.25.
 
 **Epic closeout:** all twelve E7 tasks are Completed; every Blocker, High, Medium, and Low/Info finding of the 2026-08-22 review is fixed or dispositioned (D-018); the v0.1 sequence stands superseded by v0.1.1. The deferred hardening residuals recorded across the member tasks are reconciled by the epic validation audit.
 
@@ -2439,7 +2439,7 @@ D-023 recorded; E9-T5 Completed.
 
 ### Evidence
 
-Delivered as the submission-gate revision and capability-report integrity: the computed route revision's transport projection gains the webhook delivery-evidence surface — `auth.type`, `auth.secret_ref` (the reference name; the resolved secret never joins, SEC-006), `auth.header_name`, `idempotency_header`, `lookup_timeout`, and the `capability_report` path — so changing how a dispatch authenticates or deduplicates pauses the acknowledged route like any behavior change (F1; `TestE9T6RevisionCoversWebhookDeliveryEvidence` pins each field through the webhook-target route, `TestE9T6DeliveryEvidenceChangePausesUntilReacknowledged` drives the end-to-end pause through a lookup-bound edit with the re-acknowledgement resuming the drain). The route's `reconciliation` block joins the projection by explicit disposition (`TestE9T6RevisionCoversReconciliation`) and the `retention` block stays out with the reason recorded in the code and configuration-spec §13 — pruning bounds never change submission behavior (`TestE9T6RetentionStaysOutOfRevision`); §13 also now states the E9-T3 transport fields it had been promised with, closing that wording debt. `route enable` treats the capability report as mandatory evidence in every target-liveness state: the `os.Stat` guard is gone, `LoadReport` runs unconditionally in the unavailable-executable branch, and a missing or unreadable report refuses at exit 3 (F2; `TestE9T6EnableGateRequiresReportWithoutExecutable` covers the missing-report, unreadable-report, unsupported-version, and honest-report-with-warning paths) — the round-1 review's material observation that a well-formed report recording a Hermes version outside the runtime-verified set still enabled is closed with `Report.RecordedVersionSupported`, because the supported set is build-time evidence needing no live target; only freshness against the installed binary rides the probe, exactly as the refined cli-spec wording and the gate comment now state. The unconditional-guarantees refusal is one shared closure across the available and unavailable branches. Two environment-dependent tests gained the TST-007 skip their absent-binary case already had: the host's Hermes moved to 0.20.5, outside the verified 0.19.1 set, so `TestRealHermesProbeIfAvailable` and the AC-504 clean-host flow skip with the installed version and the verified set named (widening the set is a fresh E0-T4 probe, not a test override; verified with the stash-isolated clean tree failing identically). Verified by `make verify` on darwin/arm64 (all checks green) and a fresh `-count=1` full suite. Reviewed through two full-target Mulgae rounds (`r_01a034f8-4a87-7634-a4a9-783f97dc2d5c`, remediation-eligible: ci pass, coverage complete, zero committed findings, with the round-1 reports' material observations remediated in-tree — the unsupported-version enable gap, the shared guarantees closure, the deliverable-to-test wording alignment, and the secret-value comment stating its structural enforcement; `r_01a0350f-0071-744c-a713-865b95a3ecbf`, hardening-deferral-eligible: ci pass, coverage complete, publication committed, zero findings, every role confirming the round-1 gap closed — the recorded-version gate mirrors `VersionMatchsWith` parsing, the freshness deferral is backed by the enforced submit-path probe, and every probe state either validates the report or refuses; the residual report observations — the gate comment's pre-existing "unusable target" phrasing, the unavailable-branch weak-guarantee coverage leg, `RecordedVersionSupported` boundary unit tests, `authProjection` nil-equivalence pinning, and the twin validation ladders across the cli/adapter boundary — carry to the E9 epic validation audit). Changelog 1.0.44.
+Delivered as the submission-gate revision and capability-report integrity: the computed route revision's transport projection gains the webhook delivery-evidence surface — `auth.type`, `auth.secret_ref` (the reference name; the resolved secret never joins, SEC-006), `auth.header_name`, `idempotency_header`, `lookup_timeout`, and the `capability_report` path — so changing how a dispatch authenticates or deduplicates pauses the acknowledged route like any behavior change (F1; `TestE9T6RevisionCoversWebhookDeliveryEvidence` pins each field through the webhook-target route, `TestE9T6DeliveryEvidenceChangePausesUntilReacknowledged` drives the end-to-end pause through a lookup-bound edit with the re-acknowledgement resuming the drain). The route's `reconciliation` block joins the projection by explicit disposition (`TestE9T6RevisionCoversReconciliation`) and the `retention` block stays out with the reason recorded in the code and configuration-spec §13 — pruning bounds never change submission behavior (`TestE9T6RetentionStaysOutOfRevision`); §13 also now states the E9-T3 transport fields it had been promised with, closing that wording debt. `route enable` treats the capability report as mandatory evidence in every target-liveness state: the `os.Stat` guard is gone, `LoadReport` runs unconditionally in the unavailable-executable branch, and a missing or unreadable report refuses at exit 3 (F2; `TestE9T6EnableGateRequiresReportWithoutExecutable` covers the missing-report, unreadable-report, unsupported-version, and honest-report-with-warning paths) — the round-1 review's material observation that a well-formed report recording a Hermes version outside the runtime-verified set still enabled is closed with `Report.RecordedVersionSupported`, because the supported set is build-time evidence needing no live target; only freshness against the installed binary rides the probe, exactly as the refined cli-spec wording and the gate comment now state. The unconditional-guarantees refusal is one shared closure across the available and unavailable branches. Two environment-dependent tests gained the TST-007 skip their absent-binary case already had: the host's Hermes moved to 0.20.5, outside the then-verified baseline set, so `TestRealHermesProbeIfAvailable` and the AC-504 clean-host flow skip with the installed version and the verified set named (widening the set is a fresh E0-T4 probe, not a test override; verified with the stash-isolated clean tree failing identically). Verified by `make verify` on darwin/arm64 (all checks green) and a fresh `-count=1` full suite. Reviewed through two full-target Mulgae rounds (`r_01a034f8-4a87-7634-a4a9-783f97dc2d5c`, remediation-eligible: ci pass, coverage complete, zero committed findings, with the round-1 reports' material observations remediated in-tree — the unsupported-version enable gap, the shared guarantees closure, the deliverable-to-test wording alignment, and the secret-value comment stating its structural enforcement; `r_01a0350f-0071-744c-a713-865b95a3ecbf`, hardening-deferral-eligible: ci pass, coverage complete, publication committed, zero findings, every role confirming the round-1 gap closed — the recorded-version gate mirrors `VersionMatchsWith` parsing, the freshness deferral is backed by the enforced submit-path probe, and every probe state either validates the report or refuses; the residual report observations — the gate comment's pre-existing "unusable target" phrasing, the unavailable-branch weak-guarantee coverage leg, `RecordedVersionSupported` boundary unit tests, `authProjection` nil-equivalence pinning, and the twin validation ladders across the cli/adapter boundary — carry to the E9 epic validation audit). Changelog 1.0.44.
 
 ## E9-T7: Header Grammar and Pinned-Toolchain Enforcement
 
@@ -2544,7 +2544,7 @@ E9-T8 Completed.
 
 ### Evidence
 
-Delivered as the documentation truth resynchronization and the v0.1.4 release (F5): the status surfaces agree with the decision record — `docs/README.md` carries SOT 1.0.47 with the shipped v0.1.4 target line and a Roadmap State narrative through the D-023 reopen and D-024 re-closure, `docs/VALIDATION.md` records the post-D-024 validation with the 60-task completion statement, the roadmap's summary and current-state block read the re-closed epic with 60/60, and the release checklist is rewritten from its v0.1.1-era basis to the current 60-task, macOS-only, toolchain-enforced posture. The member-task residual observations are reconciled in-tree by this task's audit: the enable-gate comment's opening clause states the evidence rule rather than the unreachable-target exception, `TestE9T6EnableGateRequiresReportWithoutExecutable` gains the unavailable-branch weak-guarantee leg, `TestE9T6RecordedVersionSupportedBoundaries` pins the recorded-version gate's parsing boundaries (the bare triple, the foreign format, the prefix-adjacent 0.19.10), `TestE9T6AuthProjectionNilEquivalence` pins the nil-versus-empty auth projection, the sink grammar test's invalid list gains the colon, and the schema-test comment states the separator-list relationship precisely; the twin validation ladders across the cli/adapter boundary are recorded in D-024 as an architectural observation for the next hardening cycle rather than forced at closeout. RELEASE-NOTES-v0.1.4 discloses the one-time re-acknowledgement under the widened revision, the enforced toolchain pin, the macOS-only artifact set, the runtime-verified Hermes set with the TST-007 skip posture, and the TST-008 gate remaining disabled. The task's own review passed through two full-target Mulgae rounds (`r_01a0356d-5993-7a83-9d16-48b13021b3e7`, remediation-eligible: ci pass, coverage complete, zero committed findings, with every role confirming the six reconciliations and the resynchronized surfaces; `r_01a03575-3871-7cae-8931-afd540997698`, hardening-deferral-eligible: ci pass, coverage complete, publication committed, zero findings). The whole-epic validation over the reopened delta (d68eff6..HEAD) converged through three remediation rounds plus a clean confirmation: round 1 (`r_01a0357c-cab8-7adb-9532-21bd7435b238`) carried three lows (fmt-check off the toolchain edge, the duplicated version-truncation parsing), fixed in c9e3245; round 2 (`r_01a0358b-26eb-7097-9dec-2f5aee31dbc9`) carried the unannotated live Linux guidance in the roadmap's index and task records plus the checklist's absent evidence pointer, fixed in d327915 together with the negative guard keeping the retired systemd surface deleted; round 3 (`r_01a035a4-51b3-79ab-be29-b911db37cbe4`, after one publication-evidence infrastructure failure that did not reach publication and did not consume the ordinal) carried four lows — the .PHONY completion, the TST-007 guard deduplication through testsupport/hermesenv (the caller-predicate shape the import cycle forces), and the missing tchar positives fixed in df476aa, with the fourth verified invalid on the tree (an explicit empty auth.header_name never reaches the schema; omitempty drops it) and recorded as such; the confirmation round (`r_01a035ad-d5aa-70e3-b9b4-4f58a489a0cd`) committed clean with zero findings. v0.1.4 is tagged at the final tree after the byte-identical double build. Changelog 1.0.47.
+Delivered as the documentation truth resynchronization and the v0.1.4 release (F5): the status surfaces agree with the decision record — `docs/README.md` carries SOT 1.0.47 with the shipped v0.1.4 target line and a Roadmap State narrative through the D-023 reopen and D-024 re-closure, `docs/VALIDATION.md` records the post-D-024 validation with the 60-task completion statement, the roadmap's summary and current-state block read the re-closed epic with 60/60, and the release checklist is rewritten from its v0.1.1-era basis to the current 60-task, macOS-only, toolchain-enforced posture. The member-task residual observations are reconciled in-tree by this task's audit: the enable-gate comment's opening clause states the evidence rule rather than the unreachable-target exception, `TestE9T6EnableGateRequiresReportWithoutExecutable` gains the unavailable-branch weak-guarantee leg, `TestE9T6RecordedVersionSupportedBoundaries` pins the recorded-version gate's parsing boundaries (the bare triple, the foreign format, the prefix-adjacent boundary triple), `TestE9T6AuthProjectionNilEquivalence` pins the nil-versus-empty auth projection, the sink grammar test's invalid list gains the colon, and the schema-test comment states the separator-list relationship precisely; the twin validation ladders across the cli/adapter boundary are recorded in D-024 as an architectural observation for the next hardening cycle rather than forced at closeout. RELEASE-NOTES-v0.1.4 discloses the one-time re-acknowledgement under the widened revision, the enforced toolchain pin, the macOS-only artifact set, the runtime-verified Hermes set with the TST-007 skip posture, and the TST-008 gate remaining disabled. The task's own review passed through two full-target Mulgae rounds (`r_01a0356d-5993-7a83-9d16-48b13021b3e7`, remediation-eligible: ci pass, coverage complete, zero committed findings, with every role confirming the six reconciliations and the resynchronized surfaces; `r_01a03575-3871-7cae-8931-afd540997698`, hardening-deferral-eligible: ci pass, coverage complete, publication committed, zero findings). The whole-epic validation over the reopened delta (d68eff6..HEAD) converged through three remediation rounds plus a clean confirmation: round 1 (`r_01a0357c-cab8-7adb-9532-21bd7435b238`) carried three lows (fmt-check off the toolchain edge, the duplicated version-truncation parsing), fixed in c9e3245; round 2 (`r_01a0358b-26eb-7097-9dec-2f5aee31dbc9`) carried the unannotated live Linux guidance in the roadmap's index and task records plus the checklist's absent evidence pointer, fixed in d327915 together with the negative guard keeping the retired systemd surface deleted; round 3 (`r_01a035a4-51b3-79ab-be29-b911db37cbe4`, after one publication-evidence infrastructure failure that did not reach publication and did not consume the ordinal) carried four lows — the .PHONY completion, the TST-007 guard deduplication through testsupport/hermesenv (the caller-predicate shape the import cycle forces), and the missing tchar positives fixed in df476aa, with the fourth verified invalid on the tree (an explicit empty auth.header_name never reaches the schema; omitempty drops it) and recorded as such; the confirmation round (`r_01a035ad-d5aa-70e3-b9b4-4f58a489a0cd`) committed clean with zero findings. v0.1.4 is tagged at the final tree after the byte-identical double build. Changelog 1.0.47.
 
 ---
 
@@ -2756,7 +2756,7 @@ E10-T3 Completed.
   the retired capability report, and the configuration-spec §12
   capability bullet needs webhook scoping.
 
-## E11-T2: Hermes 0.19.1+ Capability Probe and Evidence Cache
+## E11-T2: Hermes Capability Probe and Evidence Cache
 
 **Status:** Completed
 **Design Gate impact:** Not required; ADR-0017 is the approved design.
@@ -2784,7 +2784,7 @@ E11-T1 Completed.
 
 ### Acceptance
 
-- frozen real 0.19.1 and installed newer Hermes traverse the same probe path;
+- the frozen real baseline and the installed newer Hermes traverse the same probe path;
 - compatible later shapes pass and incompatible/malformed/over-bound shapes name the missing capability;
 - an executable change blocks submission before side effects;
 - Hermes source and private state remain untouched; `make verify` green.
@@ -2793,7 +2793,7 @@ E11-T1 Completed.
 
 - `TestE11T2ProbePassesFrozenInterface` and `TestE11T2SamePathFrozenAndNewer`
   (`internal/adapters/hermeskanban/e11t2_test.go`): the frozen real
-  0.19.1 interface and a compatible newer Hermes traverse the same
+  the baseline interface and a compatible newer Hermes traverse the same
   probe path (TST-012, AC-701/702 posture) with a stable
   fingerprinted record.
 - `TestE11T2CacheInvalidation` and `TestE11T2SubmitBlocksOnExecutableChange`:
@@ -2944,7 +2944,7 @@ E11-T3 Completed.
   SQLite or Watchman commands anywhere in the flow.
 - `TestG7AC701SameProbePathBothInterfaces` through
   `TestG7AC705DisabledSkillFailsClosedWithAlternatives`: the frozen
-  0.19.1 and a newer Hermes traverse the same probe path (AC-701), the
+  the baseline and a newer Hermes traverse the same probe path (AC-701), the
   drifted create surface names its missing flags (AC-702), the stale
   read re-proves the live executable (AC-703), and the missing-profile
   and disabled-skill refusals list their sorted alternatives (AC-704,
@@ -3363,7 +3363,7 @@ Hermes profile. The isolated real-Hermes leg (disposable board,
 redirected HOME, real Watchman binding, detection through receipt to
 the delivered notification, managed-trigger removal) is skip-guarded
 under the documented TST-007 posture where the installed Hermes create
-surface drifts from the frozen 0.19.1 flags. `make verify` green at SOT
+surface drifts from the frozen baseline flags. `make verify` green at SOT
 1.1.16.
 
 ## E13-T4: Documentation Truth, Release Proof, and v0.1.5
@@ -3807,7 +3807,7 @@ is green.
 
 ## E15-T4: Hermes v0.20.5+ Compatibility Gate G11
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -3839,7 +3839,52 @@ E15-T3 Completed.
 
 ### Evidence
 
-Planned; none.
+Completed 2026-08-31. The real-environment walkthrough
+(`docs/integrations/hermes-v0.20.5-g11-evidence.md`) ran the reviewed
+binary against the installed Hermes Agent v0.20.5 over fully disposable
+state created and discarded through the public CLI: the v3 probe
+certified `agent-dispatch-group-enforced` (the only missing create flag
+exactly `--mutex-key`), capabilities and preflight agreed on the mode
+with the disposable profile proven on-disk and the `llm-wiki` skill
+enabled through the public surfaces, two real tasks were durably
+submitted whose objects carry no `mutex_key` field at all, a three-file
+burst and a cross-route arrival on the occupied shared group merged
+with no second child, an acknowledged independent group submitted
+concurrently, and the durable group table held exactly one holder per
+group. The floor-raise refusal (`set-minimum-version` to 0.21.0 →
+preflight exit 3 before any side effect, restore → green) evidenced the
+below-floor posture beside the frozen-interface suites for the 0.20.4
+and later-target-mutex legs (TST-012: one probe path). Re-opening the real-environment
+tests for the new baseline exposed and closed three real defects — the
+reconciliation child's activation bypassing the group gate (now refused
+in the same transaction, pinned by
+`TestE15T4ReconcileChildRespectsOccupiedGroup`), the downtime
+re-acknowledgement that could never submit again after an executable
+swap (a partial probe is now the liveness posture; the capability
+binding preserves for the same executable and retires explicitly via
+`CapabilityFingerprintClear` on a swap), and post-cutover dead letters
+wedging the recovery re-acknowledgement (the DAT-013 gate now keys on
+the migration-v12 child-row legacy marker).
+Every exact previous-baseline reference is removed from the tracked
+files (current contracts, historical narratives, fixtures, and release
+notes; Git history and tags untouched), the capability corpus and
+interface report record the 0.20.5 baseline, the runbook gained the
+v0.1.6 serialization upgrade sequence, and the VALIDATION G11 table maps
+AC-1101 through AC-1108 to their evidence. No Hermes core or private
+storage was modified. Review round 1 (r_01a05833-179c-7b81-8c01-e821e3dd8feb,
+remediation-eligible) published committed with complete coverage and CI
+pass, and its ten findings — the capability corpus's stale session
+metadata and refuted-at-baseline resource_mutex claim, the fixture still
+carrying the retired create shape, the silent partial-probe enable, the
+defect-count mismatch, the default-floor comment contradiction, the
+retired build date, the mutex-surface naming residue, and the two
+transient-read binding-loss paths — were verified valid and remediated
+(the corpus now records its dual session history honestly, the partial
+enable warns and distinguishes downtime from a shape-incompatible
+Hermes, and a transient store read preserves the binding); review round
+2 (r_01a05860-57de-7f48-9307-fc219723d936) then published committed
+with complete coverage, CI pass, and ZERO unresolved findings — the task
+is Mulgae-approved outright; `make verify` is green.
 
 ---
 

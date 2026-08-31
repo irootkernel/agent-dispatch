@@ -124,6 +124,40 @@ Copying a live WAL database without its WAL/SHM or checkpoint procedure is not a
 7. resume route;
 8. run one reconciliation.
 
+### 9a. v0.1.6 serialization upgrade (migration v18, E15)
+
+The migration is additive and configuration-independent; the first
+reconciliation after the upgrade materializes the serialization-group
+topology from the current configuration. The upgrade sequence:
+
+1. verified pre-migration backup (§8) — required before the migration
+   runs (it creates one automatically; keep it);
+2. `hermes probe --target <id>` — the probe contract advanced to v3, so
+   every cached record is stale until re-probed; the fresh record
+   certifies one effective serialization mode
+   (`agent-dispatch-group-enforced` on a Hermes without `--mutex-key`,
+   `agent-dispatch-group-plus-target-mutex` with it);
+3. declare every target floor explicitly — an omitted
+   `minimum_version` now fails closed; `hermes set-minimum-version
+   <target> 0.20.5` remediates a legacy below-floor or omitted-floor
+   document and reports each affected route's changed revision;
+4. `route preflight --route <id>` for every route — a below-floor
+   installation, an unknown profile or skill, and an unacknowledged
+   cross-group topology all refuse here, before any submission;
+5. `route enable --route <id> --acknowledge-production-gate <revision>
+   --yes` — every route whose revision changed (a serialization edit,
+   the acknowledgement flag, or a floor change) pauses until the fresh
+   acknowledgement;
+6. run one reconciliation per route — it materializes the group
+   membership and reports any preserved `serialization_conflict` (two
+   pre-upgrade active children resolving to one group select no
+   arbitrary holder; let them reach their terminal outcomes through
+   `work complete`/`work fail`, and the group resolves atomically to
+   its sole survivor or its oldest waiting lane).
+
+Rollback restores the pre-upgrade database, the previous binary, and
+the compatible configuration together; no down migration exists (OPS-015).
+
 ## 10. Uninstall
 
 Uninstall order:

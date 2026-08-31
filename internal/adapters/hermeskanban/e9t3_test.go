@@ -57,7 +57,7 @@ func TestE9T3SinkWarnsOnMutexSuppression(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sink: %v", err)
 	}
-	// NewSink binds the frozen 0.19.1 interface's resource_mutex support
+	// NewSink binds the frozen mutex-capable interface fixture's resource_mutex support
 	// (E11-T1 interim truth source); this test drives the suppression
 	// path itself, so it simulates the capability the E11-T2 probe will
 	// record per executable.

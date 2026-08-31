@@ -21,6 +21,13 @@ func e11t1MarkLegacy(t *testing.T, configPath, dispatchID string) {
 		t.Fatal(err)
 	}
 	defer store.Close()
+	// The DAT-013 legacy marker is the absence of a destinations-contract
+	// child row (migration v12) beside a foreign revision: pre-cutover
+	// work blocks enablement, while post-cutover residue under an older
+	// revision resolves through the retry/discard exits (E15-T4).
+	if _, err := store.Exec(`DELETE FROM child_dispatches WHERE dispatch_id = ?`, dispatchID); err != nil {
+		t.Fatalf("strip the child row for the legacy shape: %v", err)
+	}
 	if _, err := store.Exec(`UPDATE dispatch_intents
 		SET state = 'dead_lettered', route_revision = 'legacy-cutover-rev', lease_owner = NULL, lease_expires_at = NULL
 		WHERE dispatch_id = ?`, dispatchID); err != nil {

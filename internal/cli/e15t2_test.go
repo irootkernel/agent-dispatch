@@ -294,7 +294,7 @@ func TestE15T2SetMinimumVersionRepairsLegacyFloor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	legacy := strings.Replace(string(raw), "minimum_version: 0.20.5", "minimum_version: 0.19.1", 1)
+	legacy := strings.Replace(string(raw), "minimum_version: 0.20.5", "minimum_version: 0.19.9", 1)
 	if err := os.WriteFile(configPath, []byte(legacy), 0o600); err != nil {
 		t.Fatal(err)
 	}

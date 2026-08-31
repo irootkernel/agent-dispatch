@@ -8,10 +8,64 @@ import (
 	"strings"
 	"testing"
 
+	"fmt"
+
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
 	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 	"github.com/irootkernel/agent-dispatch/internal/testsupport/stubhermes"
 )
+
+// e15t2ArrivalLineage builds one direct child lineage for a route's
+// main lane: the g8 stress shape pinned to this suite's IDs.
+func e15t2ArrivalLineage(t *testing.T, routeID string, n int) ports.Lineage {
+	t.Helper()
+	now := "2026-08-31T00:00:00Z"
+	projection := `{"id":"main","workstream":"main"}`
+	revision := records.RevisionOfProjection(projection)
+	return ports.Lineage{
+		Observation: ports.ObservationInput{
+			ObservationID: fmt.Sprintf("obs-e15t1r-%d", n), SchemaVersion: "agent-dispatch.source-observation/v1",
+			SourceType: "watchman", SourceID: "watchman-main", TriggerName: "trig",
+			ResourceID: "vault-main", ObservedAt: now, ReceivedAt: now,
+			RawPayloadDigest: fmt.Sprintf("sha256:%064d", n), IngestStatus: "accepted",
+			Changes: []ports.ObservationChange{{
+				Ordinal: 0, Path: fmt.Sprintf("Inbox/n%d.md", n), Operation: "modify", ExistsAfter: true, FileType: "regular",
+				AfterDigest: fmt.Sprintf("sha256:%064d", n+1), DigestStatus: "known",
+			}},
+		},
+		Batch: ports.BatchInput{
+			BatchID: fmt.Sprintf("batch-e15t1r-%d", n), RouteID: routeID, RouteRevision: "route-rev-" + routeID,
+			ResourceID: "vault-main", CreatedAt: now,
+			ContentFingerprint: fmt.Sprintf("sha256:%064d", n+2), ObservationIDs: []string{fmt.Sprintf("obs-e15t1r-%d", n)},
+		},
+		Decision: ports.DecisionInput{
+			DecisionID: fmt.Sprintf("decision-e15t1r-%d", n), BatchID: fmt.Sprintf("batch-e15t1r-%d", n), RouteID: routeID,
+			RouteRevision: "route-rev-" + routeID, PolicyRevision: "policy-rev", Disposition: "dispatch",
+			Classification: "normal", ReasonCodesJSON: `["normal_batch"]`, CreatedAt: now, Actor: "seed",
+		},
+		Intent: ports.IntentInput{
+			DispatchID: fmt.Sprintf("dispatch-e15t1r-%d", n), DecisionID: fmt.Sprintf("decision-e15t1r-%d", n), RouteID: routeID,
+			RouteRevision: "route-rev-" + routeID, TargetID: "hermes-main", TargetType: "hermes_kanban",
+			ResourceID: "vault-main", Generation: 1, IdempotencyKey: fmt.Sprintf("agent-dispatch:v2:sha256:%064d", n),
+			ContentFingerprint: fmt.Sprintf("sha256:%064d", n+2), ManifestDigest: fmt.Sprintf("sha256:%064d", n+3),
+			RequestVersion: "agent-dispatch.hermes-task/v1", RequestJSON: `{"contract_version":"agent-dispatch.hermes-task/v1"}`,
+			CreatedAt: now,
+			Fanout: &ports.FanoutInput{
+				AggregateID: fmt.Sprintf("agg-e15t1r-%d", n), Origin: "arrival",
+				DestinationID: "main", DestinationRevision: revision, Workstream: "main",
+				Selections: []records.DestinationSelection{{
+					DestinationID: "main", DestinationRevision: revision, Workstream: "main", Reason: "fanout_mode:all",
+				}},
+				Revisions: []ports.DestinationRevisionInput{{
+					DestinationID: "main", Revision: revision, ProjectionJSON: projection,
+				}},
+			},
+		},
+	}
+}
 
 // E15-T1 CLI coverage (CON-013): the same-resource cross-group topology
 // gate of `route preflight` — unacknowledged different groups fail
@@ -376,5 +430,120 @@ func TestE15T1DispatchSendsEffectiveGroupAsTargetMutex(t *testing.T) {
 	}
 	if !strings.Contains(string(argvLog), "--mutex-key") || !strings.Contains(string(argvLog), "resource:vault-main") {
 		t.Fatalf("a mutex-capable target must receive the effective group as the complementary mutex, got: %s", argvLog)
+	}
+}
+
+func TestE15T1PreflightWarnsOnUnreadableGroupState(t *testing.T) {
+	// E15-T1 hardening revalidation F002: the persisted-conflict gate
+	// fails CLOSED on an unreadable group state — a warn naming the
+	// degraded read, never a silent no-conflict pass.
+	bin := stubhermes.Write(t)
+	configPath := e15t1TwoRouteConfig(t, bin, "group-a", "group-a", false, false)
+	store, err := sqlite.Open(filepath.Join(os.Getenv("AGENT_DISPATCH_STATE_DIR"), StateDBName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Migrate(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	// Degrade exactly the group-state read: the ledger still records v18
+	// but the tables are gone (the corruption class the warn names).
+	if _, err := store.Exec(`DROP TABLE serialization_group_members`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Exec(`DROP TABLE serialization_groups`); err != nil {
+		t.Fatal(err)
+	}
+	store.Close()
+	var out, errb bytes.Buffer
+	code := Run([]string{"route", "preflight", "--config", configPath, "--route", "wiki"}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("a degraded read must not fail the preflight: %s", errb.String())
+	}
+	if !strings.Contains(out.String(), "could not be read") {
+		t.Fatalf("the degraded serialization-state read must warn on the envelope: %s", out.String())
+	}
+}
+
+func TestE15T1ReconcileWarnsOnConflictAndTopologyFailure(t *testing.T) {
+	// E15-T1 hardening revalidation F003/F006: the reconcile surfaces a
+	// persisted serialization conflict on stderr and a topology
+	// materialization failure is reported, never silent.
+	bin := stubhermes.Write(t)
+	configPath := e15t1TwoRouteConfig(t, bin, "group-a", "group-a", false, false)
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cfg.Resources["vault-main"].Root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Two preserved actives in one group: the topology materialization
+	// recomputes the blocking conflict from live lane state (a seeded
+	// CONFLICT row alone would be dissolved by the same reconciliation).
+	store, err := sqlite.Open(filepath.Join(os.Getenv("AGENT_DISPATCH_STATE_DIR"), StateDBName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Migrate(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RegisterResource(nil, "vault-main", "res-rev-1", "/srv/vault", "/srv/vault", "markdown", "disabled"); err != nil {
+		t.Fatal(err)
+	}
+	for _, routeID := range []string{"wiki", "audit"} {
+		if err := store.RegisterRoute(nil, routeID, "route-rev-"+routeID, "policy-rev", "vault-main", "hermes-main", "{}", "2026-08-31T00:00:00Z"); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.InitializeRouteState(nil, routeID); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.SetRouteActivation(context.Background(), routeID, "enabled", "route-rev-"+routeID, "", "2026-08-31T00:00:00Z"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Both lanes activate BEFORE the group topology exists (the
+	// pre-upgrade shape): the reconcile's own materialization then
+	// resolves the two live actives into one group and reports the
+	// preserved conflict.
+	c := &dispatch.Coordinator{Store: store, Now: func() string { return "2026-08-31T00:00:00Z" }, Actor: "seed"}
+	wikiLin := e15t2ArrivalLineage(t, "wiki", 601)
+	if _, err := c.Arrival(context.Background(), wikiLin); err != nil {
+		t.Fatalf("seed wiki child: %v", err)
+	}
+	auditLin := e15t2ArrivalLineage(t, "audit", 602)
+	if _, err := c.Arrival(context.Background(), auditLin); err != nil {
+		t.Fatalf("seed audit child: %v", err)
+	}
+	// The configuration's effective groups are what the reconcile
+	// materializes; seed them durable so the assertion can re-read them.
+	if _, err := store.MaterializeSerializationGroups(context.Background(), []sqlite.SerializationGroupMemberInput{
+		{RouteID: "wiki", DestinationID: "main", GroupID: "group-a"},
+		{RouteID: "audit", DestinationID: "main", GroupID: "group-a"},
+	}, "seed", "2026-08-31T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	store.Close()
+	var out, errb bytes.Buffer
+	code := Run([]string{"reconcile", "--config", configPath, "--route", "wiki", "--reason", "manual"}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("reconcile: %s", errb.String())
+	}
+	if !strings.Contains(errb.String(), "reports a preserved conflict") {
+		t.Fatalf("the reconcile must warn about the persisted conflict: stderr=%q stdout=%q", errb.String(), out.String())
+	}
+	verify, verr := sqlite.Open(filepath.Join(os.Getenv("AGENT_DISPATCH_STATE_DIR"), StateDBName))
+	if verr != nil {
+		t.Fatal(verr)
+	}
+	defer verify.Close()
+	groups, gerr := verify.LoadSerializationGroups(context.Background())
+	if gerr != nil {
+		t.Fatal(gerr)
+	}
+	for _, g := range groups {
+		if g.GroupID == "group-a" && g.State != sqlite.GroupStateConflict {
+			t.Fatalf("the shared group must report the preserved conflict: %+v", g)
+		}
 	}
 }

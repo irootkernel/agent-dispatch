@@ -52,7 +52,7 @@ Route {
   target_id
   hermes_profile
   hermes_skills
-  mutex_key
+  serialization_group
   submission_retry_policy
   execution_hints
   failure_budget

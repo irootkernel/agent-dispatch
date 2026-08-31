@@ -158,7 +158,7 @@ routes:
         skills:
           - llm-wiki
         workstream: indexing
-        mutex_key: wiki-publish
+        serialization_group: wiki-publish
         execution_hints:
           max_runtime: 30m
           max_attempts: 2
@@ -282,7 +282,34 @@ with the exact regeneration path below and never converted (OPS-014,
 D-025); historic database evidence stays queryable through the v10
 forward migration, and route enablement under the destinations contract
 refuses while unresolved legacy work from a different route revision
-remains (DAT-013).
+remains (DAT-013; since E15-T4 the legacy marker is the absence of a
+destinations-contract child row — post-cutover residue resolves through
+the retry/discard exits after the re-acknowledgement).
+
+### Serialization groups (E15-T1, ADR-0021, CON-011 through CON-014)
+
+Every destination resolves one effective serialization group — the
+explicit `serialization_group`, the deprecated `mutex_key` alias, or
+exactly `resource:<resource_id>`. Explicit values are 1 through 255
+ASCII bytes matching `^[A-Za-z0-9][A-Za-z0-9._:/-]*$` with no case
+folding or Unicode normalization; an explicit default-form value
+intentionally joins the resource-derived group. `serialization_group`
+and `mutex_key` may coexist only when identical (one deprecation
+warning); different or ungrammatical values fail validation, and newly
+generated configuration never emits `mutex_key`. A group is global
+within one state database: at most one active child holds it, arrivals
+for an occupied group merge into the selected lane's dirty generation,
+completion promotes the oldest first-dirty waiting lane (destination ID
+as the tie break), retries retain the slot, and reruns transfer it
+atomically. Destinations governing one resource under different groups
+fail `route preflight` unless every involved route sets
+`allow_cross_group_concurrency: true`; the acknowledgement and each
+effective group join the destination and route revisions, so every
+topology change pauses production acknowledgement. The renderer sends
+the effective group as the complementary target mutex exactly when the
+certified serialization mode is `agent-dispatch-group-plus-target-mutex`
+and suppresses the flag otherwise; the local group slot is never
+replaced by it.
 
 ```yaml
 version: 1
@@ -303,7 +330,7 @@ routes:
         skills: [llm-wiki, agent-dispatch-wiki-maintenance]
         workstream: indexing
         workspace: "dir:/srv/knowledge/A"
-        mutex_key: wiki-publish
+        serialization_group: wiki-publish
         conditions:
           path_include: ["**/*.md"]
           path_exclude: ["archive/**"]

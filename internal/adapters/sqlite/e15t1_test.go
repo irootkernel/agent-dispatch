@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -161,10 +162,33 @@ func TestE15T1MigrationPreservesIdentitiesAndReportsConflict(t *testing.T) {
 		}
 	}
 
-	// The typed refusal exists for the acquisition gates (E15-T3) and
-	// names the class, not a holder.
-	if !strings.Contains(ErrSerializationConflict.Error(), "preserved conflict") {
-		t.Fatalf("the typed conflict refusal must name the class: %v", ErrSerializationConflict)
+	// The typed refusal is behaviorally load-bearing (E15-T3/E15-T4):
+	// acquiring into the conflicted group returns exactly it inside the
+	// activation transaction, and it wraps the state-not-eligible
+	// sentinel so callers classify it as a gate, never a storage fault —
+	// pinned against the preserved fixture rather than the constant's
+	// own text.
+	var active int
+	if err := upgraded.QueryRow(`SELECT COUNT(*) FROM destination_lane_state l
+		JOIN serialization_group_members m ON m.route_id = l.route_id AND m.destination_id = l.destination_id
+		WHERE m.group_id = 'wiki-publish' AND l.lane_state IN ('ACTIVE_CLEAN','ACTIVE_DIRTY')`).Scan(&active); err != nil {
+		t.Fatal(err)
+	}
+	if active != 2 {
+		t.Fatalf("the fixture must hold two preserved actives, got %d", active)
+	}
+	// The conflicted group refuses any member lane's activation through
+	// the pre-check (the fresh-child commit is lane-blocked by the
+	// preserved holder, which is itself the no-arbitrary-holder proof);
+	// the rerun refusal is pinned behaviorally by the E15-T3 suite.
+	if free, reason, gerr := upgraded.GroupSlotFree(context.Background(), "wiki-maintenance", "indexing"); gerr != nil || free || reason == "" {
+		t.Fatalf("the conflicted group must refuse with a reason: free=%v reason=%q err=%v", free, reason, gerr)
+	}
+	if !errors.Is(ErrSerializationConflict, ports.ErrStateNotEligible) {
+		t.Fatal("the conflict refusal must wrap the state-not-eligible sentinel")
+	}
+	if errors.Is(ErrSerializationConflict, ports.ErrStateNotEligible) != true {
+		t.Fatal("the conflict refusal must wrap the state-not-eligible sentinel")
 	}
 
 	// Every conflict records typed evidence and an audit row.

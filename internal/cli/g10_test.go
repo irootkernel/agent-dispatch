@@ -379,3 +379,75 @@ func TestG10FreshGenerateWithoutVaultRootStopsAtBaseline(t *testing.T) {
 		}
 	}
 }
+
+// TestG10GateSummaryDegradedPathsLabelTheirCause proves the honesty
+// contract's degraded half (OPS-016, AC-1005): when a fact cannot be
+// read, its summary line names the failed read — not the store open,
+// and never an invented state — so a load failure after a successful
+// open is labeled by its own cause (cold-validation round-2 F002).
+func TestG10GateSummaryDegradedPathsLabelTheirCause(t *testing.T) {
+	dir := t.TempDir()
+	routeID := "wiki-maintenance"
+	// degraded builds one config whose state directory holds a migrated
+	// store with the named tables dropped, so the store opens while the
+	// reads fail deterministically.
+	degraded := func(name string, drop ...string) string {
+		t.Helper()
+		stateDir := filepath.Join(dir, name)
+		if err := os.MkdirAll(stateDir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		dbPath := filepath.Join(stateDir, StateDBName)
+		store, err := sqlite.Open(dbPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := store.Migrate(filepath.Join(stateDir, "backups")); err != nil {
+			t.Fatal(err)
+		}
+		for _, table := range drop {
+			if _, err := store.Exec(`DROP TABLE ` + table); err != nil {
+				t.Fatal(err)
+			}
+		}
+		store.Close()
+		cfg := config.Example("g10-degraded", filepath.Join(dir, name+"-vault"))
+		cfg.Instance.StateDir = stateDir
+		configPath := filepath.Join(dir, name+".yaml")
+		if err := config.WriteExample(cfg, configPath); err != nil {
+			t.Fatal(err)
+		}
+		loaded, err := config.Load(configPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out, errb bytes.Buffer
+		setupGateSummary(&setupUI{stdout: &out, stderr: &errb}, loaded, configPath, routeID)
+		return out.String()
+	}
+
+	// Both runtime reads fail: each line names its own failed read.
+	both := degraded("both-missing", "route_runtime_state", "route_baselines")
+	for _, want := range []string{
+		"runtime activation:         unreadable (runtime state could not be loaded)",
+		"production acknowledgement: unreadable (acknowledgement could not be loaded)",
+		"initial baseline:           unreadable (baseline could not be loaded)",
+	} {
+		if !strings.Contains(both, want) {
+			t.Fatalf("the degraded summary must label its own failed read %q:\n%s", want, both)
+		}
+	}
+
+	// Only the baseline read fails: the runtime lines stay honest
+	// positives while the baseline line names its cause.
+	baselineOnly := degraded("baseline-missing", "route_baselines")
+	for _, want := range []string{
+		"runtime activation:         disabled (no runtime state; nothing dispatched and no trigger installed)",
+		"production acknowledgement: not acknowledged",
+		"initial baseline:           unreadable (baseline could not be loaded)",
+	} {
+		if !strings.Contains(baselineOnly, want) {
+			t.Fatalf("the partially degraded summary must keep its readable facts and label only the failed one %q:\n%s", want, baselineOnly)
+		}
+	}
+}

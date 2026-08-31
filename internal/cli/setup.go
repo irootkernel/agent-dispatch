@@ -301,9 +301,11 @@ func setupGateSummary(ui *setupUI, cfg *config.Config, configPath, routeID strin
 				}
 			} else {
 				runtimeState = "unreadable (runtime state could not be loaded)"
+				ackState = "unreadable (acknowledgement could not be loaded)"
 			}
 		} else if Perr != nil {
 			runtimeState = "unreadable (runtime state could not be loaded)"
+			ackState = "unreadable (acknowledgement could not be loaded)"
 		}
 		if baseline, berr := store.LoadRouteBaseline(requestCtx(), routeID); berr == nil {
 			if baseline != nil {
@@ -312,6 +314,8 @@ func setupGateSummary(ui *setupUI, cfg *config.Config, configPath, routeID strin
 			} else {
 				baselineState = "not established"
 			}
+		} else {
+			baselineState = "unreadable (baseline could not be loaded)"
 		}
 		store.Close()
 	}

@@ -131,9 +131,11 @@ contents or resolved credentials.
 ## 8. Setup and Rollback
 
 `setup wiki` produces disabled configuration, verifies external capabilities,
-installs and tests the Watchman binding, runs initial reconciliation, and stops
-at a production-gate summary. Enabling still requires the exact computed route
-revision and explicit confirmation.
+checks the Watchman binding state and prints the explicit install and test
+commands (setup never installs the trigger itself), establishes the initial
+baseline through the disabled-route `reconcile --baseline-only` operation, and
+stops at a five-state production-gate summary. Enabling still requires the
+exact computed route revision and explicit confirmation.
 
 The v0.1.5 config contract is a clean `version: 1` cutover to
 `destinations[]`; legacy `dispatch` is rejected with regeneration guidance.

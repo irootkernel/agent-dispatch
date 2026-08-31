@@ -290,8 +290,11 @@ func TestE14T1RouteSpellingsCovered(t *testing.T) {
 	withStdin(t, "", func() {
 		code = Run([]string{"setup", "wiki", "--config", configPath, "--route"}, &out, &errb)
 	})
-	if code != 2 || !strings.Contains(errb.String(), "an explicit route selection is required") {
-		t.Fatalf("a valueless trailing --route must leave the selection unset and refuse: %d %s", code, errb.String())
+	if code != 2 || !strings.Contains(errb.String(), "--route requires a value") {
+		t.Fatalf("a valueless trailing --route must be a usage error like every other route-flag command: %d %s", code, errb.String())
+	}
+	if strings.Contains(out.String(), "setup complete") {
+		t.Fatalf("the malformed flag must not reach the gate summary: %s", out.String())
 	}
 }
 
@@ -315,4 +318,35 @@ func TestE14T1SingleRouteAutoSelects(t *testing.T) {
 		t.Fatalf("the automatic selection must be reported: %s", errb.String())
 	}
 	e14t1AssertWalkthroughNamesRoute(t, configPath, out.String(), errb.String(), "wiki")
+}
+
+// TestE14EpicAuditSetupFlagValuesStrict proves the epic-audit flag
+// contract: a valueless --config, an empty =value, and a value that is
+// itself the next flag are usage errors, never silent fallbacks.
+func TestE14EpicAuditSetupFlagValuesStrict(t *testing.T) {
+	bin := stubhermes.Write(t)
+	configPath := e11t2HermesConfig(t, bin)
+	setPlanEnv(t, "/tmp", false)
+	for _, argv := range [][]string{
+		{"setup", "wiki", "--config"},
+		{"setup", "wiki", "--config="},
+		{"setup", "wiki", "--config", "--route", "wiki"},
+		{"setup", "wiki", "--route="},
+		{"setup", "wiki", "--config", configPath, "--route", "--config"},
+	} {
+		var out, errb bytes.Buffer
+		var code int
+		withStdin(t, "", func() {
+			code = Run(argv, &out, &errb)
+		})
+		if code != 2 {
+			t.Fatalf("%v must be a usage error: %d", argv, code)
+		}
+		if !strings.Contains(errb.String(), "requires a value") {
+			t.Fatalf("%v must name the valueless flag: %s", argv, errb.String())
+		}
+		if strings.Contains(out.String(), "setup complete") {
+			t.Fatalf("%v must not reach the gate summary: %s", argv, out.String())
+		}
+	}
 }

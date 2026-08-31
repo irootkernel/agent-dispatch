@@ -112,7 +112,7 @@ The release gate is cumulative. A later gate cannot pass while an earlier gate i
 | AC-703 | Given the executable content, path, reported version, or probe contract changes, when cached evidence is read, then it is invalidated before submission. |
 | AC-704 | Given a missing on-disk profile, when route preflight or enable runs, then it fails before task creation and lists available profiles. |
 | AC-705 | Given a required skill absent or disabled for a selected profile, when preflight runs, then it fails closed with bounded available alternatives. |
-| AC-706 | Given a new operator, when using only root/group help and `setup wiki`, then disabled configuration, Watchman test, initial reconciliation, and a production-gate summary are reached without internal database or Watchman commands. |
+| AC-706 | Given a new operator, when using only root/group help and `setup wiki`, then disabled configuration, the Watchman binding check with the printed install and test commands, the initial baseline, and a production-gate summary are reached without internal database or Watchman commands. |
 
 ### G8: Fan-Out and Completion Evidence
 

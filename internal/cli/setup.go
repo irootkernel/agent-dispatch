@@ -81,21 +81,41 @@ func runSetupWiki(command string, args []string, ui *setupUI) int {
 	// An explicit --config path names the walkthrough's target file;
 	// the platform default is used otherwise. An explicit --route names
 	// the one route the walkthrough drives (E14-T1, CLI-016).
+	// The walkthrough's own value flags parse strictly (the E14 epic
+	// audit reconciled the former leniency): a valueless flag, an empty
+	// =value, or a value that is itself the next flag is a malformed
+	// invocation refused with a usage error — never a silent fallback
+	// to the platform defaults or the sorted-first route.
 	explicitConfig := ""
 	explicitRoute := ""
-	for i, a := range args {
-		if a == "--config" && i+1 < len(args) {
-			explicitConfig = args[i+1]
+	for i := 0; i < len(args); i++ {
+		name, value := args[i], ""
+		hasValue := false
+		if strings.HasPrefix(name, "--") {
+			if eq := strings.IndexByte(name, '='); eq >= 0 {
+				name, value, hasValue = name[:eq], name[eq+1:], true
+			}
 		}
-		if strings.HasPrefix(a, "--config=") {
-			explicitConfig = strings.TrimPrefix(a, "--config=")
+		var target *string
+		switch name {
+		case "--config":
+			target = &explicitConfig
+		case "--route":
+			target = &explicitRoute
+		default:
+			continue
 		}
-		if a == "--route" && i+1 < len(args) {
-			explicitRoute = args[i+1]
+		if !hasValue {
+			if i+1 >= len(args) || strings.HasPrefix(args[i+1], "--") {
+				return usageError(ui.stderr, command, name+" requires a value")
+			}
+			i++
+			value = args[i]
 		}
-		if strings.HasPrefix(a, "--route=") {
-			explicitRoute = strings.TrimPrefix(a, "--route=")
+		if value == "" {
+			return usageError(ui.stderr, command, name+" requires a value")
 		}
+		*target = value
 	}
 
 	basePath := platformpaths.DefaultConfigPath()

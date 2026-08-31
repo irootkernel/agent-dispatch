@@ -1,8 +1,8 @@
 # SOT Package Validation
 
-> **Validated:** 2026-08-31 (E14 delivers gate G10 over the shipped v0.1.5
-> baseline — the guided setup and disabled baseline; 78 of 89 roadmap tasks
-> are complete and E15-T1 is next)
+> **Validated:** 2026-08-31 (E15 delivers gate G11 over the shipped v0.1.5
+> baseline — the Hermes v0.20.5 floor and serialization groups; 82 of 89
+> roadmap tasks are complete and E16-T1 is next)
 > **Package target:** Agent Dispatch SOT 1.2.0 / implementation v0.1.5 (published 2026-08-30)
 
 ## Completed Checks
@@ -19,23 +19,23 @@
 - Internal Markdown links resolve within the package, excluding intentionally unresolved wiki links retained in the historical source draft.
 - Markdown code fences are balanced.
 - The documentation package has one delivery scope, exactly one owner for each of the seven semantic roles, and `docs/roadmap/roadmap.md` as its sole lifecycle authority.
-- The roadmap contains exactly 18 epics and 89 task headings (the 75 tasks through E13 plus the 3 E14 tasks, all Completed, and the 11 planned E15-E17 tasks).
+- The roadmap contains exactly 18 epics and 89 task headings (the 82 tasks through E15, all Completed, and the 7 planned E16-E17 tasks).
 - Every task uses one allowed status value.
-- Every sequence through E14 is fully Completed (78/78 delivered); no task is active and E15-T1 is next.
+- Every sequence through E15 is fully Completed (82/82 delivered); no task is active and E16-T1 is next.
 - Required-spec IDs are unique.
 - Acceptance-scenario IDs are unique.
 - The D-025 functional baseline remains unchanged; D-026 moves paths and adds ownership indexes without changing roadmap identity, lifecycle, or executable-evidence claims.
 
 ## Package Statistics at Validation
 
-- Markdown files: 84 on the manifest basis (including the seven role indexes, supporting collection indexes, v0.1.5 source record, target architecture, and ADR-0016 through ADR-0019)
+- Markdown files: 89 on the manifest basis (including the seven role indexes, supporting collection indexes, v0.1.5 source record, the v0.1.6 operational follow-up contract, target architecture, and ADR-0016 through ADR-0022)
 - JSON Schemas: 18
 - Example files: 24
-- Integration reports: 2 (Hermes public interface E0-T4, Watchman public interface E0-T5)
+- Integration reports: 3 (Hermes public interface E0-T4, Watchman public interface E0-T5, real-Hermes G11 evidence E15-T4)
 - Integration fixtures: 42 files, 9 under `integrations/fixtures/hermes/` and 33 under `integrations/fixtures/watchman/`
-- Roadmap tasks: 89 (33 v0.1 + 12 E7 + 6 E8 + 9 E9 + 15 E10-E13 + 3 E14 delivered; 11 E15-E17 planned)
-- Normative requirements: 223
-- Acceptance scenarios: 86
+- Roadmap tasks: 89 (33 v0.1 + 12 E7 + 6 E8 + 9 E9 + 15 E10-E13 + 3 E14 + 4 E15 delivered; 7 E16-E17 planned)
+- Normative requirements: 225
+- Acceptance scenarios: 91
 
 ## Reproduction
 

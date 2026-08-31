@@ -170,13 +170,35 @@ func (c *Coordinator) arrivalOne(ctx context.Context, lin ports.Lineage) (Fanout
 		return FanoutLaneResult{DestinationID: lane}, err
 	}
 	if err := state.CanActivateNormalDispatch(snap); err == nil {
+		// E15-T3 (CON-012): an occupied serialization group merges the
+		// arrival into this lane's dirty generation before any durable
+		// intent — the read is a fast path; the activation transaction
+		// re-proves the acquisition for the race window.
+		if free, _, gerr := c.Store.GroupSlotFree(ctx, lin.Decision.RouteID, lane); gerr == nil && !free {
+			dirty, merr := c.Store.CommitMergePending(ctx, lin, []string{lane}, []string{lane}, c.Actor, c.Now())
+			if merr != nil {
+				return FanoutLaneResult{DestinationID: lane}, merr
+			}
+			return FanoutLaneResult{DestinationID: lane, DirtyGeneration: dirty}, nil
+		}
 		err := c.Store.CommitLineage(ctx, lin)
 		if err == nil {
 			// The lane slot reservation commits with the intent
 			// (persistence §7); for coordination the reserved dispatch
 			// activates the lane. The acceptance refinement arrives with
-			// the E4/E5 receipt projections.
+			// the E4/E5 receipt projections. A group slot lost to a
+			// concurrent activation inside this transaction reports
+			// ErrGroupSlotHeld: the burst merges like any loser of the
+			// lane race (AC-204 posture), leaving the reserved dispatch
+			// for the operator exits.
 			if err := c.Store.ActivateDispatch(ctx, lin.Intent.DispatchID, c.Actor, c.Now()); err != nil {
+				if errors.Is(err, ports.ErrGroupSlotHeld) {
+					dirty, merr := c.Store.MergeSelectedLanes(ctx, lin.Decision.RouteID, lin.Batch.BatchID, []string{lane}, []string{lane}, c.Actor, c.Now())
+					if merr != nil {
+						return FanoutLaneResult{DestinationID: lane}, merr
+					}
+					return FanoutLaneResult{DestinationID: lane, DirtyGeneration: dirty}, nil
+				}
 				return FanoutLaneResult{DestinationID: lane}, err
 			}
 			return FanoutLaneResult{DestinationID: lane, DispatchID: lin.Intent.DispatchID}, nil
@@ -238,6 +260,27 @@ func (c *Coordinator) ArrivalFanout(ctx context.Context, lins []ports.Lineage) (
 		}
 		result := FanoutLaneResult{DestinationID: lane}
 		if state.CanActivateNormalDispatch(snap) == nil {
+			// E15-T3 (CON-012): an occupied serialization group merges
+			// this lane's slice of the occurrence before any durable
+			// intent; the activation transaction re-proves the
+			// acquisition for the race window.
+			if free, _, gerr := c.Store.GroupSlotFree(ctx, lin.Decision.RouteID, lane); gerr == nil && !free {
+				var dirty int
+				var mergeErr error
+				if !persisted {
+					dirty, mergeErr = c.Store.CommitMergePending(ctx, lin, []string{lane}, selection, c.Actor, c.Now())
+				} else {
+					dirty, mergeErr = c.Store.MergeSelectedLanes(ctx, lin.Decision.RouteID, lin.Batch.BatchID, []string{lane}, selection, c.Actor, c.Now())
+				}
+				if mergeErr != nil {
+					recordFailure(lane, "", mergeErr)
+					continue
+				}
+				persisted = true
+				result.DirtyGeneration = dirty
+				out.Merged = append(out.Merged, result)
+				continue
+			}
 			var commitErr error
 			if !persisted {
 				commitErr = c.Store.CommitLineage(ctx, lin)
@@ -250,8 +293,27 @@ func (c *Coordinator) ArrivalFanout(ctx context.Context, lins []ports.Lineage) (
 				// (persistence §7); for coordination the reserved dispatch
 				// activates the lane. A failed activation leaves the child
 				// durable with a reserved slot: record it as a failed
-				// activation so the operator sees the dispatch to resolve.
+				// activation so the operator sees the dispatch to resolve —
+				// except a group slot lost to a concurrent activation,
+				// which merges the burst like any loser of the lane race
+				// (E15-T3, CON-012; AC-204 posture).
 				if err := c.Store.ActivateDispatch(ctx, lin.Intent.DispatchID, c.Actor, c.Now()); err != nil {
+					if errors.Is(err, ports.ErrGroupSlotHeld) {
+						var dirty int
+						var mergeErr error
+						if !persisted {
+							dirty, mergeErr = c.Store.CommitMergePending(ctx, lin, []string{lane}, selection, c.Actor, c.Now())
+						} else {
+							dirty, mergeErr = c.Store.MergeSelectedLanes(ctx, lin.Decision.RouteID, lin.Batch.BatchID, []string{lane}, selection, c.Actor, c.Now())
+						}
+						if mergeErr != nil {
+							recordFailure(lane, lin.Intent.DispatchID, mergeErr)
+							continue
+						}
+						result.DirtyGeneration = dirty
+						out.Merged = append(out.Merged, result)
+						continue
+					}
 					recordFailure(lane, lin.Intent.DispatchID, err)
 					continue
 				}

@@ -15,9 +15,9 @@
 | Release target | v0.1.6 (planned) |
 | Current epic | E15 In Progress |
 | Current active task | None |
-| Next task | E15-T3 |
-| Completed tasks | 80 / 89 |
-| Planned tasks | 9 / 89 |
+| Next task | E15-T4 |
+| Completed tasks | 81 / 89 |
+| Planned tasks | 8 / 89 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -136,7 +136,7 @@
 | 78 | E14-T3 | Completed | Rerunnable setup, five-state summary, and G10 |
 | 79 | E15-T1 | Completed | Serialization configuration, revisions, and migration |
 | 80 | E15-T2 | Completed | Consistent local serialization and optional target mutex contract |
-| 81 | E15-T3 | Planned | Group slot enforcement and bounded follow-up |
+| 81 | E15-T3 | Completed | Group slot enforcement and bounded follow-up |
 | 82 | E15-T4 | Planned | Hermes v0.20.5+ compatibility gate G11 |
 | 83 | E16-T1 | Planned | Drain policy, leases, and forward migration |
 | 84 | E16-T2 | Planned | Lease-safe bounded notification delivery |
@@ -3743,7 +3743,7 @@ Mulgae-approved outright with no deferral; `make verify` is green.
 
 ## E15-T3: Group Slot Enforcement and Bounded Follow-Up
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -3773,7 +3773,37 @@ E15-T2 Completed.
 
 ### Evidence
 
-Planned; none.
+Completed 2026-08-31. The durable serialization_groups row is the ONE
+slot: acquisition is transactional and CONDITIONAL — the write succeeds
+only from the states the transaction's read authorized (open, or held
+by this lane's own identity for the idempotent re-acquire and the
+consumed promotion reservation), so a racing activation can never
+overwrite the winner's hold; a group held by another lane reports
+ErrGroupSlotHeld and the arrival merges into its lane's dirty
+generation exactly like a lane-race loser, and a preserved conflict
+refuses acquisition, rerun, and promotion outright. The arrival paths
+pre-check the slot before persisting any intent, and the merge path's
+reservation-consumption edge is itself group-gated — a reserved
+dispatch whose group is occupied stays reserved instead of silently
+becoming a second group child. Completion releases the slot in the same
+transaction and promotes at most the oldest first-dirty waiting lane
+(destination ID, then route ID, as the deterministic tie breaks) as a
+reservation the promoted lane's next activation consumes; the releaser's
+own follow-up waits behind it. A rerun TRANSFERS the slot to its
+replacement atomically with the lane takeover, and retries retain the
+slot through the retry lifecycle. e15t3_test.go proves AC-1102 through
+AC-1105 with real SQLite files: shared-group single-child under an
+eight-process arrival race across two routes (fresh connections, the
+production one-shot shape, with the documented retryable-BUSY posture),
+occupied-group merging, oldest-first promotion with the waiting
+follow-up activating through its reservation, independent-group
+concurrency, rerun transfer with conflict refusal, and the
+conflict-blocked acquisition with the allowed existing-work exits
+resolving the group to its sole survivor; review round 1
+(r_01a057d5-edb9-7feb-9e85-976509c583f4, remediation-eligible) published
+committed with complete coverage, CI pass, and ZERO unresolved findings —
+the task is Mulgae-approved outright on the first round; `make verify`
+is green.
 
 ## E15-T4: Hermes v0.20.5+ Compatibility Gate G11
 

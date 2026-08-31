@@ -317,13 +317,35 @@ func (s *Store) mergeLanesTx(tx *sql.Tx, routeID string, selectedDestinations []
 		dirtyAfter := ownDirty + 1
 		if snap.State == state.RouteIdle && snap.ActiveDispatchID != "" {
 			// A reserved-but-not-yet-activated dispatch still implies lane
-			// activity for coordination: consume its own reservation first.
-			if err := s.applyLaneTransition(tx, routeID, dest, snap, state.RouteActiveClean, state.ReasonDispatchAccepted,
-				state.RouteEvidence{Actor: actor, ActivatingDispatchID: snap.ActiveDispatchID}, now,
-				auditJSON("reason", state.ReasonDispatchAccepted, "dispatch_id", snap.ActiveDispatchID, "note", "reservation activation before merge", "destination_id", dest)); err != nil {
-				return 0, false, err
+			// activity for coordination: consume its own reservation
+			// first — UNLESS the lane's serialization group is occupied
+			// (E15-T3, CON-012): the reservation's real activation is
+			// group-gated, and consuming it here would run a second group
+			// child. The dirty generation still records the burst and the
+			// reserved dispatch activates through its own gated path.
+			groupFree := true
+			if groupID, ok, gerr := groupOfLaneTx(tx, routeID, dest); gerr != nil {
+				return 0, false, gerr
+			} else if ok {
+				var gState string
+				var gRoute, gDest sql.NullString
+				if err := tx.QueryRow(`SELECT state, holder_route_id, holder_destination_id FROM serialization_groups WHERE group_id = ?`, groupID).
+					Scan(&gState, &gRoute, &gDest); err != nil {
+					return 0, false, err
+				}
+				groupFree = gState == GroupStateOpen || (nullText(gRoute) == routeID && nullText(gDest) == dest)
 			}
-			snap.State = state.RouteActiveClean
+			if groupFree {
+				if err := s.applyLaneTransition(tx, routeID, dest, snap, state.RouteActiveClean, state.ReasonDispatchAccepted,
+					state.RouteEvidence{Actor: actor, ActivatingDispatchID: snap.ActiveDispatchID}, now,
+					auditJSON("reason", state.ReasonDispatchAccepted, "dispatch_id", snap.ActiveDispatchID, "note", "reservation activation before merge", "destination_id", dest)); err != nil {
+					return 0, false, err
+				}
+				snap.State = state.RouteActiveClean
+				if err := s.acquireGroupSlotTx(tx, routeID, dest, snap.ActiveDispatchID, actor, now); err != nil {
+					return 0, false, err
+				}
+			}
 		}
 		if snap.State.IsActive() {
 			// Active work exists on this lane: a validated ACTIVE_* ->
@@ -605,6 +627,13 @@ func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.Acti
 			WHERE route_id = ? AND destination_id = ? AND active_dispatch_id = ?`, req.DirtySuppressed, req.DirtySuppressed, routeID, lane, req.DispatchID); err != nil {
 			return out, err
 		}
+		// E15-T3 (CON-012): the completing dispatch releases the group
+		// slot in the same transaction; the oldest first-dirty waiting
+		// lane of the group receives the next activation as a
+		// reservation, or the group opens.
+		if err := s.releaseGroupSlotTx(tx, routeID, lane, req.DispatchID, req.Actor, now); err != nil {
+			return out, err
+		}
 	} else if to == state.RouteFollowupReady {
 		// The completed dispatch no longer holds the lane's slot; the
 		// follow-up takes it at activation.
@@ -612,6 +641,13 @@ func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.Acti
 		// follow-up (repeated reconciliations never stack generations);
 		// the flag stays route-keyed as the shared collapse.
 		if _, err := tx.Exec(`UPDATE destination_lane_state SET active_dispatch_id = NULL, dirty_generation = 0, dirty_since = NULL WHERE route_id = ? AND destination_id = ? AND active_dispatch_id = ?`, routeID, lane, req.DispatchID); err != nil {
+			return out, err
+		}
+		// E15-T3 (CON-012): the completed dispatch no longer holds the
+		// group slot even though its lane stays FOLLOWUP_READY — the
+		// follow-up re-acquires at activation, and an older waiting
+		// lane may be promoted ahead of it.
+		if err := s.releaseGroupSlotTx(tx, routeID, lane, req.DispatchID, req.Actor, now); err != nil {
 			return out, err
 		}
 		if _, err := tx.Exec(`UPDATE route_runtime_state SET pending_reconcile = 0 WHERE route_id = ?`, routeID); err != nil {
@@ -698,6 +734,13 @@ func (s *Store) ActivateDispatch(ctx context.Context, dispatchID, actor, now str
 		dispatchID, routeID, lane, dispatchID); err != nil {
 		return err
 	}
+	// E15-T3 (CON-011): the activation takes the group slot in the SAME
+	// transaction — a group held by another lane rolls the lane
+	// activation back and reports ErrGroupSlotHeld so the caller merges
+	// the arrival; a preserved conflict refuses outright.
+	if err := s.acquireGroupSlotTx(tx, routeID, lane, dispatchID, actor, now); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -749,6 +792,13 @@ func (s *Store) ActivateFollowup(ctx context.Context, dispatchID, actor, now str
 	}
 	if _, err := tx.Exec(`UPDATE destination_lane_state SET active_dispatch_id = ?, active_generation = ? WHERE route_id = ? AND destination_id = ?`,
 		dispatchID, int(generation), routeID, lane); err != nil {
+		return err
+	}
+	// E15-T3 (CON-012): a follow-up activation takes the group slot the
+	// same way a normal dispatch does; a promotion reserved for THIS
+	// lane passes, another lane's hold (or reservation) refuses, and the
+	// follow-up stays FOLLOWUP_READY until its turn.
+	if err := s.acquireGroupSlotTx(tx, routeID, lane, dispatchID, actor, now); err != nil {
 		return err
 	}
 	return tx.Commit()

@@ -310,3 +310,280 @@ func (s *Store) SerializationGroupOf(ctx context.Context, routeID, destinationID
 	}
 	return groupID, true, nil
 }
+
+// E15-T3 group-slot enforcement (ADR-0021, CON-011 through CON-012):
+// the serialization_groups row is the ONE durable slot. Acquisition is
+// transactional and fail-closed on preserved conflicts; a held group
+// refuses every other lane; release promotes at most the oldest
+// first-dirty waiting lane of the same group with destination ID as
+// the deterministic tie break; a rerun transfers the slot atomically
+// with the lane takeover.
+
+// ErrGroupSlotHeld is defined in ports (ports.ErrGroupSlotHeld): the
+// typed refusal an activation receives when another lane's child holds
+// the effective group. The caller merges the arrival into its lane's
+// dirty generation (CON-012) exactly as a lane-slot race does.
+
+// GroupSlotFree reports whether one lane may activate a child under
+// its effective group right now (E15-T3): true when the lane has no
+// group membership (pre-materialization or legacy work — no slot
+// semantics apply) or the group is OPEN, held by the lane's own
+// dispatch, or reserved for this lane by a promotion; false when
+// another lane holds it or the group reports a preserved conflict.
+// reason names the refusing holder for the operator surface.
+func (s *Store) GroupSlotFree(ctx context.Context, routeID, destinationID string) (bool, string, error) {
+	var maxVersion sql.NullInt64
+	if err := s.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&maxVersion); err != nil {
+		return false, "", err
+	}
+	if !maxVersion.Valid || maxVersion.Int64 < groupSchemaVersion {
+		return true, "", nil
+	}
+	var (
+		state       string
+		holderRoute sql.NullString
+		holderDest  sql.NullString
+		holderDis   sql.NullString
+	)
+	err := s.QueryRowContext(ctx, `SELECT g.state, g.holder_route_id, g.holder_destination_id, g.holder_dispatch_id
+		FROM serialization_groups g
+		JOIN serialization_group_members m ON m.group_id = g.group_id
+		WHERE m.route_id = ? AND m.destination_id = ?`, routeID, destinationID).
+		Scan(&state, &holderRoute, &holderDest, &holderDis)
+	if errors.Is(err, sql.ErrNoRows) {
+		return true, "", nil
+	}
+	if err != nil {
+		return false, "", err
+	}
+	switch {
+	case state == GroupStateOpen:
+		return true, "", nil
+	case state == GroupStateConflict:
+		return false, "the group reports a preserved serialization conflict", nil
+	case nullText(holderRoute) == routeID && nullText(holderDest) == destinationID:
+		// Held (or promoted-reserved) by this lane's own lane identity.
+		return true, "", nil
+	default:
+		return false, fmt.Sprintf("held by %s/%s (%s)", nullText(holderRoute), nullText(holderDest), nullText(holderDis)), nil
+	}
+}
+
+// groupSchemaVersion is the migration that introduced the group
+// tables: a database below it has no slot semantics at all (the
+// harness's pre-upgrade shapes and any crash-window state before the
+// v18 unit applies), so acquisitions and releases there are no-ops
+// rather than schema errors.
+const groupSchemaVersion = 18
+
+// groupOfLaneTx resolves one lane's group inside a transaction; ok is
+// false for lanes without membership (no slot semantics).
+func groupOfLaneTx(tx *sql.Tx, routeID, destinationID string) (string, bool, error) {
+	var maxVersion sql.NullInt64
+	if err := tx.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&maxVersion); err != nil {
+		return "", false, err
+	}
+	if !maxVersion.Valid || maxVersion.Int64 < groupSchemaVersion {
+		return "", false, nil
+	}
+	var groupID string
+	err := tx.QueryRow(`SELECT group_id FROM serialization_group_members WHERE route_id = ? AND destination_id = ?`,
+		routeID, destinationID).Scan(&groupID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return groupID, true, nil
+}
+
+// acquireGroupSlotTx takes the group slot for one dispatch inside the
+// caller's activation transaction (CON-011): a preserved conflict
+// refuses, another lane's hold refuses with ErrGroupSlotHeld (the
+// caller merges instead), and this lane's own hold or a promotion
+// reserved for this lane passes. Idempotent for the holding dispatch.
+func (s *Store) acquireGroupSlotTx(tx *sql.Tx, routeID, destinationID, dispatchID, actor, now string) error {
+	groupID, ok, err := groupOfLaneTx(tx, routeID, destinationID)
+	if err != nil || !ok {
+		return err
+	}
+	var (
+		state        string
+		holderRoute  sql.NullString
+		holderDest   sql.NullString
+		holderDis    sql.NullString
+		conflictJSON string
+		version      int64
+	)
+	if err := tx.QueryRow(`SELECT state, holder_route_id, holder_destination_id, holder_dispatch_id, conflict_json, version
+		FROM serialization_groups WHERE group_id = ?`, groupID).
+		Scan(&state, &holderRoute, &holderDest, &holderDis, &conflictJSON, &version); err != nil {
+		return err
+	}
+	switch {
+	case state == GroupStateOpen:
+	case state == GroupStateConflict:
+		return fmt.Errorf("%w (group %s: %s)", ErrSerializationConflict, groupID, boundedCollisions(conflictJSON))
+	case nullText(holderDis) == dispatchID:
+		return nil
+	case nullText(holderRoute) == routeID && nullText(holderDest) == destinationID:
+		// A promotion reserved the slot for exactly this lane: the next
+		// activation of this lane consumes the reservation.
+	default:
+		return fmt.Errorf("%w: group %s is held by %s/%s (%s)", ports.ErrGroupSlotHeld, groupID, nullText(holderRoute), nullText(holderDest), nullText(holderDis))
+	}
+	// The acquisition write is CONDITIONAL on the state this
+	// transaction read (optimistic concurrency): a racing activation
+	// that committed between the read and this write leaves
+	// RowsAffected at zero — the loser then re-reads and reports the
+	// typed refusal instead of overwriting the winner's hold.
+	// The write succeeds only from the states this transaction's read
+	// authorized: OPEN, or HELD by THIS lane's identity (the self-hold
+	// idempotence and the consumed promotion reservation). A group held
+	// by any other lane — including one acquired between the read and
+	// this write — fails the WHERE and reports the typed refusal.
+	res, err := tx.Exec(`UPDATE serialization_groups
+		SET state = ?, holder_route_id = ?, holder_destination_id = ?, holder_dispatch_id = ?, conflict_json = '[]', updated_at = ?, version = version + 1
+		WHERE group_id = ? AND (state = ? OR (state = ? AND holder_route_id = ? AND holder_destination_id = ?))`,
+		GroupStateHeld, routeID, destinationID, dispatchID, now, groupID, GroupStateOpen, GroupStateHeld, routeID, destinationID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("%w: group %s was taken concurrently", ports.ErrGroupSlotHeld, groupID)
+	}
+	return s.AppendTransition(tx, serializationTransitionID(groupID, "slot-acquired", version+1), "serialization_group", groupID,
+		state, GroupStateHeld, now, auditJSON("reason", "slot-acquired", "actor", actor,
+			"route_id", routeID, "destination_id", destinationID, "dispatch_id", dispatchID))
+}
+
+// releaseGroupSlotTx releases the slot of one completing dispatch and
+// promotes at most the oldest first-dirty waiting lane of the same
+// group (CON-012): the reservation (holder route/destination without a
+// dispatch) hands the next activation to the promoted lane
+// deterministically — oldest dirty_since first, destination ID then
+// route ID as the tie breaks — and a group without a waiting lane
+// opens. The completing lane's own follow-up competes for the slot
+// like any other lane; promotion never picks the releaser itself.
+func (s *Store) releaseGroupSlotTx(tx *sql.Tx, routeID, destinationID, dispatchID, actor, now string) error {
+	groupID, ok, err := groupOfLaneTx(tx, routeID, destinationID)
+	if err != nil || !ok {
+		return err
+	}
+	var (
+		state       string
+		holderDis   sql.NullString
+		holderRoute sql.NullString
+		holderDest  sql.NullString
+		version     int64
+	)
+	if err := tx.QueryRow(`SELECT state, holder_route_id, holder_destination_id, holder_dispatch_id, version
+		FROM serialization_groups WHERE group_id = ?`, groupID).
+		Scan(&state, &holderRoute, &holderDest, &holderDis, &version); err != nil {
+		return err
+	}
+	if state != GroupStateHeld || (nullText(holderDis) != dispatchID && !(nullText(holderRoute) == routeID && nullText(holderDest) == destinationID)) {
+		// The releaser does not hold the slot (a promotion already moved
+		// it, or the group is not held): nothing to release.
+		return nil
+	}
+	// The waiting lanes of this group: member lanes other than the
+	// releaser that hold dirty work or a ready follow-up, oldest
+	// first-dirty first with the deterministic tie breaks.
+	var (
+		nextRoute string
+		nextDest  string
+	)
+	row := tx.QueryRow(`SELECT l.route_id, l.destination_id
+		FROM destination_lane_state l
+		JOIN serialization_group_members m ON m.route_id = l.route_id AND m.destination_id = l.destination_id
+		WHERE m.group_id = ? AND NOT (l.route_id = ? AND l.destination_id = ?)
+		  AND (l.dirty_generation > 0 OR l.lane_state = 'FOLLOWUP_READY')
+		ORDER BY l.dirty_since IS NULL, l.dirty_since, l.destination_id, l.route_id
+		LIMIT 1`, groupID, routeID, destinationID)
+	if err := row.Scan(&nextRoute, &nextDest); errors.Is(err, sql.ErrNoRows) {
+		if _, err := tx.Exec(`UPDATE serialization_groups
+			SET state = ?, holder_route_id = NULL, holder_destination_id = NULL, holder_dispatch_id = NULL, updated_at = ?, version = version + 1
+			WHERE group_id = ? AND state = ? AND holder_dispatch_id = ?`, GroupStateOpen, now, groupID, GroupStateHeld, dispatchID); err != nil {
+			return err
+		}
+		return s.AppendTransition(tx, serializationTransitionID(groupID, "slot-released", version+1), "serialization_group", groupID,
+			GroupStateHeld, GroupStateOpen, now, auditJSON("reason", "slot-released", "actor", actor,
+				"route_id", routeID, "destination_id", destinationID, "dispatch_id", dispatchID))
+	} else if err != nil {
+		return err
+	}
+	res, err := tx.Exec(`UPDATE serialization_groups
+		SET state = ?, holder_route_id = ?, holder_destination_id = ?, holder_dispatch_id = NULL, updated_at = ?, version = version + 1
+		WHERE group_id = ? AND state = ? AND holder_dispatch_id = ?`, GroupStateHeld, nextRoute, nextDest, now, groupID, GroupStateHeld, dispatchID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		// The releaser no longer holds the slot (a concurrent transfer
+		// or resolution moved it): the promotion is silently skipped —
+		// the durable holder already names the winner.
+		return nil
+	}
+	return s.AppendTransition(tx, serializationTransitionID(groupID, "slot-promoted", version+1), "serialization_group", groupID,
+		GroupStateHeld, GroupStateHeld, now, auditJSON("reason", "slot-promoted", "actor", actor,
+			"route_id", routeID, "destination_id", destinationID, "dispatch_id", dispatchID,
+			"promoted_route_id", nextRoute, "promoted_destination_id", nextDest))
+}
+
+// transferGroupSlotTx moves the slot of one superseded dispatch to its
+// replacement inside the rerun takeover transaction (CON-012: a rerun
+// TRANSFERS the slot atomically — never releases-then-races): the
+// original's own hold moves to the new dispatch, a conflict refuses
+// the rerun, and any other state (open, another lane's hold) leaves
+// the new dispatch to acquire through its own activation.
+func (s *Store) transferGroupSlotTx(tx *sql.Tx, routeID, destinationID, originalDispatchID, newDispatchID, actor, now string) error {
+	groupID, ok, err := groupOfLaneTx(tx, routeID, destinationID)
+	if err != nil || !ok {
+		return err
+	}
+	var (
+		state       string
+		holderDis   sql.NullString
+		holderRoute sql.NullString
+		holderDest  sql.NullString
+		version     int64
+	)
+	if err := tx.QueryRow(`SELECT state, holder_route_id, holder_destination_id, holder_dispatch_id, version
+		FROM serialization_groups WHERE group_id = ?`, groupID).
+		Scan(&state, &holderRoute, &holderDest, &holderDis, &version); err != nil {
+		return err
+	}
+	switch {
+	case state == GroupStateConflict:
+		return fmt.Errorf("%w (group %s)", ErrSerializationConflict, groupID)
+	case state == GroupStateHeld && nullText(holderDis) == originalDispatchID:
+		res, err := tx.Exec(`UPDATE serialization_groups
+			SET holder_dispatch_id = ?, updated_at = ?, version = version + 1
+			WHERE group_id = ? AND state = ? AND holder_dispatch_id = ?`, newDispatchID, now, groupID, GroupStateHeld, originalDispatchID)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return nil
+		}
+		return s.AppendTransition(tx, serializationTransitionID(groupID, "slot-transferred-rerun", version+1), "serialization_group", groupID,
+			GroupStateHeld, GroupStateHeld, now, auditJSON("reason", "slot-transferred-rerun", "actor", actor,
+				"route_id", routeID, "destination_id", destinationID,
+				"from_dispatch_id", originalDispatchID, "dispatch_id", newDispatchID))
+	}
+	return nil
+}
+
+// boundedCollisions renders a conflict row's collision evidence for an
+// operator error without echoing unbounded stored JSON.
+func boundedCollisions(conflictJSON string) string {
+	if len(conflictJSON) > 200 {
+		return conflictJSON[:200] + "..."
+	}
+	if conflictJSON == "" || conflictJSON == "[]" {
+		return "preserved active collision"
+	}
+	return conflictJSON
+}

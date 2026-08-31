@@ -3,6 +3,7 @@ package ports
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/irootkernel/agent-dispatch/internal/domain/state"
 )
@@ -18,6 +19,12 @@ import (
 // binding and the app layer references this constant directly.
 const LegacyDestinationLaneID = "__legacy__"
 
+// ErrGroupSlotHeld is the typed refusal an activation receives when
+// another lane's child holds the effective serialization group
+// (E15-T3, CON-012): the arrival merges into its lane's dirty
+// generation exactly as a lane-slot race loser does.
+var ErrGroupSlotHeld = fmt.Errorf("%w: serialization group slot held by another lane", ErrRouteSlotHeld)
+
 // RouteCoordinationStore is the durable surface the coordinator drives.
 type RouteCoordinationStore interface {
 	// LoadRouteState returns the route's aggregated coordination snapshot
@@ -29,6 +36,15 @@ type RouteCoordinationStore interface {
 	// reads as IDLE with an empty slot; a route-level hold overrides the
 	// lane's own state.
 	LoadLaneState(ctx context.Context, routeID, destinationID string) (state.RouteSnapshot, error)
+	// GroupSlotFree reports whether one lane may activate a child under
+	// its effective serialization group right now (E15-T3, CON-011):
+	// true without membership (legacy work — no slot semantics), when
+	// the group is open, or when this lane's own identity holds or is
+	// reserved for it; false with the refusing holder named in reason
+	// when another lane holds the slot or the group reports a preserved
+	// conflict. It is a read-only pre-check; the activation transaction
+	// re-proves the acquisition.
+	GroupSlotFree(ctx context.Context, routeID, destinationID string) (bool, string, error)
 	// LoadIntentLane returns the coordination snapshot of the lane one
 	// dispatch belongs to (E12-T2): the child row's destination, else the
 	// synthetic legacy lane of pre-cutover work.

@@ -136,6 +136,9 @@ type storeOp interface {
 	// audit round-1 F001; E9-T3, L-18).
 	ReleaseQuarantineWithRevision(ctx context.Context, quarantineID, actor, reason, routeRevision, policyRevision, now string) (ports.QuarantineRecord, error)
 	io.Closer
+	// GroupSlotFree is the serialization-group pre-check of the
+	// coordinator surface (E15-T3); the concrete store implements it.
+	GroupSlotFree(ctx context.Context, routeID, destinationID string) (bool, string, error)
 	ListRoutes(ctx context.Context) ([]sqlite.RouteRow, error)
 	CountIntentsByState(ctx context.Context) (map[string]int64, error)
 	CountQuarantineByState(ctx context.Context) (map[string]int64, error)

@@ -780,6 +780,13 @@ func (s *Store) saveIntentTakeOverOriginal(tx *sql.Tx, i IntentRecord, originalD
 	if n, _ := res.RowsAffected(); n == 0 {
 		return fmt.Errorf("route %s lane %s already has an active dispatch (invariant 5): %w", i.RouteID, lane, ErrOptimisticConcurrency)
 	}
+	// E15-T3 (CON-012): the rerun TRANSFERS the group slot atomically
+	// with the lane takeover — the original's own hold moves to the
+	// replacement and a preserved conflict refuses the rerun; nothing
+	// is released for another lane to race in.
+	if err := s.transferGroupSlotTx(tx, i.RouteID, lane, originalDispatchID, i.DispatchID, "operator-rerun", normalizeTimestamp(i.CreatedAt)); err != nil {
+		return err
+	}
 	// When the superseded original held a DIFFERENT lane (a rerun that
 	// moved from the legacy lane to a live destination lane), its lane's
 	// slot releases here: the superseded dispatch must not keep holding a

@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
 	"sort"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
@@ -258,13 +260,14 @@ func (s *Store) EnqueueRouteNotification(ctx context.Context, routeID string, ev
 	return created, tx.Commit()
 }
 
-// RetryNotification re-arms one refused notification for delivery (the
-// explicit operator retry of CLI-013): only a refused notification
-// re-arms — a delivered success never re-sends (the endpoint already
-// holds the idempotency key) and a pending notification needs no
-// re-arm. The stable idempotency identity is untouched, so the retried
-// delivery presents the same key the endpoint deduplicated before
-// (NTF-007); nothing outside the notification tables changes (NTF-005).
+// RetryNotification is the sole operator bypass around the drain
+// backoff (E16-T2, NTF-013): an ambiguous, retryable, or refused record
+// returns to pending and becomes immediately due — the persisted
+// backoff deadline is deliberately discarded. A delivered success never
+// re-arms (the endpoint already holds the idempotency key). The stable
+// idempotency identity is untouched, so the retried delivery presents
+// the same key the endpoint deduplicated before (NTF-007); nothing
+// outside the notification tables changes (NTF-005).
 func (s *Store) RetryNotification(ctx context.Context, notificationID string) error {
 	tx, err := s.BeginTx(ctx, nil)
 	if err != nil {
@@ -278,13 +281,19 @@ func (s *Store) RetryNotification(ctx context.Context, notificationID string) er
 		}
 		return err
 	}
+	now := time.Now().UTC().Format(time.RFC3339)
 	switch records.NotificationState(state) {
 	case records.NotificationDelivered:
 		return fmt.Errorf("%w: %s is already delivered", ports.ErrStateNotEligible, notificationID)
 	case records.NotificationPending:
-		return nil // already armed
+		// A pending record under backoff becomes immediately due; an
+		// unleased pending record that is already due needs no change.
+		if _, err := tx.Exec(`UPDATE notification_events SET due_at = ? WHERE notification_id = ? AND state = 'pending'`, now, notificationID); err != nil {
+			return err
+		}
+		return tx.Commit()
 	case records.NotificationRefused:
-		if _, err := tx.Exec(`UPDATE notification_events SET state = 'pending', resolved_at = NULL WHERE notification_id = ? AND state = 'refused'`, notificationID); err != nil {
+		if _, err := tx.Exec(`UPDATE notification_events SET state = 'pending', resolved_at = NULL, due_at = ? WHERE notification_id = ? AND state = 'refused'`, now, notificationID); err != nil {
 			return err
 		}
 		return tx.Commit()
@@ -561,6 +570,252 @@ func (s *Store) FinishDrainRun(ctx context.Context, drainID string, counts ports
 	}
 	if n == 0 {
 		return fmt.Errorf("%w: %s", ports.ErrDrainRunNotFound, drainID)
+	}
+	return tx.Commit()
+}
+
+// notificationLeaseMargin is the fence's margin over the effective
+// delivery deadline (v0.1.6 §4): the lease outlives the caller's
+// delivery budget by thirty seconds, so a worker racing its own budget
+// expiry keeps the fence until its outcome can land.
+const notificationLeaseMargin = 30 * time.Second
+
+// notificationDueSQL is the due-selection predicate every drain claim
+// shares: pending work whose persisted due deadline has arrived and
+// whose lease is free or expired (E16-T2, NTF-011/NTF-015).
+const notificationDueSQL = `e.state = 'pending' AND e.due_at != '' AND e.due_at <= ? AND (e.lease_owner = '' OR e.lease_expires_at IS NULL OR e.lease_expires_at <= ?)`
+
+// ClaimDueNotifications atomically leases the currently due, unclaimed
+// pending work (E16-T2): one transaction selects the bounded candidate
+// set and advances each row's fencing token under a conditional UPDATE
+// keyed on the row's current lease-freedom, so two concurrent drainers
+// always claim disjoint records — the UPDATE's row count, never the
+// SELECT, decides the claim.
+func (s *Store) ClaimDueNotifications(ctx context.Context, filter ports.NotificationClaimFilter) ([]ports.NotificationClaim, error) {
+	limit := filter.Limit
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	// UTC at nanosecond precision: every lease predicate compares these
+	// strings against the stored RFC 3339 UTC values, so a local-zone
+	// rendering would silently widen the due and expiry windows.
+	now := time.Now().UTC()
+	leaseUntil := filter.LeaseUntil
+	if leaseUntil == "" {
+		leaseUntil = now.Add(notificationLeaseMargin).Format(time.RFC3339Nano)
+	}
+	leaseUntil = normalizeTimestamp(leaseUntil)
+	// The stored due and lease-expiry values are second-precision
+	// (normalizeTimestamp); the predicate's bound must be too, or a
+	// notification created in the same second as the claim would compare
+	// "12Z" > "12.123Z" and stay unclaimable for up to a second.
+	nowSecond := now.Truncate(time.Second).Format(time.RFC3339)
+	conds := notificationDueSQL
+	args := []any{nowSecond, nowSecond}
+	if filter.RouteID != "" {
+		conds += " AND e.route_id = ?"
+		args = append(args, filter.RouteID)
+	}
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	rows, err := tx.Query(`SELECT e.notification_id FROM notification_events e WHERE `+conds+`
+		ORDER BY e.created_at, e.notification_id LIMIT ?`, append(args, limit)...)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, limit)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	claims := make([]ports.NotificationClaim, 0, len(ids))
+	for _, id := range ids {
+		// The conditional UPDATE is the atomic claim: it succeeds only
+		// while the row's lease is still free or expired, and the
+		// advancing token is the fence a recovering drainer checks.
+		res, err := tx.Exec(`UPDATE notification_events
+			SET lease_owner = ?, lease_token = lease_token + 1, lease_expires_at = ?
+			WHERE notification_id = ? AND state = 'pending'
+			  AND (lease_owner = '' OR lease_expires_at IS NULL OR lease_expires_at <= ?)`,
+			filter.Owner, leaseUntil, id, nowSecond)
+		if err != nil {
+			return nil, err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return nil, err
+		}
+		if n == 0 {
+			continue // another drainer won this row inside our transaction
+		}
+		rec, err := scanNotificationEventByIDTx(tx, id)
+		if err != nil {
+			return nil, err
+		}
+		claims = append(claims, ports.NotificationClaim{NotificationEventRecord: rec, LeaseToken: rec.LeaseToken})
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return claims, nil
+}
+
+// scanNotificationEventByIDTx loads one notification row plus its
+// current lease columns through an open transaction.
+func scanNotificationEventByIDTx(tx *sql.Tx, id string) (ports.NotificationEventRecord, error) {
+	var rec ports.NotificationEventRecord
+	var destinationID, resolvedAt sql.NullString
+	err := tx.QueryRow(`SELECT notification_id, route_id, event, destination_id, transition, sink_id, sink_type, policy_revision, payload_json, state, idempotency_key, created_at, resolved_at, due_at, lease_owner, lease_token, lease_expires_at
+		FROM notification_events WHERE notification_id = ?`, id).Scan(
+		&rec.NotificationID, &rec.RouteID, &rec.Event, &destinationID, &rec.Transition, &rec.SinkID, &rec.SinkType,
+		&rec.PolicyRevision, &rec.PayloadJSON, &rec.State, &rec.IdempotencyKey, &rec.CreatedAt, &resolvedAt,
+		&rec.DueAt, &rec.LeaseOwner, &rec.LeaseToken, &rec.LeaseExpiresAt)
+	if err != nil {
+		return ports.NotificationEventRecord{}, err
+	}
+	rec.DestinationID, rec.ResolvedAt = destinationID.String, resolvedAt.String
+	return rec, nil
+}
+
+// notificationBackoffDelay computes the persisted retry delay for
+// attempt n (NTF-014): min(Initial * Multiplier^(n-1), Max), then one
+// symmetric ±JitterFraction jitter applied per retry — the jitter draw
+// happens once here and the resulting deadline is stored, so every
+// process observes the same due time.
+func notificationBackoffDelay(backoff ports.NotificationBackoff, attempt int, draw float64) time.Duration {
+	if attempt < 1 {
+		attempt = 1
+	}
+	delay := float64(backoff.Initial)
+	for i := 1; i < attempt; i++ {
+		delay *= backoff.Multiplier
+		if backoff.Max > 0 && delay > float64(backoff.Max) {
+			delay = float64(backoff.Max)
+			break
+		}
+	}
+	if backoff.Max > 0 && delay > float64(backoff.Max) {
+		delay = float64(backoff.Max)
+	}
+	jitter := 1 + (draw*2-1)*backoff.JitterFraction
+	if jitter < 0 {
+		jitter = 0
+	}
+	return time.Duration(delay * jitter)
+}
+
+// notificationJitterDraw is the symmetric jitter source; a package
+// variable so tests pin the persisted deadline deterministically.
+var notificationJitterDraw = func() float64 { return rand.Float64() }
+
+// RecordNotificationAttemptFenced records one delivery outcome under
+// the claim's fence (E16-T2, NTF-012): the attempt is admitted only
+// while the stored lease still carries the claiming token and owner, a
+// terminal outcome resolves the notification, an ambiguous or
+// retryable outcome persists the jittered backoff deadline, and the
+// lease is released in the same transaction. A stale owner — one whose
+// lease expired and was recovered by another drainer — fails with
+// ports.ErrNotificationLeaseLost and records nothing.
+func (s *Store) RecordNotificationAttemptFenced(ctx context.Context, in ports.NotificationAttemptInput, claim ports.NotificationClaim, backoff ports.NotificationBackoff) (ports.NotificationAttemptRecord, error) {
+	if _, err := records.ParseNotificationAttemptOutcome(string(in.Outcome)); err != nil {
+		return ports.NotificationAttemptRecord{}, err
+	}
+	startedAt := normalizeTimestamp(in.StartedAt)
+	completedAt := normalizeTimestamp(in.CompletedAt)
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return ports.NotificationAttemptRecord{}, err
+	}
+	defer tx.Rollback()
+	// The fence: the row must still carry this claim exactly. A
+	// recovered lease (advanced token, new owner) refuses the stale
+	// outcome before any evidence is written.
+	var owner string
+	var token int64
+	if err := tx.QueryRow(`SELECT lease_owner, lease_token FROM notification_events WHERE notification_id = ?`, in.NotificationID).Scan(&owner, &token); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ports.NotificationAttemptRecord{}, fmt.Errorf("%w: %s", ports.ErrNotificationNotFound, in.NotificationID)
+		}
+		return ports.NotificationAttemptRecord{}, err
+	}
+	if owner == "" || token != claim.LeaseToken {
+		return ports.NotificationAttemptRecord{}, fmt.Errorf("%w: %s (claim token %d, stored %d)", ports.ErrNotificationLeaseLost, in.NotificationID, claim.LeaseToken, token)
+	}
+	var next int
+	if err := tx.QueryRow(`SELECT COALESCE(MAX(attempt_number), 0) + 1 FROM notification_attempts WHERE notification_id = ?`, in.NotificationID).Scan(&next); err != nil {
+		return ports.NotificationAttemptRecord{}, err
+	}
+	attemptID := records.NotificationAttemptID(in.NotificationID, next)
+	if _, err := tx.Exec(`INSERT INTO notification_attempts (attempt_id, notification_id, attempt_number, outcome, error_code, response_digest, started_at, completed_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		attemptID, in.NotificationID, next, string(in.Outcome), nullString(in.ErrorCode), nullString(in.ResponseDigest), startedAt, completedAt); err != nil {
+		return ports.NotificationAttemptRecord{}, err
+	}
+	resolution := ""
+	if in.Outcome.Terminal() {
+		resolution = string(records.NotificationDelivered)
+		if in.Outcome == records.NotificationRefusedOutcome {
+			resolution = string(records.NotificationRefused)
+		}
+	} else {
+		// The backoff deadline is persisted once, jittered once: every
+		// later process reads the same due time (NTF-014).
+		completed, err := time.Parse(time.RFC3339, completedAt)
+		if err != nil {
+			return ports.NotificationAttemptRecord{}, fmt.Errorf("fenced attempt completed_at: %w", err)
+		}
+		delay := notificationBackoffDelay(backoff, next, notificationJitterDraw())
+		resolution = completed.Add(delay).UTC().Format(time.RFC3339Nano)
+	}
+	if resolution != "" && (resolution == string(records.NotificationDelivered) || resolution == string(records.NotificationRefused)) {
+		if _, err := tx.Exec(`UPDATE notification_events SET state = ?, resolved_at = ?, lease_owner = '', lease_expires_at = NULL WHERE notification_id = ? AND state = 'pending'`,
+			resolution, completedAt, in.NotificationID); err != nil {
+			return ports.NotificationAttemptRecord{}, err
+		}
+	} else if resolution != "" {
+		if _, err := tx.Exec(`UPDATE notification_events SET due_at = ?, lease_owner = '', lease_expires_at = NULL WHERE notification_id = ? AND state = 'pending'`,
+			normalizeTimestamp(resolution), in.NotificationID); err != nil {
+			return ports.NotificationAttemptRecord{}, err
+		}
+	} else {
+		if _, err := tx.Exec(`UPDATE notification_events SET lease_owner = '', lease_expires_at = NULL WHERE notification_id = ?`, in.NotificationID); err != nil {
+			return ports.NotificationAttemptRecord{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return ports.NotificationAttemptRecord{}, err
+	}
+	return ports.NotificationAttemptRecord{
+		AttemptID: attemptID, NotificationID: in.NotificationID, AttemptNumber: next, Outcome: in.Outcome,
+		ErrorCode: in.ErrorCode, ResponseDigest: in.ResponseDigest, StartedAt: startedAt, CompletedAt: completedAt,
+	}, nil
+}
+
+// ReleaseNotificationClaims returns unstarted claims to the due pool at
+// budget expiry: the release is fenced on the claim's token, so a claim
+// already recovered by another drainer is left untouched.
+func (s *Store) ReleaseNotificationClaims(ctx context.Context, owner string, claims []ports.NotificationClaim) error {
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, claim := range claims {
+		if _, err := tx.Exec(`UPDATE notification_events SET lease_owner = '', lease_expires_at = NULL
+			WHERE notification_id = ? AND lease_owner = ? AND lease_token = ?`, claim.NotificationID, owner, claim.LeaseToken); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

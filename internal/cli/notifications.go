@@ -338,6 +338,18 @@ func (s notificationDeliveryStore) RecordNotificationAttempt(ctx context.Context
 	return s.store.RecordNotificationAttempt(ctx, in)
 }
 
+func (s notificationDeliveryStore) ClaimDueNotifications(ctx context.Context, filter ports.NotificationClaimFilter) ([]ports.NotificationClaim, error) {
+	return s.store.ClaimDueNotifications(ctx, filter)
+}
+
+func (s notificationDeliveryStore) RecordNotificationAttemptFenced(ctx context.Context, in ports.NotificationAttemptInput, claim ports.NotificationClaim, backoff ports.NotificationBackoff) (ports.NotificationAttemptRecord, error) {
+	return s.store.RecordNotificationAttemptFenced(ctx, in, claim, backoff)
+}
+
+func (s notificationDeliveryStore) ReleaseNotificationClaims(ctx context.Context, owner string, claims []ports.NotificationClaim) error {
+	return s.store.ReleaseNotificationClaims(ctx, owner, claims)
+}
+
 // runNotificationsDrain delivers the pending notifications, oldest
 // first, bounded (CLI-013, observability-and-operations §8): the pass
 // first evaluates the configured drift classes per route — integration
@@ -363,25 +375,30 @@ func runNotificationsDrain(command string, args []string, stdout, stderr io.Writ
 	}
 	defer closer.Close()
 	// The limit validates BEFORE any drift side effect: a usage error
-	// must not leave half-evaluated notification intents behind.
-	delivery := appnotifications.Delivery{
-		Store:    notificationDeliveryStore{store: closer},
-		Resolver: notificationSinkResolver(cfg, stderr),
-		Now:      time.Now,
-	}
+	// must not leave half-evaluated notification intents behind. The
+	// manual drain shares the E16-T2 lease-safe service: it selects due
+	// work only, claims atomically, records fenced outcomes, and
+	// persists the retry backoff (NTF-011 through NTF-014).
+	limit := 0
 	if raw := flags.val("--limit"); raw != "" {
 		n, ok := parseBoundedLimit(raw)
 		if !ok {
 			return usageError(stderr, command, "--limit must be an integer between 1 and 500")
 		}
-		delivery.MaxPerRun = n
+		limit = n
+	}
+	drainer := &appnotifications.DrainService{
+		Store:    notificationDeliveryStore{store: closer},
+		Resolver: notificationSinkResolver(cfg, stderr),
+		Now:      time.Now,
+		Limit:    limit,
 	}
 	ctx := requestCtx()
 	drift, driftErr := evaluateDriftNotifications(ctx, cfg, closer, dispatch.Timestamp(time.Now()))
 	if driftErr != nil {
 		return planErr(stderr, command, "sqlite_query_failed", "storage", driftErr.Error(), 20)
 	}
-	report, err := delivery.DeliverPending(ctx)
+	report, err := drainer.DrainDue(ctx, "")
 	if err != nil {
 		var construction *appnotifications.SinkConstructionError
 		if errors.As(err, &construction) {

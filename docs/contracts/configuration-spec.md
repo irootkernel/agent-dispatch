@@ -389,6 +389,12 @@ is optional with an explicit effective default:
 | `retry.multiplier` | `2.0` | The per-retry delay multiplier (1.0 through 10.0). |
 | `retry.jitter_fraction` | `0.2` | One symmetric ±20% jitter applied per retry (0.0 through 0.5). |
 
+Both the explicit `notifications drain` and every automatic mode select
+due work only: an ambiguous or retryable outcome persists a jittered
+backoff deadline (30 seconds doubling to 15 minutes), and
+`notifications retry <id>` is the sole operator bypass that returns an
+ambiguous, retryable, or refused record to immediately-due pending.
+
 The effective drain policy carries its own inspectable drain-policy
 revision that digests every resolved field, and a declared block whose
 effective policy differs from the pure default joins the route revision —

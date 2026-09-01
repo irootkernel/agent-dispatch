@@ -3,6 +3,7 @@ package ports
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 )
@@ -89,6 +90,14 @@ type NotificationEventRecord struct {
 	// listing surface (zero and empty when no attempt ran yet).
 	AttemptCount int
 	LastOutcome  records.NotificationAttemptOutcome
+	// Drain-delivery state (E16-T1/E16-T2): the persisted due deadline
+	// and the current lease columns. DueAt/lease fields are populated by
+	// the claim and direct-load surfaces; the listing projection leaves
+	// them zeroed.
+	DueAt          string
+	LeaseOwner     string
+	LeaseToken     int64
+	LeaseExpiresAt string
 }
 
 // NotificationAttemptInput records one sink delivery attempt (NTF-004,
@@ -186,4 +195,62 @@ type NotificationDelivery struct {
 type NotificationSink interface {
 	// Deliver performs one bounded delivery attempt.
 	Deliver(ctx context.Context, in NotificationDelivery) NotificationAttemptInput
+}
+
+// ErrNotificationLeaseLost reports a fenced outcome that arrived after
+// another drainer recovered the notification (E16-T2, NTF-012): the
+// claim's fencing token no longer matches the stored lease, so the
+// stale owner's outcome is refused instead of overwriting the recovery.
+var ErrNotificationLeaseLost = errors.New("notification lease lost to a recovering drainer")
+
+// NotificationClaimFilter selects the due work one drain pass claims
+// (E16-T2, NTF-011): only pending notifications whose persisted due
+// deadline has arrived and whose lease is free or expired, oldest
+// first, bounded by Limit, optionally scoped to one route.
+type NotificationClaimFilter struct {
+	RouteID string
+	Limit   int
+	Owner   string
+	// LeaseUntil is the fence's expiry timestamp (RFC3339): the
+	// effective delivery deadline plus the thirty-second margin.
+	LeaseUntil string
+}
+
+// NotificationClaim is one atomically claimed due notification: the
+// stored record plus the fencing token this claim advanced to. The
+// token rides every outcome the claiming worker records; a worker that
+// lost the claim cannot commit after recovery advanced the token.
+type NotificationClaim struct {
+	NotificationEventRecord
+	LeaseToken int64
+}
+
+// NotificationBackoff is the persisted retry envelope one ambiguous or
+// retryable outcome applies (NTF-014): the delay for attempt n is
+// min(Initial * Multiplier^(n-1), Max), one symmetric ±JitterFraction
+// jitter is applied per retry, and the resulting deadline is persisted
+// so every process observes the same due time.
+type NotificationBackoff struct {
+	Initial        time.Duration
+	Max            time.Duration
+	Multiplier     float64
+	JitterFraction float64
+}
+
+// NotificationDrainStore is the lease-safe claim and fenced-outcome
+// surface the bounded drain service drives (E16-T2): concurrent
+// drainers claim disjoint due work, outcomes are fenced by the claim's
+// token, and unstarted claims are released at budget expiry.
+type NotificationDrainStore interface {
+	// ClaimDueNotifications atomically leases the currently due,
+	// unclaimed pending work bounded by the filter.
+	ClaimDueNotifications(ctx context.Context, filter NotificationClaimFilter) ([]NotificationClaim, error)
+	// RecordNotificationAttemptFenced records one delivery outcome
+	// under the claim's fence, persists the backoff deadline of an
+	// ambiguous or retryable outcome, and releases the lease; a stale
+	// owner fails with ErrNotificationLeaseLost.
+	RecordNotificationAttemptFenced(ctx context.Context, in NotificationAttemptInput, claim NotificationClaim, backoff NotificationBackoff) (NotificationAttemptRecord, error)
+	// ReleaseNotificationClaims releases still-leased claims a pass
+	// could not start before its budget expired.
+	ReleaseNotificationClaims(ctx context.Context, owner string, claims []NotificationClaim) error
 }

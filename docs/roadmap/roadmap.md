@@ -15,9 +15,9 @@
 | Release target | v0.1.6 (planned) |
 | Current epic | E16 In Progress |
 | Current active task | None |
-| Next task | E16-T2 |
-| Completed tasks | 83 / 89 |
-| Planned tasks | 6 / 89 |
+| Next task | E16-T3 |
+| Completed tasks | 84 / 89 |
+| Planned tasks | 5 / 89 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -139,7 +139,7 @@
 | 81 | E15-T3 | Completed | Group slot enforcement and bounded follow-up |
 | 82 | E15-T4 | Completed | Hermes v0.20.5+ compatibility gate G11 |
 | 83 | E16-T1 | Completed | Drain policy, leases, and forward migration |
-| 84 | E16-T2 | Planned | Lease-safe bounded notification delivery |
+| 84 | E16-T2 | Completed | Lease-safe bounded notification delivery |
 | 85 | E16-T3 | Planned | Post-commit after-command integration |
 | 86 | E16-T4 | Planned | Scheduler, status, doctor, and G12 |
 | 87 | E17-T1 | Planned | CLI, configuration, operations, and skill truth |
@@ -3952,7 +3952,7 @@ round-trip, migration upgrade, due backfill, drain-run evidence).
 
 ## E16-T2: Lease-Safe Bounded Notification Delivery
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -3985,9 +3985,26 @@ E16-T1 Completed.
 
 ### Evidence
 
-Planned; none.
-
-## E16-T3: Post-Commit After-Command Integration
+Completed 2026-09-01. One lease-safe bounded drain service now serves the
+explicit manual drain and the later automatic passes: it atomically
+claims only due work (concurrent drainers always hold disjoint claims —
+the conditional fencing-token UPDATE decides, never the candidate
+SELECT), records outcomes under the claim's fence so a stale owner whose
+expired lease was recovered cannot commit after recovery, and releases
+unstarted claims at wall-budget expiry while a started delivery keeps
+its fence and remains lease-recoverable. Ambiguous and retryable
+outcomes persist one symmetric ±20% jittered backoff deadline (30s
+doubling to 15m) computed once at record time, so every process observes
+the same due time; `notifications retry <id>` is the sole operator
+bypass, returning an ambiguous, retryable, or refused record to
+immediately-due pending. The manual `notifications drain` selects due
+work only through the same service; a defective sink declaration stays
+sink-local as one retryable attempt. Lease expiry is the effective
+delivery deadline plus the thirty-second margin, and a full drain pass
+leaves every non-notification table byte-identical (AC-1208). Covered by
+store tests (disjoint claims, stale-owner refusal, persisted backoff,
+bypass, table isolation, claim release) and service tests (budget
+expiry, recovery skip, sink isolation, defaults).
 
 **Status:** Planned
 

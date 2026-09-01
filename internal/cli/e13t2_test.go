@@ -309,6 +309,31 @@ func TestE13T2AmbiguousRetryKeepsStableKeyAndRefusedRetryRearms(t *testing.T) {
 	keys.Close()
 	store.Close()
 	f.setStatus(http.StatusOK, 0)
+	// E16-T2: the ambiguous outcomes carry a persisted backoff deadline,
+	// so an immediate second drain selects no webhook work. The explicit
+	// operator retry is the sole bypass that makes them immediately due.
+	store2 := e5t1Store(t, f.configPath)
+	rows, err := store2.Query(`SELECT notification_id FROM notification_events WHERE sink_id = 'ops-webhook' AND state = 'pending'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pendingIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		pendingIDs = append(pendingIDs, id)
+	}
+	rows.Close()
+	store2.Close()
+	for _, id := range pendingIDs {
+		out.Reset()
+		errb.Reset()
+		if code := Run([]string{"notifications", "retry", id, "--config", f.configPath}, &out, &errb); code != 0 {
+			t.Fatalf("retry %s: %s", id, errb.String())
+		}
+	}
 	out.Reset()
 	errb.Reset()
 	if code := Run([]string{"notifications", "drain", "--config", f.configPath}, &out, &errb); code != 0 {

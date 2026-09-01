@@ -335,3 +335,81 @@ func TestE16T3StderrBoundAndConfigUnreadable(t *testing.T) {
 		t.Fatalf("the unreadable-configuration branch must report once: %q", errb2.String())
 	}
 }
+
+// TestE16T3ExcludedCommandsNeverSpawnAfterCommandDrain pins the
+// registry's exclusion convention (round-2 F006): the explicit manual
+// drain and the read-only inspection commands are not registered
+// success sites, so neither may spawn an after-command pass — asserted
+// as the absence of any drain_runs evidence row — even though the
+// explicit drain itself delivers and an after-command route has due
+// work the whole time.
+func TestE16T3ExcludedCommandsNeverSpawnAfterCommandDrain(t *testing.T) {
+	dir := t.TempDir()
+	cfg := e16t3Config("after-command")
+	cfg.Instance.StateDir = filepath.Join(dir, "state")
+	configPath := filepath.Join(dir, "config.yaml")
+	if err := config.WriteExample(cfg, configPath); err != nil {
+		t.Fatal(err)
+	}
+	s := e16t3StoreAt(t, cfg.Instance.StateDir)
+	ctx := context.Background()
+	if err := s.SetRouteActivation(ctx, "wiki", "enabled", "route-rev-1", "", "2026-01-01T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	seed := func(id string) {
+		t.Helper()
+		if _, err := s.EnqueueRouteNotification(ctx, "wiki", records.EventWorkCompleted, id, "", nil, "2026-08-30T09:00:00Z"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	afterCommandRuns := func() int {
+		t.Helper()
+		var n int
+		if err := s.QueryRow(`SELECT COUNT(*) FROM drain_runs WHERE trigger = 'after-command'`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	// The explicit manual drain delivers the route's due work through
+	// the shared lease-safe service but never records an after-command
+	// pass: the drain-success recursion exclusion is structural.
+	seed("manual-pass")
+	markInvocationStart()
+	var out, errb bytes.Buffer
+	if code := Run([]string{"notifications", "drain", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("manual drain: %d %s", code, errb.String())
+	}
+	byState, err := s.CountNotificationsByState(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if byState["delivered"] < 1 || byState["pending"] != 0 {
+		t.Fatalf("the manual drain must deliver the due work (the drift evaluation may add its own): %v", byState)
+	}
+	if n := afterCommandRuns(); n != 0 {
+		t.Fatalf("the explicit drain must never spawn an after-command pass: %d evidence rows", n)
+	}
+	// A read-only inspection command stays completely dry: no delivery
+	// and no automatic evidence row of any trigger.
+	seed("read-only-pass")
+	out.Reset()
+	errb.Reset()
+	markInvocationStart()
+	if code := Run([]string{"notifications", "list", "--route", "wiki", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("notifications list: %d %s", code, errb.String())
+	}
+	byState, err = s.CountNotificationsByState(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if byState["pending"] != 1 {
+		t.Fatalf("a read-only command must not drain: %v", byState)
+	}
+	var anyRuns int
+	if err := s.QueryRow(`SELECT COUNT(*) FROM drain_runs`).Scan(&anyRuns); err != nil {
+		t.Fatal(err)
+	}
+	if anyRuns != 0 {
+		t.Fatalf("no excluded command may write drain evidence: %d rows", anyRuns)
+	}
+}

@@ -3890,10 +3890,10 @@ is Mulgae-approved outright; `make verify` is green.
 
 # E16: Automatic Durable Notification Draining
 
-**Epic status:** In Progress
+**Epic status:** Completed
 **Purpose:** Make notification delivery progress boundedly during normal one-shot operation without coupling it to source state.
 **Gate:** G12
-**Detailed SOT:** [v0.1.6 operational follow-up](../specs/v0.1.6-operational-follow-up.md)
+**Canonical Outcomes:** [required-spec.md](../specs/required-spec.md) (requirements) · [acceptance-criteria.md](../specs/acceptance-criteria.md) (G12 scenarios) · [configuration-spec.md](../contracts/configuration-spec.md) (drain contract) · [architecture-decision-records/0022-post-commit-notification-draining.md](../architecture-decision-records/0022-post-commit-notification-draining.md) (ADR) · [runbook.md](../operations/runbook.md) §9b (upgrade and rollback) · [VALIDATION.md](../VALIDATION.md) (gate evidence)
 
 ## E16-T1: Drain Policy, Leases, and Forward Migration
 

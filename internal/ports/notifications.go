@@ -242,6 +242,13 @@ type NotificationBackoff struct {
 // drainers claim disjoint due work, outcomes are fenced by the claim's
 // token, and unstarted claims are released at budget expiry.
 type NotificationDrainStore interface {
+	NotificationStore
+	// StartDrainRun records the beginning of one bounded drain pass's
+	// evidence row.
+	StartDrainRun(ctx context.Context, in DrainRunInput) error
+	// FinishDrainRun completes one drain pass's evidence row exactly
+	// once; an unknown identity fails loudly.
+	FinishDrainRun(ctx context.Context, drainID string, counts DrainRunCounts, completedAt string) error
 	// ClaimDueNotifications atomically leases the currently due,
 	// unclaimed pending work bounded by the filter.
 	ClaimDueNotifications(ctx context.Context, filter NotificationClaimFilter) ([]NotificationClaim, error)

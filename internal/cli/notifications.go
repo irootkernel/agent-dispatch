@@ -334,6 +334,30 @@ func (s notificationDeliveryStore) PendingNotifications(ctx context.Context, lim
 	return s.store.PendingNotifications(ctx, limit)
 }
 
+func (s notificationDeliveryStore) ListNotifications(ctx context.Context, filter ports.NotificationFilter) ([]ports.NotificationEventRecord, error) {
+	return s.store.ListNotifications(ctx, filter)
+}
+
+func (s notificationDeliveryStore) LoadNotification(ctx context.Context, id string) (ports.NotificationEventRecord, error) {
+	return s.store.LoadNotification(ctx, id)
+}
+
+func (s notificationDeliveryStore) ListNotificationAttempts(ctx context.Context, id string) ([]ports.NotificationAttemptRecord, error) {
+	return s.store.ListNotificationAttempts(ctx, id)
+}
+
+func (s notificationDeliveryStore) CountNotificationsByState(ctx context.Context) (map[string]int64, error) {
+	return s.store.CountNotificationsByState(ctx)
+}
+
+func (s notificationDeliveryStore) EnqueueRouteNotification(ctx context.Context, routeID string, event records.NotificationEventKind, transition, destinationID string, source map[string]string, now string) (int, error) {
+	return s.store.EnqueueRouteNotification(ctx, routeID, event, transition, destinationID, source, now)
+}
+
+func (s notificationDeliveryStore) RetryNotification(ctx context.Context, id string) error {
+	return s.store.RetryNotification(ctx, id)
+}
+
 func (s notificationDeliveryStore) RecordNotificationAttempt(ctx context.Context, in ports.NotificationAttemptInput) (ports.NotificationAttemptRecord, error) {
 	return s.store.RecordNotificationAttempt(ctx, in)
 }
@@ -502,4 +526,12 @@ func parseBoundedLimit(raw string) (int, bool) {
 		return 0, false
 	}
 	return n, true
+}
+
+func (s notificationDeliveryStore) StartDrainRun(ctx context.Context, in ports.DrainRunInput) error {
+	return s.store.StartDrainRun(ctx, in)
+}
+
+func (s notificationDeliveryStore) FinishDrainRun(ctx context.Context, drainID string, counts ports.DrainRunCounts, completedAt string) error {
+	return s.store.FinishDrainRun(ctx, drainID, counts, completedAt)
 }

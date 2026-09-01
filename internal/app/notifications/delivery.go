@@ -26,8 +26,14 @@ type Store interface {
 }
 
 // NotificationDrainStore is the lease-safe store surface the drain
-// service drives (ports.NotificationDrainStore is the shared contract).
-type NotificationDrainStore = ports.NotificationDrainStore
+// service drives: the minimal claim/fence/release contract (the full
+// ports.NotificationDrainStore embeds it with the evidence and
+// inspection surfaces).
+type NotificationDrainStore interface {
+	ClaimDueNotifications(ctx context.Context, filter ports.NotificationClaimFilter) ([]ports.NotificationClaim, error)
+	RecordNotificationAttemptFenced(ctx context.Context, in ports.NotificationAttemptInput, claim ports.NotificationClaim, backoff ports.NotificationBackoff) (ports.NotificationAttemptRecord, error)
+	ReleaseNotificationClaims(ctx context.Context, owner string, claims []ports.NotificationClaim) error
+}
 
 // SinkResolver builds one sink adapter for a route's configured sink
 // reference; a construction failure is the configuration class (the

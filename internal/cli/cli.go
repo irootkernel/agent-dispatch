@@ -100,6 +100,9 @@ var knownCommands = map[string]bool{
 // the stderr structured log (OPS-001). This build implements the full
 // v0.1 command tree; an unrecognized name is command_unknown.
 func Run(args []string, stdout, stderr io.Writer) int {
+	// The invocation clock anchors the after-command drain's ten-second
+	// whole-invocation budget (E16-T3).
+	markInvocationStart()
 	if len(args) == 0 {
 		writeError(stderr, "", "command_unknown", "usage", "usage: agent-dispatch <command> [flags]; run 'agent-dispatch version --output json'")
 		return 2

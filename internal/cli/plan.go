@@ -389,10 +389,16 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 		return intentErr(stderr, command, err)
 	}
 	report, err := rt.SubmitOnce(requestCtx(), outcome.dispatchID, "agent-dispatch-dispatch")
-	outcome.Close()
 	if err != nil {
+		outcome.Close()
 		return intentErr(stderr, command, err)
 	}
+	// The registered post-commit pass (E16-T3): the core transaction
+	// committed and the command succeeded, so every affected
+	// after-command route drains its existing due work before the
+	// process exits — silent on success, bounded stderr on problems.
+	maybeAfterCommandDrainCfg(command, artifacts.cfg, outcome.store, stderr, artifacts.opts.routeID)
+	outcome.Close()
 	return writeEnvelope(stdout, command, map[string]any{
 		"route_id": artifacts.opts.routeID, "dispatch_id": outcome.dispatchID,
 		"state": string(report.To), "reason": string(report.Reason), "submitted": true,

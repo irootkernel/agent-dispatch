@@ -201,10 +201,12 @@ func runWorkComplete(command string, args []string, stdout, stderr io.Writer) in
 		return workReceiptErr(stderr, command, err)
 	}
 	if result.AuditWarning != nil {
+		maybeAfterCommandDrain(command, flags.val("--config"), store, stderr, intent.RouteID)
 		return writeEnvelopeWithWarnings(stdout, command, result, []string{
 			"the completion committed but its attribution audit append failed: " + result.AuditWarning.Error(),
 		})
 	}
+	maybeAfterCommandDrain(command, flags.val("--config"), store, stderr, intent.RouteID)
 	return writeEnvelope(stdout, command, result)
 }
 
@@ -234,6 +236,7 @@ func runWorkFail(command string, args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return workReceiptErr(stderr, command, err)
 	}
+	maybeAfterCommandDrain(command, flags.val("--config"), store, stderr, intent.RouteID)
 	return writeEnvelope(stdout, command, result)
 }
 

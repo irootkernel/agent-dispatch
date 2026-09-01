@@ -121,10 +121,12 @@ func runQuarantineResolve(command, sub string, args []string, stdout, stderr io.
 	// not found in the configuration keeps the quarantined decision's
 	// own revisions.
 	routeRevision, policyRevision := "", ""
+	releaseRouteID := ""
 	if cfg, cerr := config.Load(resolveConfigPath(flags.val("--config"))); cerr == nil {
 		var routeID string
 		if qerr := closer.QueryRowContext(requestCtx(), `SELECT p.route_id FROM policy_decisions p
 			JOIN quarantine_items q ON q.decision_id = p.decision_id WHERE q.quarantine_id = ?`, flags.positional).Scan(&routeID); qerr == nil {
+			releaseRouteID = routeID
 			if rev, ok := config.RouteRevision(cfg, routeID); ok {
 				routeRevision = rev
 			}
@@ -145,6 +147,12 @@ func runQuarantineResolve(command, sub string, args []string, stdout, stderr io.
 	}
 	if err != nil {
 		return quarantineErr(stderr, command, sub, err)
+	}
+	if sub == "release" {
+		if releaseRouteID == "" {
+			boundedAfterCommandNote(stderr, "quarantine release: the owning route could not be resolved; automatic notification drain skipped")
+		}
+		maybeAfterCommandDrain(command, flags.val("--config"), closer, stderr, releaseRouteID)
 	}
 	return writeEnvelope(stdout, command, rec)
 }
@@ -340,6 +348,7 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 		if code := writeEnvelopeWithWarnings(stdout, command, merged, laneWarnings); code != 0 {
 			return code
 		}
+		maybeAfterCommandDrainCfg(command, artifacts.cfg, store, stderr, routeID)
 		return siblingFailureOverlay()
 	}
 	// --submit drives the scheduled delivery path (OPS-007): the
@@ -378,6 +387,7 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 		if code := writeEnvelopeWithWarnings(stdout, command, merged, warnings); code != 0 {
 			return code
 		}
+		maybeAfterCommandDrainCfg(command, artifacts.cfg, store, stderr, routeID)
 		return siblingFailureOverlay()
 	}
 	// The YAML-key half of the two-key gate (E7-T6/M-2, epic audit
@@ -392,6 +402,7 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 		if code := writeEnvelopeWithWarnings(stdout, command, merged, warnings); code != 0 {
 			return code
 		}
+		maybeAfterCommandDrainCfg(command, artifacts.cfg, store, stderr, routeID)
 		return siblingFailureOverlay()
 	}
 	envelope := map[string]any{"result": result, "submitted": false}
@@ -420,6 +431,7 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 	if code := writeEnvelopeWithWarnings(stdout, command, envelope, laneWarnings); code != 0 {
 		return code
 	}
+	maybeAfterCommandDrainCfg(command, artifacts.cfg, store, stderr, routeID)
 	return siblingFailureOverlay()
 }
 

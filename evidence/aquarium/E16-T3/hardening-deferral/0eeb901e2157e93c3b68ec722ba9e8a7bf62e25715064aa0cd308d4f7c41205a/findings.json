@@ -1,0 +1,38 @@
+{
+  "schema": "aquarium.promoted-findings/v1",
+  "work_unit": {"kind": "task", "id": "E16-T3"},
+  "source_run": "r_01a05bb3-4b90-731b-93dd-0d6d85419a6e",
+  "target": {
+    "content_sha256": "sha256:0eeb901e2157e93c3b68ec722ba9e8a7bf62e25715064aa0cd308d4f7c41205a",
+    "capture_kind": "dirty"
+  },
+  "coverage_status": "complete",
+  "ci_decision": "pass",
+  "publication_status": "committed",
+  "structured_extraction_status": "structured",
+  "review_ordinal": 2,
+  "review_mode": "hardening-deferral-eligible",
+  "findings": [
+    {
+      "finding_id": "F001",
+      "severity": "low",
+      "title": "Invocation clock and stderr counter are hidden package globals",
+      "disposition": "deferred-for-hardening",
+      "paths": ["internal/cli/aftercommand.go"]
+    },
+    {
+      "finding_id": "F002",
+      "severity": "low",
+      "title": "Drain store contract declared flat in storeOp alongside afterCommandStore",
+      "disposition": "deferred-for-hardening",
+      "paths": ["internal/cli/state.go", "internal/cli/aftercommand.go"]
+    },
+    {
+      "finding_id": "F003",
+      "severity": "low",
+      "title": "evidenceCtx discards its CancelFunc, leaking each 5-second timer",
+      "disposition": "deferred-for-hardening",
+      "paths": ["internal/cli/aftercommand.go"]
+    }
+  ]
+}

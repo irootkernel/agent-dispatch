@@ -15,9 +15,9 @@
 | Release target | v0.1.6 (planned) |
 | Current epic | E16 In Progress |
 | Current active task | None |
-| Next task | E16-T3 |
-| Completed tasks | 84 / 89 |
-| Planned tasks | 5 / 89 |
+| Next task | E16-T4 |
+| Completed tasks | 85 / 89 |
+| Planned tasks | 4 / 89 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -140,7 +140,7 @@
 | 82 | E15-T4 | Completed | Hermes v0.20.5+ compatibility gate G11 |
 | 83 | E16-T1 | Completed | Drain policy, leases, and forward migration |
 | 84 | E16-T2 | Completed | Lease-safe bounded notification delivery |
-| 85 | E16-T3 | Planned | Post-commit after-command integration |
+| 85 | E16-T3 | Completed | Post-commit after-command integration |
 | 86 | E16-T4 | Planned | Scheduler, status, doctor, and G12 |
 | 87 | E17-T1 | Planned | CLI, configuration, operations, and skill truth |
 | 88 | E17-T2 | Planned | Cold validation and required deployment evidence |
@@ -4006,7 +4006,9 @@ store tests (disjoint claims, stale-owner refusal, persisted backoff,
 bypass, table isolation, claim release) and service tests (budget
 expiry, recovery skip, sink isolation, defaults).
 
-**Status:** Planned
+## E16-T3: Post-Commit After-Command Integration
+
+**Status:** Completed
 
 ### Objective
 
@@ -4042,7 +4044,34 @@ E16-T2 Completed.
 
 ### Evidence
 
-Planned; none.
+Completed 2026-09-01. The registered post-commit command set — dispatch,
+work completion and failure, applicable dispatch retry and rerun,
+quarantine release, and reconciliation — now invokes one bounded
+after-command drain after its core transaction commits and the command
+succeeds, on the still-open store (dispatch drains before its envelope
+is written; the reconcile exits drain after theirs, on the same
+contract):
+stdout, JSON, and exit behavior are unchanged, a successful pass writes
+no diagnostics, and problems write at most four bounded stderr lines
+with the recovery schedule named as the remainder's owner. Setup,
+baseline-only, read-only commands, and the explicit notification drain
+are excluded (no recursion). Affected after-command routes resolve in
+deterministic route-ID order; the pass interleaves one notification per
+route per round under the one-invocation ten-second wall budget (anchored
+at Run start, so a long core command consumes it), each route stopping
+at its own configured limit, and one drain-run evidence row aggregates
+each route's rounds. Drain-run evidence writes use their own short
+bounded context so a mid-pass budget expiry still closes the evidence
+row. Existing due work drains even when the invocation
+created no new notification; a failed core command never auto-drains
+(only success paths call the hook); a manual-mode or unaffected route
+stays dry with no evidence row. Covered by focused CLI tests: silent
+delivery of pre-existing due work with evidence, manual/unaffected
+dryness, exhausted-budget no-op, route ordering and filters, and the
+round-robin limit posture. The drift-evaluation registry member rides
+the scheduled runner of E16-T4 (its only automatic surface); the
+explicit drain command's own drift evaluation stays excluded as drain
+recursion.
 
 ## E16-T4: Scheduler, Status, Doctor, and G12
 

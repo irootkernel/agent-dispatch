@@ -309,6 +309,9 @@ func runDispatchesRetry(command string, args []string, stdout, stderr io.Writer)
 		}
 		return intentErr(stderr, command, err)
 	}
+	if intent, ierr := store.LoadIntent(requestCtx(), flags.positional); ierr == nil {
+		maybeAfterCommandDrain(command, flags.val("--config"), store, stderr, intent.RouteID)
+	}
 	return writeEnvelope(stdout, command, map[string]any{"dispatch_id": flags.positional, "state": to, "retried": true})
 }
 
@@ -476,6 +479,9 @@ func runDispatchesRerun(command string, args []string, stdout, stderr io.Writer)
 	summary, err := op.Rerun(requestCtx(), flags.positional, "operator", flags.val("--reason"))
 	if err != nil {
 		return intentErr(stderr, command, err)
+	}
+	if snap, serr := store.LoadIntent(requestCtx(), summary.DispatchID); serr == nil {
+		maybeAfterCommandDrain(command, flags.val("--config"), store, stderr, snap.RouteID)
 	}
 	return writeEnvelope(stdout, command, summary)
 }

@@ -189,6 +189,16 @@ func runRouteEnable(command string, args []string, stdout, stderr io.Writer) int
 	if _, ok := cfg.Routes[routeID]; !ok {
 		return planErr(stderr, command, "config_route_not_found", "configuration", fmt.Sprintf("route %q is not defined", routeID), 3)
 	}
+	// The managed-schedule production gate (E16-T4, v0.1.6 §4): an
+	// automatic drain mode requires an installed, loaded,
+	// definition-matching launchd schedule before enablement. Setup
+	// prints but never runs the install command, so a fresh walkthrough
+	// surfaces this at its printed enable step instead.
+	if posture := schedulePosture(cfg, routeID, resolveConfigPath(flags.val("--config"))); posture != nil && posture["expected"] == true && posture["healthy"] != true {
+		return planErr(stderr, command, "config_invalid", "configuration",
+			fmt.Sprintf("drain mode %v requires an installed, loaded, definition-matching managed schedule before production enablement (present=%v loaded=%v); run 'agent-dispatch schedule install --route %s --platform launchd' first",
+				posture["mode"], posture["installed"], posture["loaded"], routeID), 3)
+	}
 	revision, ok := config.RouteRevision(cfg, routeID)
 	if !ok {
 		return planErr(stderr, command, "internal_unclassified", "internal", "route revision could not be computed", 40)

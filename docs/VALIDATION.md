@@ -19,9 +19,9 @@
 - Internal Markdown links resolve within the package, excluding intentionally unresolved wiki links retained in the historical source draft.
 - Markdown code fences are balanced.
 - The documentation package has one delivery scope, exactly one owner for each of the seven semantic roles, and `docs/roadmap/roadmap.md` as its sole lifecycle authority.
-- The roadmap contains exactly 18 epics and 89 task headings (the 82 tasks through E15, all Completed, and the 7 planned E16-E17 tasks).
+- The roadmap contains exactly 18 epics and 89 task headings (the 86 tasks through E16, all Completed, and the 3 planned E17 tasks).
 - Every task uses one allowed status value.
-- Every sequence through E15 is fully Completed (82/82 delivered); no task is active and E16-T1 is next.
+- Every sequence through E16 is fully Completed (86/86 delivered); no task is active and E17-T1 is next.
 - Required-spec IDs are unique.
 - Acceptance-scenario IDs are unique.
 - The D-025 functional baseline remains unchanged; D-026 moves paths and adds ownership indexes without changing roadmap identity, lifecycle, or executable-evidence claims.
@@ -33,7 +33,7 @@
 - Example files: 24
 - Integration reports: 3 (Hermes public interface E0-T4, Watchman public interface E0-T5, real-Hermes G11 evidence E15-T4)
 - Integration fixtures: 42 files, 9 under `integrations/fixtures/hermes/` and 33 under `integrations/fixtures/watchman/`
-- Roadmap tasks: 89 (33 v0.1 + 12 E7 + 6 E8 + 9 E9 + 15 E10-E13 + 3 E14 + 4 E15 delivered; 7 E16-E17 planned)
+- Roadmap tasks: 89 (33 v0.1 + 12 E7 + 6 E8 + 9 E9 + 15 E10-E13 + 3 E14 + 4 E15 + 4 E16 delivered; 3 E17 planned)
 - Normative requirements: 225
 - Acceptance scenarios: 91
 
@@ -385,6 +385,34 @@ could never submit again after an executable swap, and post-cutover
 dead letters wedging the recovery re-acknowledgement — each pinned by
 the tests above. `make verify` including the race suite is green on
 darwin/arm64 at this tree.
+
+
+## Gate G12: Automatic Durable Notification Draining (E16)
+
+The behavioral criteria are the G12 acceptance scenarios of
+`specs/acceptance-criteria.md`, pinned by the E16 suites cited per row;
+real-environment drain evidence against a live Hermes and launchd joins
+the E17 release validation (§6 of the operational follow-up contract).
+
+| Criterion | Evidence |
+|---|---|
+| AC-1201 after-command mode delivers a completion notification through one bounded automatic pass without another filesystem event | The E16-T3 registry (work completion among the registered success sites): `TestE16T3AfterCommandDrainDeliversExistingDueWork` delivers pre-existing due work with one drain-run evidence row, silently |
+| AC-1202 webhook timeout or process death resumes the due notification under its stable identity through the fifteen-minute fallback | The managed recovery schedule (`StartInterval` 900 in `TestE16T4RenderProducesValidLaunchdSyntax`) plus the lease-recovery suite: `TestE16T2StaleOwnerCannotCommitAfterRecovery` and `TestE16T2ReleaseUnstartedClaims`; the stable-key posture is the E13T2 suite |
+| AC-1203 simultaneous drains claim disjoint leases, expiry recovers safely, a stale fencing token records nothing | `TestE16T2ConcurrentDrainersClaimDisjointWork` and `TestE16T2StaleOwnerCannotCommitAfterRecovery` (ErrNotificationLeaseLost, zero attempt rows) |
+| AC-1204 configured limit, ten-second budget, persisted backoff, manual and scheduled modes; scheduled drain runs only after healthy reconciliation | `TestE16T3ExhaustedBudgetDrainsNothing`, `TestE16T3RoundRobinSharesTheBudget`, `TestE16T2RetryableOutcomePersistsBackoffDeadline`, `TestE16T3ManualAndUnaffectedRoutesStayDry`, and `TestE16T4ScheduleRunDrainsScheduledRoute` (the runner reconciles first and drains after the healthy pass) |
+| AC-1205 refusal, ambiguity, retryability, or sink-resolution failure leave the succeeded command's exit successful and the outcome inspectable | `TestE16T3AfterCommandDrainDeliversExistingDueWork` (silent success), `TestE16T2UnresolvableSinkStaysLocal`, and the E13T2 inspectability suites (list/attempts surfaces unchanged) |
+| AC-1206 status and doctor expose count, age, due/backoff, live claims, mode, limit, scheduler expectation/evidence, and actionable findings without direct SQLite inspection | The `notification_drain` status projection and typed doctor findings of E16-T4 (pending age against the configured window, due/backoff split, live claims, repeated ambiguous/retryable outcomes, unresolvable sinks, scheduler installed/loaded/definition-match posture with remediations); real-environment transcripts are E17 evidence |
+| AC-1207 no protected content leaks and no recursive drain-success notification exists | The E13 sanitization boundary (payload source projection) plus the E16-T3 exclusions: `TestE16T3ManualAndUnaffectedRoutesStayDry` and the explicit-drain exclusion documented at the hook's only call sites |
+| AC-1208 a v0.1.5 notification database migrates with every ID, idempotency key, and attempt unchanged | `TestE16T1MigrationV19UpgradesCleanly` (identity, attempt, and state survival across the v18-to-v19 upgrade) |
+| AC-1209 migrated pending is initially due, drain selects due work only, retry alone re-arms immediately, and the jittered deadline is shared | `TestE16T1MigrationV19UpgradesCleanly` (backfill to creation time), `TestE16T2RetryableOutcomePersistsBackoffDeadline` (future-due not claimable), `TestE16T2RetryNotificationBypassesBackoff`, and `TestE13T2AmbiguousRetryKeepsStableKeyAndRefusedRetryRearms` |
+| AC-1210 the managed schedule lifecycle: idempotent install, conflicting definitions preserved and refused, inspect reports file/load/digest, disable preserves, uninstall removes only that plist, rotation keeps three 10 MiB files | `TestE16T4InstallIdempotentAndConflicting`, `TestE16T4InspectReportsHealth` (digest matching), `TestE16T4DisablePreservesAndUninstallRemoves` (foreign-file refusal), `TestE16T4LogRotation` |
+| AC-1211 one global ten-second budget, deterministic one-item route rounds, existing due progress without a new notification, failed core never auto-drains, stdout/JSON/exit unchanged | `TestE16T3AfterCommandDrainDeliversExistingDueWork` (pre-existing due work, silent), `TestE16T3RunAnchorsTheInvocationBudget`, `TestE16T3RoundRobinSharesTheBudget`, `TestE16T3FailedCoreCommandNeverDrains`, and the E16-T3 contract suite |
+
+Migration v19 is additive and identity-preserving (migrated pending work
+is immediately due), the drain-policy revision is inspectable beside
+the route revision, the status and doctor surfaces project the delivery
+and scheduler posture, and `make verify` including the race suite is
+green on darwin/arm64 at this tree.
 
 ## MUST-Closure Matrix (E8-T6, D-020) — supersedes the E7-T12 matrix
 

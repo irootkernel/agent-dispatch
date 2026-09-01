@@ -32,6 +32,7 @@ Commands:
   receipts       list and show acceptance and execution evidence.
   events         show — aggregate-event inspection with per-child evidence.
   notifications  test, list, retry, drain — the notification delivery surface.
+  schedule       render, install, inspect, disable, uninstall, run — the managed launchd drain schedule.
   work           begin, complete, fail — the Hermes companion receipt surface.
   quarantine     list, release, discard — held-path operator exits.
   reconcile      Run a full-scope reconciliation generation.
@@ -245,6 +246,22 @@ Example:
   agent-dispatch events show <aggregate-id>
 
 Next safe command: agent-dispatch receipts list --kind work`,
+	"schedule": `schedule — the managed launchd drain schedule (E16-T4)
+
+Usage: agent-dispatch schedule <render|install|inspect|disable|uninstall|run> --route <id> --platform launchd [flags]
+
+Flags: --config; --at HH:MM overrides the scheduled mode's 03:00 local
+default. The managed label and plist path derive from the instance ID,
+route ID, and a digest of the configuration's absolute path; the plist
+invokes the internal 'schedule run' command directly, never a shell
+chain. Install is idempotent for an identical definition and refuses a
+different one; disable unloads while preserving the plist; uninstall
+removes only that exact managed plist. After-command recovery runs
+every fifteen minutes; scheduled mode runs the reconciliation first
+and drains only after a healthy pass. Schedule logs rotate at 10 MiB
+with three files retained.
+
+Next safe command: agent-dispatch schedule render --route <id> --platform launchd`,
 	"notifications": `notifications — the notification delivery surface
 
 Usage: agent-dispatch notifications <test|list|retry|drain> [flags]

@@ -99,7 +99,19 @@ type afterCommandStore interface {
 
 // maybeAfterCommandDrainCfg is the already-loaded-configuration core.
 func maybeAfterCommandDrainCfg(command string, cfg *config.Config, store afterCommandStore, stderr io.Writer, affectedRoutes ...string) {
-	routes := afterCommandRoutes(cfg, affectedRoutes)
+	autoDrainCfg(command, cfg, store, stderr, map[string]bool{config.DrainModeAfterCommand: true}, affectedRoutes...)
+}
+
+// autoDrainCfg is the mode-filtered drain core shared by the
+// after-command registry and the scheduled runner (E16-T4 round-1
+// F001): the scheduled runner drains its own route under either
+// automatic mode.
+func autoDrainCfg(command string, cfg *config.Config, store afterCommandStore, stderr io.Writer, modes map[string]bool, affectedRoutes ...string) {
+	if store == nil {
+		boundedAfterCommandNote(stderr, "automatic drain skipped: state store unavailable")
+		return
+	}
+	routes := afterCommandRoutesInModes(cfg, modes, affectedRoutes)
 	if len(routes) == 0 {
 		return
 	}
@@ -224,6 +236,12 @@ func finishAfterCommandRun(store afterCommandStore, drainID string, report *noti
 // The deterministic order is the round-robin's visiting order (v0.1.6
 // §4).
 func afterCommandRoutes(cfg *config.Config, affected []string) []string {
+	return afterCommandRoutesInModes(cfg, map[string]bool{config.DrainModeAfterCommand: true}, affected)
+}
+
+// afterCommandRoutesInModes resolves the affected routes whose effective
+// drain mode is one of the given automatic modes, in route-ID order.
+func afterCommandRoutesInModes(cfg *config.Config, modes map[string]bool, affected []string) []string {
 	affectedSet := map[string]bool{}
 	for _, r := range affected {
 		affectedSet[r] = true
@@ -231,7 +249,7 @@ func afterCommandRoutes(cfg *config.Config, affected []string) []string {
 	out := []string{}
 	for _, routeID := range cfg.SortedRouteIDs() {
 		policy, err := config.EffectiveNotificationDrain(cfg.Routes[routeID].Notifications)
-		if err != nil || policy.Mode != config.DrainModeAfterCommand {
+		if err != nil || !modes[policy.Mode] {
 			continue
 		}
 		if len(affectedSet) > 0 && !affectedSet[routeID] {

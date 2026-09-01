@@ -283,6 +283,24 @@ func TestG5AC504CleanHostInstallDispatchScheduleUninstall(t *testing.T) {
 	// part of the reviewed enable, then acknowledges the revision the
 	// final configuration computes (board edits are behavior-affecting).
 	e5t4Rewrite(t, cfgPath, "enabled: false", "enabled: true")
+	// The v0.1.6 managed-schedule gate (E16-T4): the generated
+	// after-command configuration requires an installed, loaded
+	// schedule before enablement; the walkthrough installs it with a
+	// stubbed launchd so the test stays hermetic.
+	savedLaunchctl := launchctlRun
+	launchctlRun = func(args ...string) (string, error) { return "", nil }
+	t.Cleanup(func() { launchctlRun = savedLaunchctl })
+	// Hermetic launchd location: the walkthrough installs its managed
+	// schedule into the test sandbox, never the real LaunchAgents.
+	agents := filepath.Join(t.TempDir(), "LaunchAgents")
+	savedAgents := launchAgentsDir
+	launchAgentsDir = func() string { return agents }
+	t.Cleanup(func() { launchAgentsDir = savedAgents })
+	if code := Run([]string{"schedule", "install", "--route", "wiki-maintenance", "--platform", "launchd", "--config", cfgPath}, &out, &errb); code != 0 {
+		t.Fatalf("AC-504 managed schedule install failed: %s", errb.String())
+	}
+	out.Reset()
+	errb.Reset()
 	cfgFinal, err := config.Load(resolveConfigPath(cfgPath))
 	if err != nil {
 		t.Fatal(err)

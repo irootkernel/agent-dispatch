@@ -13,11 +13,11 @@
 | Shipped release | v0.1.5 (published 2026-08-30) |
 | Planned SOT baseline | 1.2.0 ([D-027](../specs/decision-log.md)) |
 | Release target | v0.1.6 (planned) |
-| Current epic | E16 In Progress |
+| Current epic | E16 Completed (G12 evidenced); next E17 |
 | Current active task | None |
-| Next task | E16-T4 |
-| Completed tasks | 85 / 89 |
-| Planned tasks | 4 / 89 |
+| Next task | E17-T1 |
+| Completed tasks | 86 / 89 |
+| Planned tasks | 3 / 89 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -141,7 +141,7 @@
 | 83 | E16-T1 | Completed | Drain policy, leases, and forward migration |
 | 84 | E16-T2 | Completed | Lease-safe bounded notification delivery |
 | 85 | E16-T3 | Completed | Post-commit after-command integration |
-| 86 | E16-T4 | Planned | Scheduler, status, doctor, and G12 |
+| 86 | E16-T4 | Completed | Scheduler, status, doctor, and G12 |
 | 87 | E17-T1 | Planned | CLI, configuration, operations, and skill truth |
 | 88 | E17-T2 | Planned | Cold validation and required deployment evidence |
 | 89 | E17-T3 | Planned | Reproducible v0.1.6 release and publication |
@@ -4075,7 +4075,7 @@ recursion.
 
 ## E16-T4: Scheduler, Status, Doctor, and G12
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -4110,7 +4110,33 @@ E16-T3 Completed.
 
 ### Evidence
 
-Planned; none.
+Completed 2026-09-01. `schedule render|install|inspect|disable|uninstall
+--platform launchd` resolves the actual binary (os.Executable) and the
+absolute configuration path, derives the managed label and plist path
+from the instance ID, route ID, and a digest of the configuration
+absolute path, and invokes one direct internal `schedule run` command —
+never a shell chain; the rendered plist validates as launchd XML with
+the mode-specific timing (fifteen-minute StartInterval for after-command
+recovery, StartCalendarInterval for scheduled mode with the 03:00 local
+default and the --at HH:MM override). Install is idempotent for an
+identical definition and refuses a different one; inspect reports
+presence, loaded state, and the definition-digest match; disable
+unloads preserving the plist; uninstall removes only the exact managed
+plist and refuses a foreign file at the same path; schedule logs rotate
+at 10 MiB keeping three. The internal runner performs the due-only
+drain in after-command recovery mode and chains the drain only after a
+healthy scheduled reconciliation, carrying the drift evaluation (its
+only automatic surface). Status and doctor project the delivery
+posture — pending age against the configured warning window, the
+due/backoff split, mode and limit, repeated ambiguous/retryable
+outcomes, unresolvable sinks, and the scheduler
+expectation/evidence/overdue state — with warnings and typed doctor
+findings, no payload or endpoint material. Production enablement (route
+enable) requires the installed, loaded, definition-matching schedule
+for automatic modes while preflight warns with the install remediation,
+so the setup walkthrough still completes and prints — never runs — the
+install command. Gate G12 is evidenced in VALIDATION.md with the AC
+matrix above; `make verify` is green.
 
 ---
 

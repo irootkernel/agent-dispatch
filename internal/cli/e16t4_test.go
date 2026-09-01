@@ -1,0 +1,361 @@
+package cli
+
+import (
+	"bytes"
+	"context"
+	"encoding/xml"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+)
+
+// e16t4Env prepares a configuration file whose wiki route drains in the
+// given mode, with the state directory under a temp root, and returns
+// the config path.
+func e16t4Env(t *testing.T, mode string) string {
+	t.Helper()
+	dir := t.TempDir()
+	// Hermetic launchd location (round-1 F004): the lifecycle tests
+	// never touch the real ~/Library/LaunchAgents.
+	agents := filepath.Join(dir, "LaunchAgents")
+	savedAgents := launchAgentsDir
+	launchAgentsDir = func() string { return agents }
+	t.Cleanup(func() { launchAgentsDir = savedAgents })
+	cfg := e16t1BaseConfigCLI()
+	cfg.Instance.StateDir = filepath.Join(dir, "state")
+	cfg.Routes["wiki"].Notifications.Drain = &config.NotificationDrain{Mode: mode}
+	configPath := filepath.Join(dir, "config.yaml")
+	if err := config.WriteExample(cfg, configPath); err != nil {
+		t.Fatal(err)
+	}
+	return configPath
+}
+
+// e16t4Render decodes the render envelope of one schedule definition.
+func e16t4Render(t *testing.T, mode, at string) map[string]any {
+	t.Helper()
+	configPath := e16t4Env(t, mode)
+	var out, errb bytes.Buffer
+	args := []string{"schedule", "render", "--route", "wiki", "--platform", "launchd", "--config", configPath}
+	if at != "" {
+		args = append(args, "--at", at)
+	}
+	markInvocationStart()
+	if code := Run(args, &out, &errb); code != 0 {
+		t.Fatalf("render: %d %s", code, errb.String())
+	}
+	return decodeEnvelope(t, &out)
+}
+
+// TestE16T4RenderProducesValidLaunchdSyntax pins the launchd syntax
+// acceptance: the rendered plist is well-formed XML carrying the direct
+// internal runner, the managed label, the resolved paths, and the
+// mode-specific timing.
+func TestE16T4RenderProducesValidLaunchdSyntax(t *testing.T) {
+	for _, tc := range []struct {
+		mode     string
+		interval bool
+	}{
+		{"after-command", true},
+		{"scheduled", false},
+	} {
+		env := e16t4Render(t, tc.mode, "")
+		plist, _ := env["plist"].(string)
+		if plist == "" {
+			t.Fatalf("%s: the render must carry the plist text", tc.mode)
+		}
+		var doc struct {
+			XMLName xml.Name `xml:"plist"`
+			Dict    struct {
+				Keys []string `xml:"key"`
+			} `xml:"dict"`
+		}
+		if err := xml.Unmarshal([]byte(plist), &doc); err != nil {
+			t.Fatalf("%s: the plist must be well-formed XML: %v", tc.mode, err)
+		}
+		if !strings.Contains(plist, "<string>schedule</string>") || !strings.Contains(plist, "<string>run</string>") || !strings.Contains(plist, "<string>wiki</string>") {
+			t.Fatalf("%s: the plist must invoke the internal runner directly", tc.mode)
+		}
+		if strings.Contains(plist, "/bin/sh") {
+			t.Fatalf("%s: the plist must never carry a shell chain", tc.mode)
+		}
+		keys := strings.Join(doc.Dict.Keys, ",")
+		if tc.interval && !strings.Contains(keys, "StartInterval") {
+			t.Fatalf("after-command recovery must use StartInterval: %s", keys)
+		}
+		if !tc.interval && !strings.Contains(keys, "StartCalendarInterval") {
+			t.Fatalf("scheduled mode must use StartCalendarInterval: %s", keys)
+		}
+		label, _ := env["label"].(string)
+		if !strings.HasPrefix(label, "xyz.rootkernel.agent-dispatch.") {
+			t.Fatalf("managed label shape: %q", label)
+		}
+		if dig, _ := env["digest"].(string); !strings.HasPrefix(dig, "sha256:") {
+			t.Fatalf("definition digest: %q", dig)
+		}
+	}
+}
+
+// TestE16T4ScheduledAtOverride pins the --at HH:MM override and the
+// 03:00 default.
+func TestE16T4ScheduledAtOverride(t *testing.T) {
+	env := e16t4Render(t, "scheduled", "")
+	if !strings.Contains(env["plist"].(string), "<integer>3</integer>") {
+		t.Fatalf("scheduled default must be 03:00: %s", env["plist"])
+	}
+	env = e16t4Render(t, "scheduled", "05:45")
+	plist := env["plist"].(string)
+	if !strings.Contains(plist, "<integer>5</integer>") || !strings.Contains(plist, "<integer>45</integer>") {
+		t.Fatalf("--at 05:45 must override the calendar: %s", plist)
+	}
+}
+
+// TestE16T4InstallIdempotentAndConflicting pins the managed-lifecycle
+// acceptance: an identical definition installs twice cleanly and a
+// different definition is refused.
+func TestE16T4InstallIdempotentAndConflicting(t *testing.T) {
+	configPath := e16t4Env(t, "after-command")
+	launchctlRun = func(args ...string) (string, error) { return "", nil }
+	defer func() {
+		launchctlRun = func(args ...string) (string, error) {
+			out, err := launchctlExec(args...)
+			return out, err
+		}
+	}()
+	var out, errb bytes.Buffer
+	markInvocationStart()
+	if code := Run([]string{"schedule", "install", "--route", "wiki", "--platform", "launchd", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("install: %d %s", code, errb.String())
+	}
+	env := decodeEnvelope(t, &out)
+	plistPath, _ := env["plist_path"].(string)
+	if plistPath == "" || !strings.HasSuffix(plistPath, ".plist") {
+		t.Fatalf("managed plist path: %v", plistPath)
+	}
+	raw, err := os.ReadFile(plistPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info, ierr := os.Stat(plistPath); ierr != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("the managed plist must be owner-only: %v %v", info, ierr)
+	}
+	// Identical definition: idempotent.
+	out.Reset()
+	errb.Reset()
+	markInvocationStart()
+	if code := Run([]string{"schedule", "install", "--route", "wiki", "--platform", "launchd", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("idempotent install: %d %s", code, errb.String())
+	}
+	// A different definition at the same path is refused... the label
+	// derives from the config path, so simulate by rewriting the file.
+	if err := os.WriteFile(plistPath, []byte(strings.Replace(string(raw), "<integer>900</integer>", "<integer>600</integer>", 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errb.Reset()
+	markInvocationStart()
+	if code := Run([]string{"schedule", "install", "--route", "wiki", "--platform", "launchd", "--config", configPath}, &out, &errb); code == 0 {
+		t.Fatal("a different definition must be refused")
+	}
+}
+
+// TestE16T4DisablePreservesAndUninstallRemoves pins the lifecycle
+// boundaries: disable keeps the plist; uninstall removes exactly the
+// managed plist and refuses a foreign file at the same path.
+func TestE16T4DisablePreservesAndUninstallRemoves(t *testing.T) {
+	configPath := e16t4Env(t, "scheduled")
+	launchctlRun = func(args ...string) (string, error) { return "", nil }
+	defer func() {
+		launchctlRun = func(args ...string) (string, error) {
+			return launchctlExec(args...)
+		}
+	}()
+	var out, errb bytes.Buffer
+	markInvocationStart()
+	if code := Run([]string{"schedule", "install", "--route", "wiki", "--platform", "launchd", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("install: %d %s", code, errb.String())
+	}
+	plistPath := decodeEnvelope(t, &out)["plist_path"].(string)
+	out.Reset()
+	errb.Reset()
+	markInvocationStart()
+	if code := Run([]string{"schedule", "disable", "--route", "wiki", "--platform", "launchd", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("disable: %d %s", code, errb.String())
+	}
+	if _, err := os.Stat(plistPath); err != nil {
+		t.Fatal("disable must preserve the plist")
+	}
+	out.Reset()
+	errb.Reset()
+	markInvocationStart()
+	if code := Run([]string{"schedule", "uninstall", "--route", "wiki", "--platform", "launchd", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("uninstall: %d %s", code, errb.String())
+	}
+	if _, err := os.Stat(plistPath); !os.IsNotExist(err) {
+		t.Fatal("uninstall must remove the managed plist")
+	}
+	// A foreign file at the same path is refused.
+	if err := os.WriteFile(plistPath, []byte("<plist version=\"1.0\"><dict><key>Label</key><string>foreign</string></dict></plist>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errb.Reset()
+	markInvocationStart()
+	if code := Run([]string{"schedule", "uninstall", "--route", "wiki", "--platform", "launchd", "--config", configPath}, &out, &errb); code == 0 {
+		t.Fatal("uninstall must refuse a non-managed plist")
+	}
+	if _, err := os.Stat(plistPath); err != nil {
+		t.Fatal("the foreign plist must survive the refusal")
+	}
+}
+
+// TestE16T4InspectReportsHealth pins the inspection acceptance:
+// presence, loaded state, and the definition-digest match.
+func TestE16T4InspectReportsHealth(t *testing.T) {
+	configPath := e16t4Env(t, "after-command")
+	launchctlRun = func(args ...string) (string, error) { return "", nil }
+	defer func() {
+		launchctlRun = func(args ...string) (string, error) {
+			return launchctlExec(args...)
+		}
+	}()
+	var out, errb bytes.Buffer
+	markInvocationStart()
+	if code := Run([]string{"schedule", "inspect", "--route", "wiki", "--platform", "launchd", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("inspect: %d %s", code, errb.String())
+	}
+	env := decodeEnvelope(t, &out)
+	if env["present"] != false || env["healthy"] != false {
+		t.Fatalf("an absent schedule is unhealthy: %v", env)
+	}
+	out.Reset()
+	errb.Reset()
+	markInvocationStart()
+	if code := Run([]string{"schedule", "install", "--route", "wiki", "--platform", "launchd", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("install: %d %s", code, errb.String())
+	}
+	out.Reset()
+	errb.Reset()
+	markInvocationStart()
+	if code := Run([]string{"schedule", "inspect", "--route", "wiki", "--platform", "launchd", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("inspect: %d %s", code, errb.String())
+	}
+	env = decodeEnvelope(t, &out)
+	if env["present"] != true || env["loaded"] != true || env["healthy"] != true {
+		t.Fatalf("an installed loaded matching schedule is healthy: %v", env)
+	}
+}
+
+// TestE16T4LogRotation pins the 10 MiB × 3 rotation posture.
+func TestE16T4LogRotation(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "schedule-wiki.out.log")
+	big := bytes.Repeat([]byte("x"), scheduleLogMaxBytes+1)
+	if err := os.WriteFile(path, big, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rotateScheduleLog(path)
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("an over-bound log rotates away")
+	}
+	if _, err := os.Stat(path + ".1"); err != nil {
+		t.Fatal("the rotated file lands at .1")
+	}
+}
+
+// launchctlExec is the real runner the test stub restores.
+func launchctlExec(args ...string) (string, error) {
+	out, err := exec.Command("launchctl", args...).CombinedOutput()
+	return string(out), err
+}
+
+// TestE16T4EnablementRequiresSchedule pins the production gate: an
+// after-command route cannot enable without an installed, loaded,
+// definition-matching schedule, while preflight only warns.
+func TestE16T4EnablementRequiresSchedule(t *testing.T) {
+	configPath := e16t4Env(t, "after-command")
+	// The two-key gate needs the configuration key on.
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, bytes.Replace(raw, []byte("enabled: false"), []byte("enabled: true"), 1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// No schedule installed: enablement refuses.
+	var out, errb bytes.Buffer
+	markInvocationStart()
+	code := Run([]string{"route", "enable", "--route", "wiki", "--acknowledge-production-gate", "any", "--yes", "--config", configPath}, &out, &errb)
+	if code == 0 || !strings.Contains(errb.String(), "managed schedule") {
+		t.Fatalf("enablement must require the schedule: %d %s", code, errb.String())
+	}
+	// Preflight reports the schedule prerequisite as its own warn check,
+	// never as a failing check of its own (other checks may fail for
+	// their own reasons, as here: no live Hermes board).
+	out.Reset()
+	errb.Reset()
+	markInvocationStart()
+	_ = Run([]string{"route", "preflight", "--route", "wiki", "--config", configPath}, &out, &errb)
+	combined := out.String() + errb.String()
+	scheduleAt := strings.Index(combined, `"check":"schedule"`)
+	if scheduleAt < 0 {
+		t.Fatalf("preflight must carry the schedule check: %s", combined)
+	}
+	// The check object marshals its keys alphabetically, so the state
+	// rides after the detail and remediation: take the object up to the
+	// next check (or the end) and require its own state to be warn.
+	end := strings.Index(combined[scheduleAt+1:], `"check":"`)
+	if end < 0 {
+		end = len(combined) - scheduleAt
+	}
+	window := combined[scheduleAt : scheduleAt+end]
+	if !strings.Contains(window, `"state":"warn"`) {
+		t.Fatalf("the schedule check must warn, not fail: %s", window)
+	}
+}
+
+// TestE16T4ScheduleRunDrainsScheduledRoute pins round-1 F001's
+// remediation: the internal runner drains its own route under either
+// automatic mode — a scheduled route's due work advances after the
+// runner even without a reconciliation dispatch.
+func TestE16T4ScheduleRunDrainsScheduledRoute(t *testing.T) {
+	configPath := e16t4Env(t, "scheduled")
+	// The scheduled runner reconciles first: give the fixture a real
+	// vault root so the reconciliation can enumerate an empty snapshot.
+	vault := t.TempDir()
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, bytes.Replace(raw, []byte("/srv/vault"), []byte(vault), 1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The runner opens the configuration's own state store, so the due
+	// work must live there.
+	s := e16t3StoreAt(t, filepath.Join(filepath.Dir(configPath), "state"))
+	if err := s.SetRouteActivation(context.Background(), "wiki", "enabled", "route-rev-1", "", "2026-01-01T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, err := s.EnqueueRouteNotification(ctx, "wiki", records.EventWorkCompleted, "sched-run-1", "", nil, "2026-08-30T09:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	markInvocationStart()
+	var out, errb bytes.Buffer
+	code := Run([]string{"schedule", "run", "--route", "wiki", "--config", configPath}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("schedule run: %d %s", code, errb.String())
+	}
+	byState, err := s.CountNotificationsByState(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if byState["delivered"] != 1 {
+		t.Fatalf("the scheduled runner must drain its route's due work: %v (stderr: %s)", byState, errb.String())
+	}
+}

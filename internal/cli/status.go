@@ -76,6 +76,30 @@ func runStatus(args []string, stdout, stderr io.Writer) int {
 
 	routeRows := make([]map[string]any, 0, len(routes))
 	warnings := []string{}
+	// Delivery and scheduler posture (E16-T4, v0.1.6 §4): per automatic
+	// route, the due/backoff split, the oldest pending age against the
+	// configured warning window, the scheduler expectation and evidence,
+	// and the repeated-outcome/unresolvable-sink diagnostics.
+	drainPosture := notificationDrainPosture(ctx, cfg, closer, resolveConfigPath(flags.val("--config")), stderr)
+	for _, routeID := range cfg.SortedRouteIDs() {
+		if row, ok := drainPosture[routeID]; ok {
+			if overdue, _ := row["pending_overdue"].(bool); overdue {
+				warnings = append(warnings, fmt.Sprintf("route %s has notifications pending past the configured warning window; inspect 'agent-dispatch notifications list --state pending'", routeID))
+			}
+			if repeated, _ := row["repeated_retry_outcomes"].(int); repeated > 0 {
+				warnings = append(warnings, fmt.Sprintf("route %s has %d notification(s) with repeated ambiguous or retryable outcomes", routeID, repeated))
+			}
+			if unresolvable, _ := row["unresolvable_sinks"].(int); unresolvable > 0 {
+				warnings = append(warnings, fmt.Sprintf("route %s has %d unresolvable sink declaration(s)", routeID, unresolvable))
+			}
+			if expected, _ := row["scheduler_expected"].(bool); expected {
+				if schedOverdue, _ := row["scheduler_overdue"].(bool); schedOverdue {
+					warnings = append(warnings, fmt.Sprintf("route %s expects a managed schedule that is not installed and loaded; run 'agent-dispatch schedule install --route %s --platform launchd'", routeID, routeID))
+				}
+			}
+		}
+	}
+
 	for _, r := range routes {
 		row := map[string]any{
 			"route_id":           r.RouteID,
@@ -119,13 +143,14 @@ func runStatus(args []string, stdout, stderr io.Writer) int {
 		warnings = append(warnings, fmt.Sprintf("%d notifications were refused by their sink: inspect 'agent-dispatch notifications list --state refused' and retry explicitly after fixing the sink", notificationCounts["refused"]))
 	}
 	return writeEnvelopeWithWarnings(stdout, command, map[string]any{
-		"routes":            routeRows,
-		"queues":            intents,
-		"quarantine":        quarantine,
-		"oldest_unresolved": nilIfEmpty(oldestUnresolved),
-		"database_bytes":    dbBytes,
-		"targets":           targetCapabilitySummary(cfg),
-		"notifications":     notificationCounts,
+		"routes":             routeRows,
+		"queues":             intents,
+		"quarantine":         quarantine,
+		"oldest_unresolved":  nilIfEmpty(oldestUnresolved),
+		"database_bytes":     dbBytes,
+		"targets":            targetCapabilitySummary(cfg),
+		"notifications":      notificationCounts,
+		"notification_drain": drainPosture,
 		// OPS-013: the five drift classes — capability, profile, skill,
 		// watchman, reconciliation — surfaced per route; four of them
 		// notify through the drain's drift evaluation and reconciliation
@@ -256,8 +281,45 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 	}
 
 	findings := doctor.Examine(input)
+	// Delivery and scheduler posture (E16-T4): the drain projection's
+	// operator-visible conditions join the doctor finding set with
+	// concrete remediations.
+	if storeErr == nil {
+		findings = append(findings, drainDoctorFindings(notificationDrainPosture(requestCtx(), cfg, store, resolveConfigPath(flags.val("--config")), stderr))...)
+	}
 	emitFindings(log, findings)
 	return writeDoctorResult(stdout, stderr, command, findings)
+}
+
+// drainDoctorFindings projects the drain posture onto doctor findings.
+func drainDoctorFindings(posture map[string]map[string]any) []doctor.Finding {
+	var findings []doctor.Finding
+	for routeID, row := range posture {
+		if overdue, _ := row["pending_overdue"].(bool); overdue {
+			findings = append(findings, doctor.Finding{Code: "notification_pending_overdue", Severity: doctor.SeverityWarning,
+				Summary:     fmt.Sprintf("route %s has notifications pending past the configured warning window (oldest %v)", routeID, row["oldest_pending_age"]),
+				Remediation: "inspect 'agent-dispatch notifications list --state pending' and verify the sink"})
+		}
+		if repeated, _ := row["repeated_retry_outcomes"].(int); repeated > 0 {
+			findings = append(findings, doctor.Finding{Code: "notification_repeated_retry", Severity: doctor.SeverityWarning,
+				Summary:     fmt.Sprintf("route %s has %d notification(s) with repeated ambiguous or retryable outcomes", routeID, repeated),
+				Remediation: "inspect the attempts with 'agent-dispatch notifications list' and verify the endpoint's health"})
+		}
+		if unresolvable, _ := row["unresolvable_sinks"].(int); unresolvable > 0 {
+			findings = append(findings, doctor.Finding{Code: "notification_sink_unresolvable", Severity: doctor.SeverityError,
+				Summary:     fmt.Sprintf("route %s has %d unresolvable sink declaration(s)", routeID, unresolvable),
+				Remediation: "fix the sink declaration (https endpoint and authentication reference) in the configuration"})
+		}
+		if expected, _ := row["scheduler_expected"].(bool); expected {
+			if schedOverdue, _ := row["scheduler_overdue"].(bool); schedOverdue {
+				findings = append(findings, doctor.Finding{Code: "schedule_overdue", Severity: doctor.SeverityError,
+					Summary:     fmt.Sprintf("route %s expects a managed launchd schedule that is not installed and loaded (mode %v)", routeID, row["mode"]),
+					Remediation: fmt.Sprintf("agent-dispatch schedule install --route %s --platform launchd", routeID)})
+			}
+		}
+	}
+	sort.Slice(findings, func(i, j int) bool { return findings[i].Code < findings[j].Code })
+	return findings
 }
 
 // writeDoctorResult emits the findings result and, when any finding has

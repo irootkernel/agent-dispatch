@@ -17,7 +17,14 @@ import (
 // the notification policy installed.
 func e16t3Store(t *testing.T) *sqlite.Store {
 	t.Helper()
-	s, err := sqlite.Open(filepath.Join(t.TempDir(), "state.db"))
+	return e16t3StoreAt(t, t.TempDir())
+}
+
+// e16t3StoreAt opens the migrated test store inside one explicit state
+// directory (the runner's configuration-owned location).
+func e16t3StoreAt(t *testing.T, stateDir string) *sqlite.Store {
+	t.Helper()
+	s, err := sqlite.Open(filepath.Join(stateDir, "state.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

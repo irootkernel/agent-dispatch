@@ -344,6 +344,25 @@ func runRoutePreflight(command string, args []string, stdout, stderr io.Writer) 
 	}
 	checks = append(checks, map[string]any{"check": "watchman", "state": bindingClass, "detail": bindingState})
 
+	// The managed schedule gate (E16-T4, v0.1.6 §4): an automatic drain
+	// mode requires an installed, loaded, definition-matching launchd
+	// schedule before production enablement.
+	if posture := schedulePosture(cfg, routeID, resolveConfigPath(flags.val("--config"))); posture != nil && posture["expected"] == true {
+		if posture["healthy"] == true {
+			checks = append(checks, map[string]any{"check": "schedule", "state": "pass",
+				"detail": fmt.Sprintf("managed launchd schedule %v installed, loaded, and matching the current definition", posture["label"])})
+		} else {
+			// The schedule is a production-enablement prerequisite
+			// (v0.1.6 §4), reported here as a warning with its
+			// remediation: `route enable` enforces the hard gate, so a
+			// first-use dependency probe (the setup walkthrough) still
+			// completes with the install command printed, never run.
+			checks = append(checks, map[string]any{"check": "schedule", "state": "warn",
+				"detail":      fmt.Sprintf("drain mode %v requires an installed, loaded, definition-matching managed schedule before production enablement (present=%v loaded=%v)", posture["mode"], posture["installed"], posture["loaded"]),
+				"remediation": fmt.Sprintf("agent-dispatch schedule install --route %s --platform launchd%s", routeID, scheduleAtHint(posture))})
+		}
+	}
+
 	if blocked {
 		// The failing checks ride the error envelope so the operator
 		// sees every alternative and remediation in one document.

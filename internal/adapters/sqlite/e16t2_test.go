@@ -2,9 +2,11 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -317,5 +319,205 @@ func TestE16T2ReleaseUnstartedClaims(t *testing.T) {
 		if c.LeaseToken != 2 {
 			t.Fatalf("reclaim advances the token, got %d", c.LeaseToken)
 		}
+	}
+}
+
+// TestE16T2SimultaneousDrainersRaceTheSamePool pins AC-1203's literal
+// claim: drainers issuing claims at the same time over the same due
+// pool always hold disjoint claims whose union covers the pool. The
+// bounded claims are smaller than the pool and each drainer loops
+// until the pool is empty, so the conditional UPDATE — including its
+// lost-row arm inside an open transaction — is exercised under -race
+// rather than through one committed lease blocking a later read
+// (round-2 F001).
+func TestE16T2SimultaneousDrainersRaceTheSamePool(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.db")
+	a, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { a.Close() })
+	if err := a.Migrate(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.RegisterResource(nil, "vault-main", "res-rev-1", "/srv/vault", "/srv/vault", "markdown", "disabled"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.RegisterRoute(nil, "wiki-maintenance", "route-rev-1", "policy-rev-1", "vault-main", "hermes-kanban-main", "{}", "2026-01-01T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.InitializeRouteState(nil, "wiki-maintenance"); err != nil {
+		t.Fatal(err)
+	}
+	// Each seed transition fans out to the two-sink test policy, so six
+	// transitions produce the twelve-notification pool.
+	const pool = 12
+	e16t2Seed(t, a, 6, "2026-08-30T09:00:00Z")
+	stores := []*Store{a}
+	for i := 1; i < 3; i++ {
+		s, err := Open(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { s.Close() })
+		stores = append(stores, s)
+	}
+	var wg sync.WaitGroup
+	claimed := make([][]ports.NotificationClaim, len(stores))
+	fatal := make([]error, len(stores))
+	for i, s := range stores {
+		wg.Add(1)
+		go func(i int, s *Store) {
+			defer wg.Done()
+			ctx := context.Background()
+			owner := fmt.Sprintf("drainer-%d", i)
+			for attempt := 0; attempt < 200; attempt++ {
+				claims, err := s.ClaimDueNotifications(ctx, ports.NotificationClaimFilter{Limit: 3, Owner: owner})
+				if err != nil {
+					// A write-snapshot conflict (SQLITE_BUSY_SNAPSHOT) is
+					// the serialized-store's safe refusal under a true
+					// race; the drainer simply retries its bounded claim.
+					fatal[i] = err
+					time.Sleep(5 * time.Millisecond)
+					continue
+				}
+				fatal[i] = nil
+				if len(claims) == 0 {
+					return
+				}
+				claimed[i] = append(claimed[i], claims...)
+			}
+		}(i, s)
+	}
+	wg.Wait()
+	seen := map[string]string{}
+	total := 0
+	for i, claims := range claimed {
+		if fatal[i] != nil {
+			t.Fatalf("drainer %d ended on an unresolved claim error: %v", i, fatal[i])
+		}
+		for _, c := range claims {
+			if prior, dup := seen[c.NotificationID]; dup {
+				t.Fatalf("notification %s was claimed by drainer-%s and drainer-%d: claims are not disjoint", c.NotificationID, prior, i)
+			}
+			seen[c.NotificationID] = fmt.Sprintf("%d", i)
+			total++
+		}
+	}
+	if total != pool {
+		t.Fatalf("the union of simultaneous claims must cover the pool: %d of %d", total, pool)
+	}
+}
+
+// TestE16T2BackoffProgressionCapsAndJitterExtremes pins the persisted
+// retry deadline beyond the first attempt (round-2 F004): the doubling
+// loop, the fifteen-minute cap, and both jitter extremes — the jitter
+// draw is deterministic through notificationJitterDraw, and the attempt
+// number comes from the stored attempt history.
+func TestE16T2BackoffProgressionCapsAndJitterExtremes(t *testing.T) {
+	s := openTestStore(t)
+	ids := e16t2Seed(t, s, 4, "2026-08-30T09:00:00Z")
+	ctx := context.Background()
+	backoff := ports.NotificationBackoff{Initial: 30 * time.Second, Max: 15 * time.Minute, Multiplier: 2.0, JitterFraction: 0.2}
+	seedAttempts := func(id string, n int) {
+		t.Helper()
+		for i := 1; i <= n; i++ {
+			if _, err := s.Exec(`INSERT INTO notification_attempts (attempt_id, notification_id, attempt_number, outcome, error_code, response_digest, started_at, completed_at)
+				VALUES (?, ?, ?, 'retryable', 'transport', NULL, '2099-01-01T00:00:01Z', '2099-01-01T00:00:02Z')`,
+				records.NotificationAttemptID(id, i), id, i); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	dueAfterRetry := func(id string, draw float64) string {
+		t.Helper()
+		restore := notificationJitterDraw
+		notificationJitterDraw = func() float64 { return draw }
+		defer func() { notificationJitterDraw = restore }()
+		claims, err := s.ClaimDueNotifications(ctx, ports.NotificationClaimFilter{Limit: 1, Owner: "drainer-" + id})
+		if err != nil || len(claims) != 1 || claims[0].NotificationID != id {
+			t.Fatalf("claim %s: %d %v", id, len(claims), err)
+		}
+		if _, err := s.RecordNotificationAttemptFenced(ctx, ports.NotificationAttemptInput{
+			NotificationID: id, Outcome: records.NotificationRetryableOutcome, ErrorCode: "transport",
+			StartedAt: "2099-01-01T00:00:10Z", CompletedAt: "2099-01-01T00:00:11Z",
+		}, claims[0], backoff); err != nil {
+			t.Fatal(err)
+		}
+		var dueAt string
+		if err := s.QueryRow(`SELECT due_at FROM notification_events WHERE notification_id = ?`, id).Scan(&dueAt); err != nil {
+			t.Fatal(err)
+		}
+		return dueAt
+	}
+	// Attempt 3 (two seeded): base 30s × 2² = 120s; draw 0 applies the
+	// −20% extreme (96s), draw 1 the +20% extreme (144s).
+	seedAttempts(ids[0], 2)
+	if got := dueAfterRetry(ids[0], 0.0); got != "2099-01-01T00:01:47Z" {
+		t.Fatalf("attempt 3 at draw 0 must persist completed+96s, got %s", got)
+	}
+	seedAttempts(ids[1], 2)
+	if got := dueAfterRetry(ids[1], 1.0); got != "2099-01-01T00:02:35Z" {
+		t.Fatalf("attempt 3 at draw 1 must persist completed+144s, got %s", got)
+	}
+	// Attempt 13 (twelve seeded): the doubling loop clamps at the
+	// fifteen-minute cap and a neutral draw keeps it exact.
+	seedAttempts(ids[2], 12)
+	if got := dueAfterRetry(ids[2], 0.5); got != "2099-01-01T00:15:11Z" {
+		t.Fatalf("attempt 13 must persist completed+15m at the cap, got %s", got)
+	}
+	// Attempt 1 with the −20% extreme: 30s × 0.8 = 24s.
+	if got := dueAfterRetry(ids[3], 0.0); got != "2099-01-01T00:00:35Z" {
+		t.Fatalf("attempt 1 at draw 0 must persist completed+24s, got %s", got)
+	}
+}
+
+// TestE16T2ReleaseNeverClobbersRecoveredLease pins the release fence's
+// recovered-claim arm (round-2 F005): a stale owner releasing the claim
+// another drainer already recovered must leave the recovering owner's
+// live lease exactly in place, and that owner still commits fenced.
+func TestE16T2ReleaseNeverClobbersRecoveredLease(t *testing.T) {
+	s := openTestStore(t)
+	ids := e16t2Seed(t, s, 1, "2026-08-30T09:00:00Z")
+	ctx := context.Background()
+	claimsA, err := s.ClaimDueNotifications(ctx, ports.NotificationClaimFilter{Limit: 1, Owner: "drainer-a"})
+	if err != nil || len(claimsA) != 1 {
+		t.Fatalf("claim a: %d %v", len(claimsA), err)
+	}
+	// The lease expires under drainer A.
+	if _, err := s.Exec(`UPDATE notification_events SET lease_expires_at = '2020-01-01T00:00:00Z' WHERE notification_id = ?`, ids[0]); err != nil {
+		t.Fatal(err)
+	}
+	claimsB, err := s.ClaimDueNotifications(ctx, ports.NotificationClaimFilter{Limit: 1, Owner: "drainer-b"})
+	if err != nil || len(claimsB) != 1 || claimsB[0].LeaseToken != 2 {
+		t.Fatalf("recovery claim: %d %v", len(claimsB), err)
+	}
+	// A's late release reports success but must not touch B's lease.
+	if err := s.ReleaseNotificationClaims(ctx, "drainer-a", claimsA); err != nil {
+		t.Fatal(err)
+	}
+	var owner string
+	var token int64
+	var expires sql.NullString
+	if err := s.QueryRow(`SELECT lease_owner, lease_token, lease_expires_at FROM notification_events WHERE notification_id = ?`, ids[0]).Scan(&owner, &token, &expires); err != nil {
+		t.Fatal(err)
+	}
+	if owner != "drainer-b" || token != 2 || !expires.Valid || expires.String == "" {
+		t.Fatalf("a stale release must leave the recovering lease intact: owner=%q token=%d expires=%+v", owner, token, expires)
+	}
+	// The recovering owner still commits under its fence.
+	if _, err := s.RecordNotificationAttemptFenced(ctx, ports.NotificationAttemptInput{
+		NotificationID: ids[0], Outcome: records.NotificationDeliveredOutcome,
+		StartedAt: "2099-01-01T00:00:10Z", CompletedAt: "2099-01-01T00:00:11Z",
+	}, claimsB[0], e16t2Backoff()); err != nil {
+		t.Fatalf("the recovering owner must commit fenced: %v", err)
+	}
+	var state string
+	if err := s.QueryRow(`SELECT state FROM notification_events WHERE notification_id = ?`, ids[0]).Scan(&state); err != nil {
+		t.Fatal(err)
+	}
+	if state != "delivered" {
+		t.Fatalf("the recovered delivery must resolve: state=%s", state)
 	}
 }

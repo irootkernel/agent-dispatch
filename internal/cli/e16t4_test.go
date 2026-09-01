@@ -9,9 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // e16t4Env prepares a configuration file whose wiki route drains in the
@@ -357,5 +359,247 @@ func TestE16T4ScheduleRunDrainsScheduledRoute(t *testing.T) {
 	}
 	if byState["delivered"] != 1 {
 		t.Fatalf("the scheduled runner must drain its route's due work: %v (stderr: %s)", byState, errb.String())
+	}
+}
+
+// TestE16T4ScheduleRunSkipsDrainWhenReconciliationFails pins the
+// scheduled runner's chaining guard (round-2 F002): when the scheduled
+// reconciliation exits nonzero, the runner propagates the failure,
+// never drains, and leaves no drain evidence — a regression that
+// reorders the drain ahead of the reconciliation or ignores the exit
+// code now fails here.
+func TestE16T4ScheduleRunSkipsDrainWhenReconciliationFails(t *testing.T) {
+	configPath := e16t4Env(t, "scheduled")
+	// A resource root that cannot exist makes the scheduled
+	// reconciliation's snapshot enumeration fail closed.
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	missing := filepath.Join(filepath.Dir(configPath), "missing-vault")
+	if err := os.WriteFile(configPath, bytes.Replace(raw, []byte("/srv/vault"), []byte(missing), 1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := e16t3StoreAt(t, filepath.Join(filepath.Dir(configPath), "state"))
+	ctx := context.Background()
+	if err := s.SetRouteActivation(ctx, "wiki", "enabled", "route-rev-1", "", "2026-01-01T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.EnqueueRouteNotification(ctx, "wiki", records.EventWorkCompleted, "sched-run-neg", "", nil, "2026-08-30T09:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	markInvocationStart()
+	var out, errb bytes.Buffer
+	code := Run([]string{"schedule", "run", "--route", "wiki", "--config", configPath}, &out, &errb)
+	if code == 0 {
+		t.Fatalf("a failing reconciliation must exit nonzero: %s", errb.String())
+	}
+	byState, err := s.CountNotificationsByState(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if byState["delivered"] != 0 || byState["pending"] < 1 {
+		t.Fatalf("an unhealthy reconciliation must leave the due work undrained: %v", byState)
+	}
+	var runs int
+	if err := s.QueryRow(`SELECT COUNT(*) FROM drain_runs WHERE route_id = 'wiki'`).Scan(&runs); err != nil || runs != 0 {
+		t.Fatalf("the runner must leave no drain evidence on a failed reconciliation: %d %v", runs, err)
+	}
+}
+
+// TestE16T4StatusAndDoctorProjectDrainPosture pins the AC-1206
+// operator surface (round-2 F003): the status envelope's
+// notification_drain projection and the doctor findings carry the
+// due/backoff split, live claims, the overdue warning window, repeated
+// ambiguous/retryable outcomes, unresolvable sinks, and the scheduler
+// expectation/overdue state without direct SQLite inspection.
+func TestE16T4StatusAndDoctorProjectDrainPosture(t *testing.T) {
+	dir := t.TempDir()
+	agents := filepath.Join(dir, "LaunchAgents")
+	savedAgents := launchAgentsDir
+	launchAgentsDir = func() string { return agents }
+	t.Cleanup(func() { launchAgentsDir = savedAgents })
+	vault := filepath.Join(dir, "vault")
+	if err := os.Mkdir(vault, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := e16t1BaseConfigCLI()
+	cfg.Instance.StateDir = filepath.Join(dir, "state")
+	res := cfg.Resources["vault-main"]
+	res.Root = vault
+	cfg.Resources["vault-main"] = res
+	cfg.Routes["wiki"].Notifications.Drain = &config.NotificationDrain{Mode: "after-command"}
+	// A config-valid webhook sink whose endpoint embeds userinfo: the
+	// resolver rejects it (SEC-013), so the route carries exactly one
+	// unresolvable sink declaration.
+	cfg.Routes["wiki"].Notifications.Sinks = []config.NotificationSink{
+		{ID: "ops-log", Type: "log"},
+		{ID: "bad-hook", Type: "webhook", Endpoint: "https://alice@hooks.invalid/v1", Auth: &config.Auth{Type: "bearer", SecretRef: "keychain://agent-dispatch/bad-hook"}},
+	}
+	configPath := filepath.Join(dir, "config.yaml")
+	if err := config.WriteExample(cfg, configPath); err != nil {
+		t.Fatal(err)
+	}
+	s := e16t3StoreAt(t, cfg.Instance.StateDir)
+	ctx := context.Background()
+	seed := func(id string) {
+		t.Helper()
+		if _, err := s.EnqueueRouteNotification(ctx, "wiki", records.EventWorkCompleted, id, "", nil, "2026-08-30T09:00:00Z"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seed("plain-due")
+	seed("live-claim")
+	seed("backoff-retry")
+	// One live unclaimed-forever claim and one future-due backoff whose
+	// last attempt is ambiguous (the repeated-outcome posture).
+	claimed, err := s.ClaimDueNotifications(ctx, ports.NotificationClaimFilter{Limit: 10, Owner: "posture-claimer"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var backoffClaim, liveClaim, plainDue ports.NotificationClaim
+	for _, c := range claimed {
+		switch c.Transition {
+		case "live-claim":
+			liveClaim = c
+		case "backoff-retry":
+			backoffClaim = c
+		case "plain-due":
+			plainDue = c
+		}
+	}
+	if liveClaim.NotificationID == "" || backoffClaim.NotificationID == "" || plainDue.NotificationID == "" {
+		t.Fatalf("the posture seed must hold all three claims: %+v", claimed)
+	}
+	// plain-due returns to the pool unclaimed; live-claim keeps its
+	// lease for the live-claims posture.
+	if err := s.ReleaseNotificationClaims(ctx, "posture-claimer", []ports.NotificationClaim{plainDue}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RecordNotificationAttemptFenced(ctx, ports.NotificationAttemptInput{
+		NotificationID: backoffClaim.NotificationID, Outcome: records.NotificationAmbiguousOutcome, ErrorCode: "transport",
+		StartedAt: "2099-01-01T00:00:10Z", CompletedAt: "2099-01-01T00:00:11Z",
+	}, backoffClaim, ports.NotificationBackoff{Initial: 30 * time.Second, Max: 15 * time.Minute, Multiplier: 2, JitterFraction: 0}); err != nil {
+		t.Fatal(err)
+	}
+	// The status envelope projects the whole posture.
+	markInvocationStart()
+	var out, errb bytes.Buffer
+	if code := Run([]string{"status", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("status: %d %s", code, errb.String())
+	}
+	env := decodeEnvelope(t, &out)
+	drain, ok := env["notification_drain"].(map[string]any)
+	if !ok {
+		t.Fatalf("the status envelope must carry notification_drain: %v", env)
+	}
+	row, ok := drain["wiki"].(map[string]any)
+	if !ok {
+		t.Fatalf("notification_drain must carry the wiki route: %v", drain)
+	}
+	for _, check := range []struct {
+		key  string
+		want any
+	}{
+		{"mode", "after-command"},
+		{"due", float64(2)},
+		{"backoff", float64(1)},
+		{"live_claims", float64(1)},
+		{"repeated_retry_outcomes", float64(1)},
+		{"unresolvable_sinks", float64(1)},
+		{"pending_overdue", true},
+		{"scheduler_expected", true},
+		{"scheduler_overdue", true},
+	} {
+		if got := row[check.key]; got != check.want {
+			t.Fatalf("posture %s = %v, want %v (row %v)", check.key, got, check.want, row)
+		}
+	}
+	if _, ok := row["oldest_pending_at"]; !ok {
+		t.Fatalf("the posture must carry the oldest pending timestamp: %v", row)
+	}
+	// Doctor maps the posture onto typed findings; the unresolvable sink
+	// and the overdue schedule are error-severity, so the command exits
+	// with the stable doctor code.
+	markInvocationStart()
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"doctor", "--config", configPath}, &out, &errb); code != 3 {
+		t.Fatalf("doctor must exit 3 on error-severity findings: %d %s", code, errb.String())
+	}
+	env = decodeEnvelope(t, &out)
+	findings, _ := env["findings"].([]any)
+	codes := map[string]bool{}
+	for _, f := range findings {
+		if m, ok := f.(map[string]any); ok {
+			if c, ok := m["code"].(string); ok {
+				codes[c] = true
+			}
+		}
+	}
+	for _, want := range []string{"notification_pending_overdue", "notification_repeated_retry", "notification_sink_unresolvable", "schedule_overdue"} {
+		if !codes[want] {
+			t.Fatalf("doctor must report %s (codes %v)", want, codes)
+		}
+	}
+}
+
+// TestE16T4DriftedDefinitionIsUnhealthyAndBlocksEnablement pins the
+// definition-matching posture (round-2 F007): a present, loaded
+// schedule whose installed bytes drifted from the managed definition
+// reports definition_matches false and healthy false, and production
+// enablement refuses on it.
+func TestE16T4DriftedDefinitionIsUnhealthyAndBlocksEnablement(t *testing.T) {
+	configPath := e16t4Env(t, "after-command")
+	launchctlRun = func(args ...string) (string, error) { return "", nil }
+	defer func() {
+		launchctlRun = func(args ...string) (string, error) {
+			return launchctlExec(args...)
+		}
+	}()
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, bytes.Replace(raw, []byte("enabled: false"), []byte("enabled: true"), 1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	markInvocationStart()
+	var out, errb bytes.Buffer
+	if code := Run([]string{"schedule", "install", "--route", "wiki", "--platform", "launchd", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("install: %d %s", code, errb.String())
+	}
+	abs, err := filepath.Abs(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plist := schedulePlistPath(scheduleLabel("test", "wiki", abs))
+	installed, err := os.ReadFile(plist)
+	if err != nil {
+		t.Fatal(err)
+	}
+	drifted := bytes.Replace(installed, []byte("<integer>900</integer>"), []byte("<integer>901</integer>"), 1)
+	if bytes.Equal(drifted, installed) {
+		t.Fatal("the drift fixture must modify the installed definition")
+	}
+	if err := os.WriteFile(plist, drifted, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errb.Reset()
+	markInvocationStart()
+	if code := Run([]string{"schedule", "inspect", "--route", "wiki", "--platform", "launchd", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("inspect: %d %s", code, errb.String())
+	}
+	env := decodeEnvelope(t, &out)
+	if env["present"] != true || env["loaded"] != true || env["definition_matches"] != false || env["healthy"] != false {
+		t.Fatalf("a drifted definition is unhealthy even while loaded: %v", env)
+	}
+	out.Reset()
+	errb.Reset()
+	markInvocationStart()
+	code := Run([]string{"route", "enable", "--route", "wiki", "--acknowledge-production-gate", "any", "--yes", "--config", configPath}, &out, &errb)
+	if code == 0 || !strings.Contains(errb.String(), "managed schedule") {
+		t.Fatalf("enablement must refuse a drifted definition: %d %s", code, errb.String())
 	}
 }

@@ -165,9 +165,9 @@ func TestE16T3ExhaustedBudgetDrainsNothing(t *testing.T) {
 	if _, err := s.EnqueueRouteNotification(ctx, "wiki", records.EventWorkCompleted, "budget-1", "", nil, "2026-08-30T09:00:00Z"); err != nil {
 		t.Fatal(err)
 	}
-	invocationMu.Lock()
-	invocationStartedAt = time.Now().Add(-afterCommandBudget - time.Second)
-	invocationMu.Unlock()
+	afterCommandClock.mu.Lock()
+	afterCommandClock.startedAt = time.Now().Add(-afterCommandBudget - time.Second)
+	afterCommandClock.mu.Unlock()
 	var stderr bytes.Buffer
 	maybeAfterCommandDrainCfg("dispatch", e16t3Config("after-command"), s, &stderr, "wiki")
 	byState, err := s.CountNotificationsByState(ctx)
@@ -244,16 +244,16 @@ func TestE16T3RoundRobinSharesTheBudget(t *testing.T) {
 // TestE16T3RunAnchorsTheInvocationBudget pins the wiring: Run's start
 // anchors the ten-second budget (F002's regression half).
 func TestE16T3RunAnchorsTheInvocationBudget(t *testing.T) {
-	invocationMu.Lock()
-	invocationStartedAt = time.Time{}
-	invocationMu.Unlock()
+	afterCommandClock.mu.Lock()
+	afterCommandClock.startedAt = time.Time{}
+	afterCommandClock.mu.Unlock()
 	var out, errb bytes.Buffer
 	if code := Run([]string{"version"}, &out, &errb); code != 0 {
 		t.Fatalf("version: %d", code)
 	}
-	invocationMu.Lock()
-	started := invocationStartedAt
-	invocationMu.Unlock()
+	afterCommandClock.mu.Lock()
+	started := afterCommandClock.startedAt
+	afterCommandClock.mu.Unlock()
 	if started.IsZero() {
 		t.Fatal("Run must anchor the after-command budget at invocation start")
 	}
@@ -301,9 +301,9 @@ func TestE16T3BudgetExpiryStillCompletesEvidence(t *testing.T) {
 	}
 	// A budget with only a sliver left: the pass starts, hits expiry
 	// before finishing, and must still close its evidence row.
-	invocationMu.Lock()
-	invocationStartedAt = time.Now().Add(-afterCommandBudget + 50*time.Millisecond)
-	invocationMu.Unlock()
+	afterCommandClock.mu.Lock()
+	afterCommandClock.startedAt = time.Now().Add(-afterCommandBudget + 50*time.Millisecond)
+	afterCommandClock.mu.Unlock()
 	var stderr bytes.Buffer
 	maybeAfterCommandDrainCfg("dispatch", e16t3Config("after-command"), s, &stderr, "wiki")
 	var open int
@@ -317,9 +317,9 @@ func TestE16T3BudgetExpiryStillCompletesEvidence(t *testing.T) {
 func TestE16T3StderrBoundAndConfigUnreadable(t *testing.T) {
 	s := e16t3Store(t)
 	markInvocationStart()
-	invocationMu.Lock()
-	afterCommandNotes = afterCommandStderrBound // already at the bound
-	invocationMu.Unlock()
+	afterCommandClock.mu.Lock()
+	afterCommandClock.notes = afterCommandStderrBound // already at the bound
+	afterCommandClock.mu.Unlock()
 	var stderr bytes.Buffer
 	boundedAfterCommandNote(&stderr, "this line must be dropped")
 	if stderr.Len() != 0 {

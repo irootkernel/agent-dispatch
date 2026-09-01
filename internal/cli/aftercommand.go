@@ -35,34 +35,32 @@ const afterCommandBudget = 10 * time.Second
 // may write: problems are visible, never noisy.
 const afterCommandStderrBound = 4
 
-// invocationMu guards the invocation clock and the stderr note counter
-// shared by Run and the after-command pass (tests invoke Run repeatedly
-// in-process).
-var invocationMu sync.Mutex
+// invocationClock is the one guarded state object of the after-command
+// pass (E16-T4 audit, deferral F001): the invocation's budget anchor
+// and the stderr note counter, never loose package globals.
+type invocationClock struct {
+	mu        sync.Mutex
+	startedAt time.Time
+	notes     int
+}
 
-// invocationStartedAt is the wall clock at this Run invocation's start:
-// the ten-second budget spans the whole invocation, so the drain
-// consumes only what remains of it.
-var invocationStartedAt time.Time
-
-// afterCommandNotes counts the diagnostics this invocation wrote.
-var afterCommandNotes int
+var afterCommandClock invocationClock
 
 // markInvocationStart records the budget's anchor and resets the note
 // counter (E16-T3).
 func markInvocationStart() {
-	invocationMu.Lock()
-	invocationStartedAt = time.Now()
-	afterCommandNotes = 0
-	invocationMu.Unlock()
+	afterCommandClock.mu.Lock()
+	defer afterCommandClock.mu.Unlock()
+	afterCommandClock.startedAt = time.Now()
+	afterCommandClock.notes = 0
 }
 
 // afterCommandDrainContext derives the drain's context from the
 // invocation's remaining budget. An exhausted budget drains nothing.
 func afterCommandDrainContext() (context.Context, context.CancelFunc) {
-	invocationMu.Lock()
-	started := invocationStartedAt
-	invocationMu.Unlock()
+	afterCommandClock.mu.Lock()
+	started := afterCommandClock.startedAt
+	afterCommandClock.mu.Unlock()
 	if started.IsZero() {
 		started = time.Now()
 	}
@@ -71,6 +69,18 @@ func afterCommandDrainContext() (context.Context, context.CancelFunc) {
 		remaining = 0
 	}
 	return context.WithTimeout(context.Background(), remaining)
+}
+
+// note writes one bounded diagnostic line under the clock's guard; the
+// pass never exceeds afterCommandStderrBound lines per invocation.
+func (c *invocationClock) note(stderr io.Writer, msg string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.notes >= afterCommandStderrBound {
+		return
+	}
+	c.notes++
+	fmt.Fprintf(stderr, "%s\n", msg)
 }
 
 // maybeAfterCommandDrain runs the post-commit pass for one successful
@@ -137,7 +147,9 @@ func autoDrainCfg(command string, cfg *config.Config, store afterCommandStore, s
 		// Evidence writes never ride the drain budget's context: at
 		// budget expiry that context is cancelled and the evidence row
 		// would stay open forever (round-1 F001).
-		if err := store.StartDrainRun(evidenceCtx(), ports.DrainRunInput{
+		evCtx, evCancel := evidenceCtx()
+		defer evCancel()
+		if err := store.StartDrainRun(evCtx, ports.DrainRunInput{
 			DrainID: drainID, RouteID: routeID, Trigger: config.DrainModeAfterCommand,
 			Mode: policy.Mode, StartedAt: time.Now().UTC().Format(time.RFC3339),
 		}); err != nil {
@@ -195,11 +207,10 @@ func autoDrainCfg(command string, cfg *config.Config, store afterCommandStore, s
 }
 
 // evidenceCtx is the bounded context drain-run evidence writes use: it
-// must survive the drain budget's expiry (round-1 F001).
-func evidenceCtx() (c context.Context) {
-	c, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	_ = cancel // the evidence write's own short bound; the process exits soon after
-	return c
+// must survive the drain budget's expiry (round-1 F001) and its cancel
+// is always released by the caller (E16-T4 audit, deferral F003).
+func evidenceCtx() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), 5*time.Second)
 }
 
 // maxRouteLimit returns the largest configured per-route pass bound.
@@ -216,7 +227,9 @@ func maxRouteLimit(limits []int) int {
 // finishAfterCommandRun completes one route's evidence row with a fresh
 // bounded context and reports the pending remainder once.
 func finishAfterCommandRun(store afterCommandStore, drainID string, report *notifications.DrainClaimedReport, stderr io.Writer) {
-	if err := store.FinishDrainRun(evidenceCtx(), drainID, ports.DrainRunCounts{
+	evCtx, evCancel := evidenceCtx()
+	defer evCancel()
+	if err := store.FinishDrainRun(evCtx, drainID, ports.DrainRunCounts{
 		Claimed: report.Claimed, Delivered: report.Delivered, Refused: report.Refused,
 		RetryScheduled: report.Ambiguous + report.Retryable, BudgetExpired: report.BudgetExpired,
 	}, time.Now().UTC().Format(time.RFC3339)); err != nil {
@@ -260,14 +273,8 @@ func afterCommandRoutesInModes(cfg *config.Config, modes map[string]bool, affect
 	return out
 }
 
-// boundedAfterCommandNote writes one bounded diagnostic line; the pass
-// never exceeds afterCommandStderrBound lines per invocation.
+// boundedAfterCommandNote writes one bounded diagnostic line through
+// the invocation clock.
 func boundedAfterCommandNote(stderr io.Writer, msg string) {
-	invocationMu.Lock()
-	defer invocationMu.Unlock()
-	if afterCommandNotes >= afterCommandStderrBound {
-		return
-	}
-	afterCommandNotes++
-	fmt.Fprintf(stderr, "%s\n", msg)
+	afterCommandClock.note(stderr, msg)
 }

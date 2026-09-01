@@ -125,6 +125,10 @@ func openUnmigratedStore(configPath string) (*sqlite.Store, error) {
 // storeOp is one durable dispatch store with its full E3-T3 surface.
 type storeOp interface {
 	ports.DispatchStore
+	// The E16 lease-safe drain surface the after-command pass drives on
+	// a registered command's still-open store — one named contract
+	// shared with the pass (afterCommandStore), never a duplicate list.
+	afterCommandStore
 	ports.InspectionStore
 	ports.OperatorStore
 	ports.ReconcileStore
@@ -163,13 +167,6 @@ type storeOp interface {
 	CompleteActive(ctx context.Context, req ports.ActiveCompletion) (ports.FollowupCreated, error)
 	ActivateDispatch(ctx context.Context, dispatchID, actor, now string) error
 	ActivateFollowup(ctx context.Context, dispatchID, actor, now string) error
-	// The E16 lease-safe drain surface the after-command pass drives on
-	// a registered command's still-open store.
-	ClaimDueNotifications(ctx context.Context, filter ports.NotificationClaimFilter) ([]ports.NotificationClaim, error)
-	RecordNotificationAttemptFenced(ctx context.Context, in ports.NotificationAttemptInput, claim ports.NotificationClaim, backoff ports.NotificationBackoff) (ports.NotificationAttemptRecord, error)
-	ReleaseNotificationClaims(ctx context.Context, owner string, claims []ports.NotificationClaim) error
-	StartDrainRun(ctx context.Context, in ports.DrainRunInput) error
-	FinishDrainRun(ctx context.Context, drainID string, counts ports.DrainRunCounts, completedAt string) error
 }
 
 // openOperatorStore opens the store and narrows it to the operator

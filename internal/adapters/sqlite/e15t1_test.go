@@ -105,9 +105,9 @@ func TestE15T1MigrationPreservesIdentitiesAndReportsConflict(t *testing.T) {
 	}
 	s.Close()
 
-	// Upgrade with the current binary: v18 applies forward-only and the
-	// group tables exist empty — the migration itself is
-	// configuration-independent.
+	// Upgrade with the current binary: v18 (and every later unit)
+	// applies forward-only and the group tables exist empty — the
+	// migration itself is configuration-independent.
 	upgraded, err := Open(path)
 	if err != nil {
 		t.Fatal(err)
@@ -116,7 +116,7 @@ func TestE15T1MigrationPreservesIdentitiesAndReportsConflict(t *testing.T) {
 	if err := upgraded.Migrate(t.TempDir()); err != nil {
 		t.Fatalf("upgrade to v18: %v", err)
 	}
-	if version, err := upgraded.SchemaVersion(); err != nil || version != 18 {
+	if version, err := upgraded.SchemaVersion(); err != nil || version != MaxSchemaVersion {
 		t.Fatalf("schema version after upgrade: %d %v", version, err)
 	}
 	var intentsAfter int

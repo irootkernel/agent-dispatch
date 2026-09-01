@@ -453,6 +453,61 @@
         "sinks"
       ],
       "properties": {
+        "drain": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Per-route drain policy (E16-T1, NTF-010): an omitted block means manual. Every field is optional with an explicit effective default resolved at evaluation time.",
+          "properties": {
+            "mode": {
+              "enum": [
+                "manual",
+                "after-command",
+                "scheduled"
+              ]
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            },
+            "failure_policy": {
+              "enum": [
+                "preserve-pending"
+              ]
+            },
+            "pending_warn_after": {
+              "$ref": "#/$defs/duration"
+            },
+            "retry": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "initial_backoff",
+                "max_backoff",
+                "multiplier",
+                "jitter_fraction"
+              ],
+              "properties": {
+                "initial_backoff": {
+                  "$ref": "#/$defs/duration"
+                },
+                "max_backoff": {
+                  "$ref": "#/$defs/duration"
+                },
+                "multiplier": {
+                  "type": "number",
+                  "minimum": 1.0,
+                  "maximum": 10.0
+                },
+                "jitter_fraction": {
+                  "type": "number",
+                  "minimum": 0.0,
+                  "maximum": 0.5
+                }
+              }
+            }
+          }
+        },
         "events": {
           "type": [
             "array",

@@ -17,6 +17,35 @@ import (
 // notification record.
 var ErrNotificationNotFound = errors.New("notification not found")
 
+// ErrDrainRunNotFound is the stable sentinel for a missing drain-run
+// evidence row: drain evidence identities are distinct from notification
+// identities, so an unknown run never masquerades as a missing
+// notification (E16-T1).
+var ErrDrainRunNotFound = errors.New("drain run not found")
+
+// DrainRunInput opens one bounded drain pass's evidence row (E16-T1,
+// ADR-0022): the deterministic drain identity, the route and trigger the
+// pass ran under, and the effective mode it resolved.
+type DrainRunInput struct {
+	DrainID   string
+	RouteID   string
+	Trigger   string
+	Mode      string
+	StartedAt string
+}
+
+// DrainRunCounts completes one drain pass's evidence row: the work the
+// pass claimed and how it resolved. RetryScheduled counts the
+// ambiguous/retryable outcomes whose backoff deadline was persisted;
+// BudgetExpired records that the pass hit its wall-clock budget.
+type DrainRunCounts struct {
+	Claimed        int
+	Delivered      int
+	Refused        int
+	RetryScheduled int
+	BudgetExpired  bool
+}
+
 // NotificationSinkRef is one configured sink reference of a route's
 // effective notification policy: identity and adapter kind only — the
 // endpoint and authentication reference stay configuration-owned and

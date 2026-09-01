@@ -158,6 +158,32 @@ type Conditions struct {
 type Notifications struct {
 	Events []string           `yaml:"events" json:"events"`
 	Sinks  []NotificationSink `yaml:"sinks"  json:"sinks"`
+	// Drain is the per-route drain policy (E16-T1, NTF-010): an omitted
+	// block means `manual`, which is exactly the v0.1.5 behavior — only
+	// an explicit `notifications drain` delivers pending records.
+	Drain *NotificationDrain `yaml:"drain,omitempty" json:"drain,omitempty"`
+}
+
+// NotificationDrain is the declared per-route drain policy. Every field
+// is optional with an explicit effective default (v0.1.6 §5); the
+// effective resolution and its revision live in drain.go.
+type NotificationDrain struct {
+	Mode             string      `yaml:"mode,omitempty"              json:"mode,omitempty"`
+	Limit            int         `yaml:"limit,omitempty"             json:"limit,omitempty"`
+	FailurePolicy    string      `yaml:"failure_policy,omitempty"    json:"failure_policy,omitempty"`
+	PendingWarnAfter string      `yaml:"pending_warn_after,omitempty" json:"pending_warn_after,omitempty"`
+	Retry            *DrainRetry `yaml:"retry,omitempty"             json:"retry,omitempty"`
+}
+
+// DrainRetry is the declared delivery retry backoff of the drain policy
+// (E16-T1, NTF-014): the delay starts at the initial backoff, doubles
+// up to the cap, and one symmetric jitter fraction is applied per retry.
+// It is all-or-nothing: a declared retry block carries every field.
+type DrainRetry struct {
+	InitialBackoff string  `yaml:"initial_backoff"  json:"initial_backoff"`
+	MaxBackoff     string  `yaml:"max_backoff"      json:"max_backoff"`
+	Multiplier     float64 `yaml:"multiplier"       json:"multiplier"`
+	JitterFraction float64 `yaml:"jitter_fraction"  json:"jitter_fraction"`
 }
 
 // NotificationSink is one declared notification sink. A webhook sink

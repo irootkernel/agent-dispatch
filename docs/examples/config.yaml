@@ -100,6 +100,16 @@ routes:
         - work_failed
         - delivery_unknown
       sinks: []
+      drain:
+        mode: after-command
+        limit: 100
+        failure_policy: preserve-pending
+        pending_warn_after: 1h
+        retry:
+          initial_backoff: 30s
+          max_backoff: 15m
+          multiplier: 2.0
+          jitter_fraction: 0.2
 
     submission_retry:
       max_attempts: 3

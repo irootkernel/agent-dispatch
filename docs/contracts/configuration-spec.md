@@ -372,9 +372,36 @@ identity/kind references — never endpoints or authentication references, so
 repointing a sink does not re-identify notifications the previous policy
 already created.
 
+The optional `drain` block (E16-T1, NTF-010) declares how pending
+notification work progresses. An omitted block means `manual` — exactly the
+v0.1.5 behavior where only an explicit `notifications drain` delivers — and
+newly generated Wiki configuration defaults to `after-command`. Every field
+is optional with an explicit effective default:
+
+| Field | Default | Contract |
+| --- | --- | --- |
+| `mode` | `manual` | `manual`, `after-command`, or `scheduled` (closed vocabulary). |
+| `limit` | `100` | The bounded item budget of one drain pass (1 through 500). |
+| `failure_policy` | `preserve-pending` | The only value in v0.1.6: a delivery failure leaves the record pending under its original identity. |
+| `pending_warn_after` | `1h` | The pending-age window status and doctor warn after. |
+| `retry.initial_backoff` | `30s` | The first retry delay; the block is all-or-nothing. |
+| `retry.max_backoff` | `15m` | The doubling cap. |
+| `retry.multiplier` | `2.0` | The per-retry delay multiplier (1.0 through 10.0). |
+| `retry.jitter_fraction` | `0.2` | One symmetric ±20% jitter applied per retry (0.0 through 0.5). |
+
+The effective drain policy carries its own inspectable drain-policy
+revision that digests every resolved field, and a declared block whose
+effective policy differs from the pure default joins the route revision —
+so switching a live route to automatic draining pauses production
+acknowledgement — while a block equivalent to the default (including
+omission) keeps the exact v0.1.5 route revision. Drain behavior never
+joins the notification-policy revision, so drain changes never re-identify
+notifications the previous policy already created.
+
 The route revision includes the normalized source and pattern policy, sorted
 destination set and each destination revision, fan-out conditions, runtime and
-retry hints, notification policy and sink references, plus every previously
+retry hints, notification policy and sink references, the effective drain
+policy when it differs from the default, plus every previously
 documented behavior-affecting field. Destination revision includes its target,
 profile, skills, workstream, workspace, mutex, hints, and conditions. Resolved
 secret values remain excluded.

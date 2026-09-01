@@ -13,11 +13,11 @@
 | Shipped release | v0.1.5 (published 2026-08-30) |
 | Planned SOT baseline | 1.2.0 ([D-027](../specs/decision-log.md)) |
 | Release target | v0.1.6 (planned) |
-| Current epic | E15 Completed (G11 evidenced); next E16 |
+| Current epic | E16 In Progress |
 | Current active task | None |
-| Next task | E16-T1 |
-| Completed tasks | 82 / 89 |
-| Planned tasks | 7 / 89 |
+| Next task | E16-T2 |
+| Completed tasks | 83 / 89 |
+| Planned tasks | 6 / 89 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -138,7 +138,7 @@
 | 80 | E15-T2 | Completed | Consistent local serialization and optional target mutex contract |
 | 81 | E15-T3 | Completed | Group slot enforcement and bounded follow-up |
 | 82 | E15-T4 | Completed | Hermes v0.20.5+ compatibility gate G11 |
-| 83 | E16-T1 | Planned | Drain policy, leases, and forward migration |
+| 83 | E16-T1 | Completed | Drain policy, leases, and forward migration |
 | 84 | E16-T2 | Planned | Lease-safe bounded notification delivery |
 | 85 | E16-T3 | Planned | Post-commit after-command integration |
 | 86 | E16-T4 | Planned | Scheduler, status, doctor, and G12 |
@@ -3890,14 +3890,14 @@ is Mulgae-approved outright; `make verify` is green.
 
 # E16: Automatic Durable Notification Draining
 
-**Epic status:** Planned
+**Epic status:** In Progress
 **Purpose:** Make notification delivery progress boundedly during normal one-shot operation without coupling it to source state.
 **Gate:** G12
 **Detailed SOT:** [v0.1.6 operational follow-up](../specs/v0.1.6-operational-follow-up.md)
 
 ## E16-T1: Drain Policy, Leases, and Forward Migration
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -3930,7 +3930,25 @@ E15-T4 Completed; ADR-0022 Accepted.
 
 ### Evidence
 
-Planned; none.
+Completed 2026-09-01. The per-route `notifications.drain` block declares
+mode (manual/after-command/scheduled), limit, preserve-pending failure
+policy, pending-age warning window, and the all-or-nothing retry backoff,
+each field optional with an explicit effective default (manual, 100,
+preserve-pending, 1h, 30s/15m/2.0/0.2); an omitted block resolves to the
+manual v0.1.5 behavior and newly generated Wiki configuration defaults to
+after-command. The effective policy digests into its own inspectable
+drain-policy revision covering every behavior-affecting field, joins the
+route revision only when it differs from the pure default (so a v0.1.5
+configuration without drain keeps its exact route revision), and never
+joins the notification-policy revision — notification identities and
+idempotency keys stay stable across drain changes. Migration v19 adds
+due deadlines, fenced lease columns (owner, monotonic token, expiry), and
+the drain-run evidence table; it rewrites no historic row, every existing
+notification identity and attempt survives unchanged, and migrated
+pending notifications backfill due-at to their creation time so they are
+immediately due. Fresh intents are immediately due at creation. Covered by
+focused config and storage tests (validation, revision partition,
+round-trip, migration upgrade, due backfill, drain-run evidence).
 
 ## E16-T2: Lease-Safe Bounded Notification Delivery
 

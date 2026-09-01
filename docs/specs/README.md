@@ -12,7 +12,7 @@ accepted ADRs and the contract collection refine it without overriding it.
 - [`acceptance-criteria.md`](acceptance-criteria.md): cumulative release gates.
 - [`traceability-matrix.md`](traceability-matrix.md): generated requirement-to-task mapping.
 - [`decision-log.md`](decision-log.md): append-only SOT admission, amendment, and errata decisions.
-- [`v0.1.6-operational-follow-up.md`](v0.1.6-operational-follow-up.md): approved detailed contract for the planned v0.1.6 operational follow-up (E15 closed against its §3 and §5; the shared spec remains the Detailed SOT of the still-planned E16 and E17).
+- [`v0.1.6-operational-follow-up.md`](v0.1.6-operational-follow-up.md): approved detailed contract for the planned v0.1.6 operational follow-up (E15 closed against its §3 and §5; the shared spec remains the Detailed SOT of E16 (in progress) and the still-planned E17).
 
 ## v0.1.5 Feature-to-Authority Map
 

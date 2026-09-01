@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 )
@@ -271,6 +272,58 @@ func validateNotifications(cfg *Config) []error {
 			default:
 				errs = append(errs, fmt.Errorf("%s (%s) type must be webhook or log (got %q)", where, sink.ID, sink.Type))
 			}
+		}
+		errs = append(errs, validateNotificationDrain(routeID, n.Drain)...)
+	}
+	return errs
+}
+
+// validateNotificationDrain enforces the declared drain policy shape
+// (E16-T1, NTF-010): a closed mode vocabulary, a closed single-value
+// failure policy, a bounded limit and pending-age window, and an
+// all-or-nothing retry block whose parsed envelope is coherent. Every
+// field is optional — absence resolves to the documented default at
+// evaluation time — so validation only rejects present-but-invalid
+// declarations.
+func validateNotificationDrain(routeID string, drain *NotificationDrain) []error {
+	if drain == nil {
+		return nil
+	}
+	var errs []error
+	where := fmt.Sprintf("route %q notifications.drain", routeID)
+	if drain.Mode != "" && !drainModeVocabulary[drain.Mode] {
+		errs = append(errs, fmt.Errorf("%s mode %q must be manual, after-command, or scheduled", where, drain.Mode))
+	}
+	if drain.Limit != 0 && (drain.Limit < 1 || drain.Limit > 500) {
+		errs = append(errs, fmt.Errorf("%s limit %d must be between 1 and 500", where, drain.Limit))
+	}
+	if drain.FailurePolicy != "" && !drainFailurePolicyVocabulary[drain.FailurePolicy] {
+		errs = append(errs, fmt.Errorf("%s failure_policy %q is outside the closed vocabulary (preserve-pending)", where, drain.FailurePolicy))
+	}
+	if drain.PendingWarnAfter != "" {
+		dur, err := time.ParseDuration(drain.PendingWarnAfter)
+		if err != nil || dur <= 0 {
+			errs = append(errs, fmt.Errorf("%s pending_warn_after %q must be a positive duration", where, drain.PendingWarnAfter))
+		}
+	}
+	if drain.Retry != nil {
+		retryWhere := where + ".retry"
+		initial, initialErr := time.ParseDuration(drain.Retry.InitialBackoff)
+		max, maxErr := time.ParseDuration(drain.Retry.MaxBackoff)
+		if initialErr != nil || initial <= 0 {
+			errs = append(errs, fmt.Errorf("%s initial_backoff %q must be a positive duration", retryWhere, drain.Retry.InitialBackoff))
+		}
+		if maxErr != nil || max <= 0 {
+			errs = append(errs, fmt.Errorf("%s max_backoff %q must be a positive duration", retryWhere, drain.Retry.MaxBackoff))
+		}
+		if initialErr == nil && maxErr == nil && initial > max {
+			errs = append(errs, fmt.Errorf("%s initial_backoff %s exceeds max_backoff %s", retryWhere, drain.Retry.InitialBackoff, drain.Retry.MaxBackoff))
+		}
+		if drain.Retry.Multiplier < 1.0 || drain.Retry.Multiplier > 10.0 {
+			errs = append(errs, fmt.Errorf("%s multiplier %v must be between 1.0 and 10.0", retryWhere, drain.Retry.Multiplier))
+		}
+		if drain.Retry.JitterFraction < 0.0 || drain.Retry.JitterFraction > 0.5 {
+			errs = append(errs, fmt.Errorf("%s jitter_fraction %v must be between 0.0 and 0.5", retryWhere, drain.Retry.JitterFraction))
 		}
 	}
 	return errs

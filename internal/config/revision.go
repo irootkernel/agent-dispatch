@@ -252,6 +252,12 @@ func notificationsProjection(n *Notifications) map[string]any {
 		})
 	}
 	shape["sinks"] = sinks
+	// The declared drain policy joins the route revision (v0.1.6 §5);
+	// an absent block projects nothing, so a v0.1.5 configuration
+	// without drain keeps its exact revision.
+	if drain := drainRouteProjection(n); drain != nil {
+		shape["drain"] = drain
+	}
 	return shape
 }
 

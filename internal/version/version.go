@@ -34,7 +34,7 @@ const ConfigVersion = "1"
 // notification events and attempts (E13-T1, ADR-0019); v17 creates the
 // disabled-route baseline records of ADR-0020 (E14-T2, DUR-017); v18
 // persists the serialization-group topology of ADR-0021 (E15-T1).
-const SchemaRange = "1-18"
+const SchemaRange = "1-19"
 
 // AdapterVersions returns the pinned adapter implementation versions the
 // build carries. Each entry names the delivered surface and its verified
@@ -43,7 +43,7 @@ func AdapterVersions() map[string]string {
 	return map[string]string{
 		"watchman":      "bounded parser and managed trigger lifecycle, verified watchman 2026.07.27.00 (E2)",
 		"localfs":       "containment resolver (E2-T2)",
-		"sqlite":        "schema-v1..v18 (v2 attempts uniqueness through v7 record revision columns, v8-v9 observation revision and managed watch bindings, v10-v11 destination cutover and capability binding, v12-v13 aggregate fan-out on destination lanes, v14-v15 receipt outcomes and batch evidence, v16 durable notification outbox, v17 disabled-route baselines, v18 serialization-group topology)",
+		"sqlite":        "schema-v1..v19 (v2 attempts uniqueness through v7 record revision columns, v8-v9 observation revision and managed watch bindings, v10-v11 destination cutover and capability binding, v12-v13 aggregate fan-out on destination lanes, v14-v15 receipt outcomes and batch evidence, v16 durable notification outbox, v17 disabled-route baselines, v18 serialization-group topology, v19 notification drain leases and drain-run evidence)",
 		"hermeskanban":  "public-cli transport, capability probe, and durable sink, verified hermes 0.20.5 (E15-T4)",
 		"hermeswebhook": "static-declaration HTTPS sink, transport acceptance only, from the E0-T4 s9 evidence (E6-T1)",
 	}

@@ -50,6 +50,7 @@ var Migrations = []Migration{
 	{Version: 16, Name: "notification-events-attempts", SQL: schemaV16NotificationEventsAttempts},
 	{Version: 17, Name: "route-baselines", SQL: schemaV17RouteBaselines},
 	{Version: 18, Name: "serialization-group-state", SQL: schemaV18SerializationGroupState},
+	{Version: 19, Name: "notification-drain-leases", SQL: schemaV19NotificationDrainLeases},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
@@ -828,4 +829,44 @@ CREATE TABLE serialization_group_members (
 	PRIMARY KEY (route_id, destination_id)
 );
 CREATE INDEX idx_serialization_group_members_group ON serialization_group_members(group_id);
+`
+
+// schemaV19NotificationDrainLeases persists the drain-delivery state the
+// v0.1.6 automatic notification draining requires (E16-T1, ADR-0022,
+// NTF-011/NTF-012): due deadlines, fenced lease columns, and drain-run
+// evidence. The migration is additive and rewrites no historic identity
+// — every notification_id, idempotency_key, and attempt row stays
+// exactly as queryable as before (the acceptance's "identities and
+// attempts survive migration unchanged"). Existing pending notifications
+// backfill due_at to their created_at, which is in the past, so migrated
+// pending work is immediately due (NTF-015); resolved rows receive the
+// same backfill harmlessly — due_at only selects pending work. The lease
+// columns start unowned (empty owner, token 0, no expiry); lease_token
+// is the fencing counter each new claim advances monotonically, so a
+// stale owner that lost its claim can never record an outcome after
+// another worker recovered the notification (E16-T2 enforces the fence).
+// drain_runs holds one evidence row per bounded drain pass — its
+// trigger, counts, and budget expiry — written only by drain code paths
+// and never read by delivery-adjacent transactions.
+const schemaV19NotificationDrainLeases = `
+ALTER TABLE notification_events ADD COLUMN due_at TEXT NOT NULL DEFAULT '';
+UPDATE notification_events SET due_at = created_at;
+ALTER TABLE notification_events ADD COLUMN lease_owner TEXT NOT NULL DEFAULT '';
+ALTER TABLE notification_events ADD COLUMN lease_token INTEGER NOT NULL DEFAULT 0 CHECK (lease_token >= 0);
+ALTER TABLE notification_events ADD COLUMN lease_expires_at TEXT;
+CREATE INDEX idx_notification_events_due ON notification_events(state, due_at, created_at);
+CREATE TABLE drain_runs (
+	drain_id        TEXT PRIMARY KEY,
+	route_id        TEXT NOT NULL,
+	trigger         TEXT NOT NULL CHECK (trigger IN ('manual','after-command','scheduled')),
+	mode            TEXT NOT NULL CHECK (mode IN ('manual','after-command','scheduled')),
+	started_at      TEXT NOT NULL,
+	completed_at    TEXT,
+	claimed         INTEGER NOT NULL DEFAULT 0,
+	delivered       INTEGER NOT NULL DEFAULT 0,
+	refused         INTEGER NOT NULL DEFAULT 0,
+	retry_scheduled INTEGER NOT NULL DEFAULT 0,
+	budget_expired  INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX idx_drain_runs_route ON drain_runs(route_id, started_at);
 `

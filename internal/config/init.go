@@ -67,6 +67,11 @@ func Example(instanceID, resourceRoot string) *Config {
 				Notifications: &Notifications{
 					Events: []string{"work_completed", "work_failed", "delivery_unknown"},
 					Sinks:  []NotificationSink{},
+					// Newly generated Wiki configuration drains
+					// automatically after successful notification-producing
+					// commands (v0.1.6 §4, NTF-010); every other field
+					// resolves to its documented default.
+					Drain: &NotificationDrain{Mode: DrainModeAfterCommand},
 				},
 				SubmissionRetry:  Retry{MaxAttempts: 3, InitialBackoff: "2s", MaxBackoff: "2m", Multiplier: 2.0, JitterFraction: 0.2},
 				LatestState:      true,

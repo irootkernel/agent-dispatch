@@ -131,11 +131,14 @@ func (s *Store) enqueueNotificationTx(tx *sql.Tx, routeID string, event records.
 		// dedup hit on the deterministic identity — every other
 		// constraint violation (a CHECK or NOT NULL drift) fails loudly
 		// instead of silently dropping the notification.
+		// A fresh notification intent is immediately due (E16-T1,
+		// NTF-015): due_at starts at creation time and only a retryable
+		// or ambiguous outcome pushes it into the backoff future.
 		_, err = tx.Exec(`INSERT INTO notification_events
-			(notification_id, route_id, event, destination_id, transition, sink_id, sink_type, policy_revision, idempotency_key, payload_json, state, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+			(notification_id, route_id, event, destination_id, transition, sink_id, sink_type, policy_revision, idempotency_key, payload_json, state, created_at, due_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
 			notificationID, routeID, string(event), nullString(destinationID), transition, sink.ID, sink.Type, policy.Revision,
-			records.NotificationIdempotencyKey(notificationID), payload, now)
+			records.NotificationIdempotencyKey(notificationID), payload, now, now)
 		if err != nil {
 			// The only tolerated insert failure is the dedup hit: the
 			// deterministic identity already exists (a replayed or rerun
@@ -514,4 +517,50 @@ func scanNotificationEvent(rows *sql.Rows) (ports.NotificationEventRecord, error
 	}
 	rec.DestinationID, rec.ResolvedAt = destinationID.String, resolvedAt.String
 	return rec, nil
+}
+
+// StartDrainRun records the beginning of one bounded drain pass
+// (ports.DrainRunInput is the shared contract; the row is written only
+// by drain code paths and never read by delivery-adjacent
+// transactions).
+func (s *Store) StartDrainRun(ctx context.Context, in ports.DrainRunInput) error {
+	startedAt := normalizeTimestamp(in.StartedAt)
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`INSERT INTO drain_runs (drain_id, route_id, trigger, mode, started_at)
+		VALUES (?, ?, ?, ?, ?)`, in.DrainID, in.RouteID, in.Trigger, in.Mode, startedAt); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// FinishDrainRun completes one drain pass's evidence row. An unknown
+// drain identity fails loudly — evidence rows are never invented.
+func (s *Store) FinishDrainRun(ctx context.Context, drainID string, counts ports.DrainRunCounts, completedAt string) error {
+	completedAt = normalizeTimestamp(completedAt)
+	budget := 0
+	if counts.BudgetExpired {
+		budget = 1
+	}
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.Exec(`UPDATE drain_runs SET completed_at = ?, claimed = ?, delivered = ?, refused = ?, retry_scheduled = ?, budget_expired = ?
+		WHERE drain_id = ? AND completed_at IS NULL`, completedAt, counts.Claimed, counts.Delivered, counts.Refused, counts.RetryScheduled, budget, drainID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("%w: %s", ports.ErrDrainRunNotFound, drainID)
+	}
+	return tx.Commit()
 }

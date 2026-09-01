@@ -105,8 +105,10 @@ the rerunnable five-state walkthrough closed gate G10 on 2026-08-31 —
 and E15 closed 2026-08-31: the Hermes v0.20.5 floor with certified
 serialization modes, one active child per serialization group, and the
 real-environment G11 walkthrough live in the roadmap's Canonical
-Outcomes links. E16 and E17 remain Planned; v0.1.5 remains the shipped
-release and E16-T1 is the next roadmap task. The separately requested
+Outcomes links. E16 is In Progress (its drain policy, lease, and
+migration groundwork is delivered); E17 remains Planned. v0.1.5 remains
+the shipped release — the roadmap's task index is the current-status
+authority. The separately requested
 general `make verify` remediation is outside this release scope.
 
 ## Repository-Native Checks

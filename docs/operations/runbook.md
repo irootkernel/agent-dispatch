@@ -158,6 +158,33 @@ topology from the current configuration. The upgrade sequence:
 Rollback restores the pre-upgrade database, the previous binary, and
 the compatible configuration together; no down migration exists (OPS-015).
 
+### 9b. v0.1.6 notification drain upgrade (migration v19, E16)
+
+The migration is additive: it adds due deadlines, lease columns, and the
+drain-run evidence table to the notification outbox, rewrites no historic
+row, and every existing notification identity and attempt survives
+unchanged. Pending notifications backfill their due time to the creation
+timestamp, so migrated pending work is immediately due and the next
+explicit `notifications drain` picks it up. An omitted `notifications.drain`
+block keeps the v0.1.5 manual behavior and the exact route revision. The
+upgrade sequence:
+
+1. verified pre-migration backup (§8) — required before the migration
+   runs (it creates one automatically; keep it);
+2. run the migration (any command that opens the state store);
+3. run `notifications drain` once per affected route to clear the
+   migrated immediately-due pending work;
+4. only when enabling automatic draining: declare the `drain` block and
+   re-run `route preflight` — a declared block whose effective policy
+   differs from the manual default changes the route revision, so
+   production acknowledgement pauses until
+   `route enable --route <id> --acknowledge-production-gate <revision>
+   --yes` re-acknowledges it.
+
+Rollback follows the shared v0.1.6 procedure: restore the pre-upgrade
+database, the previous binary, and the compatible configuration together;
+no down migration exists (OPS-015).
+
 ## 10. Uninstall
 
 Uninstall order:

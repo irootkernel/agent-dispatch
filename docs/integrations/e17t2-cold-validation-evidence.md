@@ -185,6 +185,41 @@ each fixed and pinned in this task:
   NEW schedule identity — uninstall the old one; the durable `--at`
   override travels with its label.
 
+## 9. Final-artifact re-verification (pre-publication)
+
+The whole-epic audit remediation changed delivery-envelope resolution,
+the retry's lease guard, and the schedule lifecycle AFTER the walkthrough
+above ran on its intermediate builds. Before publication, the exact
+shipping artifact (`dist/agent-dispatch-v0.1.6-darwin-arm64`, stamped
+`v0.1.6 / commit 24e07c4 / schema 1-20`) re-ran the affected surfaces on
+a fresh disposable environment against the installed Hermes v0.20.5,
+Watchman 2026.07.27.00, and real launchd:
+
+- `hermes probe`: every shape probe passed, mode
+  `agent-dispatch-group-enforced`, fingerprint `cap:35583a58b0753f09`;
+  `route preflight` green (profile, skills, workspace, serialization);
+- `schedule install --at 05:45` then a flagless `schedule inspect`:
+  healthy with the definition matching (the audit-reworked
+  persist-before-write ordering and joined launchctl targets on real
+  launchd); the two-key enable passed the schedule gate;
+- `reconcile --submit` delivered a real task on the disposable board
+  (`t_886b752c`, public read-back: no `mutex_key` field, assignee and
+  skills intact); `work begin`/`work complete` drove the completion into
+  the outbox and the after-command pass delivered it automatically
+  (attempts=1, delivered); `status` projected the latest drain evidence
+  and the healthy scheduler posture;
+- `schedule disable` preserved the plist while unloading on real
+  launchd; `uninstall` removed exactly the managed plist and cleared the
+  stored override; the disposable board was deleted through the public
+  CLI and the environment discarded with no launchd residue.
+
+The deterministic suites (make verify, race included) were green on the
+same tree. The pre-existing boundary stands: no Hermes WORKER executed
+a dispatched task (task execution requires operator credentials and
+stays outside the gate, the documented TST-007 posture) — the
+completion leg was driven through the same public work-receipt CLI a
+worker uses.
+
 ## 8. Boundary
 
 No Hermes core file, private storage, or plugin was read beyond the

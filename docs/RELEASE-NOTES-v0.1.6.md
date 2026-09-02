@@ -127,7 +127,11 @@ No production activation is part of this release.
   authority, re-verifying byte-identity at that tree).
 - The versioned skills and the checked-in schemas and examples are
   manifest-verified (`make manifest-check`) and schema-validated on
-  every `make verify` run.
+  every `make verify` run. Before publication the exact shipping
+  artifact re-ran the real-Hermes, real-launchd surfaces on disposable
+  state (probe, preflight, schedule lifecycle with the durable `--at`,
+  a real board submission through automatic delivery) — see the
+  cold-validation evidence's final-artifact re-verification section.
 
 ## Known state
 

@@ -1,7 +1,7 @@
 # Agent Dispatch Implementation Roadmap
 
-> **Roadmap version:** 1.2
-> **Release target:** v0.1.6
+> **Roadmap version:** 1.3
+> **Release target:** v0.1.6 (released 2026-09-02)
 > **Execution model:** Strictly linear, one active task globally  
 > **Epics:** 18
 > **Tasks:** 89
@@ -10,14 +10,14 @@
 
 | Field | Value |
 |---|---|
-| Shipped release | v0.1.5 (published 2026-08-30) |
-| Planned SOT baseline | 1.2.0 ([D-027](../specs/decision-log.md)) |
-| Release target | v0.1.6 (planned) |
-| Current epic | E17 In Progress |
+| Shipped release | v0.1.6 (published 2026-09-02) |
+| Planned SOT baseline | 1.3.0 ([D-027](../specs/decision-log.md) delivered) |
+| Release target | v0.1.6 (released) |
+| Current epic | E17 In Progress (all tasks Completed; epic closeout pending) |
 | Current active task | None |
-| Next task | E17-T3 |
-| Completed tasks | 88 / 89 |
-| Planned tasks | 1 / 89 |
+| Next task | None (89/89; the roadmap is complete) |
+| Completed tasks | 89 / 89 |
+| Planned tasks | 0 / 89 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -144,7 +144,7 @@
 | 86 | E16-T4 | Completed | Scheduler, status, doctor, and G12 |
 | 87 | E17-T1 | Completed | CLI, configuration, operations, and skill truth |
 | 88 | E17-T2 | Completed | Cold validation and required deployment evidence |
-| 89 | E17-T3 | Planned | Reproducible v0.1.6 release and publication |
+| 89 | E17-T3 | Completed | Reproducible v0.1.6 release and publication |
 
 ---
 
@@ -4276,7 +4276,7 @@ remediation is reported here, not absorbed.
 
 ## E17-T3: Reproducible v0.1.6 Release and Publication
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -4310,7 +4310,26 @@ E17-T2 Completed.
 
 ### Evidence
 
-Planned; none.
+Completed 2026-09-02. Gate G13's release rows are complete in VALIDATION.md:
+AC-1301/AC-1302 closed by the E17-T2 cold validation, AC-1303 by the release
+proof — two consecutive `make release VERSION=v0.1.6` builds from the clean
+pre-tag candidate tree (commit f4007a1, pinned Go 1.26.6) byte-identical with
+SHA256SUMS recording
+`506758f360c0b3a6640a437787170fc40d07d947e0aefa0da498ac23eb8dc67f`, the
+binary reporting v0.1.6 / schema 1-20, and the versioned surfaces agreeing
+(operator skill 2.1.0's compatibility declaration, the v0.1.6 release notes,
+the synchronized status documents) — and AC-1304 by the additive-migration
+and rollback record (runbook §9a/§9b through v18-v20, the identity-survival
+and heal harnesses, and the real-launchd scheduler-uninstall preservation).
+The status surfaces are synchronized to the published posture (docs/README,
+VALIDATION, the SOT changelog at 1.3.0, the release checklist rewritten for
+v0.1.6 with its dated addendum, the v0.1.6 release notes, and this roadmap at
+89/89). `make verify` is fully green on the final tree. The annotated
+`v0.1.6` tag, the main/tag push, and the hosted Release with the artifact
+and SHA256SUMS are the operator's separately authorized publication
+boundary — the hosted artifact re-cuts from the tagged release commit. No
+production route was enabled and no Hermes core or private state was
+changed: the release is explicitly a no-production-activation record.
 
 ---
 

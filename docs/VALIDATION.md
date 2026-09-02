@@ -1,9 +1,9 @@
 # SOT Package Validation
 
-> **Validated:** 2026-09-02 (E16 delivers gate G12 over the v0.1.6
-> development baseline — automatic durable notification draining; 86 of 89
-> roadmap tasks are complete and E17-T1 is next)
-> **Package target:** Agent Dispatch SOT 1.2.0 / implementation v0.1.5 (published 2026-08-30)
+> **Validated:** 2026-09-02 (E17 closes gate G13 — documentation truth,
+> cold validation, and the reproducible v0.1.6 release; 89 of 89 roadmap
+> tasks are complete)
+> **Package target:** Agent Dispatch SOT 1.3.0 / implementation v0.1.6 (published 2026-09-02)
 
 ## Completed Checks
 
@@ -19,21 +19,21 @@
 - Internal Markdown links resolve within the package, excluding intentionally unresolved wiki links retained in the historical source draft.
 - Markdown code fences are balanced.
 - The documentation package has one delivery scope, exactly one owner for each of the seven semantic roles, and `docs/roadmap/roadmap.md` as its sole lifecycle authority.
-- The roadmap contains exactly 18 epics and 89 task headings (the 86 tasks through E16, all Completed, and the 3 planned E17 tasks).
+- The roadmap contains exactly 18 epics and 89 task headings, all 89 Completed.
 - Every task uses one allowed status value.
-- Every sequence through E16 is fully Completed (86/86 delivered); no task is active and E17-T1 is next.
+- Every sequence through E17 is fully Completed (89/89 delivered); no task is active.
 - Required-spec IDs are unique.
 - Acceptance-scenario IDs are unique.
 - The D-025 functional baseline remains unchanged; D-026 moves paths and adds ownership indexes without changing roadmap identity, lifecycle, or executable-evidence claims.
 
 ## Package Statistics at Validation
 
-- Markdown files: 89 on the manifest basis (including the seven role indexes, supporting collection indexes, v0.1.5 source record, the v0.1.6 operational follow-up contract, target architecture, and ADR-0016 through ADR-0022)
+- Markdown files: 91 on the manifest basis (including the seven role indexes, supporting collection indexes, the v0.1.5 and v0.1.6 release notes, the v0.1.6 operational follow-up contract and cold-validation evidence, and ADR-0016 through ADR-0022)
 - JSON Schemas: 18
 - Example files: 24
-- Integration reports: 3 (Hermes public interface E0-T4, Watchman public interface E0-T5, real-Hermes G11 evidence E15-T4)
+- Integration reports: 4 (Hermes public interface E0-T4, Watchman public interface E0-T5, real-Hermes G11 evidence E15-T4, cold-validation evidence E17-T2)
 - Integration fixtures: 42 files, 9 under `integrations/fixtures/hermes/` and 33 under `integrations/fixtures/watchman/`
-- Roadmap tasks: 89 (33 v0.1 + 12 E7 + 6 E8 + 9 E9 + 15 E10-E13 + 3 E14 + 4 E15 + 4 E16 delivered; 3 E17 planned)
+- Roadmap tasks: 89, all Completed (33 v0.1 + 12 E7 + 6 E8 + 9 E9 + 15 E10-E13 + 3 E14 + 4 E15 + 4 E16 + 3 E17)
 - Normative requirements: 225
 - Acceptance scenarios: 91
 
@@ -425,8 +425,8 @@ with E17-T3.
 |---|---|
 | AC-1301 the final-tree suites reconcile G10-G12 and every earlier gate without absorbing the separate general verify remediation | The full deterministic gate suites re-ran green on this tree through `make verify` (unit and race, manifest, schema, traceability, schedule-check) including the new E17-T2 regression pins below; the separately requested general `make verify` remediation stays outside this release's scope and is reported, not absorbed |
 | AC-1302 disposable-environment walkthroughs cover every requested delivery-evidence item without production activation | [`integrations/e17t2-cold-validation-evidence.md`](integrations/e17t2-cold-validation-evidence.md): clean-host setup and post-Watchman-install rerun, real Hermes v0.20.5 probe/preflight, five real board tasks with `mutex_key` suppression, the managed launchd lifecycle including a real `launchctl kickstart` firing and the durable `--at` override, completion/outbox/automatic delivery through the log sink, dual-sink failure fan-out, the ten-second wall budget with released unstarted claims, transport timeout (ambiguous at-least-once), the fenced operator bypass, kill -9 crash recovery through lease expiry, shared-group exclusion beside acknowledged independent-group concurrency (both groups HELD), the known-limitations record, and a fully disposable boundary with public-CLI board teardown |
-| AC-1303 two release builds byte-identical, versioned documentation and skills agree | E17-T3 (release proof) |
-| AC-1304 documented upgrade and rollback preserve identities, restore the verified set, and scheduler uninstall preserves state | The migration additivity and rollback procedure are recorded (runbook §9b, migrations v19-v20); the release-tree build rows land with E17-T3 |
+| AC-1303 two release builds byte-identical, versioned documentation and skills agree | Two consecutive `make release VERSION=v0.1.6` builds from the pre-tag candidate tree (clean worktree at commit `f4007a1`, pinned Go 1.26.6) produce the byte-identical darwin/arm64 binary — `SHA256SUMS` records `506758f360c0b3a6640a437787170fc40d07d947e0aefa0da498ac23eb8dc67f` and `cmp` proves the artifacts identical — and the versioned surfaces agree on v0.1.6: the binary's `version` output (v0.1.6, schema range 1-20), the operator skill 2.1.0's compatibility declaration, the v0.1.6 release notes, the synchronized status documents, and `TestG5AC506ReleaseArtifactsPresent` re-verifying every `dist/SHA256SUMS` digest against the hashed artifact when `dist/` is present |
+| AC-1304 documented upgrade and rollback preserve identities, restore the verified set, and scheduler uninstall preserves state | The upgrade path (runbook §9a/§9b) records the additive forward-only migrations v18-v20 with the verified pre-migration backup, the required re-probe, preflight, and production re-acknowledgement where a serialization or drain revision changed; identity survival is pinned by `TestE16T1MigrationV19UpgradesCleanly` (notification IDs, idempotency keys, and attempts unchanged) and the heal harnesses (`TestE10T1MigrationV8BackfillAndIntegrity`, `TestE9ValidationMigrationV7BackfillsAndPropagates`, updated through the v20 ledger); the rollback procedure restores the verified pre-upgrade database, previous binary, and compatible configuration together with no down migration; and `TestE16T4DisablePreservesAndUninstallRemoves` plus the real-launchd walkthrough prove scheduler disable/uninstall preserve configuration, SQLite state, logs, and notification history |
 
 The cold validation closed three real-environment defects in this tree:
 the launchctl print/bootout target form (an absent schedule read as

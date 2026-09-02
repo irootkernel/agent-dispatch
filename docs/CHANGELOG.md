@@ -1,5 +1,50 @@
 # SOT Changelog
 
+## 1.3.0 - 2026-09-02
+
+The v0.1.6 operational follow-up is delivered and published; the
+specification package now states the shipped behavior:
+
+- E17-T1 synchronizes the public operator contract with the shipped
+  E14-E16 behavior: the CLI contract gains the managed launchd
+  schedule group and the due-only drain truth (the lease-safe pass
+  report, the retry bypass over ambiguous/retryable/refused records,
+  the drift evaluation riding only the scheduled runner, and the
+  status/doctor drain posture); the operator skill moves to 2.1.0 with
+  the schedule lifecycle and the schedule-before-enablement rule; the
+  runbook upgrade path teaches the expressible drain pass and the
+  managed-schedule enablement; installation documents the managed drain
+  schedule; configuration-spec is named the single drain-defaults
+  authority; and the lifecycle citation corrections (the specs index,
+  the E16-T2 drain-isolation property's requirement reference).
+- E17-T2 cold-validates the complete E14-E16 result: the deterministic
+  gate suites re-run green and the real-environment walkthrough
+  (integrations/e17t2-cold-validation-evidence.md) covers every
+  required delivery-evidence item on disposable state against the
+  installed Hermes v0.20.5, Watchman, and real launchd. It remediates
+  the E16 confirmation-review cohort (the posture's latest drain
+  evidence, the per-route retry envelope on every surface, Run-level
+  after-command wiring, the durable `--at` timing, the live-lease
+  refusal and fenced retry, the mid-pass claim release, plist XML
+  escaping, the rotation bound, the recovery leg, the usage contracts,
+  and day-unit durations) and closes three new real defects: the
+  launchctl print/bootout joined service target, the clean exit-14
+  refusal of a dispatch on a never-registered route (previously a raw
+  foreign-key storage failure), and the Watchman-trigger
+  executable-path guidance. SQLite moves to schema range 1-20 with the
+  additive v20 (managed-schedule timing overrides).
+- E17-T3 records the release proof: `make verify` fully green on the
+  final tree, two byte-identical `make release VERSION=v0.1.6` builds
+  with SHA256SUMS, the v0.1.6 release notes, the synchronized status
+  surfaces, and the explicit no-production-activation record. The
+  roadmap closes at 89/89.
+
+v0.1.6 is published (2026-09-02): the candidate was cut from the
+post-validation final tree as two byte-identical builds, and the
+release commit, the `v0.1.6` tag, `main`, and the hosted Release with
+its checksums follow under the operator's publication authority. No
+production activation is part of the release.
+
 ## 1.2.0 - 2026-08-31
 
 D-027 adopts the focused v0.1.6 operational follow-up as documentation-only

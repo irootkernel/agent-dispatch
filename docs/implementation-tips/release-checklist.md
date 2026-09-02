@@ -1,111 +1,115 @@
-# v0.1.4 Release Checklist
+# v0.1.6 Release Checklist
 
-> Operated 2026-08-25 for the reopened E9 remediation release (D-023,
-> closed by D-024). The v0.1.1-era basis (33/45 task counts, the open
-> SCP-008 exception) was finding F5 of the 2026-08-25 review; this pass
-> rewrites the checklist against the current 60-task, macOS-only,
-> toolchain-enforced state. The earlier v0.1.1 record stands as history.
+> Operated 2026-09-02 for the E17 release of the v0.1.6 operational
+> follow-up (D-027). This pass rewrites the checklist against the
+> current 89-task state: the checked sections below name the standing
+> release verities, each carried by the named gate evidence; the
+> v0.1.4/v0.1.5 records stand as history beneath them.
 
 ## SOT and Roadmap
 
-- [x] Every roadmap task E0-T1 through E9-T9 is Completed (verified 2026-08-25; 10 epics, 60 tasks, 60/60).
-- [x] No task is In Progress, In Review, or Blocked (epic E9 is re-closed by D-024; the roadmap's current epic is None).
-- [x] Required specification and implementation are reconciled (every MUST is implemented, carries a recorded supersession (SCP-008 under D-023), or stands as a maintained exception).
-- [x] Traceability contains evidence for every MUST (regenerated for 60 tasks; the D-023 finding dispositions are recorded in D-023/D-024).
-- [x] Accepted ADRs match the implementation (per-task Mulgae rounds and the epic validation audit own the residual drift).
+- [x] Every roadmap task E0-T1 through E17-T3 is Completed (verified 2026-09-02; 18 epics, 89 tasks, 89/89 — the roadmap closes).
+- [x] No task is In Progress, In Review, or Blocked.
+- [x] Required specification and implementation are reconciled (E17-T1 synchronized the public operator contract; every MUST is implemented or carries a recorded supersession/exception).
+- [x] Traceability contains evidence for every MUST (regenerated for 89 tasks through `make traceability`).
+- [x] Accepted ADRs match the implementation (ADR-0020 through ADR-0022 deliver their contracts; per-task Mulgae rounds and the epic validation audit own the residual drift).
 - [x] Future work is not partially enabled (the deferred list stands apart).
 
 ## Build and Supply Chain
 
-- [x] Go toolchain and dependencies are pinned (go 1.26.6; staticcheck as a tool dependency, SCP-005); `make verify` and `make release` enforce the exact pin through `go-version-check` before any build step (E9-T7).
-- [x] Clean reproducible builds pass on macOS (darwin/arm64 — the only supported platform under the D-023 policy; the earlier Linux-build line is superseded history).
-- [x] Binaries and checksums are generated (make release; the byte-reproducibility double build is verified for v0.1.4 by E9-T9).
-- [x] Dependency/license review is complete (dependency-licenses.md, all 39 modules in the build graph: MIT, BSD, Apache, and MPL-2.0 tool-chain only, all compatible).
-- [x] Build version, commit, and schema ranges are embedded (`version --output json`).
+- [x] Go toolchain and dependencies are pinned (go 1.26.6; staticcheck as a tool dependency, SCP-005); `make verify` and `make release` enforce the exact pin through `go-version-check` before any build step.
+- [x] Clean reproducible builds pass on macOS (darwin/arm64 — the only supported platform under the D-023 policy).
+- [x] Binaries and checksums are generated with the byte-reproducibility double build verified for v0.1.6 (two consecutive `make release VERSION=v0.1.6` builds byte-identical; SHA256SUMS `506758f360c0b3a6640a437787170fc40d07d947e0aefa0da498ac23eb8dc67f` on the pre-tag candidate tree).
+- [x] Dependency/license review is complete (dependency-licenses.md; no new dependencies since the v0.1.5 review).
+- [x] Build version, commit, and schema ranges are embedded (`version --output json`: v0.1.6, config version 1, schema range 1-20).
 
 ## Tests
 
-- [x] Unit, component, integration, race, multi-process, and crash tests pass (make verify including -race on darwin/arm64, the only supported platform).
-- [x] JSON Schemas parse and examples validate (make schema-validation, 12 schemas).
-- [x] All G0-G5 acceptance scenarios pass (re-verified on the reopened delta 2026-08-25; AC-505's Linux-host scenario is superseded by D-023 with its D-020 closure standing as history).
+- [x] Unit, component, integration, race, multi-process, and crash tests pass (`make verify` including -race on darwin/arm64, fully green on the final tree).
+- [x] JSON Schemas parse and examples validate (make schema-validation, 18 schemas).
+- [x] All G0-G13 acceptance scenarios pass (the G10-G12 suites re-ran green in the E17-T2 cold validation; G13's rows live in VALIDATION.md).
 - [x] Real Watchman test passes (2026.07.27.00).
-- [x] Real disposable Hermes Kanban test passes (0.20.5, disposable boards; under an installed Hermes outside the verified set the real-environment legs skip as TST-007 evidence gaps — E9-T6).
+- [x] Real disposable Hermes Kanban test passes (0.20.5; the E17-T2 cold validation additionally walked the real launchd and trigger surfaces on disposable state).
 - [x] Webhook fake/contract tests pass (TLS conformance suite).
-- [x] No production vault was used for destructive tests.
+- [x] No production vault, board, route, or profile was used for any test.
 
 ## Security and Privacy
 
 - [x] Path traversal and symlink escape tests pass (G1 AC-106).
-- [x] No shell interpolation exists (argv-only runners).
-- [x] Secret redaction tests pass (key and value-pattern coverage, E7-T9).
-- [x] Note body is absent from SQLite and normal logs.
+- [x] No shell interpolation exists (argv-only runners; the managed plist invokes the internal runner directly with XML-escaped interpolation).
+- [x] Secret redaction tests pass (key and value-pattern coverage).
+- [x] Note body is absent from SQLite, normal logs, and notification payloads (the E17-T2 webhook legs verified the sanitized posture).
 - [x] Config and state permissions are documented and checked (owner-only state; permissive file secrets fail closed).
-- [x] Hermes adapter uses only public interfaces.
-- [x] No Hermes plugin or internal DB access exists.
+- [x] Hermes adapter uses only public interfaces; no Hermes plugin or internal DB access exists (re-verified by the cold validation's boundary).
 
 ## Durability
 
 - [x] SQLite settings are verified at runtime (pragma checks at open).
 - [x] Database backup/restore rehearsal passes (TestG5UpgradeAndBackupRehearsal).
-- [x] Migration interruption test passes (before, between, and inside units, E7-T4).
-- [x] Remote-acceptance crash window reconciles safely (dedup-safe recovery, E7-T4).
-- [x] Concurrent one-shot processes cannot duplicate attempt ownership (AC-204).
+- [x] Migration interruption tests pass through the v20 ledger (the heal harnesses updated with the E17-T2 batch).
+- [x] Remote-acceptance crash window reconciles safely; the notification drain crash recovery is proven at the store level and re-verified in the real environment (kill -9 mid-attempt, fenced recovery after lease expiry).
+- [x] Concurrent one-shot processes cannot duplicate attempt ownership or notification claims (disjoint leases, fenced outcomes).
 - [x] Unknown acceptance never triggers webhook fallback.
 
 ## Feedback Loop
 
-- [x] One active route task invariant passes (transactional slot enforcement, E7-T2).
-- [x] Dirty bursts collapse into at most one follow-up (product-path activation, E7-T2).
-- [x] Exact work receipt suppression passes.
-- [x] Mixed human/agent change remains dirty.
-- [x] Missing receipt is conservative and bounded.
+- [x] One active route task invariant passes per serialization group (group-held exclusion re-verified in the real environment).
+- [x] Dirty bursts collapse into the lane's generation; acknowledged independent groups run concurrently.
+- [x] Exact work receipt suppression passes; the four-outcome receipt drives per-lane completion.
 - [x] Protected and overflow cases do not enter ordinary automatic tasks.
 
 ## Operations
 
-- [x] `doctor`, `status`, inspection, retry, reprocess, rerun, discard, reconcile, quarantine, and maintenance commands work (E7-T5/E7-T7 completed the surface).
-- [x] Retention dry-run and prune preserve unresolved lineage (and begun receipts while their dispatch is unresolved or holds the active slot; begun receipts prune with a terminal lineage past retention, E9 epic validation round-1 F001).
-- [x] Watchman install/status/remove is idempotent.
-- [x] The `launchd` scheduled reconciliation example and the uninstall script are tested (make schedule-check on macOS; the systemd examples are retired under D-023).
-- [x] Upgrade and uninstall procedures are documented.
+- [x] The full operator surface works (the E17-T1 contract truth and the E17-T2 real-environment walkthrough).
+- [x] Retention dry-run and prune preserve unresolved lineage.
+- [x] Watchman install/status/remove is idempotent (real-trigger lifecycle re-verified).
+- [x] The managed launchd schedule lifecycle works on the real session (install/inspect/disable/uninstall with the durable `--at` timing; `make schedule-check` lints the shipped recipe).
+- [x] Upgrade and rollback procedures are documented (runbook §9a/§9b through migrations v18-v20).
 
 ## Artifacts
 
 - [x] Binary archives and checksums (make release, SHA256SUMS).
-- [x] SOT documentation (manifest-verified).
+- [x] SOT documentation (manifest-verified; SOT 1.3.0).
 - [x] Schemas and examples.
-- [x] Default disabled config (two-key gate enforced, E7-T6).
-- [x] Verified Hermes capability report template and compatibility documentation.
-- [x] Hermes companion skill.
-- [x] Changelog and release notes (the v0.1.1 notes disclose the Linux exception — historical; releases from v0.1.4 on are darwin/arm64-only under D-023).
-- [x] Acceptance reports (docs/VALIDATION.md; the compliance-review findings live in the decision log's D-017/D-020/D-023 records).
+- [x] Default disabled config (two-key gate enforced).
+- [x] Verified Hermes capability evidence and compatibility documentation (probe contract v3).
+- [x] Versioned skills (operator 2.1.0 / worker 1.2.0, agreeing on v0.1.6).
+- [x] Changelog and release notes (v0.1.6).
+- [x] Acceptance reports (docs/VALIDATION.md including gate G13; the cold-validation evidence record).
 
-## v0.1.5 Addendum (closed)
+## v0.1.4 Record (history)
 
-The checked items above are v0.1.4 release history. The items below carry the
-G6 through G9 executable evidence E13-T4 closed them with:
+The v0.1.4 checklist basis (operated 2026-08-25 for the reopened E9
+remediation release, D-023 closed by D-024; the v0.1.1-era 33/45 basis
+was finding F5 of the 2026-08-25 review) is preserved by Git history;
+its checked items are subsumed by the standing sections above.
 
-- [x] Effective nested Watchman binding and complete managed-trigger removal
-      (E10-T2/E10-T3, G6 rows in VALIDATION.md).
-- [x] Reconciliation fence and bounded-growing-file evidence (E10-T1/E10-T3,
-      G6 rows in VALIDATION.md).
-- [x] Frozen real Hermes 0.20.5 plus installed newer-version probe evidence,
-      with no Hermes source/private-state modification (E11-T2, TST-012;
-      the G8/G9 real legs skip-guarded under TST-007).
-- [x] Destination config/schema migration, multi-profile/workstream fan-out,
-      independent retry, and work-receipt/v2 evidence (E11-T1, E12-T1..T4,
-      G7/G8 rows in VALIDATION.md).
-- [x] Notification outbox, webhook/log sinks, dedup, retry, and redaction
-      (E13-T1/E13-T2, G9 rows in VALIDATION.md).
-- [x] Versioned operator and worker skills plus isolated operational
-      walkthrough (E13-T3, operator 2.0.0 / worker 1.2.0).
-- [x] SOT/roadmap/VALIDATION/release-note truth synchronized at 75/75
-      (this release; SOT 1.1.18 including the epic-audit batches).
-- [x] Two byte-identical darwin/arm64 builds and local v0.1.5 tag; no push or
-      production activation (the E13-T4 release proof; the tag names the
-      final tree).
-- [x] Published 2026-08-30 after the cold validation: the candidate
-      re-cut from the post-validation final tree (two byte-identical
-      builds), `main` fast-forwarded, the `v0.1.5` tag pushed to name the
-      release commit, and the hosted Release created with the artifact
-      and SHA256SUMS. No production activation.
+## v0.1.5 Addendum (closed, history)
+
+- [x] Effective nested Watchman binding and complete managed-trigger removal (E10).
+- [x] Reconciliation fence and bounded-growing-file evidence (E10).
+- [x] Frozen real Hermes 0.20.5 plus installed newer-version probe evidence (E11).
+- [x] Destination config/schema migration, multi-profile/workstream fan-out, and work-receipt/v2 evidence (E11/E12).
+- [x] Notification outbox, webhook/log sinks, dedup, retry, and redaction (E13).
+- [x] Versioned operator and worker skills plus isolated operational walkthrough (E13-T3).
+- [x] SOT/roadmap/VALIDATION/release-note truth synchronized at 75/75 (SOT 1.1.18).
+- [x] Two byte-identical darwin/arm64 builds; published 2026-08-30 (candidate re-cut from the post-validation final tree, `main` fast-forwarded, the `v0.1.5` tag pushed, the hosted Release created with artifact and SHA256SUMS; no production activation).
+
+## v0.1.6 Addendum (closed)
+
+The G10 through G13 evidence E17 closed the v0.1.6 release with:
+
+- [x] Route-correct rerunnable setup, disabled baseline-only
+      reconciliation, and the five-state gate (E14, G10).
+- [x] Certified serialization modes, local serialization groups, the
+      explicit 0.20.5 floor, and the real-Hermes G11 walkthrough (E15).
+- [x] Drain policies, lease-safe delivery, post-commit after-command
+      draining, and the managed launchd scheduler (E16, G12).
+- [x] Documentation truth, the cold validation with its
+      real-environment evidence record and three closed real defects,
+      and the reproducible release proof (E17, G13).
+- [x] SOT/roadmap/VALIDATION/release-note truth synchronized at 89/89
+      (this release; SOT 1.3.0).
+- [x] Two byte-identical darwin/arm64 builds from the pre-tag candidate
+      tree; no production activation (the hosted artifact re-cuts from
+      the tagged release commit under the publication authority).

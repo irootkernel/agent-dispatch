@@ -1,10 +1,9 @@
 # Agent Dispatch Documentation
 
 > **Documentation profile:** Single delivery scope with an adopted legacy roadmap identity contract
-> **SOT version:** 1.2.0
-> **Shipped implementation:** Agent Dispatch v0.1.5 (published 2026-08-30)
-> **Planned release target:** Agent Dispatch v0.1.6
-> **Document status:** Approved planned baseline
+> **SOT version:** 1.3.0
+> **Shipped implementation:** Agent Dispatch v0.1.6 (published 2026-09-02)
+> **Document status:** Shipped release state
 > **Language:** English
 
 This directory is the canonical specification package for Agent Dispatch. It
@@ -87,32 +86,27 @@ v0.1.5 is the published latest release (2026-08-30): the candidate was
 re-cut from the post-validation final tree and published with its tag
 and hosted Release.
 
-## v0.1.6 Planned Follow-up
+## v0.1.6 Operational Follow-up (shipped 2026-09-02)
 
-D-027 approves four sequential planned epics, E14 through E17, to close the
-three operational gaps found during a real v0.1.5 deployment: route-correct
-and rerunnable disabled setup, explicit Hermes v0.20.5 mutex downgrade through
-Agent Dispatch serialization groups, and bounded post-commit notification
-draining. The detailed contract is
+D-027 approved four sequential epics, E14 through E17, closing the
+three operational gaps found during a real v0.1.5 deployment: the
+detailed contract was
 [`specs/v0.1.6-operational-follow-up.md`](specs/v0.1.6-operational-follow-up.md),
-with acceptance gates G10 through G13.
-
-The adoption itself was documentation only and claimed no implementation,
-migration, test, deployment-transcript, artifact, or release evidence at
-the time. E14 has since delivered and evidenced its share — the explicit
-setup route selection, the disabled baseline-only reconciliation, and
-the rerunnable five-state walkthrough closed gate G10 on 2026-08-31 —
-and E15 closed 2026-08-31: the Hermes v0.20.5 floor with certified
-serialization modes, one active child per serialization group, and the
-real-environment G11 walkthrough live in the roadmap's Canonical
-Outcomes links. E16 closed 2026-09-01 the same way: the drain policy
-and migration groundwork, the lease-safe bounded delivery service, the
-post-commit after-command integration, and the managed launchd
-scheduler with gate G12 live in the roadmap's Canonical Outcomes
-links. E17 remains Planned. v0.1.5 remains the
-shipped release — the roadmap's task index is the current-status
-authority. The separately requested
-general `make verify` remediation is outside this release scope.
+with acceptance gates G10 through G13. All four epics delivered and
+evidenced: E14 closed gate G10 on 2026-08-31 (the explicit setup route
+selection, the disabled baseline-only reconciliation, and the
+rerunnable five-state walkthrough), E15 closed gate G11 on 2026-08-31
+(the Hermes v0.20.5 floor with certified serialization modes and the
+real-environment walkthrough), E16 closed gate G12 on 2026-09-01 (the
+drain policy and migration groundwork, the lease-safe bounded delivery,
+the post-commit after-command integration, and the managed launchd
+scheduler), and E17 closed gate G13 on 2026-09-02 (the documentation
+truth, the cold validation with its real-environment evidence record,
+and the reproducible release proof). v0.1.6 is the published latest
+release — the roadmap's task index is the current-status authority,
+and the delivered outcomes live in the roadmap's Canonical Outcomes
+links. The separately requested general `make verify` remediation
+remained outside this release's scope and is reported, not absorbed.
 
 ## Repository-Native Checks
 

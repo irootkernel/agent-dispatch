@@ -387,7 +387,7 @@ is optional with an explicit effective default:
 | `limit` | `100` | The bounded item budget of one drain pass (1 through 500). |
 | `failure_policy` | `preserve-pending` | The only value in v0.1.6: a delivery failure leaves the record pending under its original identity. |
 | `pending_warn_after` | `1h` | The pending-age window status and doctor warn after. |
-| `retry.initial_backoff` | `30s` | The first retry delay; the block is all-or-nothing. |
+| `retry.initial_backoff` | `30s` | The first retry delay; the block is all-or-nothing — every retry field is REQUIRED once the block is declared, so the per-field defaults apply only to the omitted block as a whole. |
 | `retry.max_backoff` | `15m` | The doubling cap. |
 | `retry.multiplier` | `2.0` | The per-retry delay multiplier (1.0 through 10.0). |
 | `retry.jitter_fraction` | `0.2` | One symmetric ±20% jitter applied per retry (0.0 through 0.5). |

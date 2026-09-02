@@ -295,20 +295,33 @@ func runScheduleLifecycle(command, sub string, args []string, stdout, stderr io.
 			"config": def.ConfigPath, "mode": def.Mode, "digest": def.Digest, "plist": def.Plist,
 		})
 	case "install":
-		installed := scheduleInstall(command, def, stdout, stderr)
-		// The timing persists only after the plist write succeeded: a
-		// refused install (a different definition at the path) must not
-		// clear or replace a live override as a side effect.
-		if installed == 0 {
-			_, store, oerr := openOperatorStore(command, flags.val("--config"), stderr)
-			if oerr != 0 {
-				return oerr
-			}
-			if err := store.SetScheduleAtOverride(requestCtx(), label, explicitAt); err != nil {
-				store.Close()
-				return planErr(stderr, command, "sqlite_query_failed", "storage", err.Error(), 20)
-			}
+		// The timing persists BEFORE the plist write and is reverted on a
+		// refused install (E17 audit F007): persisting only after the
+		// write left a crash window where an installed --at override had
+		// no durable row and the posture re-read the drift the round-4
+		// F004 fix closed. Writing first inverts the window — a crash
+		// after the row but before the plist converges by re-running the
+		// same install — and a REFUSED install (a different definition
+		// at the path) restores the prior row so the existing schedule's
+		// definition match survives the refusal untouched.
+		prior := scheduleAtOverrideUnmigrated(configPath, label)
+		_, store, oerr := openOperatorStore(command, flags.val("--config"), stderr)
+		if oerr != 0 {
+			return oerr
+		}
+		if err := store.SetScheduleAtOverride(requestCtx(), label, explicitAt); err != nil {
 			store.Close()
+			return planErr(stderr, command, "sqlite_query_failed", "storage", err.Error(), 20)
+		}
+		store.Close()
+		installed := scheduleInstall(command, def, stdout, stderr)
+		if installed != 0 && prior != explicitAt {
+			if _, rstore, rerr := openOperatorStore(command, flags.val("--config"), stderr); rerr == 0 {
+				if err := rstore.SetScheduleAtOverride(requestCtx(), label, prior); err != nil {
+					fmt.Fprintf(stderr, "schedule install: the refused install's timing override could not be restored; re-run install with the intended --at to converge (%v)\n", err)
+				}
+				rstore.Close()
+			}
 		}
 		return installed
 	case "inspect":

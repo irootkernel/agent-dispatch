@@ -219,37 +219,33 @@ func (d *DrainService) retry() ports.NotificationBackoff {
 	return b
 }
 
-// retryFor resolves the envelope one claim's fenced record persists: the
-// claim's own route wins when a per-route resolver is wired (round-4
-// F002). The service-level envelope's defaults fill every unresolved
-// member — the jitter fraction included, so an unresolved envelope keeps
-// the documented 0.2 symmetric jitter. A resolved route policy carries
-// its jitter EXACTLY: the policy layer already defaults an absent
-// fraction to 0.2, so an explicit 0.0 is an operator choice that
-// survives here.
+// retryFor resolves the envelope one claim's fenced record persists
+// (round-4 F002 and the E17 audit's F002): a RESOLVED envelope — the
+// service-level one (the automatic pass binds its route policy there)
+// or the per-route resolver's — is authoritative including an explicit
+// zero jitter, because the configuration layer already defaulted every
+// absent member; only when NO envelope is resolved anywhere do the
+// documented defaults apply, jitter included.
 func (d *DrainService) retryFor(routeID string) ports.NotificationBackoff {
-	b := d.retry()
-	if b.JitterFraction <= 0 {
-		b.JitterFraction = 0.2
+	env := d.Retry
+	if d.BackoffFor != nil {
+		if route := d.BackoffFor(routeID); route != (ports.NotificationBackoff{}) {
+			env = route
+		}
 	}
-	if d.BackoffFor == nil {
-		return b
+	if env == (ports.NotificationBackoff{}) {
+		return ports.NotificationBackoff{Initial: 30 * time.Second, Max: 15 * time.Minute, Multiplier: 2.0, JitterFraction: 0.2}
 	}
-	route := d.BackoffFor(routeID)
-	if route == (ports.NotificationBackoff{}) {
-		return b // no policy for this route: the documented defaults
+	if env.Initial <= 0 {
+		env.Initial = 30 * time.Second
 	}
-	if route.Initial > 0 {
-		b.Initial = route.Initial
+	if env.Max <= 0 {
+		env.Max = 15 * time.Minute
 	}
-	if route.Max > 0 {
-		b.Max = route.Max
+	if env.Multiplier <= 0 {
+		env.Multiplier = 2.0
 	}
-	if route.Multiplier > 0 {
-		b.Multiplier = route.Multiplier
-	}
-	b.JitterFraction = route.JitterFraction
-	return b
+	return env
 }
 
 func (d *DrainService) owner() string {

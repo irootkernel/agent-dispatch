@@ -289,14 +289,21 @@ func (s *Store) RetryNotification(ctx context.Context, notificationID string) er
 		// A live lease is a transient conflict (round-4 F012): the
 		// drainer holding it owns the in-flight outcome, so the bypass
 		// refuses instead of silently superseding it when the fenced
-		// record lands.
+		// record lands. The lease predicate rides the UPDATE itself
+		// (E17 audit F006): a claim landing between the check above and
+		// this write fails the conditional instead of re-arming claimed
+		// work — the affected-rows check maps that race to the same
+		// live-lease refusal.
 		if leaseOwner != "" && leaseExpiresAt > now {
 			return fmt.Errorf("%w: %s is under a live delivery lease until %s", ports.ErrNotificationLeaseActive, notificationID, leaseExpiresAt)
 		}
-		// A pending record under backoff becomes immediately due; an
-		// unleased pending record that is already due needs no change.
-		if _, err := tx.Exec(`UPDATE notification_events SET due_at = ? WHERE notification_id = ? AND state = 'pending'`, now, notificationID); err != nil {
+		res, err := tx.Exec(`UPDATE notification_events SET due_at = ? WHERE notification_id = ? AND state = 'pending'
+			AND (lease_owner = '' OR lease_expires_at IS NULL OR lease_expires_at <= ?)`, now, notificationID, now)
+		if err != nil {
 			return err
+		}
+		if n, err := res.RowsAffected(); err == nil && n == 0 {
+			return fmt.Errorf("%w: %s acquired a live delivery lease during the retry", ports.ErrNotificationLeaseActive, notificationID)
 		}
 		return tx.Commit()
 	case records.NotificationRefused:

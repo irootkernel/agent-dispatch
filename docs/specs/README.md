@@ -12,7 +12,7 @@ accepted ADRs and the contract collection refine it without overriding it.
 - [`acceptance-criteria.md`](acceptance-criteria.md): cumulative release gates.
 - [`traceability-matrix.md`](traceability-matrix.md): generated requirement-to-task mapping.
 - [`decision-log.md`](decision-log.md): append-only SOT admission, amendment, and errata decisions.
-- [`v0.1.6-operational-follow-up.md`](v0.1.6-operational-follow-up.md): approved detailed contract for the planned v0.1.6 operational follow-up (E15 closed against its §3 and §5; the shared spec remains the Detailed SOT of the still-planned E17 (E16 closed 2026-09-01 into its Canonical Outcomes links)).
+- [`v0.1.6-operational-follow-up.md`](v0.1.6-operational-follow-up.md): the approved v0.1.6 operational follow-up contract (every epic E14-E17 delivered and evidenced; the shared spec stays linked as E17's Detailed SOT until the epic closeout replaces it with Canonical Outcomes).
 
 ## v0.1.5 Feature-to-Authority Map
 
@@ -45,8 +45,12 @@ release (2026-08-30).
 
 D-027 owns this approved plan, with the detailed contract in
 [`v0.1.6-operational-follow-up.md`](v0.1.6-operational-follow-up.md) and
-ADRs 0020 through 0022. E14's capabilities are implemented, validated,
-and evidenced at gate G10 (closed 2026-08-31); E15 closed gate G11 and
-E16 closed gate G12 (both 2026-08-31/09-01, their delivered outcomes in
-the roadmap's Canonical Outcomes links); E17 remains Planned, and
-v0.1.5 remains the published latest release.
+ADRs 0020 through 0022. Every epic delivered and evidenced: E14 closed
+gate G10 (2026-08-31), E15 closed gate G11 (2026-08-31), E16 closed
+gate G12 (2026-09-01), and E17 closed gate G13 (2026-09-02) — the
+documentation truth, the cold validation with its real-environment
+evidence record, and the reproducible release proof. v0.1.6 is the
+published latest release (2026-09-02); the roadmap's task index at
+89/89 is the current-status authority. The separately requested general
+`make verify` remediation stayed outside the release scope and is
+reported, not absorbed.

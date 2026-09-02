@@ -33,6 +33,33 @@ func (f *recordingDrainStore) RecordNotificationAttemptFenced(ctx context.Contex
 	return f.fakeDrainStore.RecordNotificationAttemptFenced(ctx, in, claim, backoff)
 }
 
+// TestE17T2ServiceEnvelopeHonorsExplicitZeroJitter pins the E17 audit's
+// F002 beside F002-of-E16: a RESOLVED envelope is authoritative including
+// an explicit zero jitter (the automatic pass binds its route policy on
+// the service envelope), and only a fully unresolved service keeps the
+// documented 0.2 default.
+func TestE17T2ServiceEnvelopeHonorsExplicitZeroJitter(t *testing.T) {
+	store := &recordingDrainStore{fakeDrainStore: newFakeDrainStore("ntf-zero")}
+	sink := &stubSink{outcomes: []records.NotificationAttemptOutcome{records.NotificationRetryableOutcome}}
+	svc := &DrainService{
+		Store: store, Resolver: func(string, ports.NotificationSinkRef) (ports.NotificationSink, error) { return sink, nil },
+		Retry: ports.NotificationBackoff{Initial: time.Second, Max: 2 * time.Second, Multiplier: 2, JitterFraction: 0},
+	}
+	if _, err := svc.DrainDue(context.Background(), ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.backoffs) != 1 {
+		t.Fatalf("the claim records one fenced outcome: %d", len(store.backoffs))
+	}
+	if b := store.backoffs[0]; b.JitterFraction != 0 || b.Initial != time.Second {
+		t.Fatalf("the service envelope's explicit zero jitter must survive: %+v", b)
+	}
+	bare := (&DrainService{}).retryFor("wiki")
+	if bare != (ports.NotificationBackoff{Initial: 30 * time.Second, Max: 15 * time.Minute, Multiplier: 2.0, JitterFraction: 0.2}) {
+		t.Fatalf("a fully unresolved service keeps the documented defaults (jitter included): %+v", bare)
+	}
+}
+
 // TestE17T2MidPassStoreErrorReleasesUnstartedClaims pins round-4 F015:
 // a durable-store failure on the first claim's fenced record releases
 // the remainder this pass never started — nothing strands until lease

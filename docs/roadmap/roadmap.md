@@ -4142,7 +4142,7 @@ matrix above; `make verify` is green.
 
 # E17: Documentation, Cold Validation, and v0.1.6 Release
 
-**Epic status:** Planned
+**Epic status:** In Progress
 **Purpose:** Reconcile every v0.1.6 claim with executable and real-environment evidence, then publish one reproducible release.
 **Gate:** G13
 **Detailed SOT:** [v0.1.6 operational follow-up](../specs/v0.1.6-operational-follow-up.md)

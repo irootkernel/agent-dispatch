@@ -205,6 +205,47 @@ func TestE16T2RetryableOutcomePersistsBackoffDeadline(t *testing.T) {
 // TestE16T2RetryNotificationBypassesBackoff pins NTF-013: the explicit
 // operator retry is the sole bypass — an ambiguous/retryable pending
 // record and a refused record both return to pending immediately due.
+// TestE17AuditRetryRearmConditionalPredicate pins the round-4
+// confirmation finding F002: the operator retry's pending re-arm rides a
+// lease-guarded conditional UPDATE — the exact statement maps a lease
+// acquired in the check-then-act window to zero affected rows (which
+// RetryNotification reports as the same notification_lease_active
+// refusal) while a free lease re-arms exactly one row.
+func TestE17AuditRetryRearmConditionalPredicate(t *testing.T) {
+	s := openTestStore(t)
+	ids := e16t2Seed(t, s, 2, "2026-09-02T00:00:00Z")
+	free, claimed := ids[0], ids[1]
+	now := time.Now().UTC().Format(time.RFC3339)
+	liveUntil := time.Now().UTC().Add(10 * time.Minute).Format(time.RFC3339)
+	if _, err := s.Exec(`UPDATE notification_events SET lease_owner = 'drainer-race', lease_expires_at = ? WHERE notification_id = ?`, liveUntil, claimed); err != nil {
+		t.Fatal(err)
+	}
+	// A free lease re-arms exactly the one row.
+	res, err := s.Exec(`UPDATE notification_events SET due_at = ? WHERE notification_id = ? AND state = 'pending'
+		AND (lease_owner = '' OR lease_expires_at IS NULL OR lease_expires_at <= ?)`, now, free, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		t.Fatalf("a free lease must re-arm one row, affected %d", n)
+	}
+	// A lease acquired in the race window matches zero rows — the
+	// affected-rows check maps this to the live-lease refusal.
+	res, err = s.Exec(`UPDATE notification_events SET due_at = ? WHERE notification_id = ? AND state = 'pending'
+		AND (lease_owner = '' OR lease_expires_at IS NULL OR lease_expires_at <= ?)`, now, claimed, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := res.RowsAffected(); n != 0 {
+		t.Fatalf("a live lease must refuse the re-arm, affected %d", n)
+	}
+	// The refused row keeps its holder and deadline untouched.
+	var owner, expires string
+	if err := s.QueryRow(`SELECT COALESCE(lease_owner,''), COALESCE(lease_expires_at,'') FROM notification_events WHERE notification_id = ?`, claimed).Scan(&owner, &expires); err != nil || owner != "drainer-race" || expires != liveUntil {
+		t.Fatalf("the racing holder's lease must survive: %q %q %v", owner, expires, err)
+	}
+}
+
 func TestE16T2RetryNotificationBypassesBackoff(t *testing.T) {
 	s := openTestStore(t)
 	ids := e16t2Seed(t, s, 2, "2026-08-30T09:00:00Z")

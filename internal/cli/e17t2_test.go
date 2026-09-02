@@ -586,6 +586,62 @@ func TestE17T2DispatchRefusesUnregisteredRoute(t *testing.T) {
 	}
 }
 
+// TestE17T2OverrideReadFailureIsReported pins the round-4 confirmation
+// findings F001/F003: a genuine read failure or an unopenable store in
+// the --at override path degrades to the default timing WITH one bounded
+// stderr line naming the consequence — never silently — while a missing
+// row and a pre-v20 table stay quiet (the ordinary no-override postures).
+func TestE17T2OverrideReadFailureIsReported(t *testing.T) {
+	var reported bytes.Buffer
+	// A real read failure (a closed database): reported, then default.
+	dir := t.TempDir()
+	db, err := sqlite.Open(filepath.Join(dir, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Migrate(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	if at := scheduleAtOverride(context.Background(), db, "some-label", &reported); at != "" {
+		t.Fatalf("a failed read resolves to the default timing: %q", at)
+	}
+	if !strings.Contains(reported.String(), "could not be read") {
+		t.Fatalf("the read failure must be reported, got: %q", reported.String())
+	}
+	// A missing row (an open, migrated store with no override): quiet.
+	reported.Reset()
+	live, err := sqlite.Open(filepath.Join(dir, "state2.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+	if err := live.Migrate(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	if at := scheduleAtOverride(context.Background(), live, "some-label", &reported); at != "" || reported.Len() != 0 {
+		t.Fatalf("a missing row is the quiet default: %q %q", at, reported.String())
+	}
+	// A pre-v20 shape (an open, UNMIGRATED database has no table): quiet.
+	reported.Reset()
+	raw, err := sqlite.Open(filepath.Join(dir, "state3.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	if at := scheduleAtOverride(context.Background(), raw, "some-label", &reported); at != "" || reported.Len() != 0 {
+		t.Fatalf("a pre-v20 table is the quiet default: %q %q", at, reported.String())
+	}
+	// An unopenable store reports before degrading (round-4 F003).
+	reported.Reset()
+	if at := scheduleAtOverrideUnmigrated("/nonexistent-e17t2/config.yaml", "some-label", &reported); at != "" {
+		t.Fatalf("an unopenable store resolves to the default timing: %q", at)
+	}
+	if !strings.Contains(reported.String(), "could not be opened") {
+		t.Fatalf("the unopenable store must be reported, got: %q", reported.String())
+	}
+}
+
 // TestE17T2LaunchctlPrintUsesJoinedTarget pins the real-launchd cold
 // validation finding: `launchctl print` takes ONE joined service target
 // (`gui/<uid>/<label>`); the domain and label as separate argv entries

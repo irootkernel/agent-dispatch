@@ -596,6 +596,9 @@ func scheduleAtOverride(ctx context.Context, reader scheduleOverrideReader, labe
 func scheduleAtOverrideUnmigrated(configPath, label string, stderr io.Writer) string {
 	store, err := openUnmigratedStore(resolveConfigPath(configPath))
 	if err != nil {
+		// An unreadable store degrades to the default timing with one
+		// bounded stderr line — never silently (round-4 F003).
+		fmt.Fprintf(stderr, "schedule: the state store could not be opened for the --at override; rendering the default timing (the schedule may read as drifted until the store is reachable): %v\n", err)
 		return ""
 	}
 	defer store.Close()

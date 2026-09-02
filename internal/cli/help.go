@@ -277,13 +277,15 @@ Exit codes: 0; 2 usage; 3 configuration; 4 not found or already
 
 Side effects: test delivers one transport-level probe (nothing stored,
 no source event, no Hermes task — NTF-008); list is read-only; retry
-re-arms one refused notification and performs one attempt under its
-stable idempotency identity; drain evaluates the configured drift
-classes per route (integration and Watchman drift enqueue their
-intents exactly once per appearance), then performs one bounded
-delivery attempt per pending notification — ambiguous and retryable
-outcomes stay pending for the next pass (NTF-007), and no delivery
-outcome ever changes dispatch or work state (NTF-005).
+re-arms one ambiguous, retryable, or refused notification to
+immediately-due pending and performs one attempt under its stable
+idempotency identity; drain selects DUE work only and performs one
+bounded lease-safe attempt per due notification — the explicit drain
+never evaluates drift (the OPS-013 drift evaluation rides the managed
+scheduled runner as its only automatic surface), ambiguous and
+retryable outcomes stay pending under their persisted backoff deadline
+(NTF-007), and no delivery outcome ever changes dispatch or work state
+(NTF-005).
 
 Example:
   agent-dispatch notifications drain --config <path>
@@ -370,9 +372,14 @@ Exit codes: 0; 3 configuration; 20 storage.
 Side effects: none — observational.
 
 The JSON result carries routes, queues, quarantine, the oldest
-unresolved dispatch, the database size, the per-target summary, and the
+unresolved dispatch, the database size, the per-target summary, the
 per-route OPS-013 drift projection (capability, profile, skill,
-watchman, reconciliation).
+watchman, reconciliation), and — for every notification-enabled route —
+the notification drain posture (mode and limit, the due/backoff
+pending split, live claims, the oldest pending age against the
+configured warning window, repeated ambiguous or retryable outcomes,
+unresolvable sinks, and the scheduler expected/installed/loaded/overdue
+state, OPS-017).
 
 Next safe command: agent-dispatch doctor`,
 	"doctor": `doctor — the findings examination
@@ -385,6 +392,13 @@ Flags: --probe-targets (add the live target probes),
 Exit codes: 0; 3 when any finding has error severity.
 
 Side effects: none — the store is examined without migrating.
+
+Findings include the notification drain posture of every
+notification-enabled route (pending age against the warning window,
+the due/backoff split, repeated ambiguous or retryable outcomes,
+unresolvable sinks, and the scheduler expectation for automatic
+modes, OPS-017) beside the configuration, store, and integration
+findings.
 
 Example:
   agent-dispatch doctor --probe-targets --integrity full

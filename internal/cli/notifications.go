@@ -373,9 +373,10 @@ func (s notificationDeliveryStore) ReleaseNotificationClaims(ctx context.Context
 	return s.store.ReleaseNotificationClaims(ctx, owner, claims)
 }
 
-// runNotificationsDrain delivers the pending notifications, oldest
-// first, bounded (CLI-013, observability-and-operations §8): the pass
-// performs one bounded attempt per pending notification. The OPS-013
+// runNotificationsDrain delivers the due notifications through the
+// lease-safe service, oldest first, bounded (CLI-013, NTF-013): the
+// pass selects DUE work only, claims atomically, and performs one
+// bounded attempt per due notification. The OPS-013
 // drift evaluation rides the scheduled runner — its only automatic
 // surface (v0.1.6 §4, E16-T3 evidence) — and never the explicit drain
 // (recursion exclusion). Delivery outcomes are reported, never
@@ -432,7 +433,7 @@ func runNotificationsDrain(command string, args []string, stdout, stderr io.Writ
 		"drain":             report,
 		"pending":           report.Pending() || pendingRemaining > 0,
 		"pending_remaining": pendingRemaining,
-		"note":              "one bounded attempt per pending notification; ambiguous and retryable outcomes stay pending under their stable idempotency identity",
+		"note":              "one bounded lease-safe attempt per due notification; ambiguous and retryable outcomes stay pending under their stable idempotency identity and persisted backoff deadline",
 	})
 }
 

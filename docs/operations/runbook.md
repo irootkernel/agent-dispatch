@@ -172,12 +172,19 @@ upgrade sequence:
 1. verified pre-migration backup (§8) — required before the migration
    runs (it creates one automatically; keep it);
 2. run the migration (any command that opens the state store);
-3. run `notifications drain` once per affected route to clear the
-   migrated immediately-due pending work;
-4. only when enabling automatic draining: declare the `drain` block and
-   re-run `route preflight` — a declared block whose effective policy
-   differs from the manual default changes the route revision, so
-   production acknowledgement pauses until
+3. run `notifications drain` once to clear the migrated
+   immediately-due pending work — the drain selects due work for every
+   route in one bounded pass (it takes no route filter; a route-scoped
+   invocation is not expressible, §cli-spec 18);
+4. only when enabling automatic draining: declare the `drain` block,
+   install the managed schedule for the route
+   (`schedule install --route <id> --platform launchd`, cli-spec §19),
+   and re-run `route preflight` — a declared block whose effective
+   policy differs from the manual default changes the route revision,
+   the preflight schedule check warns with the exact install command
+   while the schedule is missing, and `route enable` refuses without
+   the installed, loaded, definition-matching schedule, so production
+   acknowledgement pauses until
    `route enable --route <id> --acknowledge-production-gate <revision>
    --yes` re-acknowledges it.
 

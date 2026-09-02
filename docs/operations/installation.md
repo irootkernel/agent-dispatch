@@ -96,6 +96,37 @@ hours). `make verify` validates the launchd artifact with the platform tool
 (`plutil -lint`) and the uninstall script with `sh -n` (SCP-008 as
 superseded by D-023); GitHub Actions is not used.
 
+### 4a. Managed drain schedule (v0.1.6, E16-T4)
+
+Since E16 a route with an automatic notification drain mode
+(`after-command` or `scheduled`, configuration-spec `notifications.drain`)
+installs its schedule through the managed lifecycle instead of a
+hand-maintained plist:
+
+```sh
+agent-dispatch schedule render  --route <id> --platform launchd   # review first
+agent-dispatch schedule install --route <id> --platform launchd
+agent-dispatch schedule inspect --route <id> --platform launchd
+```
+
+The managed label and plist path derive from the instance ID, route
+ID, and a digest of the configuration's absolute path, the plist
+invokes the internal `schedule run` command directly (never a shell
+chain), install is idempotent for an identical definition and refuses
+a different one, and `disable`/`uninstall` preserve configuration,
+state, and history — uninstall removes only that exact managed plist
+(cli-spec §19). `after-command` recovery runs every fifteen minutes;
+`scheduled` mode runs the reconciliation first and chains the drain
+after a healthy pass, daily at 03:00 local by default (`--at HH:MM`
+overrides). Logs rotate at 10 MiB with three files retained. Production
+enablement of an automatic mode REQUIRES the installed, loaded,
+definition-matching schedule (`route preflight` warns with the exact
+install command while it is missing and `route enable` refuses without
+it; `setup wiki` prints the exact install command without running it).
+The §4 hand-maintained reconcile plist remains the recipe for routes
+without an automatic drain mode; a scheduled-mode route should use the
+managed schedule, which owns the same reconcile-then-drain chain.
+
 ## 5. Upgrade (OPS-009)
 
 1. Back up the database and configuration (section 6).

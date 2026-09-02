@@ -153,7 +153,8 @@ func runStatus(args []string, stdout, stderr io.Writer) int {
 		"notification_drain": drainPosture,
 		// OPS-013: the five drift classes — capability, profile, skill,
 		// watchman, reconciliation — surfaced per route; four of them
-		// notify through the drain's drift evaluation and reconciliation
+		// notify through the managed scheduled runner's drift evaluation
+		// (its only automatic surface, E16-T3) and reconciliation
 		// through the pending-reconcile transitions of E13-T1.
 		"drift": routeDriftSummary(ctx, cfg, closer),
 	}, warnings)

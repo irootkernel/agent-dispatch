@@ -260,9 +260,12 @@ func TestG9SkillsVersionedValidatedAndInstallable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, must := range []string{"version: 2.0.0", "notifications drain", "notifications retry", "notifications test", "route disable", "watchman remove"} {
+	// The operator skill's v0.1.6-era guidance (E17-T1): the managed
+	// schedule surface joins the notification commands, and the version
+	// moved to 2.1.0 with it.
+	for _, must := range []string{"version: 2.1.0", "notifications drain", "notifications retry", "notifications test", "route disable", "watchman remove", "schedule install", "schedule inspect"} {
 		if !strings.Contains(string(operator), must) {
-			t.Fatalf("the operator skill must carry its v0.1.5 guidance (%q missing)", must)
+			t.Fatalf("the operator skill must carry its v0.1.6 guidance (%q missing)", must)
 		}
 	}
 	for _, must := range []string{"version: 1.2.0", "workstream", "excluded", "work-receipt/v2", "untrusted"} {

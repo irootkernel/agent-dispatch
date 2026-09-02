@@ -373,7 +373,10 @@ repointing a sink does not re-identify notifications the previous policy
 already created.
 
 The optional `drain` block (E16-T1, NTF-010) declares how pending
-notification work progresses. An omitted block means `manual` — exactly the
+notification work progresses. This table is the single documentation
+authority for the effective drain defaults; the CLI contract and
+operations guidance restate behavior but defer to these values. An
+omitted block means `manual` — exactly the
 v0.1.5 behavior where only an explicit `notifications drain` delivers — and
 newly generated Wiki configuration defaults to `after-command`. Every field
 is optional with an explicit effective default:

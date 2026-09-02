@@ -38,6 +38,7 @@ agent-dispatch dispatch
 agent-dispatch dispatches list|show|retry|reprocess|rerun|discard|refresh|drain
 agent-dispatch events show
 agent-dispatch notifications test|list|retry|drain
+agent-dispatch schedule render|install|inspect|disable|uninstall|run
 agent-dispatch receipts list|show
 agent-dispatch work begin|complete|fail
 agent-dispatch quarantine list|show|release|discard
@@ -341,9 +342,10 @@ Successful commands use:
 
 Errors use the error contract. Command-specific schemas may be added without changing this outer envelope within v1.
 
-## 18. v0.1.5 Command Surface (shipped)
+## 18. Command Surface (v0.1.5 shipped; v0.1.6 additions marked)
 
-The commands below are the shipped v0.1.5 surface.
+The commands below are the current surface: the shipped v0.1.5 commands
+plus the v0.1.6 additions this contract records with their owning task.
 
 ```text
 agent-dispatch --help
@@ -355,6 +357,8 @@ agent-dispatch hermes set-minimum-version <target> <version>
 agent-dispatch route preflight --route <id>
 agent-dispatch route set-profile <route>:<destination> <profile>
 agent-dispatch route set-skills <route>:<destination> <skill>...
+agent-dispatch schedule render|install|inspect|disable|uninstall --route <id> \
+  --platform launchd [--at HH:MM]     # v0.1.6 (E16-T4), §19
 ```
 
 `events show <aggregate-id>` lands with E12-T3 (CLI-013): it renders one
@@ -376,7 +380,8 @@ valid BEGUN receipt classifies the aggregate in-progress, not
 evidence-gap — the run is known-busy work, and the gap class stays for
 accepted work with no (or an invalid) receipt to trust, E12 epic
 whole-review round 1). `notifications test|list|retry|drain` land with
-E13-T2 (CLI-013): `test --route <id> --sink <id>` delivers one
+E13-T2 and share the E16-T2 lease-safe delivery service
+(CLI-013): `test --route <id> --sink <id>` delivers one
 transport-level probe of the declared sink — the payload is the
 notification-event/v1 envelope with the dedicated `test` event value
 (outside the stored vocabulary by design), its stable idempotency
@@ -385,14 +390,20 @@ deduplicate at the endpoint, and nothing is stored: no notification
 intent, no source event, no Hermes task (NTF-008); `list` renders the
 durable intents with `--route`, `--state`, `--sink`, and `--limit`
 filters plus each row's attempt count and last outcome (NTF-004);
-`retry <notification-id>` re-arms one refused notification — the
-operator's explicit decision — and performs one attempt under the
-notification's stable idempotency identity, refusing a delivered
-notification at exit 4 (NTF-007); `drain` performs one bounded attempt
-per pending notification, oldest first, bounded by `--limit`, and never
-evaluates drift — the OPS-013 drift evaluation rides the scheduled
-runner as its only automatic surface (v0.1.6 §4), so the explicit drain
-stays recursion-free. The envelope's `pending` and
+`retry <notification-id>` is the sole operator bypass (NTF-013): it
+re-arms one ambiguous, retryable, or refused notification to
+immediately-due pending under its stable idempotency identity and
+performs one attempt, refusing a delivered notification at exit 4
+(NTF-007); `drain` selects DUE work only and performs one bounded
+lease-safe attempt per due notification through the shared service —
+atomic disjoint claims, fenced outcomes, and the persisted jittered
+backoff deadline (NTF-011 through NTF-014). The pass report carries
+`claimed`, `delivered`, `refused`, `ambiguous`, `retryable`, and
+`budget_expired` (the lease-safe claim count and wall-budget state of
+the E16-T2 service); the explicit drain never evaluates drift — the
+OPS-013 drift evaluation rides the managed scheduled runner as its
+only automatic surface (§19, v0.1.6 §4), so the explicit drain stays
+recursion-free. The envelope's `pending` and
 `pending_remaining` report the store's post-pass pending truth — the
 pass bound never hides a backlog. Delivery outcomes are data, never
 exit codes: an ambiguous or
@@ -400,8 +411,14 @@ retryable outcome stays pending for the next pass, and no delivery
 outcome ever mutates dispatch, receipt, or work state (NTF-005); the log
 sink emits its structured payload lines on stderr so stdout keeps the
 one-envelope contract. `status` projects the notification by-state
-counts and warns on pending delivery work (observability-and-operations
-§10).
+counts, warns on pending delivery work, and — for every
+notification-enabled route — carries the drain posture projection
+(observability-and-operations §10, OPS-017): mode and limit, the
+due/backoff pending split, live claims, the oldest pending age against
+the configured warning window, repeated ambiguous or retryable
+outcomes, unresolvable sink declarations, and the scheduler
+expectation/evidence/overdue state of the automatic modes (§19);
+`doctor` projects the same posture as typed findings.
 
 Every root and group parser accepts `-h` and `--help`. Help states required
 flags, defaults, output modes, exit codes, side effects, production approval,
@@ -478,3 +495,64 @@ Stable v0.1.5 usage/refusal codes join the error registry before implementation;
 integration drift maps to target/capability refusal, ambiguous notification
 delivery remains notification state rather than a dispatch exit, and config
 mutation never partially writes a file.
+
+## 19. Managed launchd Drain Schedule (E16-T4, v0.1.6)
+
+```text
+agent-dispatch schedule render|install|inspect|disable|uninstall \
+  --route <id> --platform launchd [--at HH:MM]
+agent-dispatch schedule run --route <id>   # internal; the plist's entrypoint
+```
+
+`--platform launchd` is the only supported v0.1.6 platform (usage error
+otherwise). Every lifecycle command resolves the ACTUAL binary path
+(`os.Executable`) and the absolute configuration path — no surface assumes
+a fixed binary location — and derives the managed identity from both: the
+label is `xyz.rootkernel.agent-dispatch.<instance-id>.<route-id>.<12-hex>`
+where the hex is the SHA-256 digest of the configuration's absolute path,
+and the plist lives at that label under `~/Library/LaunchAgents/`. Distinct
+configurations of one route therefore never share a schedule (CLI-018,
+OPS-018).
+
+- `render` prints the full definition without touching launchd: `label`,
+  `plist_path`, `binary`, `config`, `mode`, `digest`, and the rendered
+  `plist` (valid launchd XML).
+- `install` writes the plist atomically with owner-only permissions and
+  bootstraps it into the current user's launchd session. It is idempotent
+  for a byte-identical definition and refuses a different definition at
+  the same path (exit 14, `transition_invalid`) — uninstall first.
+- `inspect` reports `present`, `loaded`, `definition_matches`,
+  `expected_digest`, `installed_digest`, and `healthy` (loaded AND
+  byte-identical to the currently rendered definition, so a drifted
+  definition — a moved binary, a retargeted configuration, a mode change —
+  is unhealthy even while loaded).
+- `disable` boots the job out of the session while preserving the plist.
+- `uninstall` boots the job out and removes ONLY the byte-identical
+  managed plist, refusing a foreign file at the same path (exit 14);
+  configuration, SQLite state, logs, and notification history are always
+  preserved.
+
+The plist invokes one direct internal `schedule run --route <id> --config
+<absolute-path>` command — never a shell chain (SEC-005). `schedule run`
+is mode-driven: in `after-command` recovery it performs the due-only drain
+plus the automatic OPS-013 drift evaluation; in `scheduled` mode it runs
+the scheduled reconciliation first (`reconcile --reason scheduled
+--submit`) and chains the drift evaluation and drain only after a healthy
+exit-0 pass. After-command recovery runs every fifteen minutes
+(`StartInterval`); scheduled mode runs daily at 03:00 local time by
+default (`StartCalendarInterval`), and `--at HH:MM` overrides the time for
+render/install (a malformed value is a usage error, never a coerced
+default). Schedule logs rotate at 10 MiB keeping the latest three files
+under the state directory's `logs/` (`schedule-<route>.out.log` /
+`.err.log`).
+
+Production enablement of an automatic mode (`after-command` or
+`scheduled`) requires an installed, loaded, definition-matching
+schedule: `route preflight` carries the schedule check — a `warn` with
+the exact `schedule install` remediation while it is missing (the
+walkthrough still completes) — and `route enable` refuses without it
+(exit 3). `setup wiki` prints — never runs — the exact `schedule
+install` command as its remediation (NTF-011, OPS-018). The effective
+drain policy and its defaults are owned by `configuration-spec.md` (the
+`notifications.drain` table); this section states only the schedule
+lifecycle constants it itself owns.

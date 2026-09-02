@@ -13,11 +13,11 @@
 | Shipped release | v0.1.5 (published 2026-08-30) |
 | Planned SOT baseline | 1.2.0 ([D-027](../specs/decision-log.md)) |
 | Release target | v0.1.6 (planned) |
-| Current epic | E16 Completed (G12 evidenced); next E17 |
+| Current epic | E17 In Progress |
 | Current active task | None |
-| Next task | E17-T1 |
-| Completed tasks | 86 / 89 |
-| Planned tasks | 3 / 89 |
+| Next task | E17-T2 |
+| Completed tasks | 87 / 89 |
+| Planned tasks | 2 / 89 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -50,7 +50,7 @@
 | E14 | Guided Setup and Disabled Baseline | **Completed** | 3 | G10 |
 | E15 | Hermes v0.20.5+ Compatibility and Serialization Groups | **Completed** | 4 | G11 |
 | E16 | Automatic Durable Notification Draining | **Completed** | 4 | G12 |
-| E17 | Documentation, Cold Validation, and v0.1.6 Release | **Planned** | 3 | G13 |
+| E17 | Documentation, Cold Validation, and v0.1.6 Release | **In Progress** | 3 | G13 |
 
 ## 3. Task Status Index
 
@@ -142,7 +142,7 @@
 | 84 | E16-T2 | Completed | Lease-safe bounded notification delivery |
 | 85 | E16-T3 | Completed | Post-commit after-command integration |
 | 86 | E16-T4 | Completed | Scheduler, status, doctor, and G12 |
-| 87 | E17-T1 | Planned | CLI, configuration, operations, and skill truth |
+| 87 | E17-T1 | Completed | CLI, configuration, operations, and skill truth |
 | 88 | E17-T2 | Planned | Cold validation and required deployment evidence |
 | 89 | E17-T3 | Planned | Reproducible v0.1.6 release and publication |
 
@@ -4001,7 +4001,7 @@ immediately-due pending. The manual `notifications drain` selects due
 work only through the same service; a defective sink declaration stays
 sink-local as one retryable attempt. Lease expiry is the effective
 delivery deadline plus the thirty-second margin, and a full drain pass
-leaves every non-notification table byte-identical (AC-1208). Covered by
+leaves every non-notification table byte-identical (NTF-005). Covered by
 store tests (disjoint claims, stale-owner refusal, persisted backoff,
 bypass, table isolation, claim release) and service tests (budget
 expiry, recovery skip, sink isolation, defaults).
@@ -4149,7 +4149,7 @@ matrix above; `make verify` is green.
 
 ## E17-T1: CLI, Configuration, Operations, and Skill Truth
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -4181,7 +4181,36 @@ E16-T4 Completed.
 
 ### Evidence
 
-Planned; none.
+Completed 2026-09-02. The public operator contract now states the shipped
+E14-E16 behavior. The CLI contract gained the managed launchd schedule
+group (§19: identity derivation from instance, route, and configuration-path
+digest; resolved binary/config paths; direct internal `schedule run` with no
+shell chain; install idempotency and refusal; inspect's presence/loaded/
+definition-match/healthy envelope; disable/uninstall preservation and exact
+plist ownership; 15-minute recovery and 03:00-default scheduled timing with
+`--at`; 10 MiB/three-file log rotation; the automatic-mode enablement
+prerequisite) and the due-only drain truth (§18): the manual drain selects
+due work through the shared lease-safe service, the pass report carries
+`claimed` and `budget_expired`, `notifications retry` re-arms ambiguous,
+retryable, and refused records as the sole bypass, drift evaluation rides
+only the managed scheduled runner, and status/doctor expose the drain
+posture members (mode/limit, due/backoff, live claims, oldest pending age,
+repeated retry outcomes, unresolvable sinks, scheduler expectation). The
+notifications, status, and doctor help texts state the same truth (CLI-009);
+the operator skill moved to 2.1.0 with the managed schedule lifecycle and
+the schedule-before-enablement rule (worker instructions unchanged — E16
+changed none); runbook §9b now teaches the expressible single drain pass
+plus the managed-schedule enablement path; installation §4a documents the
+managed drain schedule beside the hand-maintained reconcile recipe;
+configuration-spec is named the single authority for the effective drain
+defaults; the schema and examples already carry the versioned drain block
+and serialization fields with their revisions (verified unchanged); the
+specs index lifecycle statement was corrected to the E15/E16 completion
+state, and the E16-T2 evidence citation for the drain table-isolation
+property was corrected from AC-1208 to NTF-005 (the migration criterion
+stays with E16-T1's migration evidence). The g9 skill-guidance test pins
+the 2.1.0 surface; traceability and the docs manifest are regenerated;
+`make verify` is green.
 
 ## E17-T2: Cold Validation and Required Deployment Evidence
 

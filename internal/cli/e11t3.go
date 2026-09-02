@@ -347,7 +347,7 @@ func runRoutePreflight(command string, args []string, stdout, stderr io.Writer) 
 	// The managed schedule gate (E16-T4, v0.1.6 §4): an automatic drain
 	// mode requires an installed, loaded, definition-matching launchd
 	// schedule before production enablement.
-	if posture := schedulePosture(cfg, routeID, resolveConfigPath(flags.val("--config"))); posture != nil && posture["expected"] == true {
+	if posture := schedulePosture(cfg, routeID, resolveConfigPath(flags.val("--config")), stderr); posture != nil && posture["expected"] == true {
 		if posture["healthy"] == true {
 			checks = append(checks, map[string]any{"check": "schedule", "state": "pass",
 				"detail": fmt.Sprintf("managed launchd schedule %v installed, loaded, and matching the current definition", posture["label"])})

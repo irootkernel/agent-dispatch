@@ -17,6 +17,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -282,7 +283,7 @@ func runScheduleLifecycle(command, sub string, args []string, stdout, stderr io.
 	// never reads as a drifted definition.
 	at := explicitAt
 	if at == "" && sub != "install" {
-		at = scheduleAtOverrideUnmigrated(configPath, label)
+		at = scheduleAtOverrideUnmigrated(configPath, label, stderr)
 	}
 	def, exit := buildScheduleDefinition(command, configPath, routeID, at, stderr)
 	if exit != 0 {
@@ -304,7 +305,7 @@ func runScheduleLifecycle(command, sub string, args []string, stdout, stderr io.
 		// same install — and a REFUSED install (a different definition
 		// at the path) restores the prior row so the existing schedule's
 		// definition match survives the refusal untouched.
-		prior := scheduleAtOverrideUnmigrated(configPath, label)
+		prior := scheduleAtOverrideUnmigrated(configPath, label, stderr)
 		_, store, oerr := openOperatorStore(command, flags.val("--config"), stderr)
 		if oerr != 0 {
 			return oerr
@@ -567,30 +568,38 @@ type scheduleOverrideReader interface {
 }
 
 // scheduleAtOverride reads the label's stored non-default timing through
-// an already-open store surface; any miss (no row, no table yet, no
-// store) resolves to the default timing.
-func scheduleAtOverride(ctx context.Context, reader scheduleOverrideReader, label string) string {
+// an already-open store surface. A missing row, a pre-v20 database
+// without the table, or a nil reader resolves to the default timing;
+// any OTHER read failure also resolves to the default timing BUT
+// reports one bounded stderr line first — the conservative degradation
+// (the posture then renders the default and reads the schedule as
+// drifted) must never be silent (E17 audit round-3 F002).
+func scheduleAtOverride(ctx context.Context, reader scheduleOverrideReader, label string, stderr io.Writer) string {
 	if reader == nil {
 		return ""
 	}
 	var at string
-	if err := reader.QueryRowContext(ctx, `SELECT at FROM schedule_at_overrides WHERE label = ?`, label).Scan(&at); err != nil {
-		return ""
+	err := reader.QueryRowContext(ctx, `SELECT at FROM schedule_at_overrides WHERE label = ?`, label).Scan(&at)
+	if err == nil {
+		return at
 	}
-	return at
+	if !errors.Is(err, sql.ErrNoRows) && !strings.Contains(err.Error(), "no such table") {
+		fmt.Fprintf(stderr, "schedule: the stored --at override could not be read; rendering the default timing (the schedule may read as drifted until the store is reachable): %v\n", err)
+	}
+	return ""
 }
 
 // scheduleAtOverrideUnmigrated reads the override without applying
 // migrations (render/inspect/disable and the plain posture are read-only
 // surfaces): a database that predates migration v20 has no table and
 // therefore no override.
-func scheduleAtOverrideUnmigrated(configPath, label string) string {
+func scheduleAtOverrideUnmigrated(configPath, label string, stderr io.Writer) string {
 	store, err := openUnmigratedStore(resolveConfigPath(configPath))
 	if err != nil {
 		return ""
 	}
 	defer store.Close()
-	return scheduleAtOverride(context.Background(), store, label)
+	return scheduleAtOverride(context.Background(), store, label, stderr)
 }
 
 // scheduleLabelFor computes the managed label from the loaded
@@ -609,17 +618,17 @@ func scheduleLabelFor(cfg *config.Config, routeID, configPath string) string {
 // production enablement. The stored --at override is resolved
 // best-effort without store side effects (a first-use posture needs
 // none).
-func schedulePosture(cfg *config.Config, routeID, configPath string) map[string]any {
+func schedulePosture(cfg *config.Config, routeID, configPath string, stderr io.Writer) map[string]any {
 	return schedulePostureCore(cfg, routeID, configPath, func(label string) string {
-		return scheduleAtOverrideUnmigrated(configPath, label)
+		return scheduleAtOverrideUnmigrated(configPath, label, stderr)
 	})
 }
 
 // schedulePostureWithStore is the posture over an already-open store
 // surface (nil degrades the override read to the default timing).
-func schedulePostureWithStore(cfg *config.Config, routeID, configPath string, reader scheduleOverrideReader) map[string]any {
+func schedulePostureWithStore(cfg *config.Config, routeID, configPath string, reader scheduleOverrideReader, stderr io.Writer) map[string]any {
 	return schedulePostureCore(cfg, routeID, configPath, func(label string) string {
-		return scheduleAtOverride(context.Background(), reader, label)
+		return scheduleAtOverride(context.Background(), reader, label, stderr)
 	})
 }
 
@@ -768,7 +777,7 @@ func notificationDrainPosture(ctx context.Context, cfg *config.Config, store dra
 			}
 		}
 		row["unresolvable_sinks"] = unresolvable
-		if posture := schedulePostureWithStore(cfg, routeID, configPath, store); posture != nil {
+		if posture := schedulePostureWithStore(cfg, routeID, configPath, store, stderr); posture != nil {
 			row["scheduler_expected"] = posture["expected"]
 			row["scheduler_installed"] = posture["installed"]
 			row["scheduler_loaded"] = posture["loaded"]

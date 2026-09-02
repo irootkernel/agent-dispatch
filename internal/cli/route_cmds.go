@@ -201,7 +201,7 @@ func runRouteEnable(command string, args []string, stdout, stderr io.Writer) int
 	// surfaces this at its printed enable step instead. The stored
 	// --at override participates in the definition match (round-4 F004):
 	// a legitimately overridden scheduled time must not read as drift.
-	if posture := schedulePostureWithStore(cfg, routeID, resolveConfigPath(flags.val("--config")), closer); posture != nil && posture["expected"] == true && posture["healthy"] != true {
+	if posture := schedulePostureWithStore(cfg, routeID, resolveConfigPath(flags.val("--config")), closer, stderr); posture != nil && posture["expected"] == true && posture["healthy"] != true {
 		return planErr(stderr, command, "config_invalid", "configuration",
 			fmt.Sprintf("drain mode %v requires an installed, loaded, definition-matching managed schedule before production enablement (present=%v loaded=%v); run 'agent-dispatch schedule install --route %s --platform launchd' first",
 				posture["mode"], posture["installed"], posture["loaded"], routeID), 3)

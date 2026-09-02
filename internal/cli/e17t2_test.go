@@ -283,7 +283,7 @@ func TestE17T2ScheduleAtOverridePersisted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	posture := schedulePostureWithStore(cfg, "wiki", configPath, s)
+	posture := schedulePostureWithStore(cfg, "wiki", configPath, s, &errb)
 	if posture["healthy"] != true || posture["overdue"] != false {
 		t.Fatalf("the posture must read the override as the intended definition: %v", posture)
 	}

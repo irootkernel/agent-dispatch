@@ -205,27 +205,14 @@ func (d *DrainService) limit() int {
 	return d.Limit
 }
 
-func (d *DrainService) retry() ports.NotificationBackoff {
-	b := d.Retry
-	if b.Initial <= 0 {
-		b.Initial = 30 * time.Second
-	}
-	if b.Max <= 0 {
-		b.Max = 15 * time.Minute
-	}
-	if b.Multiplier <= 0 {
-		b.Multiplier = 2.0
-	}
-	return b
-}
-
 // retryFor resolves the envelope one claim's fenced record persists
 // (round-4 F002 and the E17 audit's F002): a RESOLVED envelope — the
 // service-level one (the automatic pass binds its route policy there)
 // or the per-route resolver's — is authoritative including an explicit
 // zero jitter, because the configuration layer already defaulted every
-// absent member; only when NO envelope is resolved anywhere do the
-// documented defaults apply, jitter included.
+// absent member; only when NO envelope is resolved anywhere do these
+// documented defaults apply (the configuration-spec drain table is the
+// authority: 30 seconds, 15 minutes, 2.0, and 0.2 symmetric jitter).
 func (d *DrainService) retryFor(routeID string) ports.NotificationBackoff {
 	env := d.Retry
 	if d.BackoffFor != nil {

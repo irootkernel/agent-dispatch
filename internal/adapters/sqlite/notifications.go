@@ -293,7 +293,12 @@ func (s *Store) RetryNotification(ctx context.Context, notificationID string) er
 		// (E17 audit F006): a claim landing between the check above and
 		// this write fails the conditional instead of re-arming claimed
 		// work — the affected-rows check maps that race to the same
-		// live-lease refusal.
+		// live-lease refusal. The stored expiry is normalized to
+		// second-precision RFC 3339 by every writer; normalizing the
+		// read keeps the lexicographic compare exact even against a
+		// sub-second value some future writer might leave (E17 audit
+		// round-2 F002).
+		leaseExpiresAt = normalizeTimestamp(leaseExpiresAt)
 		if leaseOwner != "" && leaseExpiresAt > now {
 			return fmt.Errorf("%w: %s is under a live delivery lease until %s", ports.ErrNotificationLeaseActive, notificationID, leaseExpiresAt)
 		}

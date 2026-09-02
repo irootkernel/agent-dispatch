@@ -19,7 +19,7 @@
 >
 > The deterministic legs of every G10-G12 criterion are the focused
 > suites the gates already name (VALIDATION.md); this document records
-> the REAL-environment legs AC-1302 adds, the two real defects the
+> the REAL-environment legs AC-1302 adds, the three real defects the
 > walkthrough exposed and closed, and the known limitations record.
 
 ## 1. Clean-host guided setup and post-install rerun (AC-1003/AC-1005)

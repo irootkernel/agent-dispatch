@@ -154,8 +154,8 @@ func TestE16T2UnresolvableSinkStaysLocal(t *testing.T) {
 // defaults the configuration layer documents.
 func TestE16T2RetryDefaults(t *testing.T) {
 	svc := &DrainService{}
-	b := svc.retry()
-	if b.Initial != 30*time.Second || b.Max != 15*time.Minute || b.Multiplier != 2.0 {
+	b := svc.retryFor("wiki")
+	if b.Initial != 30*time.Second || b.Max != 15*time.Minute || b.Multiplier != 2.0 || b.JitterFraction != 0.2 {
 		t.Fatalf("defaults: %+v", b)
 	}
 	if svc.limit() != DefaultMaxPerRun {

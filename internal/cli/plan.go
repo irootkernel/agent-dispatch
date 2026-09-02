@@ -302,7 +302,11 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	// mid-transaction foreign-key failure would surface as an
 	// unattributable storage fault instead of the two-key state conflict
 	// the contract names (the E17-T2 real-Hermes cold validation
-	// finding).
+	// finding). runDispatch is the product's single arrival boundary —
+	// the Watchman trigger and the operator both enter here, the drain
+	// and rerun surfaces only advance existing intents, and reconcile
+	// materializes its own registration — so this gate covers every
+	// arrival-writing caller (E17 audit round-2 F005's boundary note).
 	_, regStore, exit := openOperatorStore(command, artifacts.opts.configPath, stderr)
 	if exit != 0 {
 		return exit

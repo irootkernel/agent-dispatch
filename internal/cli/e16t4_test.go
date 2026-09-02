@@ -357,8 +357,12 @@ func TestE16T4ScheduleRunDrainsScheduledRoute(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if byState["delivered"] != 1 {
-		t.Fatalf("the scheduled runner must drain its route's due work: %v (stderr: %s)", byState, errb.String())
+	// The runner carries the drift evaluation (its only automatic
+	// surface since v0.1.6 §4): the fixture's unbound route enqueues its
+	// integration-drift intent beside the seeded work, and the scheduled
+	// pass delivers both.
+	if byState["delivered"] != 2 {
+		t.Fatalf("the scheduled runner must drain its route's due and drift work: %v (stderr: %s)", byState, errb.String())
 	}
 }
 

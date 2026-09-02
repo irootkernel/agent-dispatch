@@ -229,11 +229,11 @@ func TestE13T2DrainDeliversLogSinkAndStatusProjects(t *testing.T) {
 	}
 	res = decodeEnvelope(t, &out)
 	drain, _ := res["drain"].(map[string]any)
-	// The drain evaluates drift first: the missing Watchman binding of
-	// the enabled route enqueues its own intent, so the pass delivers
-	// the work intent and the drift intent (both on the log sink).
-	if drain["delivered"] != float64(2) || res["pending"] != false {
-		t.Fatalf("the drain must deliver the work and drift intents: %v", res)
+	// The explicit drain never evaluates drift (v0.1.6 §4: the drift
+	// evaluation rides the scheduled runner), so the pass delivers only
+	// the work intent on the log sink.
+	if drain["delivered"] != float64(1) || res["pending"] != false {
+		t.Fatalf("the drain must deliver the work intent: %v", res)
 	}
 	// The listing carries the attempt projection; a second drain is a
 	// no-op (nothing pending).
@@ -244,8 +244,8 @@ func TestE13T2DrainDeliversLogSinkAndStatusProjects(t *testing.T) {
 	}
 	res = decodeEnvelope(t, &out)
 	rows, _ := res["notifications"].([]any)
-	if len(rows) != 2 {
-		t.Fatalf("the delivered intents must list: %v", res["notifications"])
+	if len(rows) != 1 {
+		t.Fatalf("the delivered intent must list: %v", res["notifications"])
 	}
 	for _, rawRow := range rows {
 		row, _ := rawRow.(map[string]any)
@@ -280,14 +280,14 @@ func TestE13T2AmbiguousRetryKeepsStableKeyAndRefusedRetryRearms(t *testing.T) {
 	}
 	res := decodeEnvelope(t, &out)
 	drain, _ := res["drain"].(map[string]any)
-	// The stalled endpoint classifies BOTH webhook intents (the work
-	// notification and the drift notification) ambiguous; the log sink's
-	// pair delivers.
-	if drain["ambiguous"] != float64(2) || drain["delivered"] != float64(2) {
-		t.Fatalf("the stalled endpoint must classify its intents ambiguous: %v", res)
+	// The stalled endpoint classifies the webhook work intent ambiguous
+	// (the drift evaluation no longer rides the explicit drain); the log
+	// sink's pair delivers.
+	if drain["ambiguous"] != float64(1) || drain["delivered"] != float64(1) {
+		t.Fatalf("the stalled endpoint must classify its intent ambiguous: %v", res)
 	}
-	if n := e13t2NotificationCount(t, f.configPath, "sink_id = 'ops-webhook' AND state = 'pending'"); n != 2 {
-		t.Fatalf("the ambiguous notifications must stay pending: %d", n)
+	if n := e13t2NotificationCount(t, f.configPath, "sink_id = 'ops-webhook' AND state = 'pending'"); n != 1 {
+		t.Fatalf("the ambiguous notification must stay pending: %d", n)
 	}
 	// The endpoint recovers; every webhook retry presents its own SAME
 	// idempotency key (NTF-007, AC-903 shape) and the source state never
@@ -340,8 +340,8 @@ func TestE13T2AmbiguousRetryKeepsStableKeyAndRefusedRetryRearms(t *testing.T) {
 		t.Fatalf("second drain: %s", errb.String())
 	}
 	headers := f.capturedHeaders()
-	if len(headers) != 4 {
-		t.Fatalf("both attempts of both notifications must reach the endpoint: %d", len(headers))
+	if len(headers) != 2 {
+		t.Fatalf("both attempts of the notification must reach the endpoint: %d", len(headers))
 	}
 	for _, want := range webhookKeys {
 		seen := 0
@@ -354,8 +354,8 @@ func TestE13T2AmbiguousRetryKeepsStableKeyAndRefusedRetryRearms(t *testing.T) {
 			t.Fatalf("each notification's stable key must appear exactly once per attempt: key seen %d times", seen)
 		}
 	}
-	if n := e13t2NotificationCount(t, f.configPath, "sink_id = 'ops-webhook' AND state = 'delivered'"); n != 2 {
-		t.Fatal("the recovered endpoint must resolve the notifications delivered")
+	if n := e13t2NotificationCount(t, f.configPath, "sink_id = 'ops-webhook' AND state = 'delivered'"); n != 1 {
+		t.Fatal("the recovered endpoint must resolve the notification delivered")
 	}
 
 	// The refused path: a definite refusal resolves refused; the explicit
@@ -404,38 +404,37 @@ func TestE13T2SinkIsolationAndDriftEvaluation(t *testing.T) {
 	if code := Run([]string{"notifications", "drain", "--config", f.configPath}, &out, &errb); code != 0 {
 		t.Fatalf("drain: %s", errb.String())
 	}
-	if n := e13t2NotificationCount(t, f.configPath, "sink_id = 'ops-log' AND state = 'delivered'"); n != 2 {
-		t.Fatal("the log sink must deliver its intents independently of the refusing webhook")
+	if n := e13t2NotificationCount(t, f.configPath, "sink_id = 'ops-log' AND state = 'delivered'"); n != 1 {
+		t.Fatal("the log sink must deliver its intent independently of the refusing webhook")
 	}
-	if n := e13t2NotificationCount(t, f.configPath, "sink_id = 'ops-webhook' AND state = 'refused'"); n != 2 {
-		t.Fatal("the webhook notifications must resolve refused independently")
+	if n := e13t2NotificationCount(t, f.configPath, "sink_id = 'ops-webhook' AND state = 'refused'"); n != 1 {
+		t.Fatal("the webhook notification must resolve refused independently")
 	}
 
-	// Drift evaluation (OPS-013): the enabled route carries no Watchman
-	// binding, so the drain enqueues watchman_drift once per sink; the
-	// second drain's identical finding deduplicates.
+	// Drift evaluation (OPS-013) rides the scheduled runner — its only
+	// automatic surface since E16 (v0.1.6 §4) — and never the explicit
+	// drain: the runner enqueues watchman_drift once per sink for the
+	// enabled route's missing Watchman binding, and the second runner
+	// pass's identical finding deduplicates. The route stays in manual
+	// drain mode, so the enqueued drift intents stay pending for the
+	// operator's explicit pass.
 	out.Reset()
 	errb.Reset()
-	if code := Run([]string{"notifications", "drain", "--config", f.configPath}, &out, &errb); code != 0 {
-		t.Fatalf("drain with drift: %s", errb.String())
-	}
-	res := decodeEnvelope(t, &out)
-	driftRows, _ := res["drift"].([]any)
-	if len(driftRows) != 1 {
-		t.Fatalf("the drift report covers the notification-enabled routes: %v", res["drift"])
-	}
-	driftRow, _ := driftRows[0].(map[string]any)
-	enqueued, _ := driftRow["enqueue"].(map[string]any)
-	if _, ok := enqueued["watchman"]; !ok {
-		t.Fatalf("the missing Watchman binding must enqueue its drift finding: %v", enqueued)
+	markInvocationStart()
+	if code := Run([]string{"schedule", "run", "--route", "wiki", "--config", f.configPath}, &out, &errb); code != 0 {
+		t.Fatalf("schedule run with drift: %s", errb.String())
 	}
 	if n := e13t2NotificationCount(t, f.configPath, "event = 'watchman_drift'"); n != 2 {
 		t.Fatalf("the drift intent must exist once per sink: %d", n)
 	}
+	if n := e13t2NotificationCount(t, f.configPath, "event = 'watchman_drift' AND state = 'pending'"); n != 2 {
+		t.Fatalf("a manual-mode route's drift intents wait for the explicit drain: %d", n)
+	}
 	out.Reset()
 	errb.Reset()
-	if code := Run([]string{"notifications", "drain", "--config", f.configPath}, &out, &errb); code != 0 {
-		t.Fatalf("dedup drain: %s", errb.String())
+	markInvocationStart()
+	if code := Run([]string{"schedule", "run", "--route", "wiki", "--config", f.configPath}, &out, &errb); code != 0 {
+		t.Fatalf("dedup schedule run: %s", errb.String())
 	}
 	if n := e13t2NotificationCount(t, f.configPath, "event = 'watchman_drift'"); n != 2 {
 		t.Fatalf("a persisting drift must never re-notify: %d", n)
@@ -525,16 +524,16 @@ func TestE13T2DefectiveSinkDeclarationDoesNotBlockHealthySinks(t *testing.T) {
 	}
 	res := decodeEnvelope(t, &out)
 	drain, _ := res["drain"].(map[string]any)
-	// The drift pass enqueues only for the still-declared log sink, so
-	// the stale webhook carries exactly its work notification as
-	// retryable evidence.
-	if drain["delivered"] != float64(2) || drain["retryable"] != float64(1) {
+	// The explicit drain carries no drift evaluation (v0.1.6 §4), so the
+	// stale webhook carries exactly its work notification as retryable
+	// evidence and the log sink delivers its single work intent.
+	if drain["delivered"] != float64(1) || drain["retryable"] != float64(1) {
 		t.Fatalf("the log sink must deliver while the stale webhook records retryable: %v", res)
 	}
 	// The webhook notifications stayed pending with the unresolvable
 	// evidence; the log notifications resolved delivered.
-	if n := e13t2NotificationCount(t, f.configPath, "sink_id = 'ops-log' AND state = 'delivered'"); n != 2 {
-		t.Fatalf("the healthy sink must deliver its intents: %d", n)
+	if n := e13t2NotificationCount(t, f.configPath, "sink_id = 'ops-log' AND state = 'delivered'"); n != 1 {
+		t.Fatalf("the healthy sink must deliver its intent: %d", n)
 	}
 	if n := e13t2NotificationCount(t, f.configPath, "sink_id = 'ops-webhook' AND state = 'pending'"); n != 1 {
 		t.Fatalf("the stale sink's intent must stay pending: %d", n)
@@ -642,9 +641,9 @@ func TestE13T2DrainReportsPendingBeyondThePassBound(t *testing.T) {
 	if n := e13t2NotificationCount(t, configPath, "state = 'pending'"); n != 2 {
 		t.Fatalf("two pending work intents: %d", n)
 	}
-	// The drift evaluation first enqueues the missing-binding drift
-	// intent, so the bounded pass delivers one of three pending
-	// notifications and must report the two that remain.
+	// The bounded pass delivers one of the two pending work
+	// notifications (the explicit drain adds no drift intents since
+	// v0.1.6 §4) and must report the one that remains.
 	var out, errb bytes.Buffer
 	if code := Run([]string{"notifications", "drain", "--limit", "1", "--config", configPath}, &out, &errb); code != 0 {
 		t.Fatalf("drain: %s", errb.String())
@@ -654,7 +653,7 @@ func TestE13T2DrainReportsPendingBeyondThePassBound(t *testing.T) {
 	if drain["delivered"] != float64(1) {
 		t.Fatalf("the bounded pass must deliver exactly one: %v", res["drain"])
 	}
-	if res["pending"] != true || res["pending_remaining"] != float64(2) {
+	if res["pending"] != true || res["pending_remaining"] != float64(1) {
 		t.Fatalf("the envelope must report the beyond-bound backlog: %v", res)
 	}
 	// An unbounded pass drains the remainder and reports a clean set.
@@ -669,10 +668,11 @@ func TestE13T2DrainReportsPendingBeyondThePassBound(t *testing.T) {
 	}
 }
 
-// TestE13T2DrainAbortsWhenDriftEnqueueFails pins the round-1
-// remediation of the epic validation: a drift-enqueue storage failure
-// is the storage class (exit 20), never envelope data with exit 0.
-func TestE13T2DrainAbortsWhenDriftEnqueueFails(t *testing.T) {
+// TestE13T2ScheduleRunAbortsWhenDriftEnqueueFails pins the storage
+// posture of the drift evaluation's new automatic surface: a
+// drift-enqueue storage failure inside the scheduled runner is the
+// storage class (exit 20), never a silent dry pass.
+func TestE13T2ScheduleRunAbortsWhenDriftEnqueueFails(t *testing.T) {
 	configPath, _ := e13t1NotificationsFixture(t)
 	e4t3RegisterRoute(t, configPath)
 	e12t2Enable(t, configPath)
@@ -682,7 +682,8 @@ func TestE13T2DrainAbortsWhenDriftEnqueueFails(t *testing.T) {
 	}
 	t.Cleanup(func() { driftEnqueue = original })
 	var out, errb bytes.Buffer
-	code := Run([]string{"notifications", "drain", "--config", configPath}, &out, &errb)
+	markInvocationStart()
+	code := Run([]string{"schedule", "run", "--route", "wiki", "--config", configPath}, &out, &errb)
 	if code != 20 {
 		t.Fatalf("a drift-enqueue storage failure must exit 20, got %d (%s)", code, errb.String())
 	}
@@ -690,6 +691,6 @@ func TestE13T2DrainAbortsWhenDriftEnqueueFails(t *testing.T) {
 		t.Fatalf("the failure must carry the storage error code: %s", errb.String())
 	}
 	if strings.Contains(out.String(), "drift enqueue storage failure") {
-		t.Fatal("a storage failure must not ride the success envelope as data")
+		t.Fatal("a storage failure must not ride stdout as data")
 	}
 }

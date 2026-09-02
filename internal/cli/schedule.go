@@ -27,6 +27,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
@@ -418,15 +420,21 @@ func runScheduleRun(command string, args []string, stdout, stderr io.Writer) int
 		}
 	}
 	// The drift evaluation is the registry's automatic surface (E16-T3
-	// evidence): it rides the scheduler, never the explicit drain. The
-	// runner drains its own route under EITHER automatic mode (round-1
-	// F001): after-command recovery drains due work directly, and
-	// scheduled mode chains the drain after the healthy reconciliation
-	// above.
+	// evidence, v0.1.6 §4): it rides the scheduler — the runner carries
+	// it as its only automatic surface — and never the explicit drain
+	// (recursion). A drift-enqueue storage failure aborts the pass as
+	// the storage class, mirroring the notifications commands.
 	store := openDrainStoreForSchedule(flags.val("--config"), stderr)
 	if store == nil {
 		return 0 // the deferral note already landed on stderr
 	}
+	if _, err := evaluateDriftNotifications(requestCtx(), cfg, store, dispatch.Timestamp(time.Now())); err != nil {
+		return planErr(stderr, command, "sqlite_query_failed", "storage", err.Error(), 20)
+	}
+	// The runner drains its own route under EITHER automatic mode
+	// (round-1 F001): after-command recovery drains due work directly,
+	// and scheduled mode chains the drain after the healthy
+	// reconciliation above.
 	autoDrainCfg(command, cfg, store, stderr, map[string]bool{
 		config.DrainModeAfterCommand: true, config.DrainModeScheduled: true,
 	}, routeID)
@@ -434,10 +442,10 @@ func runScheduleRun(command string, args []string, stdout, stderr io.Writer) int
 }
 
 // openDrainStoreForSchedule opens the operator store for the runner's
-// drain; an open failure returns a nil-safe dry pass with one bounded
-// note.
-func openDrainStoreForSchedule(configPath string, stderr io.Writer) afterCommandStore {
-	store, _, exit := openOperatorStore("schedule run", configPath, stderr)
+// drift evaluation and drain; an open failure returns nil with one
+// bounded note (the pass stays dry).
+func openDrainStoreForSchedule(configPath string, stderr io.Writer) *sqlite.Store {
+	_, store, exit := openOperatorStore("schedule run", configPath, stderr)
 	if exit != 0 {
 		boundedAfterCommandNote(stderr, "schedule run: state store unavailable; drain deferred to the next recovery")
 		return nil

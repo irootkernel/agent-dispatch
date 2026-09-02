@@ -87,10 +87,11 @@ func TestG9AC905IsolatedTwoDestinationNotificationWalkthrough(t *testing.T) {
 	}
 	res := decodeEnvelope(t, &out)
 	drain, _ := res["drain"].(map[string]any)
-	// The drain delivers each sink's intent: both lanes' completions on
-	// the log and webhook sinks plus the drift evaluation's watchman
-	// finding (the fixture route has no installed binding).
-	if drain["delivered"] != float64(6) {
+	// The drain delivers each sink's work intent: both lanes'
+	// completions on the log and webhook sinks. The drift evaluation no
+	// longer rides the explicit drain (v0.1.6 §4: the scheduled runner
+	// is its only automatic surface).
+	if drain["delivered"] != float64(4) {
 		t.Fatalf("the walkthrough's notifications must all deliver: %v", res)
 	}
 	payloads := f.deliveredPayloads()
@@ -178,8 +179,18 @@ func TestG9AC905FailureDiagnosisDisableRemovalRetryRollback(t *testing.T) {
 		t.Fatalf("the failed lane must be diagnosable through events show: %v", res["aggregate_status"])
 	}
 	// Notification retry: the endpoint refuses, the operator fixes it,
-	// and the explicit retry delivers under the same identity.
+	// and the explicit retry delivers under the same identity. The
+	// refused record comes from the drift evaluation's intents — the
+	// scheduled runner enqueues them (its only automatic surface since
+	// v0.1.6 §4) and the manual-mode route's explicit drain refuses the
+	// webhook one under the broken endpoint.
 	f.setStatus(http.StatusForbidden, 0)
+	out.Reset()
+	errb.Reset()
+	markInvocationStart()
+	if code := Run([]string{"schedule", "run", "--route", "wiki", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("schedule run with drift: %s", errb.String())
+	}
 	out.Reset()
 	errb.Reset()
 	if code := Run([]string{"notifications", "drain", "--config", configPath}, &out, &errb); code != 0 {

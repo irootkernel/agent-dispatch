@@ -388,15 +388,11 @@ filters plus each row's attempt count and last outcome (NTF-004);
 `retry <notification-id>` re-arms one refused notification — the
 operator's explicit decision — and performs one attempt under the
 notification's stable idempotency identity, refusing a delivered
-notification at exit 4 (NTF-007); `drain` first evaluates the configured
-drift classes per notification-enabled route (the missing or changed
-Watchman binding enqueues `watchman_drift`, the capability, profile, and
-skill findings enqueue `integration_drift`, each exactly once per drift
-appearance through the finding-digest occurrence; the reconciliation
-class stays with the pending-reconcile transitions) and then performs
-one bounded attempt per pending notification, oldest first, bounded by
-`--limit`; a drift-enqueue storage failure aborts the command as the
-storage class (exit 20). The envelope's `pending` and
+notification at exit 4 (NTF-007); `drain` performs one bounded attempt
+per pending notification, oldest first, bounded by `--limit`, and never
+evaluates drift — the OPS-013 drift evaluation rides the scheduled
+runner as its only automatic surface (v0.1.6 §4), so the explicit drain
+stays recursion-free. The envelope's `pending` and
 `pending_remaining` report the store's post-pass pending truth — the
 pass bound never hides a backlog. Delivery outcomes are data, never
 exit codes: an ambiguous or

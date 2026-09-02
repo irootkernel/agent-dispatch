@@ -13,7 +13,6 @@ import (
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/notificationsink"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
-	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
 	appnotifications "github.com/irootkernel/agent-dispatch/internal/app/notifications"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
@@ -376,12 +375,12 @@ func (s notificationDeliveryStore) ReleaseNotificationClaims(ctx context.Context
 
 // runNotificationsDrain delivers the pending notifications, oldest
 // first, bounded (CLI-013, observability-and-operations §8): the pass
-// first evaluates the configured drift classes per route — integration
-// and Watchman drift enqueue their intents transactionally, exactly
-// once per drift appearance (OPS-013) — and then performs one bounded
-// attempt per pending notification. Delivery outcomes are reported,
-// never exit-coded: an ambiguous or retryable remainder is visible work
-// for the next pass (NTF-007). The pass bound never hides a backlog:
+// performs one bounded attempt per pending notification. The OPS-013
+// drift evaluation rides the scheduled runner — its only automatic
+// surface (v0.1.6 §4, E16-T3 evidence) — and never the explicit drain
+// (recursion exclusion). Delivery outcomes are reported, never
+// exit-coded: an ambiguous or retryable remainder is visible work for
+// the next pass (NTF-007). The pass bound never hides a backlog:
 // `pending` and `pending_remaining` report the store's post-pass
 // pending truth, not just this pass's outcomes.
 func runNotificationsDrain(command string, args []string, stdout, stderr io.Writer) int {
@@ -398,10 +397,8 @@ func runNotificationsDrain(command string, args []string, stdout, stderr io.Writ
 		return exit
 	}
 	defer closer.Close()
-	// The limit validates BEFORE any drift side effect: a usage error
-	// must not leave half-evaluated notification intents behind. The
-	// manual drain shares the E16-T2 lease-safe service: it selects due
-	// work only, claims atomically, records fenced outcomes, and
+	// The manual drain shares the E16-T2 lease-safe service: it selects
+	// due work only, claims atomically, records fenced outcomes, and
 	// persists the retry backoff (NTF-011 through NTF-014).
 	limit := 0
 	if raw := flags.val("--limit"); raw != "" {
@@ -418,10 +415,6 @@ func runNotificationsDrain(command string, args []string, stdout, stderr io.Writ
 		Limit:    limit,
 	}
 	ctx := requestCtx()
-	drift, driftErr := evaluateDriftNotifications(ctx, cfg, closer, dispatch.Timestamp(time.Now()))
-	if driftErr != nil {
-		return planErr(stderr, command, "sqlite_query_failed", "storage", driftErr.Error(), 20)
-	}
 	report, err := drainer.DrainDue(ctx, "")
 	if err != nil {
 		var construction *appnotifications.SinkConstructionError
@@ -437,7 +430,6 @@ func runNotificationsDrain(command string, args []string, stdout, stderr io.Writ
 	pendingRemaining := int(byState[string(records.NotificationPending)])
 	return writeEnvelope(stdout, command, map[string]any{
 		"drain":             report,
-		"drift":             drift,
 		"pending":           report.Pending() || pendingRemaining > 0,
 		"pending_remaining": pendingRemaining,
 		"note":              "one bounded attempt per pending notification; ambiguous and retryable outcomes stay pending under their stable idempotency identity",
@@ -445,7 +437,8 @@ func runNotificationsDrain(command string, args []string, stdout, stderr io.Writ
 }
 
 // driftEnqueue binds the drift evaluation to the store's enqueue
-// surface; tests swap it to prove the drain's storage-failure posture.
+// surface; tests swap it to prove the scheduled runner's
+// storage-failure posture.
 var driftEnqueue = func(ctx context.Context, store *sqlite.Store, routeID string, event records.NotificationEventKind, transition string, source map[string]string, now string) (int, error) {
 	return store.EnqueueRouteNotification(ctx, routeID, event, transition, "", source, now)
 }

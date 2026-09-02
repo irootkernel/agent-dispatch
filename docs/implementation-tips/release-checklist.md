@@ -19,7 +19,7 @@
 
 - [x] Go toolchain and dependencies are pinned (go 1.26.6; staticcheck as a tool dependency, SCP-005); `make verify` and `make release` enforce the exact pin through `go-version-check` before any build step.
 - [x] Clean reproducible builds pass on macOS (darwin/arm64 — the only supported platform under the D-023 policy).
-- [x] Binaries and checksums are generated with the byte-reproducibility double build verified for v0.1.6 (two consecutive `make release VERSION=v0.1.6` builds byte-identical; SHA256SUMS `506758f360c0b3a6640a437787170fc40d07d947e0aefa0da498ac23eb8dc67f` on the pre-tag candidate tree).
+- [x] Binaries and checksums are generated with the byte-reproducibility double build verified for v0.1.6 (two consecutive `make release VERSION=v0.1.6` builds byte-identical on the final implementation tree; SHA256SUMS `ea0eb3cf17820baa2d9ce76b8a5539dca6f3c3130e5501f7b2bba08dd702deae`).
 - [x] Dependency/license review is complete (dependency-licenses.md; no new dependencies since the v0.1.5 review).
 - [x] Build version, commit, and schema ranges are embedded (`version --output json`: v0.1.6, config version 1, schema range 1-20).
 
@@ -110,6 +110,8 @@ The G10 through G13 evidence E17 closed the v0.1.6 release with:
       and the reproducible release proof (E17, G13).
 - [x] SOT/roadmap/VALIDATION/release-note truth synchronized at 89/89
       (this release; SOT 1.3.0).
-- [x] Two byte-identical darwin/arm64 builds from the pre-tag candidate
-      tree; no production activation (the hosted artifact re-cuts from
-      the tagged release commit under the publication authority).
+- [x] Two byte-identical darwin/arm64 builds from the final
+      implementation tree (commit 24e07c4, every audit remediation
+      included); no production activation (the hosted artifact re-cuts
+      from the tagged release commit under the publication authority,
+      re-verifying byte-identity there).

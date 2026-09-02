@@ -4313,9 +4313,9 @@ E17-T2 Completed.
 Completed 2026-09-02. Gate G13's release rows are complete in VALIDATION.md:
 AC-1301/AC-1302 closed by the E17-T2 cold validation, AC-1303 by the release
 proof — two consecutive `make release VERSION=v0.1.6` builds from the clean
-pre-tag candidate tree (commit f4007a1, pinned Go 1.26.6) byte-identical with
-SHA256SUMS recording
-`506758f360c0b3a6640a437787170fc40d07d947e0aefa0da498ac23eb8dc67f`, the
+final implementation tree (commit 24e07c4, pinned Go 1.26.6, carrying every
+whole-epic audit remediation) byte-identical with SHA256SUMS recording
+`ea0eb3cf17820baa2d9ce76b8a5539dca6f3c3130e5501f7b2bba08dd702deae`, the
 binary reporting v0.1.6 / schema 1-20, and the versioned surfaces agreeing
 (operator skill 2.1.0's compatibility declaration, the v0.1.6 release notes,
 the synchronized status documents) — and AC-1304 by the additive-migration

@@ -173,6 +173,15 @@ fake sinks for concurrency and idempotency plus an isolated `HERMES_HOME` and
 disposable board for the public-interface walkthrough. G9 uses local webhook
 fixtures to prove dedup, ambiguity, retry, redaction, and sink independence.
 
+`make test` and `make test-race` place the whole Go suite under disposable
+`HOME`, `HERMES_HOME`, and `HERMES_KANBAN_HOME` roots after preserving the Go
+toolchain cache locations. Real-Hermes tests add a second, per-test sandbox and
+clear higher-precedence Kanban selectors before invoking the installed binary.
+This outer guard contains a test that forgets to opt in, while the per-test root
+prevents package or race-suite runs from sharing profiles and boards. The
+operator's sticky `active_profile` file and shared Kanban tree are never test
+fixtures.
+
 Environment-dependent evidence must state whether it is frozen-contract,
 current live read-only, or disposable runtime evidence. A skipped real leg
 cannot be promoted to current runtime proof. `make verify` remains the single

@@ -10,19 +10,20 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/irootkernel/agent-dispatch/internal/testsupport/hermesenv"
 )
 
 // e5t2SkillDir is the packaged production skill inside the docs tree.
 var e5t2SkillDir = filepath.Join("..", "..", "docs", "skills", "agent-dispatch-wiki-maintenance")
 
-// e5t2Hermes runs one public hermes command against a disposable HOME so
+// e5t2Hermes runs one public hermes command against a disposable root so
 // the validation never touches the real Hermes profile.
-func e5t2Hermes(t *testing.T, home string, argv ...string) (string, error) {
+func e5t2Hermes(t *testing.T, sandbox *hermesenv.Sandbox, argv ...string) (string, error) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "hermes", argv...)
-	cmd.Env = append(os.Environ(), "HOME="+home)
+	cmd := sandbox.CommandContext(ctx, argv...)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
@@ -71,18 +72,13 @@ func TestHermesCompanionSkillPackaged(t *testing.T) {
 // --skill flag, the durable task record carries it, and the board is
 // deleted afterwards. The real Hermes profile is never touched.
 func TestHermesCompanionSkillValidated(t *testing.T) {
-	if _, err := exec.LookPath("hermes"); err != nil {
-		t.Skip("hermes binary not available (environment-dependent evidence gap)")
-	}
-	probe, err := e5t2Hermes(t, os.Getenv("HOME"), "--version")
-	if err != nil || !strings.Contains(probe, "v0.20.5") {
-		t.Skipf("installed hermes is outside the verified set: %q", probe)
-	}
+	sandbox := hermesenv.NewSandbox(t, func(firstLine string) bool {
+		return strings.Contains(firstLine, "v0.20.5")
+	})
 
 	// Disposable profile: install the skill by local copy (the documented
 	// public mechanism, INSTALL.md option A).
-	home := t.TempDir()
-	skillsDir := filepath.Join(home, ".hermes", "skills", "productivity")
+	skillsDir := filepath.Join(sandbox.HermesHome, "skills", "productivity")
 	if err := os.MkdirAll(skillsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -94,29 +90,29 @@ func TestHermesCompanionSkillValidated(t *testing.T) {
 		t.Fatalf("installing the skill into the disposable profile: %v: %s", err, out)
 	}
 
-	listing, err := e5t2Hermes(t, home, "skills", "list")
+	listing, err := e5t2Hermes(t, sandbox, "skills", "list")
 	if err != nil {
 		t.Fatalf("skills list: %v: %s", err, listing)
 	}
 	if !strings.Contains(listing, "agent-dispatch-wiki-maintenance") {
 		t.Fatalf("disposable profile must list the installed skill: %s", listing)
 	}
-	inspected, err := e5t2Hermes(t, home, "skills", "inspect", "agent-dispatch-wiki-maintenance")
+	inspected, err := e5t2Hermes(t, sandbox, "skills", "inspect", "agent-dispatch-wiki-maintenance")
 	if err != nil || !strings.Contains(inspected, "agent-dispatch-wiki-maintenance") {
 		t.Fatalf("skills inspect failed: %v: %s", err, inspected)
 	}
 
 	// Disposable board task selecting the skill through the public flag.
 	board := fmt.Sprintf("agent-dispatch-e5t2-skill-%d", time.Now().UnixNano())
-	if out, err := e5t2Hermes(t, home, "kanban", "boards", "create", board); err != nil {
+	if out, err := e5t2Hermes(t, sandbox, "kanban", "boards", "create", board); err != nil {
 		t.Fatalf("boards create: %v: %s", err, out)
 	}
 	defer func() {
-		if out, err := e5t2Hermes(t, home, "kanban", "boards", "rm", board, "--delete"); err != nil {
+		if out, err := e5t2Hermes(t, sandbox, "kanban", "boards", "rm", board, "--delete"); err != nil {
 			t.Logf("board cleanup: %v: %s", err, out)
 		}
 	}()
-	created, err := e5t2Hermes(t, home, "kanban", "--board", board, "create",
+	created, err := e5t2Hermes(t, sandbox, "kanban", "--board", board, "create",
 		"--skill", "agent-dispatch-wiki-maintenance", "--json", "Agent Dispatch companion skill validation")
 	if err != nil {
 		t.Fatalf("kanban create with the skill: %v: %s", err, created)
@@ -142,7 +138,7 @@ func TestHermesCompanionSkillValidated(t *testing.T) {
 	}
 
 	// The durable record still carries it on the public show surface.
-	shown, err := e5t2Hermes(t, home, "kanban", "--board", board, "show", task.ID, "--json")
+	shown, err := e5t2Hermes(t, sandbox, "kanban", "--board", board, "show", task.ID, "--json")
 	if err != nil || !strings.Contains(shown, "agent-dispatch-wiki-maintenance") {
 		t.Fatalf("task show must carry the skill: %v: %s", err, shown)
 	}

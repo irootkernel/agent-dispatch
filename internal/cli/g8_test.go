@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -864,55 +863,35 @@ func g8StressLineages(t *testing.T, s *sqlite.Store, n int) []ports.Lineage {
 // installed (the gate's pass/fail never depends on this leg — every
 // AC-801 through AC-806 criterion is proven deterministically above).
 func TestG8RealHermesTwoDestinationWalkthrough(t *testing.T) {
-	hermesenv.SkipUnlessSupportedHermes(t, func(firstLine string) bool {
+	sandbox := hermesenv.NewSandbox(t, func(firstLine string) bool {
 		ver, perr := hermeskanban.ParseVersionOutput(firstLine)
 		return perr == nil && ver.Eligible(hermeskanban.MinimumEligibleVersion)
 	})
-	bin, _ := exec.LookPath("hermes")
-	// The HOME redirect below happens after the board exists; the cleanup
-	// defer may therefore run under the REDIRECTED HOME (E12 epic
-	// validation, review posture): capture the real HOME now so the
-	// deletion command runs in the operator's environment, and the board
-	// name is recorded in the test log for manual removal if the cleanup
-	// still fails (the disposable-board guarantee stays honest).
-	realHome := os.Getenv("HOME")
-	cleanupEnv := func(argv ...string) (string, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		cmd := exec.CommandContext(ctx, bin, argv...)
-		cmd.Env = append(os.Environ(), "HOME="+realHome)
-		out, err := cmd.CombinedOutput()
-		return strings.TrimSpace(string(out)), err
-	}
+	bin := sandbox.Binary
 	// The frozen mutex-capable create surface: a drifted surface is the E11-T2
 	// capability probe's detection, not this walkthrough's (same posture
 	// as the adapter's realboard test).
-	if help, herr := g3Hermes(t, "kanban", "create", "-h"); herr != nil || !strings.Contains(help, "--mutex-key") {
+	if help, herr := g3Hermes(t, bin, "kanban", "create", "-h"); herr != nil || !strings.Contains(help, "--mutex-key") {
 		t.Skipf("installed hermes create surface drifted from the frozen mutex-capable flags; the capability probe owns shape detection: %s", help)
 	}
 	// The disposable board is uniquely generated (nanosecond tag) and the
-	// cleanup deletes exactly that one board by name — never a wildcard or
-	// the user's active selection. It is best-effort: the HOME redirect
-	// below happens AFTER the board exists, and a cleanup failure under a
-	// redirected environment must not mask the walkthrough's result, so it
-	// logs the orphan honestly instead of failing the test (review round 1,
-	// security finding).
+	// cleanup deletes exactly that one board by name inside the per-test
+	// Kanban root — never a wildcard or the user's active selection.
 	board := fmt.Sprintf("agent-dispatch-g8-%d", time.Now().UnixNano())
-	if out, err := cleanupEnv("kanban", "boards", "create", board); err != nil {
+	if out, err := g3Hermes(t, bin, "kanban", "boards", "create", board); err != nil {
 		t.Skipf("boards create unavailable (%v): %s", err, out)
 	}
 	t.Logf("disposable walkthrough board: %s", board)
 	defer func() {
-		out, err := cleanupEnv("kanban", "boards", "rm", board, "--delete")
+		out, err := g3Hermes(t, bin, "kanban", "boards", "rm", board, "--delete")
 		if err != nil {
-			t.Logf("best-effort cleanup of the disposable board %s failed (%v): %s — remove it manually (TST-007 posture)", board, err, out)
+			t.Logf("best-effort cleanup of sandbox board %s failed (%v): %s", board, err, out)
 		}
 	}()
 
 	// The walkthrough fixture: the two-destination shape bound to the real
 	// executable and the disposable board, isolated per test.
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := sandbox.Home
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("AGENT_DISPATCH_CONFIG", "")
 	t.Setenv("AGENT_DISPATCH_STATE_DIR", filepath.Join(home, "state"))
@@ -942,7 +921,7 @@ hermes_targets:
     executable: %s
     submit_timeout: 30s
     lookup_timeout: 30s
-    environment_allowlist: [PATH, HOME]
+    environment_allowlist: [PATH, HOME, HERMES_HOME, HERMES_KANBAN_HOME]
 routes:
   wiki:
     enabled: true

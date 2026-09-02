@@ -185,14 +185,9 @@ func TestG5AC503PrunePreservesLineageAndAudit(t *testing.T) {
 // enables against.
 var g5Board = fmt.Sprintf("agent-dispatch-g5-%d", time.Now().UnixNano())
 
-// runHermesBin runs the real installed Hermes CLI (skipped when absent
-// by the caller's environment gate).
-func runHermesBin(t *testing.T, argv ...string) (string, error) {
+// runHermesBin runs the sandboxed real installed Hermes CLI.
+func runHermesBin(t *testing.T, bin string, argv ...string) (string, error) {
 	t.Helper()
-	bin, err := exec.LookPath("hermes")
-	if err != nil {
-		t.Skip("hermes binary not available (environment-dependent evidence gap)")
-	}
 	cmd := exec.Command(bin, argv...)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
@@ -204,12 +199,11 @@ func TestG5AC504CleanHostInstallDispatchScheduleUninstall(t *testing.T) {
 	// the verified support set skips as an environment-dependent
 	// evidence gap (TST-007); the environment probe is shared through
 	// testsupport/hermesenv with the adapter owning the version judgment.
-	hermesenv.SkipUnlessSupportedHermes(t, func(firstLine string) bool {
+	sandbox := hermesenv.NewSandbox(t, func(firstLine string) bool {
 		ver, perr := hermeskanban.ParseVersionOutput(firstLine)
 		return perr == nil && ver.Eligible(hermeskanban.MinimumEligibleVersion)
 	})
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := sandbox.Home
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("XDG_STATE_HOME", "")
 	t.Setenv("AGENT_DISPATCH_CONFIG", "")
@@ -220,6 +214,7 @@ func TestG5AC504CleanHostInstallDispatchScheduleUninstall(t *testing.T) {
 		t.Fatalf("AC-504 init failed: %s", errb.String())
 	}
 	cfgPath := platformpaths.DefaultConfigPath()
+	e5t4Rewrite(t, cfgPath, "      - PATH", "      - PATH\n      - HERMES_HOME\n      - HERMES_KANBAN_HOME")
 	out.Reset()
 	errb.Reset()
 	if code := Run([]string{"config", "validate", "--config", cfgPath}, &out, &errb); code != 0 {
@@ -273,11 +268,11 @@ func TestG5AC504CleanHostInstallDispatchScheduleUninstall(t *testing.T) {
 	// destination must select it, because the enable gate enforces
 	// HER-015 (a configured profile exists on disk before enablement).
 	e5t4Rewrite(t, cfgPath, "profile: wiki-maintainer", "profile: default")
-	if outb, berr := runHermesBin(t, "kanban", "boards", "create", g5Board); berr != nil {
+	if outb, berr := runHermesBin(t, sandbox.Binary, "kanban", "boards", "create", g5Board); berr != nil {
 		t.Fatalf("AC-504 board create failed: %v: %s", berr, outb)
 	}
 	t.Cleanup(func() {
-		_, _ = runHermesBin(t, "kanban", "boards", "rm", g5Board, "--delete")
+		_, _ = runHermesBin(t, sandbox.Binary, "kanban", "boards", "rm", g5Board, "--delete")
 	})
 	// The two-key gate (E7-T6/M-2): the operator flips the YAML key as
 	// part of the reviewed enable, then acknowledges the revision the

@@ -290,12 +290,11 @@ func TestG9SkillsVersionedValidatedAndInstallable(t *testing.T) {
 	// Installability through the documented public mechanism: the local
 	// copy of the operator skill lists in a disposable Hermes profile
 	// (INSTALL.md option A; skip-guarded as environment-dependent).
-	hermesenv.SkipUnlessSupportedHermes(t, func(firstLine string) bool {
+	sandbox := hermesenv.NewSandbox(t, func(firstLine string) bool {
 		ver, perr := hermeskanban.ParseVersionOutput(firstLine)
 		return perr == nil && ver.Eligible(hermeskanban.MinimumEligibleVersion)
 	})
-	home := t.TempDir()
-	skillsDir := filepath.Join(home, ".hermes", "skills", "operations")
+	skillsDir := filepath.Join(sandbox.HermesHome, "skills", "operations")
 	if err := os.MkdirAll(skillsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -306,8 +305,7 @@ func TestG9SkillsVersionedValidatedAndInstallable(t *testing.T) {
 	if out, err := exec.Command("cp", "-R", src, skillsDir).CombinedOutput(); err != nil {
 		t.Fatalf("installing the operator skill into the disposable profile: %v: %s", err, out)
 	}
-	cmd := exec.Command("hermes", "skills", "list")
-	cmd.Env = append(os.Environ(), "HOME="+home)
+	cmd := sandbox.CommandContext(context.Background(), "skills", "list")
 	listing, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Skipf("skills list under the disposable profile unavailable: %v: %s", err, listing)
@@ -327,7 +325,7 @@ func TestG9SkillsVersionedValidatedAndInstallable(t *testing.T) {
 // no supported Hermes is installed; the deterministic leg above owns
 // the gate.
 func TestG9RealHermesNotificationWalkthrough(t *testing.T) {
-	hermesenv.SkipUnlessSupportedHermes(t, func(firstLine string) bool {
+	sandbox := hermesenv.NewSandbox(t, func(firstLine string) bool {
 		ver, perr := hermeskanban.ParseVersionOutput(firstLine)
 		return perr == nil && ver.Eligible(hermeskanban.MinimumEligibleVersion)
 	})
@@ -337,32 +335,29 @@ func TestG9RealHermesNotificationWalkthrough(t *testing.T) {
 	capture := f
 	_ = capture
 
-	bin, _ := exec.LookPath("hermes")
-	realHome := os.Getenv("HOME")
-	cleanupEnv := func(argv ...string) (string, error) {
+	bin := sandbox.Binary
+	runIsolated := func(argv ...string) (string, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, bin, argv...)
-		cmd.Env = append(os.Environ(), "HOME="+realHome)
+		cmd := sandbox.CommandContext(ctx, argv...)
 		out, err := cmd.CombinedOutput()
 		return strings.TrimSpace(string(out)), err
 	}
-	if help, herr := cleanupEnv("kanban", "create", "-h"); herr != nil || !strings.Contains(help, "--mutex-key") {
+	if help, herr := runIsolated("kanban", "create", "-h"); herr != nil || !strings.Contains(help, "--mutex-key") {
 		t.Skipf("installed hermes create surface drifted from the frozen 0.20.5 flags: %s", help)
 	}
 	board := fmt.Sprintf("agent-dispatch-g9-%d", time.Now().UnixNano())
-	if out, err := cleanupEnv("kanban", "boards", "create", board); err != nil {
+	if out, err := runIsolated("kanban", "boards", "create", board); err != nil {
 		t.Skipf("boards create unavailable (%v): %s", err, out)
 	}
 	t.Logf("disposable walkthrough board: %s", board)
 	defer func() {
-		if out, err := cleanupEnv("kanban", "boards", "rm", board, "--delete"); err != nil {
-			t.Logf("best-effort cleanup of the disposable board %s failed (%v): %s — remove it manually", board, err, out)
+		if out, err := runIsolated("kanban", "boards", "rm", board, "--delete"); err != nil {
+			t.Logf("best-effort cleanup of sandbox board %s failed (%v): %s", board, err, out)
 		}
 	}()
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := sandbox.Home
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("AGENT_DISPATCH_CONFIG", "")
 	t.Setenv("AGENT_DISPATCH_STATE_DIR", filepath.Join(home, "state"))
@@ -392,7 +387,7 @@ hermes_targets:
     executable: %[4]s
     submit_timeout: 30s
     lookup_timeout: 30s
-    environment_allowlist: [PATH, HOME]
+    environment_allowlist: [PATH, HOME, HERMES_HOME, HERMES_KANBAN_HOME]
 routes:
   wiki:
     enabled: true

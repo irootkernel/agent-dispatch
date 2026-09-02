@@ -18,6 +18,7 @@ import (
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/platformpaths"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/testsupport/hermesenv"
 )
 
 // newGateSink builds the gate's sink through the production
@@ -100,11 +101,11 @@ func g3Run(t *testing.T, bin string, args ...string) (map[string]any, string, st
 }
 
 // g3Hermes runs one public hermes administrative command.
-func g3Hermes(t *testing.T, argv ...string) (string, error) {
+func g3Hermes(t *testing.T, bin string, argv ...string) (string, error) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "hermes", argv...).CombinedOutput()
+	out, err := exec.CommandContext(ctx, bin, argv...).CombinedOutput()
 	return strings.TrimSpace(string(out)), err
 }
 
@@ -124,7 +125,7 @@ func g3RouteRevision(t *testing.T, configPath string) string {
 
 // g3 is the gate harness state.
 type g3 struct {
-	bin, configPath, vault, board, stateDir string
+	bin, hermes, configPath, vault, board, stateDir string
 }
 
 // g3Setup guards on the real Watchman and a verified Hermes, then
@@ -134,17 +135,14 @@ func g3Setup(t *testing.T) *g3 {
 	if _, err := exec.LookPath("watchman"); err != nil {
 		t.Skip("watchman binary not available (environment-dependent evidence gap)")
 	}
-	if _, err := exec.LookPath("hermes"); err != nil {
-		t.Skip("hermes binary not available (environment-dependent evidence gap)")
-	}
-	probe, err := g3Hermes(t, "--version")
-	if err != nil || !strings.Contains(probe, "v0.20.5") {
-		t.Skipf("installed hermes is outside the verified set: %q", probe)
-	}
+	sandbox := hermesenv.NewSandbox(t, func(firstLine string) bool {
+		return strings.Contains(firstLine, "v0.20.5")
+	})
 
 	dir := t.TempDir()
 	h := &g3{
 		bin:      g3Binary(t),
+		hermes:   sandbox.Binary,
 		vault:    filepath.Join(dir, "vault"),
 		stateDir: filepath.Join(dir, "state"),
 		board:    fmt.Sprintf("agent-dispatch-e4t5-g3-%d", time.Now().UnixNano()),
@@ -155,31 +153,25 @@ func g3Setup(t *testing.T) *g3 {
 	if err := os.MkdirAll(h.stateDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	hermes, err := exec.LookPath("hermes")
-	if err != nil {
-		t.Fatal(err)
-	}
 	// The gate runs against the real installed Hermes with a disposable
 	// profile prepared through the public CLI (E15-T4): the wiki-maintainer
 	// destination profile is created and board-registered inside a
 	// throwaway HOME, so the gate never depends on the operator's own
 	// profiles and leaves the real ~/.hermes untouched.
-	home := t.TempDir()
-	t.Setenv("HOME", home)
 	for _, argv := range [][]string{
 		{"profile", "create", "wiki-maintainer"},
 		{"profile", "use", "wiki-maintainer"},
 		{"config", "set", "default_model", "gpt-5.2", "--force"},
 	} {
-		if out, err := g3Hermes(t, argv...); err != nil {
+		if out, err := g3Hermes(t, h.hermes, argv...); err != nil {
 			t.Fatalf("disposable profile setup %v: %v: %s", argv, err, out)
 		}
 	}
-	if out, err := g3Hermes(t, "kanban", "boards", "create", h.board); err != nil {
+	if out, err := g3Hermes(t, h.hermes, "kanban", "boards", "create", h.board); err != nil {
 		t.Fatalf("boards create: %v: %s", err, out)
 	}
 	t.Cleanup(func() {
-		if out, err := g3Hermes(t, "kanban", "boards", "rm", h.board, "--delete"); err != nil {
+		if out, err := g3Hermes(t, h.hermes, "kanban", "boards", "rm", h.board, "--delete"); err != nil {
 			t.Errorf("cleanup boards rm --delete failed: %v: %s", err, out)
 		}
 	})
@@ -203,7 +195,7 @@ hermes_targets:
     executable: %s
     submit_timeout: 30s
     lookup_timeout: 15s
-    environment_allowlist: [PATH, HOME]
+    environment_allowlist: [PATH, HOME, HERMES_HOME, HERMES_KANBAN_HOME]
 routes:
   wiki:
     enabled: true
@@ -248,7 +240,7 @@ routes:
     reconciliation:
       initial: true
       daily_expected: true
-`, h.stateDir, h.vault, h.board, hermes)
+`, h.stateDir, h.vault, h.board, h.hermes)
 	if err := os.WriteFile(h.configPath, []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -353,7 +345,7 @@ func TestG3AC301And305RealTriggerEndToEnd(t *testing.T) {
 
 	// AC-305: inspect the real task through the public show.
 	ref := h.g3ExternalRef(t, string(raw))
-	show, err := g3Hermes(t, "kanban", "--board", h.board, "show", ref, "--json")
+	show, err := g3Hermes(t, h.hermes, "kanban", "--board", h.board, "show", ref, "--json")
 	if err != nil {
 		t.Fatalf("hermes show %s: %v: %s", ref, err, show)
 	}
@@ -419,7 +411,7 @@ func (h *g3) g3ExternalRef(t *testing.T, raw string) string {
 // the task count.
 func (h *g3) g3AssertBoardTaskCount(t *testing.T, want int) {
 	t.Helper()
-	listing, err := g3Hermes(t, "kanban", "--board", h.board, "list", "--json")
+	listing, err := g3Hermes(t, h.hermes, "kanban", "--board", h.board, "list", "--json")
 	if err != nil {
 		t.Fatalf("board list must succeed for a trustworthy count: %v: %s", err, listing)
 	}
@@ -522,8 +514,7 @@ func TestG3AC303DowntimeAndRestart(t *testing.T) {
 
 	// Recovery: restore the executable and drain in fresh processes
 	// until the persisted backoff deadline passes and the work submits.
-	hermes, _ := exec.LookPath("hermes")
-	h.g3SetExecutable(t, hermes)
+	h.g3SetExecutable(t, h.hermes)
 	// The restore moves the behavior digest back, so the operator
 	// re-acknowledges the route under the restored executable before the
 	// drain (E9-T3/T3-F006: every executable swap is a re-acknowledge
@@ -720,6 +711,8 @@ func g3TriggerEnv(t *testing.T, h *g3) []string {
 	return []string{
 		"PATH=" + os.Getenv("PATH"),
 		"HOME=" + os.Getenv("HOME"),
+		"HERMES_HOME=" + os.Getenv("HERMES_HOME"),
+		"HERMES_KANBAN_HOME=" + os.Getenv("HERMES_KANBAN_HOME"),
 		"WATCHMAN_TRIGGER=agent-dispatch.wiki.g3",
 		"WATCHMAN_ROOT=" + h.vault,
 		"WATCHMAN_CLOCK=c:1:2:3:4",

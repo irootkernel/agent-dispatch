@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -152,19 +151,19 @@ func TestProbeVerboseStates(t *testing.T) {
 // present (TST-007 posture; skipped as an environment-dependent evidence
 // gap otherwise).
 func TestRealHermesProbeIfAvailable(t *testing.T) {
-	bin, err := exec.LookPath("hermes")
-	if err != nil {
-		t.Skip("hermes binary not available")
-	}
 	// An installed Hermes below the eligibility floor skips as the same
 	// environment-dependent evidence gap as an absent binary (TST-007);
 	// the environment probe is shared through testsupport/hermesenv and
 	// the eligibility judgment stays here.
-	hermesenv.SkipUnlessSupportedHermes(t, func(firstLine string) bool {
+	sandbox := hermesenv.NewSandbox(t, func(firstLine string) bool {
 		ver, perr := ParseVersionOutput(firstLine)
 		return perr == nil && ver.Eligible(MinimumEligibleVersion)
 	})
-	adapter, err := New("hermes-local", bin, "", ProcessLimits{LookupTimeout: 10 * time.Second, SubmitTimeout: 20 * time.Second})
+	adapter, err := New("hermes-local", sandbox.Binary, "", ProcessLimits{
+		LookupTimeout:        10 * time.Second,
+		SubmitTimeout:        20 * time.Second,
+		EnvironmentAllowlist: sandbox.EnvironmentAllowlist(),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,9 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/testsupport/stubhermes"
 )
 
 // e16t4Env prepares a configuration file whose wiki route drains in the
@@ -326,21 +328,43 @@ func TestE16T4EnablementRequiresSchedule(t *testing.T) {
 // automatic mode — a scheduled route's due work advances after the
 // runner even without a reconciliation dispatch.
 func TestE16T4ScheduleRunDrainsScheduledRoute(t *testing.T) {
+	// Capability evidence is operator-global by default. Keep this
+	// fixture independent from both the operator cache and sibling tests.
+	t.Setenv("HOME", t.TempDir())
 	configPath := e16t4Env(t, "scheduled")
 	// The scheduled runner reconciles first: give the fixture a real
-	// vault root so the reconciliation can enumerate an empty snapshot.
+	// vault root so the reconciliation can enumerate an empty snapshot,
+	// and a stub Hermes so the ten-second drain budget never depends on
+	// an installed operator binary's startup or profile state.
 	vault := t.TempDir()
-	raw, err := os.ReadFile(configPath)
+	cfg, err := config.Load(configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(configPath, bytes.Replace(raw, []byte("/srv/vault"), []byte(vault), 1), 0o600); err != nil {
+	resource := cfg.Resources["vault-main"]
+	resource.Root = vault
+	cfg.Resources["vault-main"] = resource
+	target := cfg.HermesTargets["hermes-main"]
+	target.Executable = stubhermes.Write(t)
+	cfg.HermesTargets["hermes-main"] = target
+	configPath = filepath.Join(filepath.Dir(configPath), "scheduled-fixture.yaml")
+	if err := config.WriteExample(cfg, configPath); err != nil {
 		t.Fatal(err)
 	}
 	// The runner opens the configuration's own state store, so the due
 	// work must live there.
 	s := e16t3StoreAt(t, filepath.Join(filepath.Dir(configPath), "state"))
 	if err := s.SetRouteActivation(context.Background(), "wiki", "enabled", "route-rev-1", "", "2026-01-01T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	// Pin the drift fixture locally. Before the Hermes test environment
+	// was isolated, an operator capability cache could accidentally
+	// supply the second notification this assertion expects.
+	if err := s.SaveWatchBinding(context.Background(), watchman.Binding{
+		RouteID: "wiki", ResourceID: "vault-main",
+		ConfiguredRoot: vault, ActualRoot: vault, RelativeRoot: ".",
+		TriggerName: "stale-trigger", UpdatedAt: "2026-08-30T09:00:00Z",
+	}); err != nil {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
@@ -358,8 +382,8 @@ func TestE16T4ScheduleRunDrainsScheduledRoute(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The runner carries the drift evaluation (its only automatic
-	// surface since v0.1.6 §4): the fixture's unbound route enqueues its
-	// integration-drift intent beside the seeded work, and the scheduled
+	// surface since v0.1.6 §4): the fixture's stale binding enqueues its
+	// watchman-drift intent beside the seeded work, and the scheduled
 	// pass delivers both.
 	if byState["delivered"] != 2 {
 		t.Fatalf("the scheduled runner must drain its route's due and drift work: %v (stderr: %s)", byState, errb.String())

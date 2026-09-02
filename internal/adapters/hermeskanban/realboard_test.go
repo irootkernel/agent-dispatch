@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/testsupport/hermesenv"
 )
 
 // TestRealHermesDisposableBoardSubmitDedupLookup is the TST-007
@@ -20,11 +21,16 @@ import (
 // board selection is never changed; only public CLI commands run
 // (HER-010). Skipped when no verified Hermes is installed.
 func TestRealHermesDisposableBoardSubmitDedupLookup(t *testing.T) {
-	bin, err := exec.LookPath("hermes")
-	if err != nil {
-		t.Skip("hermes binary not available")
+	sandbox := hermesenv.NewSandbox(t, func(firstLine string) bool {
+		ver, perr := ParseVersionOutput(firstLine)
+		return perr == nil && ver.Eligible(MinimumEligibleVersion)
+	})
+	limits := ProcessLimits{
+		LookupTimeout:        15 * time.Second,
+		SubmitTimeout:        30 * time.Second,
+		EnvironmentAllowlist: sandbox.EnvironmentAllowlist(),
 	}
-	client := NewClient(bin, ProcessLimits{LookupTimeout: 15 * time.Second, SubmitTimeout: 30 * time.Second})
+	client := NewClient(sandbox.Binary, limits)
 	version, err := client.DiscoverVersion(context.Background())
 	if err != nil {
 		t.Skipf("hermes not usable: %v", err)
@@ -38,23 +44,23 @@ func TestRealHermesDisposableBoardSubmitDedupLookup(t *testing.T) {
 	// detects. Until it lands, this end-to-end test runs only against
 	// interfaces whose create surface matches what the client submits
 	// (TST-007 environment-dependent evidence gap otherwise).
-	if help, herr := runHermes(t, bin, "kanban", "create", "-h"); herr != nil || !strings.Contains(help, "--mutex-key") {
+	if help, herr := runHermes(t, sandbox.Binary, "kanban", "create", "-h"); herr != nil || !strings.Contains(help, "--mutex-key") {
 		t.Skipf("installed hermes %s create surface drifted from the frozen mutex-capable flags; the E11-T2 capability probe owns shape detection: %s", version, strings.Join(strings.Split(strings.TrimSpace(help), "\n")[:1], ""))
 	}
 
 	board := fmt.Sprintf("agent-dispatch-e4t3-test-%d", time.Now().UnixNano())
-	if out, err := runHermes(t, bin, "kanban", "boards", "create", board); err != nil {
+	if out, err := runHermes(t, sandbox.Binary, "kanban", "boards", "create", board); err != nil {
 		t.Skipf("boards create unavailable (%v): %s", err, out)
 	}
 	defer func() {
 		// Hard-delete the disposable board exactly as the E0-T4 probe
 		// did; failure to clean up fails the test honestly.
-		if out, err := runHermes(t, bin, "kanban", "boards", "rm", board, "--delete"); err != nil {
+		if out, err := runHermes(t, sandbox.Binary, "kanban", "boards", "rm", board, "--delete"); err != nil {
 			t.Errorf("cleanup boards rm --delete failed (%v): %s", err, out)
 		}
 	}()
 
-	sink, err := NewSink("hermes-real", bin, "", board, ProcessLimits{LookupTimeout: 15 * time.Second, SubmitTimeout: 30 * time.Second}, 262144)
+	sink, err := NewSink("hermes-real", sandbox.Binary, "", board, limits, 262144)
 	if err != nil {
 		t.Fatalf("sink construction against the eligibility floor: %v", err)
 	}

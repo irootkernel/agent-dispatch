@@ -27,11 +27,30 @@ manifest-check schema-validation traceability schedule-check: go-version-check
 build:
 	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/agent-dispatch
 
+# Defense in depth for tests that execute an installed Hermes. Each target
+# gets an outer disposable HOME so a newly added test cannot reach the
+# operator's sticky profile or shared Kanban root before opting into the
+# per-test hermesenv sandbox. Preserve Go's machine-local cache/config paths
+# so changing HOME does not turn verification into an uncached network setup.
+define run_isolated_tests
+	@test_root=$$(mktemp -d) || exit 1; \
+	 trap 'rm -rf "$$test_root"' EXIT HUP INT TERM; \
+	 mkdir -p "$$test_root/home" "$$test_root/hermes" || exit 1; \
+	 go_cache=$$($(GO) env GOCACHE) || exit 1; \
+	 go_mod_cache=$$($(GO) env GOMODCACHE) || exit 1; \
+	 go_path=$$($(GO) env GOPATH) || exit 1; \
+	 go_env=$$($(GO) env GOENV) || exit 1; \
+	 unset HERMES_KANBAN_DB HERMES_KANBAN_BOARD HERMES_KANBAN_WORKSPACES_ROOT; \
+	 HOME="$$test_root/home" HERMES_HOME="$$test_root/hermes" \
+	 HERMES_KANBAN_HOME="$$test_root/hermes" GOCACHE="$$go_cache" \
+	 GOMODCACHE="$$go_mod_cache" GOPATH="$$go_path" GOENV="$$go_env" $(1)
+endef
+
 test:
-	$(GO) test ./...
+	$(call run_isolated_tests,$(GO) test ./...)
 
 test-race:
-	$(GO) test -race ./...
+	$(call run_isolated_tests,$(GO) test -race ./...)
 
 vet:
 	$(GO) vet ./...

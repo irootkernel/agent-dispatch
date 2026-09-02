@@ -296,6 +296,27 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	if code != 0 {
 		return code
 	}
+	// A never-registered route — no baseline or reconciliation has
+	// materialized its trusted registration — must refuse BEFORE any
+	// durable write: every arrival row references the registration, and a
+	// mid-transaction foreign-key failure would surface as an
+	// unattributable storage fault instead of the two-key state conflict
+	// the contract names (the E17-T2 real-Hermes cold validation
+	// finding).
+	_, regStore, exit := openOperatorStore(command, artifacts.opts.configPath, stderr)
+	if exit != 0 {
+		return exit
+	}
+	registered, rerr := regStore.RouteRegistered(requestCtx(), artifacts.opts.routeID)
+	regStore.Close()
+	if rerr != nil {
+		return planErr(stderr, command, "sqlite_query_failed", "storage", rerr.Error(), 20)
+	}
+	if !registered {
+		return planErr(stderr, command, "transition_invalid", "conflict",
+			fmt.Sprintf("route %q has no trusted registration yet; run 'agent-dispatch setup wiki' or 'reconcile --route %s --reason initial --baseline-only' first — nothing was persisted",
+				artifacts.opts.routeID, artifacts.opts.routeID), 14)
+	}
 	// Structural dispositions never reach the coordinator's dispatch
 	// path: quarantine holds durably (PTH-008), reconcile marks the
 	// single pending generation (SRC-005), and drop persists only the

@@ -51,6 +51,7 @@ var Migrations = []Migration{
 	{Version: 17, Name: "route-baselines", SQL: schemaV17RouteBaselines},
 	{Version: 18, Name: "serialization-group-state", SQL: schemaV18SerializationGroupState},
 	{Version: 19, Name: "notification-drain-leases", SQL: schemaV19NotificationDrainLeases},
+	{Version: 20, Name: "schedule-at-overrides", SQL: schemaV20ScheduleAtOverrides},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
@@ -869,4 +870,24 @@ CREATE TABLE drain_runs (
 	budget_expired  INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX idx_drain_runs_route ON drain_runs(route_id, started_at);
+`
+
+// schemaV20ScheduleAtOverrides persists the managed launchd schedule's
+// non-default scheduled-mode timing (E16-T4 round-4 F004): the operator's
+// `--at HH:MM` choice is durable state keyed by the managed label — the
+// same instance/route/configuration-digest identity the plist derives
+// from — so render, inspect, and the status/doctor posture reproduce the
+// installed definition's timing instead of re-rendering against the 03:00
+// default. Without the row a legitimate override looked like a drifted
+// definition: the schedule read permanently unhealthy and blocked
+// production enablement. `schedule install --at` upserts the row, an
+// explicit default or `schedule uninstall` clears it; the table is
+// additive and machine-local, joins no revision, and is never written by
+// delivery-adjacent transactions.
+const schemaV20ScheduleAtOverrides = `
+CREATE TABLE schedule_at_overrides (
+	label       TEXT PRIMARY KEY,
+	at          TEXT NOT NULL CHECK (at GLOB '[01][0-9]:[0-5][0-9]' OR at GLOB '2[0-3]:[0-5][0-9]'),
+	updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
 `

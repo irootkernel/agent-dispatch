@@ -189,12 +189,19 @@ func runRouteEnable(command string, args []string, stdout, stderr io.Writer) int
 	if _, ok := cfg.Routes[routeID]; !ok {
 		return planErr(stderr, command, "config_route_not_found", "configuration", fmt.Sprintf("route %q is not defined", routeID), 3)
 	}
+	store, closer, exit := openOperatorStore(command, flags.val("--config"), stderr)
+	if exit != 0 {
+		return exit
+	}
+	defer closer.Close()
 	// The managed-schedule production gate (E16-T4, v0.1.6 §4): an
 	// automatic drain mode requires an installed, loaded,
 	// definition-matching launchd schedule before enablement. Setup
 	// prints but never runs the install command, so a fresh walkthrough
-	// surfaces this at its printed enable step instead.
-	if posture := schedulePosture(cfg, routeID, resolveConfigPath(flags.val("--config"))); posture != nil && posture["expected"] == true && posture["healthy"] != true {
+	// surfaces this at its printed enable step instead. The stored
+	// --at override participates in the definition match (round-4 F004):
+	// a legitimately overridden scheduled time must not read as drift.
+	if posture := schedulePostureWithStore(cfg, routeID, resolveConfigPath(flags.val("--config")), closer); posture != nil && posture["expected"] == true && posture["healthy"] != true {
 		return planErr(stderr, command, "config_invalid", "configuration",
 			fmt.Sprintf("drain mode %v requires an installed, loaded, definition-matching managed schedule before production enablement (present=%v loaded=%v); run 'agent-dispatch schedule install --route %s --platform launchd' first",
 				posture["mode"], posture["installed"], posture["loaded"], routeID), 3)
@@ -209,11 +216,6 @@ func runRouteEnable(command string, args []string, stdout, stderr io.Writer) int
 		return planErr(stderr, command, "config_invalid", "configuration",
 			fmt.Sprintf("acknowledged revision %q does not match the computed route revision %q; review the route and acknowledge the computed value", flags.val("--acknowledge-production-gate"), revision), 3)
 	}
-	store, closer, exit := openOperatorStore(command, flags.val("--config"), stderr)
-	if exit != 0 {
-		return exit
-	}
-	defer closer.Close()
 	capabilityFingerprint, code := routeEnableGate(command, cfg, routeID, revision, closer, stderr)
 	if code != 0 {
 		return code

@@ -93,6 +93,21 @@ type scheduleDefinition struct {
 // renderSchedulePlist renders the launchd definition. The internal
 // runner is invoked directly (no shell): the two-key gate and the
 // drain's own bounded behavior are the safety boundary (SEC-007).
+// xmlEscape escapes one interpolated string for the plist's XML text
+// content: filesystem paths and operator identifiers are untrusted
+// rendering input, so every interpolation passes through here (round-4
+// F018 — a path containing &<>"' must never break out of its element).
+func xmlEscape(s string) string {
+	replacer := strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+		`"`, "&quot;",
+		"'", "&apos;",
+	)
+	return replacer.Replace(s)
+}
+
 func renderSchedulePlist(d scheduleDefinition) string {
 	startKey := "StartInterval"
 	var startXML string
@@ -135,7 +150,7 @@ func renderSchedulePlist(d scheduleDefinition) string {
     <string>%s</string>
 </dict>
 </plist>
-`, d.Label, d.BinaryPath, d.RouteID, d.ConfigPath, startXML, d.StdoutPath, d.StderrPath)
+`, xmlEscape(d.Label), xmlEscape(d.BinaryPath), xmlEscape(d.RouteID), xmlEscape(d.ConfigPath), startXML, xmlEscape(d.StdoutPath), xmlEscape(d.StderrPath))
 }
 
 // buildScheduleDefinition resolves the managed definition for one route
@@ -247,10 +262,29 @@ func runScheduleLifecycle(command, sub string, args []string, stdout, stderr io.
 	}
 	// A malformed --at is a usage defect, never a silently coerced
 	// default (round-1 F008).
-	if at := flags.val("--at"); at != "" && !scheduleAtPattern.MatchString(at) {
-		return usageError(stderr, command, fmt.Sprintf("--at %q must be HH:MM with hours 00-23 and minutes 00-59", at))
+	explicitAt := flags.val("--at")
+	if explicitAt != "" && !scheduleAtPattern.MatchString(explicitAt) {
+		return usageError(stderr, command, fmt.Sprintf("--at %q must be HH:MM with hours 00-23 and minutes 00-59", explicitAt))
 	}
-	def, exit := buildScheduleDefinition(command, flags.val("--config"), routeID, flags.val("--at"), stderr)
+	configPath := resolveConfigPath(flags.val("--config"))
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
+	}
+	if _, ok := cfg.Routes[routeID]; !ok {
+		return usageError(stderr, command, fmt.Sprintf("route %q is not declared in the configuration", routeID))
+	}
+	label := scheduleLabelFor(cfg, routeID, configPath)
+	// The stored --at override is the durable timing of the managed
+	// schedule (round-4 F004): install declares it explicitly (an absent
+	// --at converges back to the default and clears the row), and every
+	// read surface renders the stored value so a legitimate override
+	// never reads as a drifted definition.
+	at := explicitAt
+	if at == "" && sub != "install" {
+		at = scheduleAtOverrideUnmigrated(configPath, label)
+	}
+	def, exit := buildScheduleDefinition(command, configPath, routeID, at, stderr)
 	if exit != 0 {
 		return exit
 	}
@@ -261,13 +295,41 @@ func runScheduleLifecycle(command, sub string, args []string, stdout, stderr io.
 			"config": def.ConfigPath, "mode": def.Mode, "digest": def.Digest, "plist": def.Plist,
 		})
 	case "install":
-		return scheduleInstall(command, def, stdout, stderr)
+		installed := scheduleInstall(command, def, stdout, stderr)
+		// The timing persists only after the plist write succeeded: a
+		// refused install (a different definition at the path) must not
+		// clear or replace a live override as a side effect.
+		if installed == 0 {
+			_, store, oerr := openOperatorStore(command, flags.val("--config"), stderr)
+			if oerr != 0 {
+				return oerr
+			}
+			if err := store.SetScheduleAtOverride(requestCtx(), label, explicitAt); err != nil {
+				store.Close()
+				return planErr(stderr, command, "sqlite_query_failed", "storage", err.Error(), 20)
+			}
+			store.Close()
+		}
+		return installed
 	case "inspect":
 		return scheduleInspect(command, def, stdout, stderr)
 	case "disable":
 		return scheduleDisable(command, def, stdout, stderr)
 	default:
-		return scheduleUninstall(command, def, stdout, stderr)
+		code := scheduleUninstall(command, def, stdout, stderr)
+		if code == 0 {
+			// The override row outliving its schedule would resurface as
+			// the next install's timing; the clear is best-effort because
+			// the schedule itself is already gone and a fresh install
+			// re-declares the timing either way.
+			if _, store, oerr := openOperatorStore(command, flags.val("--config"), stderr); oerr == 0 {
+				if err := store.SetScheduleAtOverride(requestCtx(), label, ""); err != nil {
+					fmt.Fprintf(stderr, "schedule uninstall: the stored --at override could not be cleared; a fresh install re-declares it (%v)\n", err)
+				}
+				store.Close()
+			}
+		}
+		return code
 	}
 }
 
@@ -345,7 +407,7 @@ func scheduleInspect(command string, def scheduleDefinition, stdout, stderr io.W
 		installedDigest = "sha256:" + hex.EncodeToString(sum[:])
 	}
 	loaded := false
-	if out, err := launchctlRun("print", fmt.Sprintf("gui/%d", os.Getuid()), def.Label); err == nil && !strings.Contains(out, "Could not find service") {
+	if out, err := launchctlRun("print", fmt.Sprintf("gui/%d/%s", os.Getuid(), def.Label)); err == nil && !strings.Contains(out, "Could not find service") {
 		loaded = true
 	}
 	definitionMatches := present && installed == def.Plist
@@ -359,7 +421,11 @@ func scheduleInspect(command string, def scheduleDefinition, stdout, stderr io.W
 
 // scheduleDisable unloads the schedule while preserving the plist.
 func scheduleDisable(command string, def scheduleDefinition, stdout, stderr io.Writer) int {
-	if out, err := launchctlRun("bootout", fmt.Sprintf("gui/%d", os.Getuid()), def.Label); err != nil && !strings.Contains(out, "No such process") && !strings.Contains(out, "not booted") {
+	// bootout takes the joined service target (`gui/<uid>/<label>`): the
+	// bare label as a second argv entry is rejected by real launchd with
+	// error 5 (the E17-T2 real-launchd cold validation finding, same
+	// class as the print target).
+	if out, err := launchctlRun("bootout", fmt.Sprintf("gui/%d/%s", os.Getuid(), def.Label)); err != nil && !strings.Contains(out, "No such process") && !strings.Contains(out, "not booted") {
 		return planErr(stderr, command, "target_response_invalid", "acceptance_unknown", out, 21)
 	}
 	return writeEnvelope(stdout, command, map[string]any{"label": def.Label, "disabled": true, "plist_preserved": true})
@@ -367,7 +433,7 @@ func scheduleDisable(command string, def scheduleDefinition, stdout, stderr io.W
 
 // scheduleUninstall unloads and removes only the exact managed plist.
 func scheduleUninstall(command string, def scheduleDefinition, stdout, stderr io.Writer) int {
-	if _, err := launchctlRun("bootout", fmt.Sprintf("gui/%d", os.Getuid()), def.Label); err != nil {
+	if _, err := launchctlRun("bootout", fmt.Sprintf("gui/%d/%s", os.Getuid(), def.Label)); err != nil {
 		// An unloaded label is the idempotent posture.
 	}
 	if _, err := os.Stat(def.PlistPath); err == nil {
@@ -481,11 +547,74 @@ func rotateScheduleLog(path string) {
 	_ = os.Rename(path, path+".1")
 }
 
+// scheduleOverrideReader is the read surface the schedule's timing
+// override needs (the concrete store satisfies it).
+type scheduleOverrideReader interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// scheduleAtOverride reads the label's stored non-default timing through
+// an already-open store surface; any miss (no row, no table yet, no
+// store) resolves to the default timing.
+func scheduleAtOverride(ctx context.Context, reader scheduleOverrideReader, label string) string {
+	if reader == nil {
+		return ""
+	}
+	var at string
+	if err := reader.QueryRowContext(ctx, `SELECT at FROM schedule_at_overrides WHERE label = ?`, label).Scan(&at); err != nil {
+		return ""
+	}
+	return at
+}
+
+// scheduleAtOverrideUnmigrated reads the override without applying
+// migrations (render/inspect/disable and the plain posture are read-only
+// surfaces): a database that predates migration v20 has no table and
+// therefore no override.
+func scheduleAtOverrideUnmigrated(configPath, label string) string {
+	store, err := openUnmigratedStore(resolveConfigPath(configPath))
+	if err != nil {
+		return ""
+	}
+	defer store.Close()
+	return scheduleAtOverride(context.Background(), store, label)
+}
+
+// scheduleLabelFor computes the managed label from the loaded
+// configuration, the route, and the configuration's absolute path.
+func scheduleLabelFor(cfg *config.Config, routeID, configPath string) string {
+	abs, err := filepath.Abs(resolveConfigPath(configPath))
+	if err != nil {
+		abs = resolveConfigPath(configPath)
+	}
+	return scheduleLabel(cfg.Instance.ID, routeID, abs)
+}
+
 // schedulePosture summarizes one route's scheduler posture for status
 // and doctor: the expected mode, the installed/loaded/matching
 // evidence, and whether the automatic schedule is overdue for
-// production enablement.
+// production enablement. The stored --at override is resolved
+// best-effort without store side effects (a first-use posture needs
+// none).
 func schedulePosture(cfg *config.Config, routeID, configPath string) map[string]any {
+	return schedulePostureCore(cfg, routeID, configPath, func(label string) string {
+		return scheduleAtOverrideUnmigrated(configPath, label)
+	})
+}
+
+// schedulePostureWithStore is the posture over an already-open store
+// surface (nil degrades the override read to the default timing).
+func schedulePostureWithStore(cfg *config.Config, routeID, configPath string, reader scheduleOverrideReader) map[string]any {
+	return schedulePostureCore(cfg, routeID, configPath, func(label string) string {
+		return scheduleAtOverride(context.Background(), reader, label)
+	})
+}
+
+// schedulePostureCore resolves the effective definition timing through
+// overrideFor — the stored non-default --at participates in the
+// definition match (round-4 F004): a legitimately overridden scheduled
+// time is the intended definition, never drift.
+func schedulePostureCore(cfg *config.Config, routeID, configPath string, overrideFor func(label string) string) map[string]any {
 	route, ok := cfg.Routes[routeID]
 	if !ok {
 		return nil
@@ -500,11 +629,7 @@ func schedulePosture(cfg *config.Config, routeID, configPath string) map[string]
 		return posture
 	}
 	posture["expected"] = true
-	abs, aerr := filepath.Abs(configPath)
-	if aerr != nil {
-		abs = configPath
-	}
-	label := scheduleLabel(cfg.Instance.ID, routeID, abs)
+	label := scheduleLabelFor(cfg, routeID, configPath)
 	def := scheduleDefinition{Label: label, PlistPath: schedulePlistPath(label)}
 	present := false
 	raw := []byte(nil)
@@ -515,7 +640,12 @@ func schedulePosture(cfg *config.Config, routeID, configPath string) map[string]
 		posture["installed_digest"] = "sha256:" + hex.EncodeToString(sum[:])
 	}
 	loaded := false
-	if out, err := launchctlRun("print", fmt.Sprintf("gui/%d", os.Getuid()), label); err == nil && !strings.Contains(out, "Could not find service") {
+	// launchctl print takes ONE joined service target (`gui/<uid>/<label>`):
+	// the domain and label as separate argv entries make real launchd print
+	// the whole domain dump — no "Could not find service" line — so an
+	// absent schedule read as loaded (the E17-T2 real-launchd cold
+	// validation finding).
+	if out, err := launchctlRun("print", fmt.Sprintf("gui/%d/%s", os.Getuid(), label)); err == nil && !strings.Contains(out, "Could not find service") {
 		loaded = true
 	}
 	// Definition matching (round-1 F003/F005): the installed bytes must
@@ -524,7 +654,7 @@ func schedulePosture(cfg *config.Config, routeID, configPath string) map[string]
 	// change) is unhealthy even while loaded.
 	definitionMatches := false
 	if present {
-		if def, derr := scheduleDefinitionFor(configPath, routeID, ""); derr == nil {
+		if def, derr := scheduleDefinitionFor(configPath, routeID, overrideFor(label)); derr == nil {
 			definitionMatches = string(raw) == def.Plist
 			posture["expected_digest"] = def.Digest
 		}
@@ -570,6 +700,27 @@ func notificationDrainPosture(ctx context.Context, cfg *config.Config, store dra
 			continue
 		}
 		row := map[string]any{"mode": policy.Mode, "limit": policy.Limit}
+		// The latest drain-run evidence row (round-4 F001, OPS-017/
+		// AC-1206): the posture exposes the most recent pass's trigger,
+		// mode, timing, outcome counts, and budget state straight from
+		// drain_runs — the operator never needs direct SQLite inspection.
+		var trigger, runMode, startedAt string
+		var completedAt sql.NullString
+		var claimed, delivered, refused, retryScheduled int
+		var budgetExpired bool
+		if err := store.QueryRowContext(ctx, `SELECT trigger, mode, started_at, completed_at, claimed, delivered, refused, retry_scheduled, budget_expired
+			FROM drain_runs WHERE route_id = ? ORDER BY started_at DESC, drain_id DESC LIMIT 1`, routeID).
+			Scan(&trigger, &runMode, &startedAt, &completedAt, &claimed, &delivered, &refused, &retryScheduled, &budgetExpired); err == nil {
+			latest := map[string]any{
+				"trigger": trigger, "mode": runMode, "started_at": startedAt,
+				"claimed": claimed, "delivered": delivered, "refused": refused,
+				"retry_scheduled": retryScheduled, "budget_expired": budgetExpired,
+			}
+			if completedAt.Valid && completedAt.String != "" {
+				latest["completed_at"] = completedAt.String
+			}
+			row["latest_drain"] = latest
+		}
 		var due, backoff int
 		if err := store.QueryRowContext(ctx, `SELECT COUNT(*) FROM notification_events WHERE route_id = ? AND state = 'pending' AND due_at != '' AND due_at <= ?`, routeID, now).Scan(&due); err == nil {
 			if err := store.QueryRowContext(ctx, `SELECT COUNT(*) FROM notification_events WHERE route_id = ? AND state = 'pending' AND due_at > ?`, routeID, now).Scan(&backoff); err == nil {
@@ -604,7 +755,7 @@ func notificationDrainPosture(ctx context.Context, cfg *config.Config, store dra
 			}
 		}
 		row["unresolvable_sinks"] = unresolvable
-		if posture := schedulePosture(cfg, routeID, configPath); posture != nil {
+		if posture := schedulePostureWithStore(cfg, routeID, configPath, store); posture != nil {
 			row["scheduler_expected"] = posture["expected"]
 			row["scheduler_installed"] = posture["installed"]
 			row["scheduler_loaded"] = posture["loaded"]

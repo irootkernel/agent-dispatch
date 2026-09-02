@@ -101,23 +101,23 @@ func EffectiveNotificationDrain(n *Notifications) (DrainPolicy, error) {
 		policy.FailurePolicy = d.FailurePolicy
 	}
 	if d.PendingWarnAfter != "" {
-		dur, err := time.ParseDuration(d.PendingWarnAfter)
+		dur, err := ParseDuration(d.PendingWarnAfter)
 		if err != nil {
 			return DrainPolicy{}, fmt.Errorf("pending_warn_after: %w", err)
 		}
-		policy.PendingWarnAfter = dur
+		policy.PendingWarnAfter = time.Duration(dur.Nanos)
 	}
 	if d.Retry != nil {
-		initial, err := time.ParseDuration(d.Retry.InitialBackoff)
+		initial, err := ParseDuration(d.Retry.InitialBackoff)
 		if err != nil {
 			return DrainPolicy{}, fmt.Errorf("retry.initial_backoff: %w", err)
 		}
-		max, err := time.ParseDuration(d.Retry.MaxBackoff)
+		max, err := ParseDuration(d.Retry.MaxBackoff)
 		if err != nil {
 			return DrainPolicy{}, fmt.Errorf("retry.max_backoff: %w", err)
 		}
-		policy.InitialBackoff = initial
-		policy.MaxBackoff = max
+		policy.InitialBackoff = time.Duration(initial.Nanos)
+		policy.MaxBackoff = time.Duration(max.Nanos)
 		policy.Multiplier = d.Retry.Multiplier
 		policy.JitterFraction = d.Retry.JitterFraction
 	}

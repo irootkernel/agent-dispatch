@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 )
@@ -301,22 +300,25 @@ func validateNotificationDrain(routeID string, drain *NotificationDrain) []error
 		errs = append(errs, fmt.Errorf("%s failure_policy %q is outside the closed vocabulary (preserve-pending)", where, drain.FailurePolicy))
 	}
 	if drain.PendingWarnAfter != "" {
-		dur, err := time.ParseDuration(drain.PendingWarnAfter)
-		if err != nil || dur <= 0 {
+		dur, err := ParseDuration(drain.PendingWarnAfter)
+		if err != nil || dur.Nanos <= 0 {
 			errs = append(errs, fmt.Errorf("%s pending_warn_after %q must be a positive duration", where, drain.PendingWarnAfter))
 		}
 	}
 	if drain.Retry != nil {
 		retryWhere := where + ".retry"
-		initial, initialErr := time.ParseDuration(drain.Retry.InitialBackoff)
-		max, maxErr := time.ParseDuration(drain.Retry.MaxBackoff)
-		if initialErr != nil || initial <= 0 {
+		// The schema-exact parser keeps day-unit durations valid here the
+		// same way the effective-policy resolution accepts them (the
+		// stdlib parser silently rejects the schema's own grammar).
+		initial, initialErr := ParseDuration(drain.Retry.InitialBackoff)
+		max, maxErr := ParseDuration(drain.Retry.MaxBackoff)
+		if initialErr != nil || initial.Nanos <= 0 {
 			errs = append(errs, fmt.Errorf("%s initial_backoff %q must be a positive duration", retryWhere, drain.Retry.InitialBackoff))
 		}
-		if maxErr != nil || max <= 0 {
+		if maxErr != nil || max.Nanos <= 0 {
 			errs = append(errs, fmt.Errorf("%s max_backoff %q must be a positive duration", retryWhere, drain.Retry.MaxBackoff))
 		}
-		if initialErr == nil && maxErr == nil && initial > max {
+		if initialErr == nil && maxErr == nil && initial.Nanos > max.Nanos {
 			errs = append(errs, fmt.Errorf("%s initial_backoff %s exceeds max_backoff %s", retryWhere, drain.Retry.InitialBackoff, drain.Retry.MaxBackoff))
 		}
 		if drain.Retry.Multiplier < 1.0 || drain.Retry.Multiplier > 10.0 {

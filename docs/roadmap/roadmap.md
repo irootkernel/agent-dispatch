@@ -15,9 +15,9 @@
 | Release target | v0.1.6 (planned) |
 | Current epic | E17 In Progress |
 | Current active task | None |
-| Next task | E17-T2 |
-| Completed tasks | 87 / 89 |
-| Planned tasks | 2 / 89 |
+| Next task | E17-T3 |
+| Completed tasks | 88 / 89 |
+| Planned tasks | 1 / 89 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -143,7 +143,7 @@
 | 85 | E16-T3 | Completed | Post-commit after-command integration |
 | 86 | E16-T4 | Completed | Scheduler, status, doctor, and G12 |
 | 87 | E17-T1 | Completed | CLI, configuration, operations, and skill truth |
-| 88 | E17-T2 | Planned | Cold validation and required deployment evidence |
+| 88 | E17-T2 | Completed | Cold validation and required deployment evidence |
 | 89 | E17-T3 | Planned | Reproducible v0.1.6 release and publication |
 
 ---
@@ -4214,7 +4214,7 @@ the 2.1.0 surface; traceability and the docs manifest are regenerated;
 
 ## E17-T2: Cold Validation and Required Deployment Evidence
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -4246,7 +4246,33 @@ E17-T1 Completed.
 
 ### Evidence
 
-Planned; none.
+Completed 2026-09-02. The deterministic G10-G12 suites re-ran green on this
+tree through `make verify`, and the real-environment walkthrough
+(`integrations/e17t2-cold-validation-evidence.md`, VALIDATION gate G13) covered
+every requested delivery-evidence item against the installed Hermes v0.20.5,
+Watchman 2026.07.27.00, and real launchd — all on disposable state (throwaway
+HOME, board, profile, vault, state directory, and managed schedules), with the
+disposable board deleted through the public CLI. The walkthrough remediated
+the E16 confirmation-review findings and closed three NEW real-environment
+defects: the launchctl print/bootout target form (an absent schedule read as
+loaded and disable failed on real launchd — both now use the single joined
+service target), the dispatch path's raw foreign-key storage failure on a
+never-registered route (now the clean exit-14 two-key refusal with the setup
+guidance), and the operational guidance for the Watchman trigger's minimal
+environment (production configurations declare the absolute hermes executable
+path; a PATH-relative arrival parks durably in retry_wait with its documented
+recovery exits). The remediated review findings carry focused pins: the
+posture's latest drain evidence (F001), the per-route retry envelope on every
+draining surface (F002), Run-level after-command wiring across all seven
+registered commands (F003), the durable `--at` timing override through
+migration v20 (F004), the live-lease refusal and fenced operator bypass
+(F012/F013), the mid-pass release of unstarted claims (F015), the rotation
+chain bound (F016), the after-command recovery leg (F017), plist XML escaping
+(F018), the schedule usage contracts (F019), and day-unit drain durations
+(F020). Schema metadata moved to range 1-20 with the drift test. The
+known-limitations record ships inside the evidence document; no production
+state was touched and the separately requested general `make verify`
+remediation is reported here, not absorbed.
 
 ## E17-T3: Reproducible v0.1.6 Release and Publication
 

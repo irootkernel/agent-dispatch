@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"time"
 
@@ -291,22 +292,37 @@ func runNotificationsRetry(command string, args []string, stdout, stderr io.Writ
 	}
 	// The sink constructs BEFORE any state changes: a defective
 	// declaration is a pure configuration failure that re-arms nothing.
-	delivery := appnotifications.Delivery{
-		Store:    notificationDeliveryStore{store: closer},
-		Resolver: notificationSinkResolver(cfg, stderr),
-		Now:      time.Now,
-	}
-	if _, err := delivery.Resolver(rec.RouteID, ports.NotificationSinkRef{ID: rec.SinkID, Type: rec.SinkType}); err != nil {
+	resolver := notificationSinkResolver(cfg, stderr)
+	if _, err := resolver(rec.RouteID, ports.NotificationSinkRef{ID: rec.SinkID, Type: rec.SinkType}); err != nil {
 		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
 	}
+	// The explicit retry runs through the lease-safe service (round-4
+	// F012/F013): a live lease refuses as a transient conflict, and the
+	// re-armed record's one attempt claims its own fence exactly like a
+	// drainer's — never an unfenced write beside a live lease.
 	if err := closer.RetryNotification(ctx, notificationID); err != nil {
 		if errors.Is(err, ports.ErrStateNotEligible) {
 			return planErr(stderr, command, "notification_already_delivered", "input_rejected", err.Error(), 4)
 		}
+		if errors.Is(err, ports.ErrNotificationLeaseActive) {
+			return planErr(stderr, command, "notification_lease_active", "conflict", err.Error(), 14)
+		}
 		return planErr(stderr, command, "sqlite_query_failed", "storage", err.Error(), 20)
 	}
-	outcome, err := delivery.DeliverOne(ctx, rec)
+	retryService := &appnotifications.DrainService{
+		Store:    notificationDeliveryStore{store: closer},
+		Resolver: resolver,
+		Now:      time.Now,
+		Owner:    fmt.Sprintf("retry-%d", os.Getpid()),
+		BackoffFor: func(routeID string) ports.NotificationBackoff {
+			return drainRetryEnvelope(cfg, routeID)
+		},
+	}
+	outcome, err := retryService.DeliverOneFenced(ctx, notificationID)
 	if err != nil {
+		if errors.Is(err, ports.ErrNotificationLeaseActive) {
+			return planErr(stderr, command, "notification_lease_active", "conflict", "another drainer claimed the re-armed notification first; its fenced outcome owns the delivery", 14)
+		}
 		var construction *appnotifications.SinkConstructionError
 		if errors.As(err, &construction) {
 			return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
@@ -373,6 +389,27 @@ func (s notificationDeliveryStore) ReleaseNotificationClaims(ctx context.Context
 	return s.store.ReleaseNotificationClaims(ctx, owner, claims)
 }
 
+// drainRetryEnvelope maps one route's effective drain policy onto the
+// backoff envelope its notifications persist (round-4 F002): the manual
+// drain and the fenced retry resolve it per route so a custom envelope
+// survives whichever surface delivered the attempt. A route absent from
+// the configuration resolves to the zero envelope — the service's
+// documented defaults fill every member.
+func drainRetryEnvelope(cfg *config.Config, routeID string) ports.NotificationBackoff {
+	route, ok := cfg.Routes[routeID]
+	if !ok || route.Notifications == nil {
+		return ports.NotificationBackoff{}
+	}
+	policy, err := config.EffectiveNotificationDrain(route.Notifications)
+	if err != nil {
+		return ports.NotificationBackoff{}
+	}
+	return ports.NotificationBackoff{
+		Initial: policy.InitialBackoff, Max: policy.MaxBackoff,
+		Multiplier: policy.Multiplier, JitterFraction: policy.JitterFraction,
+	}
+}
+
 // runNotificationsDrain delivers the due notifications through the
 // lease-safe service, oldest first, bounded (CLI-013, NTF-013): the
 // pass selects DUE work only, claims atomically, and performs one
@@ -414,6 +451,12 @@ func runNotificationsDrain(command string, args []string, stdout, stderr io.Writ
 		Resolver: notificationSinkResolver(cfg, stderr),
 		Now:      time.Now,
 		Limit:    limit,
+		// The manual pass spans every route, so each claim persists its
+		// own route's configured retry envelope (round-4 F002) — the
+		// deadline never depends on which surface drained the record.
+		BackoffFor: func(routeID string) ports.NotificationBackoff {
+			return drainRetryEnvelope(cfg, routeID)
+		},
 	}
 	ctx := requestCtx()
 	report, err := drainer.DrainDue(ctx, "")

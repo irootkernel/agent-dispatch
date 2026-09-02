@@ -69,6 +69,17 @@ stays disabled until `route enable` records the acknowledged revision,
 and the Watchman trigger is created idempotently (re-running
 `watchman install` reports `already_defined`).
 
+**Executable path under the real trigger.** Watchman invokes the
+installed trigger with a minimal environment (the frozen
+`trigger-invocation-environment.txt` evidence): a PATH-relative
+`executable: hermes` declaration does not resolve there, and the
+trigger's first submission parks durably in `retry_wait`
+(`transport_failure / definite_not_submitted`) with the documented
+recovery exits. Production configurations declare the ABSOLUTE hermes
+executable path (for example
+`executable: /Users/<user>/.local/bin/hermes`); `dispatches retry`
+from a PATH-complete shell recovers a parked arrival either way.
+
 ## 4. Daily reconciliation scheduling (OPS-006, OPS-007)
 
 The platform scheduler runs one-shot reconciliation; there is no

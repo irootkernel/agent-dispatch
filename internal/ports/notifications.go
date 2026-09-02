@@ -203,14 +203,25 @@ type NotificationSink interface {
 // stale owner's outcome is refused instead of overwriting the recovery.
 var ErrNotificationLeaseLost = errors.New("notification lease lost to a recovering drainer")
 
+// ErrNotificationLeaseActive reports a live delivery lease on the
+// record (round-4 F012/F013): an explicit operator retry cannot re-arm
+// or claim work a drainer is actively delivering — the retry is a
+// transient conflict until the lease resolves or expires, never a
+// silent supersession of the in-flight outcome.
+var ErrNotificationLeaseActive = errors.New("notification has a live delivery lease")
+
 // NotificationClaimFilter selects the due work one drain pass claims
 // (E16-T2, NTF-011): only pending notifications whose persisted due
 // deadline has arrived and whose lease is free or expired, oldest
-// first, bounded by Limit, optionally scoped to one route.
+// first, bounded by Limit, optionally scoped to one route or — for the
+// fenced operator retry — to one exact notification.
 type NotificationClaimFilter struct {
 	RouteID string
-	Limit   int
-	Owner   string
+	// NotificationID narrows the claim to one exact record (the fenced
+	// retry path); empty claims any due work under the other filters.
+	NotificationID string
+	Limit          int
+	Owner          string
 	// LeaseUntil is the fence's expiry timestamp (RFC3339): the
 	// effective delivery deadline plus the thirty-second margin.
 	LeaseUntil string

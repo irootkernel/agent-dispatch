@@ -20,6 +20,23 @@ import (
 // keyed on the dispatch's destination lane (CON-007/CON-008); the route row
 // keeps the envelope and the route-level QUARANTINED/UNCERTAIN holds.
 
+// RouteRegistered reports whether the route's trusted registration row
+// exists (materialized by the first reconciliation or the disabled
+// baseline): durable arrival rows reference it, so a never-registered
+// route must refuse before any write instead of failing a foreign key
+// mid-transaction (the E17-T2 real-Hermes cold validation finding).
+func (s *Store) RouteRegistered(ctx context.Context, routeID string) (bool, error) {
+	var one int
+	err := s.QueryRowContext(ctx, `SELECT 1 FROM routes WHERE route_id = ?`, routeID).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // LoadRouteState returns the route's aggregated coordination snapshot
 // (E12-T2): the route envelope plus the route-level UNCERTAIN/QUARANTINED
 // hold when set, otherwise the aggregation over the route's lanes — a

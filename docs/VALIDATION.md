@@ -414,6 +414,47 @@ the route revision, the status and doctor surfaces project the delivery
 and scheduler posture, and `make verify` including the race suite is
 green on darwin/arm64 at this tree.
 
+## Gate G13: v0.1.6 Release (E17)
+
+The behavioral criteria are the G13 acceptance scenarios of
+`specs/acceptance-criteria.md`. E17-T2 records the cold-validation and
+real-environment rows; the release-proof rows (AC-1303/AC-1304) land
+with E17-T3.
+
+| Criterion | Evidence |
+|---|---|
+| AC-1301 the final-tree suites reconcile G10-G12 and every earlier gate without absorbing the separate general verify remediation | The full deterministic gate suites re-ran green on this tree through `make verify` (unit and race, manifest, schema, traceability, schedule-check) including the new E17-T2 regression pins below; the separately requested general `make verify` remediation stays outside this release's scope and is reported, not absorbed |
+| AC-1302 disposable-environment walkthroughs cover every requested delivery-evidence item without production activation | [`integrations/e17t2-cold-validation-evidence.md`](integrations/e17t2-cold-validation-evidence.md): clean-host setup and post-Watchman-install rerun, real Hermes v0.20.5 probe/preflight, five real board tasks with `mutex_key` suppression, the managed launchd lifecycle including a real `launchctl kickstart` firing and the durable `--at` override, completion/outbox/automatic delivery through the log sink, dual-sink failure fan-out, the ten-second wall budget with released unstarted claims, transport timeout (ambiguous at-least-once), the fenced operator bypass, kill -9 crash recovery through lease expiry, shared-group exclusion beside acknowledged independent-group concurrency (both groups HELD), the known-limitations record, and a fully disposable boundary with public-CLI board teardown |
+| AC-1303 two release builds byte-identical, versioned documentation and skills agree | E17-T3 (release proof) |
+| AC-1304 documented upgrade and rollback preserve identities, restore the verified set, and scheduler uninstall preserves state | The migration additivity and rollback procedure are recorded (runbook §9b, migrations v19-v20); the release-tree build rows land with E17-T3 |
+
+The cold validation closed three real-environment defects in this tree:
+the launchctl print/bootout target form (an absent schedule read as
+loaded; disable failed on real launchd —
+`TestE17T2LaunchctlPrintUsesJoinedTarget`), the dispatch path's raw
+foreign-key storage failure on a never-registered route (now the clean
+exit-14 two-key refusal with setup guidance —
+`TestE17T2DispatchRefusesUnregisteredRoute`), and the operational
+guidance for the Watchman trigger's minimal environment (production
+configurations declare the absolute hermes executable path; the arrival
+parks durably in `retry_wait` with the documented recovery exits). The
+E16 confirmation-review findings F001-F004 and the code-side Low cohort
+are remediated here with focused pins: the posture's latest drain
+evidence (`TestE17T2StatusExposesLatestDrainEvidence`), the per-route
+retry envelope on every surface (`TestE17T2PerRouteBackoffDrivesEachClaim`,
+`TestE17T2ManualDrainEnvelopeHelper`), the fenced operator bypass and
+live-lease refusal (`TestE17T2RetryAttemptIsFencedAndDelivers`,
+`TestE17T2RetryRefusesLiveLease`), the Run-level after-command registry
+wiring across all seven registered commands
+(`TestE17T2RegisteredCommandsDrainAfterCommit`), the durable `--at`
+override (`TestE17T2ScheduleAtOverridePersisted`), plist XML escaping
+(`TestE17T2PlistEscapesHostilePaths`), day-unit drain durations
+(`TestE17T2DayUnitDrainDurations`), the mid-pass release of unstarted
+claims (`TestE17T2MidPassStoreErrorReleasesUnstartedClaims`), the
+rotation chain bound (`TestE17T2LogRotationChain`), the after-command
+recovery leg (`TestE17T2ScheduleRunAfterCommandRecoveryLeg`), and the
+schedule usage contracts (`TestE17T2ScheduleUsageContracts`).
+
 ## MUST-Closure Matrix (E8-T6, D-020) — supersedes the E7-T12 matrix
 
 Every MUST requirement the 2026-08-23 review judged FAIL or PARTIAL on

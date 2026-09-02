@@ -186,6 +186,13 @@ type DrainService struct {
 	// Retry is the backoff envelope persisted on ambiguous/retryable
 	// outcomes; zero members fall back to the documented defaults.
 	Retry ports.NotificationBackoff
+	// BackoffFor resolves the per-route configured retry envelope for a
+	// pass that spans multiple routes (the manual drain): the claim's own
+	// route decides its persisted deadline, so a route declaring a custom
+	// envelope is never silently flattened to the defaults by whichever
+	// surface drained it (round-4 F002). Nil or a zero-resolution falls
+	// back to Retry.
+	BackoffFor func(routeID string) ports.NotificationBackoff
 	// Owner identifies this drainer's leases; empty derives a unique
 	// per-process owner.
 	Owner string
@@ -209,6 +216,39 @@ func (d *DrainService) retry() ports.NotificationBackoff {
 	if b.Multiplier <= 0 {
 		b.Multiplier = 2.0
 	}
+	return b
+}
+
+// retryFor resolves the envelope one claim's fenced record persists: the
+// claim's own route wins when a per-route resolver is wired (round-4
+// F002). The service-level envelope's defaults fill every unresolved
+// member — the jitter fraction included, so an unresolved envelope keeps
+// the documented 0.2 symmetric jitter. A resolved route policy carries
+// its jitter EXACTLY: the policy layer already defaults an absent
+// fraction to 0.2, so an explicit 0.0 is an operator choice that
+// survives here.
+func (d *DrainService) retryFor(routeID string) ports.NotificationBackoff {
+	b := d.retry()
+	if b.JitterFraction <= 0 {
+		b.JitterFraction = 0.2
+	}
+	if d.BackoffFor == nil {
+		return b
+	}
+	route := d.BackoffFor(routeID)
+	if route == (ports.NotificationBackoff{}) {
+		return b // no policy for this route: the documented defaults
+	}
+	if route.Initial > 0 {
+		b.Initial = route.Initial
+	}
+	if route.Max > 0 {
+		b.Max = route.Max
+	}
+	if route.Multiplier > 0 {
+		b.Multiplier = route.Multiplier
+	}
+	b.JitterFraction = route.JitterFraction
 	return b
 }
 
@@ -290,6 +330,15 @@ func (d *DrainService) DrainDue(ctx context.Context, routeID string) (DrainClaim
 			if errors.Is(err, ports.ErrNotificationLeaseLost) {
 				continue // recovered by another drainer; not this pass's outcome
 			}
+			// A durable-store failure mid-pass must not strand the
+			// claimed-but-unstarted remainder until lease expiry (round-4
+			// F015): the failing claim keeps its fence and stays
+			// lease-recoverable; everything never started is released for
+			// the next pass. The release is best-effort — the original
+			// error stays this pass's outcome.
+			if len(unstarted) > 0 {
+				_ = d.Store.ReleaseNotificationClaims(context.WithoutCancel(ctx), owner, unstarted)
+			}
 			return report, err
 		}
 		switch outcome {
@@ -320,6 +369,40 @@ func (d *DrainService) DrainDue(ctx context.Context, routeID string) (DrainClaim
 // fallback share one documented constant value.
 const notificationLeaseMargin = 30 * time.Second
 
+// DeliverOneFenced delivers exactly one notification through the same
+// lease-safe claim/fence path as a drain pass (round-4 F013): the
+// operator retry's explicit attempt claims the record it just re-armed,
+// so its outcome records under the claim's fence exactly like a
+// drainer's — never as an unfenced write beside a live lease. It
+// returns the recorded outcome; ErrNotificationLeaseActive means
+// another drainer won the re-armed record first and owns the attempt.
+func (d *DrainService) DeliverOneFenced(ctx context.Context, notificationID string) (records.NotificationAttemptOutcome, error) {
+	owner := d.owner()
+	now := d.now().UTC()
+	leaseUntil := now.Add(notificationLeaseMargin)
+	if deadline, ok := ctx.Deadline(); ok && deadline.After(now) {
+		leaseUntil = deadline.Add(notificationLeaseMargin)
+	}
+	claims, err := d.Store.ClaimDueNotifications(ctx, ports.NotificationClaimFilter{
+		NotificationID: notificationID, Limit: 1, Owner: owner,
+		LeaseUntil: leaseUntil.UTC().Format(time.RFC3339Nano),
+	})
+	if err != nil {
+		return "", err
+	}
+	if len(claims) == 0 {
+		return "", ports.ErrNotificationLeaseActive
+	}
+	outcome, err := d.deliverClaimed(ctx, claims[0])
+	if err != nil {
+		if errors.Is(err, ports.ErrNotificationLeaseLost) {
+			return "", ports.ErrNotificationLeaseActive
+		}
+		return "", err
+	}
+	return outcome, nil
+}
+
 // deliverClaimed delivers one claimed notification through its sink and
 // records the fenced outcome with the persisted backoff. A lease lost
 // to a recovering drainer is not this pass's error: the recovery owns
@@ -344,7 +427,7 @@ func (d *DrainService) deliverClaimed(ctx context.Context, claim ports.Notificat
 			ErrorCode:      "sink_unresolvable",
 			StartedAt:      started,
 			CompletedAt:    d.now().UTC().Format(time.RFC3339),
-		}, claim, d.retry()); err != nil {
+		}, claim, d.retryFor(claim.RouteID)); err != nil {
 			if errors.Is(err, ports.ErrNotificationLeaseLost) {
 				return "", err
 			}
@@ -357,7 +440,7 @@ func (d *DrainService) deliverClaimed(ctx context.Context, claim ports.Notificat
 		Outcome:        outcome,
 		StartedAt:      started,
 		CompletedAt:    d.now().UTC().Format(time.RFC3339),
-	}, claim, d.retry()); err != nil {
+	}, claim, d.retryFor(claim.RouteID)); err != nil {
 		if errors.Is(err, ports.ErrNotificationLeaseLost) {
 			return "", err
 		}

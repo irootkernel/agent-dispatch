@@ -274,8 +274,8 @@ func (s *Store) RetryNotification(ctx context.Context, notificationID string) er
 		return err
 	}
 	defer tx.Rollback()
-	var state string
-	if err := tx.QueryRow(`SELECT state FROM notification_events WHERE notification_id = ?`, notificationID).Scan(&state); err != nil {
+	var state, leaseOwner, leaseExpiresAt string
+	if err := tx.QueryRow(`SELECT state, COALESCE(lease_owner, ''), COALESCE(lease_expires_at, '') FROM notification_events WHERE notification_id = ?`, notificationID).Scan(&state, &leaseOwner, &leaseExpiresAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("%w: %s", ports.ErrNotificationNotFound, notificationID)
 		}
@@ -286,6 +286,13 @@ func (s *Store) RetryNotification(ctx context.Context, notificationID string) er
 	case records.NotificationDelivered:
 		return fmt.Errorf("%w: %s is already delivered", ports.ErrStateNotEligible, notificationID)
 	case records.NotificationPending:
+		// A live lease is a transient conflict (round-4 F012): the
+		// drainer holding it owns the in-flight outcome, so the bypass
+		// refuses instead of silently superseding it when the fenced
+		// record lands.
+		if leaseOwner != "" && leaseExpiresAt > now {
+			return fmt.Errorf("%w: %s is under a live delivery lease until %s", ports.ErrNotificationLeaseActive, notificationID, leaseExpiresAt)
+		}
 		// A pending record under backoff becomes immediately due; an
 		// unleased pending record that is already due needs no change.
 		if _, err := tx.Exec(`UPDATE notification_events SET due_at = ? WHERE notification_id = ? AND state = 'pending'`, now, notificationID); err != nil {
@@ -615,6 +622,10 @@ func (s *Store) ClaimDueNotifications(ctx context.Context, filter ports.Notifica
 	if filter.RouteID != "" {
 		conds += " AND e.route_id = ?"
 		args = append(args, filter.RouteID)
+	}
+	if filter.NotificationID != "" {
+		conds += " AND e.notification_id = ?"
+		args = append(args, filter.NotificationID)
 	}
 	tx, err := s.BeginTx(ctx, nil)
 	if err != nil {

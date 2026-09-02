@@ -394,16 +394,22 @@ filters plus each row's attempt count and last outcome (NTF-004);
 re-arms one ambiguous, retryable, or refused notification to
 immediately-due pending under its stable idempotency identity and
 performs one attempt, refusing a delivered notification at exit 4
-(NTF-007); `drain` selects DUE work only and performs one bounded
-lease-safe attempt per due notification through the shared service —
-atomic disjoint claims, fenced outcomes, and the persisted jittered
-backoff deadline (NTF-011 through NTF-014). The pass report carries
-`claimed`, `delivered`, `refused`, `ambiguous`, `retryable`, and
-`budget_expired` (the lease-safe claim count and wall-budget state of
-the E16-T2 service); the explicit drain never evaluates drift — the
-OPS-013 drift evaluation rides the managed scheduled runner as its
-only automatic surface (§19, v0.1.6 §4), so the explicit drain stays
-recursion-free. The envelope's `pending` and
+(NTF-007) and a record under a live delivery lease at exit 14
+(`notification_lease_active` — the in-flight drainer owns the outcome;
+retry again once it resolves or the lease expires); the attempt itself
+claims its own fence exactly like a drainer's, so its outcome records
+under the claim's fencing token. `drain` selects DUE work only and
+performs one bounded lease-safe attempt per due notification through the
+shared service — atomic disjoint claims, fenced outcomes, and the
+persisted jittered backoff deadline of EACH CLAIM'S OWN ROUTE
+configuration (a route declaring a custom retry envelope keeps it
+whichever surface drained the record; NTF-011 through NTF-014). The pass
+report carries `claimed`, `delivered`, `refused`, `ambiguous`,
+`retryable`, and `budget_expired` (the lease-safe claim count and
+wall-budget state of the E16-T2 service); the explicit drain never
+evaluates drift — the OPS-013 drift evaluation rides the managed
+scheduled runner as its only automatic surface (§19, v0.1.6 §4), so the
+explicit drain stays recursion-free. The envelope's `pending` and
 `pending_remaining` report the store's post-pass pending truth — the
 pass bound never hides a backlog. Delivery outcomes are data, never
 exit codes: an ambiguous or
@@ -416,9 +422,11 @@ notification-enabled route — carries the drain posture projection
 (observability-and-operations §10, OPS-017): mode and limit, the
 due/backoff pending split, live claims, the oldest pending age against
 the configured warning window, repeated ambiguous or retryable
-outcomes, unresolvable sink declarations, and the scheduler
-expectation/evidence/overdue state of the automatic modes (§19);
-`doctor` projects the same posture as typed findings.
+outcomes, unresolvable sink declarations, the scheduler
+expectation/evidence/overdue state of the automatic modes (§19), and
+the latest drain evidence — the most recent pass's trigger, mode,
+timing, outcome counts, and budget state read from the durable
+drain-run rows; `doctor` projects the same posture as typed findings.
 
 Every root and group parser accepts `-h` and `--help`. Help states required
 flags, defaults, output modes, exit codes, side effects, production approval,
@@ -533,7 +541,9 @@ OPS-018).
   preserved.
 
 The plist invokes one direct internal `schedule run --route <id> --config
-<absolute-path>` command — never a shell chain (SEC-005). `schedule run`
+<absolute-path>` command — never a shell chain (SEC-005); every
+interpolated path and identifier is XML-escaped, so hostile characters in a
+filesystem path stay inert element text. `schedule run`
 is mode-driven: in `after-command` recovery it performs the due-only drain
 plus the automatic OPS-013 drift evaluation; in `scheduled` mode it runs
 the scheduled reconciliation first (`reconcile --reason scheduled
@@ -542,7 +552,13 @@ exit-0 pass. After-command recovery runs every fifteen minutes
 (`StartInterval`); scheduled mode runs daily at 03:00 local time by
 default (`StartCalendarInterval`), and `--at HH:MM` overrides the time for
 render/install (a malformed value is a usage error, never a coerced
-default). Schedule logs rotate at 10 MiB keeping the latest three files
+default). The override is durable state keyed by the managed label:
+`inspect`, the status posture, and a flagless `render` reproduce the
+installed timing — a legitimate override is the intended definition,
+never drift — while a flagless `install` over an existing override
+refuses as a different definition (uninstall first) and `uninstall`
+clears the stored timing with the plist. Schedule logs rotate at 10 MiB
+retaining the latest three files total
 under the state directory's `logs/` (`schedule-<route>.out.log` /
 `.err.log`).
 

@@ -158,10 +158,11 @@ topology from the current configuration. The upgrade sequence:
 Rollback restores the pre-upgrade database, the previous binary, and
 the compatible configuration together; no down migration exists (OPS-015).
 
-### 9b. v0.1.6 notification drain upgrade (migration v19, E16)
+### 9b. v0.1.6 notification drain upgrade (migrations v19-v20, E16/E17)
 
-The migration is additive: it adds due deadlines, lease columns, and the
-drain-run evidence table to the notification outbox, rewrites no historic
+The migrations are additive: v19 adds due deadlines, lease columns, and the
+drain-run evidence table to the notification outbox, and v20 adds the
+managed schedule's durable `--at` timing store; neither rewrites any historic
 row, and every existing notification identity and attempt survives
 unchanged. Pending notifications backfill their due time to the creation
 timestamp, so migrated pending work is immediately due and the next

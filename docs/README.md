@@ -89,10 +89,11 @@ and hosted Release.
 ## v0.1.6 Operational Follow-up (shipped 2026-09-02)
 
 D-027 approved four sequential epics, E14 through E17, closing the
-three operational gaps found during a real v0.1.5 deployment: the
-detailed contract was
-[`specs/v0.1.6-operational-follow-up.md`](specs/v0.1.6-operational-follow-up.md),
-with acceptance gates G10 through G13. All four epics delivered and
+three operational gaps found during a real v0.1.5 deployment, with
+acceptance gates G10 through G13 (the delivery contract's durable
+content lives in the requirements, contracts, ADRs 0020-0022, and the
+roadmap's Canonical Outcomes; the temporary follow-up dossier was
+retired at the E17 closeout). All four epics delivered and
 evidenced: E14 closed gate G10 on 2026-08-31 (the explicit setup route
 selection, the disabled baseline-only reconciliation, and the
 rerunnable five-state walkthrough), E15 closed gate G11 on 2026-08-31

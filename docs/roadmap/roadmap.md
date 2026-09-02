@@ -13,7 +13,7 @@
 | Shipped release | v0.1.6 (published 2026-09-02) |
 | Planned SOT baseline | 1.3.0 ([D-027](../specs/decision-log.md) delivered) |
 | Release target | v0.1.6 (released) |
-| Current epic | E17 In Progress (all tasks Completed; epic closeout pending) |
+| Current epic | None (E17 Completed 2026-09-02; the roadmap is complete) |
 | Current active task | None |
 | Next task | None (89/89; the roadmap is complete) |
 | Completed tasks | 89 / 89 |
@@ -4142,10 +4142,10 @@ matrix above; `make verify` is green.
 
 # E17: Documentation, Cold Validation, and v0.1.6 Release
 
-**Epic status:** In Progress
+**Epic status:** Completed
 **Purpose:** Reconcile every v0.1.6 claim with executable and real-environment evidence, then publish one reproducible release.
 **Gate:** G13
-**Detailed SOT:** [v0.1.6 operational follow-up](../specs/v0.1.6-operational-follow-up.md)
+**Canonical Outcomes:** [required-spec.md](../specs/required-spec.md) (requirements) · [acceptance-criteria.md](../specs/acceptance-criteria.md) (G13 scenarios) · [cli-spec.md](../contracts/cli-spec.md) (operator contract truth) · [configuration-spec.md](../contracts/configuration-spec.md) (drain, schedule, and executable contracts) · [runbook.md](../operations/runbook.md) §9a/§9b (upgrade and rollback) · [e17t2-cold-validation-evidence.md](../integrations/e17t2-cold-validation-evidence.md) (real-environment cold validation) · [VALIDATION.md](../VALIDATION.md) (gate evidence) · [RELEASE-NOTES-v0.1.6.md](../RELEASE-NOTES-v0.1.6.md) (the release record)
 
 ## E17-T1: CLI, Configuration, Operations, and Skill Truth
 
@@ -4335,9 +4335,9 @@ changed: the release is explicitly a no-production-activation record.
 
 # 4. Deferred Future Work
 
-The following do not count toward the 89 tracked roadmap tasks (75 completed
-through v0.1.5 and 14 planned v0.1.6 tasks across E14-E17) and remain Deferred
-until a new roadmap is approved:
+The following do not count toward the 89 tracked roadmap tasks (all 89
+Completed through v0.1.6, released 2026-09-02) and remain Deferred until a
+new roadmap is approved:
 
 - Agent Dispatch managed daemon;
 - multi-vault production certification and global budgets;

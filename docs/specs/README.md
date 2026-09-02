@@ -12,7 +12,6 @@ accepted ADRs and the contract collection refine it without overriding it.
 - [`acceptance-criteria.md`](acceptance-criteria.md): cumulative release gates.
 - [`traceability-matrix.md`](traceability-matrix.md): generated requirement-to-task mapping.
 - [`decision-log.md`](decision-log.md): append-only SOT admission, amendment, and errata decisions.
-- [`v0.1.6-operational-follow-up.md`](v0.1.6-operational-follow-up.md): the approved v0.1.6 operational follow-up contract (every epic E14-E17 delivered and evidenced; the shared spec stays linked as E17's Detailed SOT until the epic closeout replaces it with Canonical Outcomes).
 
 ## v0.1.5 Feature-to-Authority Map
 
@@ -43,9 +42,9 @@ release (2026-08-30).
 | Automatic durable notification draining | `NTF-*`, `DUR-*`, `CLI-*`, `OPS-*`, `TST-*` | G12 | E16 |
 | Documentation, cold validation, and release proof | all applicable groups | G13 | E17 |
 
-D-027 owns this approved plan, with the detailed contract in
-[`v0.1.6-operational-follow-up.md`](v0.1.6-operational-follow-up.md) and
-ADRs 0020 through 0022. Every epic delivered and evidenced: E14 closed
+D-027 owns this delivered plan, with ADRs 0020 through 0022 fixing the
+baseline, serialization, and drain decisions. Every epic delivered and
+evidenced: E14 closed
 gate G10 (2026-08-31), E15 closed gate G11 (2026-08-31), E16 closed
 gate G12 (2026-09-01), and E17 closed gate G13 (2026-09-02) — the
 documentation truth, the cold validation with its real-environment

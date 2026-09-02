@@ -28,7 +28,7 @@
 
 ## Package Statistics at Validation
 
-- Markdown files: 91 on the manifest basis (including the seven role indexes, supporting collection indexes, the v0.1.5 and v0.1.6 release notes, the v0.1.6 operational follow-up contract and cold-validation evidence, and ADR-0016 through ADR-0022)
+- Markdown files: 90 on the manifest basis (including the seven role indexes, supporting collection indexes, the v0.1.5 and v0.1.6 release notes, the cold-validation evidence, and ADR-0016 through ADR-0022; the v0.1.6 follow-up dossier was retired at the E17 closeout)
 - JSON Schemas: 18
 - Example files: 24
 - Integration reports: 4 (Hermes public interface E0-T4, Watchman public interface E0-T5, real-Hermes G11 evidence E15-T4, cold-validation evidence E17-T2)

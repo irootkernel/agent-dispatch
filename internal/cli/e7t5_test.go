@@ -2,8 +2,12 @@ package cli
 
 import (
 	"bytes"
+	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/irootkernel/agent-dispatch/internal/config"
 )
 
 // E7-T5 regression suite: the CLI inspection contract (H-5, M-13, M-14,
@@ -177,5 +181,51 @@ func TestTraceIDReachesEnvelope(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), `"trace_id":"trace-e7t5-1"`) {
 		t.Fatalf("the trace id must reach the envelope: %s", out.String())
+	}
+}
+
+// TestConfigShowExposesDrainPolicyRevisions pins the E16-T1 inspectability
+// claim of configuration-spec §5: every route's effective drain policy
+// digests into its own revision beside the route revision it
+// conditionally joins, and a declared automatic policy differs from the
+// manual default without touching the store.
+func TestConfigShowExposesDrainPolicyRevisions(t *testing.T) {
+	dir := t.TempDir()
+	var writes int
+	write := func(drain *config.NotificationDrain) string {
+		t.Helper()
+		writes++
+		cfg := e16t1BaseConfigCLI()
+		cfg.Instance.StateDir = filepath.Join(dir, "state")
+		cfg.Routes["wiki"].Notifications.Drain = drain
+		path := filepath.Join(dir, fmt.Sprintf("config-%d.yaml", writes))
+		if err := config.WriteExample(cfg, path); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	drainRevision := func(path string) string {
+		t.Helper()
+		var out, errb bytes.Buffer
+		if code := Run([]string{"config", "show", "--config", path}, &out, &errb); code != 0 {
+			t.Fatalf("config show: %s", errb.String())
+		}
+		res := decodeEnvelope(t, &out)
+		rows, _ := res["computed_drain_policy_revisions"].(map[string]any)
+		row, _ := rows["wiki"].(string)
+		if len(row) != 64 {
+			t.Fatalf("the drain-policy revision must be a 64-hex digest: %q (rows %v)", row, rows)
+		}
+		return row
+	}
+	manual := drainRevision(write(nil))
+	automatic := drainRevision(write(&config.NotificationDrain{Mode: "after-command"}))
+	if manual == "" || automatic == "" || manual == automatic {
+		t.Fatalf("a declared automatic policy must digest differently from the manual default: %q vs %q", manual, automatic)
+	}
+	// The default is stable and the declaration is inspectable beside
+	// the route revision: a re-read of the same file repeats the digest.
+	if repeat := drainRevision(write(&config.NotificationDrain{Mode: "after-command"})); repeat != automatic {
+		t.Fatalf("the effective-policy digest must be deterministic: %q vs %q", repeat, automatic)
 	}
 }

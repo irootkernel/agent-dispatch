@@ -70,7 +70,7 @@ Performs schema and semantic validation. `--probe-targets` invokes read-only pub
 
 ### `config show`
 
-Prints normalized redacted configuration and computed revisions.
+Prints normalized redacted configuration and computed revisions: `computed_route_revisions` carries each route's acknowledged route revision, and `computed_drain_policy_revisions` carries each route's effective drain-policy revision (the inspectable digest of configuration-spec §5, E16-T1) — both without touching the store.
 
 ### `route stale`
 

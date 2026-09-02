@@ -451,9 +451,9 @@ var driftEnqueue = func(ctx context.Context, store *sqlite.Store, routeID string
 // drift never re-notifies and a changed or newly appearing drift does
 // (AC-901). The reconciliation class is excluded: its appearances
 // already notify through the pending-reconcile transitions of E13-T1.
-// A drift-enqueue storage failure aborts the drain as the storage
-// class — it is a durable-store condition, never a delivery outcome
-// that belongs in the envelope as data.
+// A drift-enqueue storage failure aborts the scheduled runner's pass
+// as the storage class — it is a durable-store condition, never a
+// delivery outcome that belongs in the envelope as data.
 func evaluateDriftNotifications(ctx context.Context, cfg *config.Config, store *sqlite.Store, now string) ([]map[string]any, error) {
 	out := []map[string]any{}
 	for _, routeID := range cfg.SortedRouteIDs() {

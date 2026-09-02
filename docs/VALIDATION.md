@@ -1,8 +1,8 @@
 # SOT Package Validation
 
-> **Validated:** 2026-08-31 (E15 delivers gate G11 over the shipped v0.1.5
-> baseline — the Hermes v0.20.5 floor and serialization groups; 82 of 89
-> roadmap tasks are complete and E16-T1 is next)
+> **Validated:** 2026-09-02 (E16 delivers gate G12 over the v0.1.6
+> development baseline — automatic durable notification draining; 86 of 89
+> roadmap tasks are complete and E17-T1 is next)
 > **Package target:** Agent Dispatch SOT 1.2.0 / implementation v0.1.5 (published 2026-08-30)
 
 ## Completed Checks

@@ -80,6 +80,16 @@ func runConfigShow(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	view["computed_route_revisions"] = revisions
+	// The effective drain policy's own inspectable revision
+	// (configuration-spec §5, E16-T1): every route's resolved policy
+	// digests beside the route revision it conditionally joins, so an
+	// operator can see the drain posture a pass would run under without
+	// touching the store.
+	drainRevisions := map[string]string{}
+	for _, routeID := range cfg.SortedRouteIDs() {
+		drainRevisions[routeID] = config.NotificationDrainRevision(cfg.Routes[routeID].Notifications)
+	}
+	view["computed_drain_policy_revisions"] = drainRevisions
 	return writeEnvelope(stdout, command, view)
 }
 

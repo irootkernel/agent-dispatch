@@ -141,10 +141,10 @@ managed schedule, which owns the same reconcile-then-drain chain.
 ## 5. Upgrade (OPS-009)
 
 1. Back up the database and configuration (section 6).
-2. Verify the new binary's version and schema range:
-   `agent-dispatch version --output json` (the schema range must cover the
-   database's migration version).
-3. Run `agent-dispatch doctor` with the new binary without submitting work.
+2. Verify the new binary identity with `agent-dispatch version --json`.
+3. Run `agent-dispatch doctor` with the new binary without submitting work;
+   opening a database newer than the binary fails closed as
+   `migration_newer_schema`.
 4. Run any command once — forward-only migrations apply inside one
    transaction per step with a pre-migration backup; a database newer
    than the binary is refused (`migration_newer_schema`, exit 21).

@@ -16,12 +16,12 @@ import (
 const helpExit = 0
 
 // rootHelp is the root command's discoverability text.
-const rootHelp = `agent-dispatch — durable vault-to-Hermes dispatch (v0.1.5)
+const rootHelp = `agent-dispatch — durable vault-to-Hermes dispatch (v0.1.6)
 
 Usage: agent-dispatch <command> [flags]
 
 Commands:
-  version        Print the build and schema versions.
+  version        Print the compact product version.
   init           Write a disabled example configuration for this machine.
   config         validate (with optional live probes) or show the configuration.
   route          plan, list, show, enable, disable, stale, preflight,
@@ -71,11 +71,11 @@ Next safe command: agent-dispatch setup wiki`
 // entry states the subcommands, key flags, side effects, and the next
 // safe command (CLI-009).
 var commandHelp = map[string]string{
-	"version": `version — print the build and schema versions
+	"version": `version — print the product version
 
-Usage: agent-dispatch version [--output json]
+Usage: agent-dispatch version [--json]
 
-Flags: --output human|json (default human).
+Flags: --json emits the compact product name and v-prefixed version.
 
 Exit codes: 0.
 

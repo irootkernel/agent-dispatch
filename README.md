@@ -29,8 +29,9 @@ make verify       # every check: format, vet, staticcheck, import lint,
                   # schema/example validation, traceability regeneration
 ```
 
-`agent-dispatch version --output json` reports build metadata in the CLI JSON
-envelope.
+`agent-dispatch version` prints the compact human identity. Use
+`agent-dispatch version --json` for the Podway-compatible machine form:
+`{"name":"agent-dispatch","version":"v0.1.6"}` in the release build.
 
 ## Contributing
 

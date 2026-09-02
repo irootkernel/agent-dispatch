@@ -20,6 +20,8 @@ Rules:
 - machine data goes to stdout;
 - logs and diagnostics go to stderr;
 - `--output json` returns one JSON object unless the command explicitly documents JSON Lines;
+- `version` is the exception to the envelope convention: it accepts only its
+  own optional `--json` flag and rejects `--output`;
 - secrets and note bodies never appear;
 - commands are non-interactive unless explicitly named `init` or given `--interactive`;
 - stable exit codes are defined in `error-model.md`.
@@ -55,7 +57,16 @@ There is no `replay` command.
 
 ### `version`
 
-Prints binary version, commit, build time, supported config version, schema range, and adapter versions.
+```text
+agent-dispatch version
+agent-dispatch version --json
+```
+
+Prints only the compact product identity. Human output is
+`agent-dispatch <version-without-v>`; JSON output is exactly one object with
+`name: "agent-dispatch"` and a `v`-prefixed `version`. Commit, build time,
+configuration version, schema range, and adapter details are not exposed by
+this command. The former `--output human|json` forms are rejected.
 
 ### `init`
 

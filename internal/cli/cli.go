@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -55,14 +54,10 @@ type ErrorEnvelope struct {
 	Result any `json:"result,omitempty"`
 }
 
-// VersionResult is the result payload of the version command (cli-spec §3).
-type VersionResult struct {
-	Version         string            `json:"version"`
-	Commit          string            `json:"commit"`
-	BuildTime       string            `json:"build_time"`
-	ConfigVersion   string            `json:"config_version"`
-	SchemaRange     string            `json:"schema_range"`
-	AdapterVersions map[string]string `json:"adapter_versions"`
+// VersionSummary is the compact public identity emitted by version --json.
+type VersionSummary struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
 }
 
 // globalOptionsMu guards the global option resets under concurrent
@@ -104,7 +99,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	// whole-invocation budget (E16-T3).
 	markInvocationStart()
 	if len(args) == 0 {
-		writeError(stderr, "", "command_unknown", "usage", "usage: agent-dispatch <command> [flags]; run 'agent-dispatch version --output json'")
+		writeError(stderr, "", "command_unknown", "usage", "usage: agent-dispatch <command> [flags]; run 'agent-dispatch version --json'")
 		return 2
 	}
 	// One process invocation carries one set of global options; the
@@ -189,7 +184,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 				fmt.Sprintf("command %q is not implemented in this build", args[0]))
 		} else {
 			writeError(stderr, args[0], "command_unknown", "usage",
-				fmt.Sprintf("unknown command %q; run 'agent-dispatch version --output json'", args[0]))
+				fmt.Sprintf("unknown command %q; run 'agent-dispatch version --json'", args[0]))
 		}
 		return 2
 	}
@@ -269,48 +264,19 @@ func scanGlobalOptions(command string, args []string, stderr io.Writer) ([]strin
 }
 
 func runVersion(args []string, stdout, stderr io.Writer) int {
-	jsonOutput := false
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--output", "-o":
-			v, err := parseOutputValue(stderr, "version", args, &i)
-			if err != nil {
-				return 2
-			}
-			jsonOutput = v
-		case "--output=json":
-			jsonOutput = true
-		case "--output=human":
-			jsonOutput = false
-		default:
-			return usageError(stderr, "version", fmt.Sprintf("unknown argument %q for version", args[i]))
+	if len(args) > 0 {
+		if len(args) != 1 || args[0] != "--json" {
+			return usageError(stderr, "version", fmt.Sprintf("unknown argument %q for version", args[0]))
 		}
-	}
-	if jsonOutput {
-		return writeEnvelope(stdout, "version", VersionResult{
-			Version:         version.Version,
-			Commit:          version.Commit,
-			BuildTime:       version.BuildTime,
-			ConfigVersion:   version.ConfigVersion,
-			SchemaRange:     version.SchemaRange,
-			AdapterVersions: version.AdapterVersions(),
-		})
-	}
-	fmt.Fprintf(stdout, "agent-dispatch %s (commit %s, built %s)\n", version.Version, version.Commit, version.BuildTime)
-	fmt.Fprintf(stdout, "config version: %s, schema range: %s\n", version.ConfigVersion, version.SchemaRange)
-	names := make([]string, 0, len(version.AdapterVersions()))
-	for name := range version.AdapterVersions() {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	var b strings.Builder
-	for i, name := range names {
-		if i > 0 {
-			b.WriteString(", ")
+		if err := json.NewEncoder(stdout).Encode(VersionSummary{
+			Name:    "agent-dispatch",
+			Version: "v" + strings.TrimPrefix(version.Version, "v"),
+		}); err != nil {
+			return 40
 		}
-		fmt.Fprintf(&b, "%s=%s", name, version.AdapterVersions()[name])
+		return 0
 	}
-	fmt.Fprintf(stdout, "adapters: %s\n", b.String())
+	fmt.Fprintf(stdout, "agent-dispatch %s\n", strings.TrimPrefix(version.Version, "v"))
 	return 0
 }
 

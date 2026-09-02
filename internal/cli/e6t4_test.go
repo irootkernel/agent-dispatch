@@ -21,6 +21,7 @@ import (
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/platformpaths"
 	"github.com/irootkernel/agent-dispatch/internal/testsupport/hermesenv"
+	buildversion "github.com/irootkernel/agent-dispatch/internal/version"
 )
 
 // TestG5AC501WebhookExplicitRoute covers AC-501 end to end through the
@@ -447,20 +448,21 @@ func TestG5AC506ReleaseArtifactsPresent(t *testing.T) {
 	}
 	var bout, berr bytes.Buffer
 	bin := filepath.Join(dir, "agent-dispatch")
-	code := runExternal(t, bin, []string{"version", "--output", "json"}, &bout, &berr)
+	code := runExternal(t, bin, []string{"version", "--json"}, &bout, &berr)
 	if code != 0 {
 		t.Fatalf("AC-506 version failed: %s", berr.String())
 	}
-	var env Envelope
-	if err := json.Unmarshal(bout.Bytes(), &env); err != nil {
-		t.Fatalf("AC-506 version is not the envelope: %s", bout.String())
-	}
-	rawResult, _ := json.Marshal(env.Result)
 	var versionResult struct {
+		Name    string `json:"name"`
 		Version string `json:"version"`
 	}
-	if err := json.Unmarshal(rawResult, &versionResult); err != nil || versionResult.Version != version {
+	if err := json.Unmarshal(bout.Bytes(), &versionResult); err != nil || versionResult.Name != "agent-dispatch" || versionResult.Version != version {
 		t.Fatalf("AC-506: built binary reports version %q, want %s (%v)", versionResult.Version, version, err)
+	}
+	bout.Reset()
+	berr.Reset()
+	if code := runExternal(t, bin, []string{"version"}, &bout, &berr); code != 0 || bout.String() != "agent-dispatch "+strings.TrimPrefix(version, "v")+"\n" {
+		t.Fatalf("AC-506 human version = %q, exit %d, stderr %s", bout.String(), code, berr.String())
 	}
 }
 
@@ -546,32 +548,17 @@ func TestG5UpgradeAndBackupRehearsal(t *testing.T) {
 	}
 }
 
-// TestVersionReportsDeliveredAdapters pins the version surface the
-// release depends on: every adapter entry names a delivered surface
-// (no stale not-implemented markers).
-func TestVersionReportsDeliveredAdapters(t *testing.T) {
-	var out, errb bytes.Buffer
-	if code := Run([]string{"version", "--output", "json"}, &out, &errb); code != 0 {
-		t.Fatalf("version failed: %s", errb.String())
-	}
-	var env Envelope
-	if err := json.Unmarshal(out.Bytes(), &env); err != nil {
-		t.Fatalf("version is not the envelope: %s", out.String())
-	}
-	raw, _ := json.Marshal(env.Result)
-	var res struct {
-		Adapters map[string]string `json:"adapter_versions"`
-	}
-	if err := json.Unmarshal(raw, &res); err != nil {
-		t.Fatal(err)
-	}
-	for name, desc := range res.Adapters {
+// TestAdapterMetadataNamesDeliveredSurfaces keeps the internal release
+// metadata honest without exposing it through the compact version command.
+func TestAdapterMetadataNamesDeliveredSurfaces(t *testing.T) {
+	adapters := buildversion.AdapterVersions()
+	for name, desc := range adapters {
 		if strings.Contains(desc, "not-implemented") {
 			t.Fatalf("adapter %s still reports not-implemented: %s", name, desc)
 		}
 	}
-	if !strings.Contains(res.Adapters["hermeswebhook"], "HTTPS sink") {
-		t.Fatalf("hermeswebhook entry wrong: %s", res.Adapters["hermeswebhook"])
+	if !strings.Contains(adapters["hermeswebhook"], "HTTPS sink") {
+		t.Fatalf("hermeswebhook entry wrong: %s", adapters["hermeswebhook"])
 	}
 }
 

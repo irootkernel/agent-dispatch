@@ -37,7 +37,10 @@ specification package now states the shipped behavior:
   final tree, two byte-identical `make release VERSION=v0.1.6` builds
   with SHA256SUMS, the v0.1.6 release notes, the synchronized status
   surfaces, and the explicit no-production-activation record. The
-  roadmap closes at 89/89.
+  roadmap closes at 89/89. The final CLI identity follows Podway's compact
+  contract: `version` prints `agent-dispatch 0.1.6`, `version --json` emits
+  only `name` and the v-prefixed `version`, and the former detailed
+  `version --output json` surface is removed.
 
 v0.1.6 is published (2026-09-02): the candidate was cut from the
 post-validation final tree as two byte-identical builds, and the

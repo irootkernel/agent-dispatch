@@ -15,7 +15,6 @@ import (
 	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
-	"github.com/irootkernel/agent-dispatch/internal/version"
 )
 
 // Gate G6 (E10-T3): the source and reconciliation integrity gate. Every
@@ -478,7 +477,7 @@ func listedAs(res map[string]any, key, path string) bool {
 
 // TestG6FreshDatabaseMigration pins the gate's fresh-database leg: a
 // brand-new state directory migrates to the current baseline on first
-// CLI use, the version surface reports the shipped schema range, and
+// CLI use, the version surface reports the compact product identity, and
 // the fresh and fully-migrated schemas are identical (pinned at the
 // store level by TestFreshAndMigratedSchemasIdentical; the interrupted
 // upgrade window by TestE10T1MigrationV8BackfillAndIntegrity).
@@ -500,10 +499,10 @@ func TestG6FreshDatabaseMigration(t *testing.T) {
 		t.Fatalf("G6: the fresh database must sit at the current baseline: %d %v", schemaVersion, err)
 	}
 	var out, errb bytes.Buffer
-	if code := Run([]string{"version"}, &out, &errb); code != 0 {
+	if code := Run([]string{"version", "--json"}, &out, &errb); code != 0 {
 		t.Fatalf("version: %s", errb.String())
 	}
-	if !strings.Contains(out.String(), version.SchemaRange) {
-		t.Fatalf("G6: the version surface must report the shipped schema range: %s", out.String())
+	if out.String() != "{\"name\":\"agent-dispatch\",\"version\":\"v0.1.0-dev\"}\n" {
+		t.Fatalf("G6: the version surface must report the compact product identity: %s", out.String())
 	}
 }

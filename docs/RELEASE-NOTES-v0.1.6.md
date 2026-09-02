@@ -118,13 +118,13 @@ No production activation is part of this release.
 
 - `agent-dispatch-v0.1.6-darwin-arm64` — the single supported platform
   under the D-023 macOS-only policy (darwin/arm64), built twice from
-  the final implementation tree with the pinned Go 1.26.6 toolchain; the two builds
-  are byte-identical and `dist/SHA256SUMS` records the digest
-  (`ea0eb3cf17820baa2d9ce76b8a5539dca6f3c3130e5501f7b2bba08dd702deae`
-  on the final implementation tree — commit `24e07c4`, carrying every
-  audit remediation; only documentation commits follow it. The hosted
-  artifact re-cuts from the tagged release commit under the publication
-  authority, re-verifying byte-identity at that tree).
+  the tagged implementation tree with the pinned Go 1.26.6 toolchain;
+  the two builds are byte-identical and the published `SHA256SUMS`
+  records the final artifact digest. `version` prints
+  `agent-dispatch 0.1.6`; `version --json` emits only
+  `{"name":"agent-dispatch","version":"v0.1.6"}` in the compact
+  Podway-compatible shape. The former detailed `version --output json`
+  surface is removed.
 - The versioned skills and the checked-in schemas and examples are
   manifest-verified (`make manifest-check`) and schema-validated on
   every `make verify` run. Before publication the exact shipping

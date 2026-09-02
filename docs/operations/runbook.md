@@ -3,7 +3,7 @@
 ## 1. Initial Deployment Sequence
 
 1. Install the verified Go-built Agent Dispatch binary.
-2. Confirm `agent-dispatch version --output json`.
+2. Confirm `agent-dispatch version --json`.
 3. Create a disabled config with `agent-dispatch init`.
 4. Set the Obsidian vault as a named resource.
 5. Declare each Hermes target under `hermes_targets` with its board, an explicit `minimum_version` (at least 0.20.5; omitting it fails closed), and `compatibility: capability_probe` — compatibility is proven by the per-executable capability probe whose record certifies one effective serialization mode (E11-T2, E15-T2).
@@ -116,7 +116,7 @@ Copying a live WAL database without its WAL/SHM or checkpoint procedure is not a
 ## 9. Upgrade
 
 1. back up database and config;
-2. validate new binary version/schema range;
+2. validate the new binary identity and run doctor for schema compatibility;
 3. run `doctor` with new binary without submitting work;
 4. run migration;
 5. verify integrity and capability compatibility;

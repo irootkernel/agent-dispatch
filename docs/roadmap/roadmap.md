@@ -374,7 +374,7 @@ E0-T4 Completed; E0-T5 Completed.
 ### Acceptance
 
 - clean checkout builds on macOS and Linux CI (superseded: hosted CI was removed on 2026-08-22 and never recorded a run; verification is `make verify` per platform, D-017);
-- `agent-dispatch version --output json` follows the CLI envelope;
+- `agent-dispatch version --json` reports the compact product identity;
 - no domain behavior is stubbed with false success;
 - package dependency direction is enforceable;
 - repository verification command passes;
@@ -390,7 +390,8 @@ Config parsing, SQLite tables, Watchman, and Hermes invocation.
 - `internal/schemavalid` with migrated self-tests (`internal/schemavalid/selftest_test.go`); the Python subset validator `docs/scripts/validate-json-schemas.py` is retired.
 - `.gaori/tester.yaml` invokes the Makefile targets; `gaori config check` passes.
 - `.github/workflows/ci.yml` was removed on 2026-08-22: GitHub Actions is not used. Local `make verify` on macOS is the recorded evidence; the earlier instruction to also run a supported Linux host before Linux-targeting releases rode SCP-008's Linux clause, which D-023 supersedes (macOS is the only supported platform).
-- `agent-dispatch version --output json` follows the CLI envelope (`internal/cli/cli_test.go`).
+- `agent-dispatch version --json` reports exactly the compact product name and
+  v-prefixed version (`internal/cli/cli_test.go`).
 
 ## E1-T2: Implement Configuration Loading, Validation, and Platform Paths
 
@@ -4313,10 +4314,10 @@ E17-T2 Completed.
 Completed 2026-09-02. Gate G13's release rows are complete in VALIDATION.md:
 AC-1301/AC-1302 closed by the E17-T2 cold validation, AC-1303 by the release
 proof — two consecutive `make release VERSION=v0.1.6` builds from the clean
-final implementation tree (commit 24e07c4, pinned Go 1.26.6, carrying every
-whole-epic audit remediation) byte-identical with SHA256SUMS recording
-`ea0eb3cf17820baa2d9ce76b8a5539dca6f3c3130e5501f7b2bba08dd702deae`, the
-binary reporting v0.1.6 / schema 1-20, and the versioned surfaces agreeing
+tagged implementation tree with the pinned Go 1.26.6 toolchain are
+byte-identical, with the published SHA256SUMS carrying the final artifact
+digest, the binary's compact version surfaces reporting `agent-dispatch 0.1.6`
+and `{"name":"agent-dispatch","version":"v0.1.6"}`, and the versioned surfaces agreeing
 (operator skill 2.1.0's compatibility declaration, the v0.1.6 release notes,
 the synchronized status documents) — and AC-1304 by the additive-migration
 and rollback record (runbook §9a/§9b through v18-v20, the identity-survival

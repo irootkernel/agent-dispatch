@@ -34,17 +34,22 @@ func (s *stubSink) Deliver(ctx context.Context, in ports.NotificationDelivery) p
 
 // fakeDrainStore is an in-memory NotificationDrainStore scripted per
 // test: claims come from a due pool, fenced records resolve or
-// schedule backoff, releases return claims to the pool.
+// schedule backoff, releases return claims to the pool. The release
+// mirrors the real store's conditional UPDATE — only claims still held
+// by the releasing owner return to the pool — so a pass that draws a
+// fresh owner for its release (round-3 F001) strands its claims here
+// exactly as it would against SQLite.
 type fakeDrainStore struct {
 	pool     []ports.NotificationClaim
 	next     map[string]int64 // notification -> next token
+	owner    map[string]string
 	released []ports.NotificationClaim
 	recorded []ports.NotificationAttemptInput
 	lost     map[string]bool // notification -> simulate lease loss
 }
 
 func newFakeDrainStore(ids ...string) *fakeDrainStore {
-	f := &fakeDrainStore{next: map[string]int64{}, lost: map[string]bool{}}
+	f := &fakeDrainStore{next: map[string]int64{}, owner: map[string]string{}, lost: map[string]bool{}}
 	for _, id := range ids {
 		f.pool = append(f.pool, ports.NotificationClaim{NotificationEventRecord: ports.NotificationEventRecord{NotificationID: id, RouteID: "wiki", SinkID: "ops-log", SinkType: "log"}, LeaseToken: 1})
 		f.next[id] = 1
@@ -62,6 +67,9 @@ func (f *fakeDrainStore) ClaimDueNotifications(ctx context.Context, filter ports
 		out = out[:limit]
 	}
 	f.pool = f.pool[len(out):]
+	for _, c := range out {
+		f.owner[c.NotificationID] = filter.Owner
+	}
 	return out, nil
 }
 
@@ -74,7 +82,13 @@ func (f *fakeDrainStore) RecordNotificationAttemptFenced(ctx context.Context, in
 }
 
 func (f *fakeDrainStore) ReleaseNotificationClaims(ctx context.Context, owner string, claims []ports.NotificationClaim) error {
-	f.released = append(f.released, claims...)
+	for _, c := range claims {
+		if f.owner[c.NotificationID] != owner {
+			continue // the real conditional UPDATE would match no rows
+		}
+		delete(f.owner, c.NotificationID)
+		f.released = append(f.released, c)
+	}
 	return nil
 }
 

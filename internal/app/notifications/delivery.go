@@ -265,8 +265,13 @@ func (d *DrainService) DrainDue(ctx context.Context, routeID string) (DrainClaim
 	if deadline, ok := ctx.Deadline(); ok && deadline.After(now) {
 		leaseUntil = deadline.Add(notificationLeaseMargin)
 	}
+	// The pass identity is one owner draw: the claim and the
+	// budget-expiry release must present the same owner or the store's
+	// fenced release matches no rows and silently strands the claims
+	// until lease expiry (round-3 F001).
+	owner := d.owner()
 	claims, err := d.Store.ClaimDueNotifications(ctx, ports.NotificationClaimFilter{
-		RouteID: routeID, Limit: d.limit(), Owner: d.owner(), LeaseUntil: leaseUntil.UTC().Format(time.RFC3339Nano),
+		RouteID: routeID, Limit: d.limit(), Owner: owner, LeaseUntil: leaseUntil.UTC().Format(time.RFC3339Nano),
 	})
 	if err != nil {
 		return report, err
@@ -302,7 +307,7 @@ func (d *DrainService) DrainDue(ctx context.Context, routeID string) (DrainClaim
 	// immediately claimable again; a budget-expired started delivery
 	// keeps its fence and remains lease-recoverable (v0.1.6 §4).
 	if len(unstarted) > 0 {
-		if err := d.Store.ReleaseNotificationClaims(ctx, d.owner(), unstarted); err != nil {
+		if err := d.Store.ReleaseNotificationClaims(ctx, owner, unstarted); err != nil {
 			return report, err
 		}
 	}

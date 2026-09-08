@@ -344,8 +344,8 @@ func TestG5AC504CleanHostInstallDispatchScheduleUninstall(t *testing.T) {
 	}
 }
 
-// TestG5AC506ReleaseArtifactsPresent covers AC-506: the v0.1.0 release
-// candidate's artifacts exist and are version-compatible — the
+// TestG5AC506ReleaseArtifactsPresent covers AC-506: the published release
+// artifacts exist and are version-compatible — the
 // reproducible release build with checksums, the schemas and example
 // config, the companion skill, the SOT package, and the changelog.
 func TestG5AC506ReleaseArtifactsPresent(t *testing.T) {
@@ -353,39 +353,19 @@ func TestG5AC506ReleaseArtifactsPresent(t *testing.T) {
 		t.Skipf("go toolchain unavailable: %v", err)
 	}
 	dir := t.TempDir()
-	// One version source: the shipped release notes name the version and
-	// the test derives everything from it (E8-T6, H-5 - the old test
-	// hard-coded v0.1.0 and never looked at dist/).
-	// The one version source: the shipped release-notes FILENAME carries
-	// the version everything else derives from (the body asserts the same
-	// value so a rename drift fails).
-	matches, merr := filepath.Glob(filepath.Join("..", "..", "docs", "RELEASE-NOTES-*.md"))
-	if merr != nil || len(matches) == 0 {
-		t.Fatalf("AC-506: release-notes files must exist, got %v (%v)", matches, merr)
-	}
-	// The LATEST release notes are the one version source (historical
-	// notes for prior releases remain in the package).
-	// Semantic selection: compare the numeric version components, never
-	// the raw filename (lexical order picks v0.1.9 over v0.1.10).
-	latest := matches[0]
-	latestKey := versionSortKey(filepath.Base(latest))
-	for _, m := range matches {
-		if k := versionSortKey(filepath.Base(m)); k > latestKey {
-			latest, latestKey = m, k
-		}
-	}
-	notesRel := filepath.Join("docs", filepath.Base(latest))
-	version := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(latest), "RELEASE-NOTES-"), ".md")
+	// Dated release headings in root CHANGELOG.md are the single version source.
+	// Pending changes and nested historical headings cannot select a release.
 	root, err := filepath.Abs("../../")
 	if err != nil {
 		t.Fatal(err)
 	}
-	notesBody, nerr := os.ReadFile(filepath.Join(root, notesRel))
-	if nerr != nil {
-		t.Fatalf("AC-506: release notes missing: %v", nerr)
+	notesBody, err := os.ReadFile(filepath.Join(root, "CHANGELOG.md"))
+	if err != nil {
+		t.Fatalf("AC-506: product changelog missing: %v", err)
 	}
-	if !strings.Contains(string(notesBody), "Agent Dispatch "+version) {
-		t.Fatalf("AC-506: release notes body must name the version %s (one version source)", version)
+	version, err := latestChangelogRelease(string(notesBody))
+	if err != nil {
+		t.Fatalf("AC-506: %v", err)
 	}
 	// The documented artifact set exists in the repository (paths
 	// relative to the repository root the release builds from).
@@ -394,8 +374,8 @@ func TestG5AC506ReleaseArtifactsPresent(t *testing.T) {
 		"docs/examples/config.yaml",
 		"docs/skills/agent-dispatch-wiki-maintenance/SKILL.md",
 		"docs/README.md",
-		"docs/CHANGELOG.md",
-		notesRel,
+		"docs/SOT-CHANGELOG.md",
+		"CHANGELOG.md",
 	} {
 		path := filepath.Join(root, rel)
 		if _, err := os.Stat(path); err != nil {
@@ -562,17 +542,93 @@ func TestAdapterMetadataNamesDeliveredSurfaces(t *testing.T) {
 	}
 }
 
-// versionSortKey renders a RELEASE-NOTES-<version>.md basename into a
-// zero-padded numeric key so semantic order equals string order.
-func versionSortKey(base string) string {
-	v := strings.TrimSuffix(strings.TrimPrefix(base, "RELEASE-NOTES-"), ".md")
-	parts := strings.Split(v, ".")
-	for i, p := range parts {
-		digits := p
-		digits = strings.TrimPrefix(digits, "v")
-		if n, err := strconv.Atoi(digits); err == nil {
-			parts[i] = fmt.Sprintf("%08d", n)
+// latestChangelogRelease selects dated ## vX.Y.Z - YYYY-MM-DD headings numerically.
+// Unreleased, nested headings, and examples inside fenced code are not releases.
+func latestChangelogRelease(body string) (string, error) {
+	latest := ""
+	var latestParts [3]int
+	seen := map[string]bool{}
+	fence := ""
+	for _, line := range strings.Split(body, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			marker := trimmed[:3]
+			if fence == "" {
+				fence = marker
+			} else if fence == marker {
+				fence = ""
+			}
+			continue
+		}
+		if fence != "" || !strings.HasPrefix(line, "## v") {
+			continue
+		}
+		version, status, ok := strings.Cut(strings.TrimSpace(strings.TrimPrefix(line, "## ")), " - ")
+		if !ok {
+			return "", fmt.Errorf("release heading needs a date or Unreleased status: %s", line)
+		}
+		parts := strings.Split(strings.TrimPrefix(version, "v"), ".")
+		if len(parts) != 3 {
+			return "", fmt.Errorf("invalid published changelog heading: %s", line)
+		}
+		var numbers [3]int
+		for i, part := range parts {
+			n, err := strconv.Atoi(part)
+			if err != nil || n < 0 || strconv.Itoa(n) != part {
+				return "", fmt.Errorf("invalid published changelog heading: %s", line)
+			}
+			numbers[i] = n
+		}
+		if status == "Unreleased" {
+			continue
+		}
+		if _, err := time.Parse("2006-01-02", status); err != nil {
+			return "", fmt.Errorf("invalid changelog release date: %s", line)
+		}
+		if seen[version] {
+			return "", fmt.Errorf("duplicate published changelog version: %s", version)
+		}
+		seen[version] = true
+		if latest == "" || numbers[0] > latestParts[0] ||
+			(numbers[0] == latestParts[0] && numbers[1] > latestParts[1]) ||
+			(numbers[0] == latestParts[0] && numbers[1] == latestParts[1] && numbers[2] > latestParts[2]) {
+			latest, latestParts = version, numbers
 		}
 	}
-	return strings.Join(parts, ".")
+	if latest == "" {
+		return "", fmt.Errorf("CHANGELOG.md must contain a dated ## vX.Y.Z - YYYY-MM-DD section")
+	}
+	return latest, nil
+}
+
+func TestLatestChangelogRelease(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{"numeric order", "## v0.1.9 - 2026-01-01\nNotes\n## v0.1.10 - 2026-02-01\nNotes\n## v0.1.2 - 2025-12-01\nNotes", "v0.1.10"},
+		{"major and minor", "## v1.99.99 - 2026-01-01\nNotes\n## v2.0.0 - 2026-02-01\nNotes\n## v1.100.0 - 2026-01-02\nNotes", "v2.0.0"},
+		{"pending and nested headings", "## Unreleased\nTarget v9.0.0\n### v9.0.0\n## v0.1.6 - 2026-09-02\nNotes", "v0.1.6"},
+		{"selected next release", "## v0.1.7 - Unreleased\nPending\n## v0.1.6 - 2026-09-02\nNotes", "v0.1.6"},
+		{"fenced example", "## Unreleased\n```md\n## v9.0.0 - 2026-09-02\n```\n## v0.1.6 - 2026-09-02\nNotes", "v0.1.6"},
+		{"missing published release", "## Unreleased\nPending changes", ""},
+		{"invalid version", "## v0.1.x - 2026-09-02\nNotes", ""},
+		{"missing date", "## v0.1.6\nNotes", ""},
+		{"invalid date", "## v0.1.6 - 2026-02-30\nNotes", ""},
+		{"duplicate version", "## v0.1.6 - 2026-09-02\nNotes\n## v0.1.6 - 2026-09-03\nOther notes", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := latestChangelogRelease(tc.body)
+			if tc.want == "" {
+				if err == nil {
+					t.Fatalf("expected invalid release source, got %q", got)
+				}
+				return
+			}
+			if err != nil || got != tc.want {
+				t.Fatalf("release = %q, %v; want %q", got, err, tc.want)
+			}
+		})
+	}
 }

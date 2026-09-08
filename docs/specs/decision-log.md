@@ -424,7 +424,7 @@ to `docs/specs`, `docs/architecture`, `docs/roadmap`,
 `docs/todo/README.md`; `docs/deferred-feedback` becomes the sole owner of small
 postponed findings. The former contracts, operations, and source directories
 move to the top-level supporting collections `docs/contracts`,
-`docs/operations`, and `docs/source`. `docs/README.md` owns the role map,
+`docs/ops`, and `docs/source`. `docs/README.md` owns the role map,
 precedence, language, roadmap namespace, and repository-native validation
 entrypoint.
 

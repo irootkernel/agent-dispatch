@@ -1,5 +1,11 @@
 # SOT Package Validation
 
+This file contains dated validation snapshots and subsequent gate records.
+Counts and passed checks below apply to their named snapshot; they do not
+certify the current HEAD. For the current documentation roles and checks, use
+the [documentation index](README.md); for delivery status use the
+[roadmap](roadmap/roadmap.md).
+
 > **Validated:** 2026-09-02 (E17 closes gate G13 — documentation truth,
 > cold validation, and the reproducible v0.1.6 release; 89 of 89 roadmap
 > tasks are complete)

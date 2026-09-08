@@ -1,4 +1,8 @@
-# v0.1.6 Release Checklist
+# v0.1.6 Release Checklist (Historical Record)
+
+This is evidence for the dated v0.1.6 release below, not a checklist already
+passed by the current HEAD. Use the [release guide](release-guide.md) for a new
+candidate. Original checked items retain their historical scope.
 
 > Operated 2026-09-02 for the E17 release of the v0.1.6 operational
 > follow-up (D-027). This pass rewrites the checklist against the

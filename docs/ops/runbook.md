@@ -1,20 +1,34 @@
 # Operations Runbook
 
+This runbook targets the operator of a local macOS arm64 instance. Identify the
+binary version, configuration path, route, and intended Hermes board before acting.
+The installation owner authorizes state changes; repository maintainers own defect
+escalation. Read-only inspection comes first, and uncertain delivery remains
+uncertain until public target evidence resolves it. Use the same `--config` path
+throughout; examples below use the default configuration and `wiki-maintenance`.
+
 ## 1. Initial Deployment Sequence
 
-1. Install the verified Go-built Agent Dispatch binary.
-2. Confirm `agent-dispatch version --json`.
-3. Create a disabled config with `agent-dispatch init`.
-4. Set the Obsidian vault as a named resource.
-5. Declare each Hermes target under `hermes_targets` with its board, an explicit `minimum_version` (at least 0.20.5; omitting it fails closed), and `compatibility: capability_probe` — compatibility is proven by the per-executable capability probe whose record certifies one effective serialization mode (E11-T2, E15-T2).
-6. Run `agent-dispatch config validate --probe-targets`.
-7. Run `agent-dispatch doctor --probe-targets`.
-8. Run fixture-based `route plan`.
-9. Install the Watchman trigger while the route remains disabled or no-submit according to implementation policy.
-10. Run an initial full reconciliation in dry-run/no-submit mode.
-11. Use a disposable vault and Hermes task space to pass the automatic-write gate.
-12. Set config `enabled: true`, then explicitly activate the computed route revision with `agent-dispatch route enable --route wiki-maintenance --acknowledge-production-gate <computed-route-revision> --yes` (the acknowledgement must equal the revision `route show` computes; any other value is refused).
-13. Install daily scheduled reconciliation.
+1. Install and verify the binary; prepare the existing vault and Hermes board,
+   profile, and requested skills. Set the target's absolute executable path and
+   explicit minimum version (at least 0.20.5).
+2. Run `agent-dispatch setup wiki` against the intended disabled configuration.
+   Correct findings and rerun using the configuration path it prints. Setup
+   records the initial disabled baseline; it never activates a production route.
+3. Install and inspect the Watchman trigger using `watchman install` and
+   `watchman status`. The configured absolute vault root must itself be watched.
+4. Review, install, and inspect the schedule appropriate to the drain mode.
+   [Installation §4](installation.md#4-daily-reconciliation-scheduling-ops-006-ops-007)
+   distinguishes daily reconciliation from the after-command drain recovery job.
+5. Complete the route's automatic-write trial in a disposable vault/board before
+   enabling production. Fixture normalization alone is not a live trigger test.
+6. Set configuration `enabled: true`; run `config validate --probe-targets`,
+   `route preflight`, and `route show` for the final route revision. Explicitly
+   activate that revision with `route enable --route wiki-maintenance
+   --acknowledge-production-gate <computed-route-revision> --yes`.
+7. Run `status` and `doctor`; inspect trigger and schedule state. Verify an
+   authorized eligible edit reaches the intended task and receipt flow. If a
+   check fails, disable new submissions, retain evidence, and follow recovery.
 
 ## 2. Routine Inspection
 
@@ -202,7 +216,9 @@ Uninstall order:
 3. remove scheduled reconciliation units;
 4. remove binary;
 5. retain config and SQLite by default;
-6. delete the state directory manually after backup; v0.1 has no purge command, so this discards dedup and reconciliation history.
+6. verify the exact trigger and jobs are absent. Permanent state erasure is a
+   separate operator decision, not a required uninstall step; it discards dedup
+   and reconciliation history.
 
 ## 11. Delivery-Failure Operator Exits (E8-T2)
 
@@ -258,7 +274,7 @@ Collect:
 
 Do not collect note bodies or secrets unless the operator deliberately handles them outside the standard support bundle.
 
-## 14. v0.1.5 Operational Flow
+## 14. Multi-Destination Operational Flow
 
 1. Run `setup wiki` (pass `--route <id>` when several routes are
    declared); review the disabled config and effective Watchman binding.
@@ -289,6 +305,22 @@ time: two overlapping passes (for example a manual drain over the scheduled
 one) can surface a storage-conflict exit while both passes' deliveries stay
 idempotent under the stable key, and the interrupted pass simply re-runs.
 
-For rollback, disable the route and remove the managed trigger, preserve the
-v0.1.5 database, restore the verified pre-migration database/config backup, and
-run the v0.1.4 doctor before resuming. Never point v0.1.4 at the upgraded DB.
+For rollback, disable submissions and the relevant triggers/schedules, preserve
+the failed database, and restore the verified pre-upgrade database/configuration
+with its matching binary. Run integrity checks and doctor before resuming; never
+point an older binary at an upgraded database. Version-specific procedures in
+§9a/§9b retain their named migration scope.
+
+## Success, Recovery, and Escalation
+
+After intervention, confirm `doctor` findings are resolved or explicitly explained,
+inspect the affected dispatch/notification/receipt by ID, and verify the expected
+Watchman and schedule definitions before resuming automatic submissions. A healthy
+command exit is not proof that Hermes completed the work.
+
+If an intervention fails, leave new submissions disabled, preserve causal IDs and
+backups, and avoid retries that could duplicate uncertain work. Database restore
+must follow [installation §6](installation.md#6-backup). The host operator handles
+local paths, permissions, and scheduling; Hermes administrators handle target access;
+repository maintainers handle integrity, contract, and unexplained state-machine
+failures. Provide the redacted incident data from §12, never secret values or note bodies.

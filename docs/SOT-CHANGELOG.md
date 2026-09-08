@@ -1,5 +1,10 @@
 # SOT Changelog
 
+This is the specification-package change history. Its version numbers identify
+SOT snapshots, not product releases. Product release notes and pending user-facing
+changes belong to the root [changelog](../CHANGELOG.md). Historical entries below
+retain their recorded scope; migrated document pointers use their current paths.
+
 ## 1.4.0 - 2026-09-08
 
 D-028 adopted and delivered the absolute watch-root binding remediation
@@ -174,7 +179,7 @@ candidate close the roadmap at 75/75:
 - the docs README baseline section records the now-evidenced G6-G9
   gates and the v0.1.5 local-candidate posture; the release
   checklist's v0.1.5 addendum closes all eight items against their
-  owning gates; RELEASE-NOTES-v0.1.5.md ships with the feature
+  owning gates; CHANGELOG.md#v015---2026-08-30 ships with the feature
   summary, artifact record (the real darwin-arm64 artifact name), and
   known state; and the roadmap records E13 Completed on the summary
   row and the epic body with task 75/75, the final Current State
@@ -885,7 +890,7 @@ E9-T9 and the D-024 closeout: documentation truth and the v0.1.4 release:
 
 - the status surfaces resynchronize (README SOT and narrative, VALIDATION post-D-024 record, the roadmap's re-closed summary and current state, and the release checklist rewritten to the 60-task macOS-only toolchain-enforced basis) closing D-023 F5;
 - the member-task residual observations reconcile in-tree: the unavailable-branch weak-guarantee coverage leg, the RecordedVersionSupported boundary unit tests, the authProjection nil-equivalence pin, the gate-comment phrasing, the grammar-test colon, and the schema-test comment wording (the twin validation ladders are recorded in D-024 as an architectural observation);
-- RELEASE-NOTES-v0.1.4 discloses the one-time re-acknowledgement under the widened revision projection, the enforced toolchain pin, the macOS-only artifact set, and the known Hermes-set posture;
+- CHANGELOG.md#v014---2026-08-25 discloses the one-time re-acknowledgement under the widened revision projection, the enforced toolchain pin, the macOS-only artifact set, and the known Hermes-set posture;
 - D-024 re-closes epic E9 9/9 with every D-023 finding dispositioned and v0.1.4 tagged at the final tree after the byte-identical double build.
 ## 1.0.46 - 2026-08-25
 
@@ -1002,7 +1007,7 @@ E8-T6: documentation truth restored and v0.1.2 released:
 - the five E8-T3 deferred documentation findings fixed (installation section 3 places the capability report before the gates; cli-spec section 3 documents the enable probe; configuration-spec section 12 states the default/probe split; the sink-contract example and the dispatch-plan example carry the honest capability set);
 - the section-4 truth items: AC-107's refuted given-clause, the E7-T1 file count, the E2-T2 Linux wording, the E7 matrix rows the review refuted (CON-003, CLI-004, DAT-009) superseded rather than rewritten, the Markdown count, the README narrative through v0.1.2, the repository-layout deviations, and the domain-model/overview prose;
 - SCP-008/AC-505 closed across the charter, acceptance criteria, VALIDATION, README, and release notes, with the two permission-expectation tests self-skipping under root;
-- the refreshed MUST-closure matrix records the v0.1.2 disposition of every FAIL/PARTIAL requirement; `make release VERSION=v0.1.2` is byte-reproducible with the tag; the AC-506 test reads one version source and validates the artifacts; RELEASE-NOTES-v0.1.2 ships with the TST-008 disclosure.
+- the refreshed MUST-closure matrix records the v0.1.2 disposition of every FAIL/PARTIAL requirement; `make release VERSION=v0.1.2` is byte-reproducible with the tag; the AC-506 test reads one version source and validates the artifacts; CHANGELOG.md#v012---2026-08-23 ships with the TST-008 disclosure.
 
 ## 1.0.32 - 2026-08-23
 
@@ -1202,7 +1207,7 @@ E6-T4: v0.1.0 verification and release:
 
 - the executable G5 acceptance suite closes the gate: AC-501 (webhook auth without persistence, transport-vs-durable distinction, no Kanban fallback), AC-502 (doctor's stable actionable findings), AC-503 (prune removes resolved expired data while unresolved lineage and the audit survive), AC-504 (the clean-host macOS install→validate→dry-run dispatch→gate-acknowledged enable→scheduled reconciliation→doctor flow without manual database edits), AC-505 (the Linux CI leg of make verify; corrected in 1.0.14: no successful Linux run is recorded, and the review's diagnostic arm64 container runs failed), and AC-506 (the release-way build with its version envelope and the full artifact set);
 - the upgrade-and-backup rehearsal is executable: built-in backup with verification, doctor, full integrity, one reconciliation, and a standalone restore that carries the lineage;
-- docs/VALIDATION.md gains the Gate G5 evidence table (G0–G5 now closed) and docs/RELEASE-NOTES-v0.1.0.md ships as the release notes artifact;
+- docs/VALIDATION.md gains the Gate G5 evidence table (G0–G5 now closed) and CHANGELOG.md#v010---2026-08-22 ships as the release notes artifact;
 - the requirement traceability matrix regenerates with every requirement resolved to its owning and verifying tasks (33 tasks, 15 groups);
 - compatibility is frozen and reported: config version 1, schema range 1-4, record payload versions, adapter profiles the then-baseline hermes and watchman 2026.07.27.00;
 - the roadmap records all 33 tasks Completed with the v0.1 sequence complete; the deferred future work stays apart (no partially enabled feature), the Hermes plugin remains absent, and production enablement stays the explicit computed-revision operator action.
@@ -1229,7 +1234,7 @@ E6-T3: packaging and scheduled reconciliation (SCP-008, OPS-006, OPS-007, OPS-00
 - the scheduling examples exist and are validated: the launchd LaunchAgent plist (`plutil -lint` on macOS), the systemd --user service and timer (`systemd-analyze verify` on Linux), and the uninstall script (`sh -n`), wired as `make schedule-check` inside `make verify` so each host lints its own artifact where the tool exists (SCP-008, where possible; corrected in 1.0.14: hosted CI is not used); both schedules invoke the verified `reconcile --reason scheduled` one-shot shape with no daemon, omitting `--submit` before the production gate;
 - `agent-dispatch completion bash|zsh` emits the static v0.1 command-tree completion, completing the registered CLI tree;
 - `agent-dispatch maintenance backup --output <path>` writes the runbook §8 built-in backup: an owner-only `VACUUM INTO` snapshot with a post-write quick check that refuses to overwrite (cli-spec §11 updated);
-- `docs/operations/installation.md` documents the install, platform config/state paths (macOS and XDG Linux), first-use clean-host scenario, daily scheduling, upgrade, backup, and uninstall procedures;
+- `docs/ops/installation.md` documents the install, platform config/state paths (macOS and XDG Linux), first-use clean-host scenario, daily scheduling, upgrade, backup, and uninstall procedures;
 - the uninstall example follows runbook §10 and retains SQLite and configuration by design — `--purge-state` only prints the manual backup guidance; the acceptance lines are pinned by tests (clean-host init through the default paths with owner-only perms and idempotent refusal, backup standalone-open and integrity, schedule shapes, no recursive deletion);
 - the Linux CI leg of `make verify` (existing ubuntu-latest matrix) validates the binary, configuration, SQLite, and — with this change — the systemd unit syntax. (Corrected in 1.0.14: no CI run was ever recorded and no successful Linux `make verify` exists; this claim was false as written.)
 

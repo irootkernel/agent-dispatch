@@ -1,40 +1,213 @@
 # Agent Dispatch
 
-Agent Dispatch observes Watchman file-change events, plans safe deterministic
-edits, and delivers them as durable Hermes Kanban tasks with verifiable
-receipts. The source of truth for scope, contracts, and the roadmap lives
-under [`docs/`](docs/README.md); start there.
+Turn changes in a Markdown vault into durable Hermes Kanban tasks.
+Agent Dispatch watches for meaningful file changes, groups the work, and
+tracks delivery and completion so your agents can maintain a wiki without
+processing every save as a separate job.
 
-## Repository layout
+## What you can do
 
-- `cmd/agent-dispatch/` CLI entry point.
-- `internal/` application services, domain, ports, adapters, config, CLI,
-  observability, and platform paths (see
-  `docs/implementation-tips/repository-layout.md`).
-- `internal/schemavalid/` Draft 2020-12 validator for the SOT schema and
-  example documents.
-- `internal/importlint/` package dependency-direction enforcement.
-- `docs/` the SOT package: specification, ADRs, contracts, roadmap,
-  schemas, examples, and integration evidence.
-- `Makefile` the single verification entrypoint.
-- GitHub Actions is not used; run `make verify` (format, vet, staticcheck, import lint, unit and race tests, manifest, schema, traceability, schedule-check) locally on the supported
-  platform (macOS, darwin/arm64 — the only supported platform under the D-023 policy).
+- Send changed Markdown files to a Hermes profile for indexing or wiki maintenance.
+- Route work to multiple destinations on one Hermes board, with explicit
+  serialization groups controlling which tasks may run together.
+- Keep protected paths and large batches for review, and reconcile missed events.
+- Inspect task delivery, work receipts, and optional completion notifications.
 
-## Build and verify
+Watchman detects changes; Agent Dispatch records and coordinates work in a
+local SQLite database; Hermes runs the agent tasks. Each Agent Dispatch
+command does bounded work and exits. Watchman and macOS launchd provide the
+ongoing triggers and scheduling.
+
+## Requirements
+
+- **macOS on Apple Silicon (`darwin/arm64`)** is the supported platform.
+- Watchman, and Hermes **0.20.5 or newer** with the public Kanban interface.
+  Version eligibility is checked separately from the capabilities of your
+  installed executable.
+- An existing local Markdown vault, a Hermes board, and a profile with the
+  skills your route requests. The generated example uses board
+  `agent-dispatch`, profile `wiki-maintainer`, and skill `llm-wiki`.
+- A local state directory outside the watched vault and cloud-sync folders.
+- **Go 1.26.6** if building from source. Contributor verification also uses Python 3.
+
+The [companion worker skill](docs/skills/agent-dispatch-wiki-maintenance/INSTALL.md)
+helps a Hermes agent report work receipts. The optional
+[operator skill](docs/skills/agent-dispatch-operator/INSTALL.md) guides operational
+commands. Install and select skills explicitly in Hermes; setup does not do this for you.
+
+## Install
+
+### Build this checkout
+
+This README describes the current source, including the absolute watch-root
+fix delivered by E18. The repository records v0.1.6 as the preceding published
+release; that release predates this fix. These changes are recorded under
+[v0.1.7 - Unreleased](CHANGELOG.md#v017---unreleased).
+
+From the repository root:
 
 ```sh
-make build        # build bin/agent-dispatch with version metadata
-make verify       # every check: format, vet, staticcheck, import lint,
-                  # unit tests, race tests, docs manifest checksums,
-                  # schema/example validation, traceability regeneration
+make build VERSION=0.0.0-dev
+./bin/agent-dispatch version
+mkdir -p "$HOME/.local/bin"
+install -m 755 bin/agent-dispatch "$HOME/.local/bin/agent-dispatch"
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
-`agent-dispatch version` prints the compact human identity. Use
-`agent-dispatch version --json` for the Podway-compatible machine form:
-`{"name":"agent-dispatch","version":"v0.1.6"}` in the release build.
+`0.0.0-dev` labels this as a source build. The install command replaces any
+binary at the destination; retain the previous binary and back up an existing
+installation before upgrading. Add the PATH entry to your shell configuration
+if needed. Keep the installed path stable because managed triggers and schedules
+refer to the executable.
 
-## Contributing
+### Use a published binary
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). The roadmap under
-`docs/roadmap/roadmap.md` is authoritative for task order and
-status.
+Choose a version from the repository's
+[GitHub Releases](https://github.com/irootkernel/agent-dispatch/releases), and read
+that version's section in the [changelog](CHANGELOG.md). Download its `agent-dispatch-<version>-darwin-arm64` binary and
+`SHA256SUMS` into the same directory. Verify with `shasum -a 256 -c SHA256SUMS`,
+then install the binary as `agent-dispatch` on your PATH. Use documentation from
+the matching tag when running an older release.
+
+See the [installation and upgrade guide](docs/ops/installation.md) for state
+paths, backups, migration behavior, and removal.
+
+## Quick start
+
+### 1. Prepare the destination
+
+Create or select your Hermes board, profile, and skills through Hermes's public
+interfaces. For a new board matching the generated example:
+
+```sh
+hermes kanban boards create agent-dispatch
+```
+
+Use an existing vault. For a first trial, use a disposable vault and Hermes board
+with a profile configured for that trial before activating automated edits.
+
+### 2. Run guided setup
+
+```sh
+agent-dispatch setup wiki
+```
+
+Setup prompts for the vault root, writes a disabled configuration, probes Hermes,
+checks the destination and Watchman binding, and records the initial baseline.
+It prints the configuration path and the remaining activation steps. If a
+prerequisite is missing, correct it and rerun against that same configuration:
+
+```sh
+agent-dispatch setup wiki --config /absolute/path/config.yaml --route wiki-maintenance
+```
+
+Edit the generated configuration to match your board, profile, and skills.
+Set `hermes_targets.<target-id>.executable` to the **absolute path** of Hermes:
+Watchman runs with a minimal PATH. Keep `routes.<route-id>.enabled: false` until
+setup and your trial are complete. An enabled input configuration produces a
+disabled draft; use the configuration path printed by setup for subsequent commands.
+
+Commands below use the default configuration and example route. If setup printed
+a different path or you chose another route, pass the same `--config` and `--route`
+throughout. See the [configuration contract](docs/contracts/configuration-spec.md)
+for all fields and defaults.
+
+### 3. Install the trigger and schedule
+
+```sh
+agent-dispatch watchman install --route wiki-maintenance
+agent-dispatch watchman status --route wiki-maintenance
+agent-dispatch schedule render --route wiki-maintenance --platform launchd
+agent-dispatch schedule install --route wiki-maintenance --platform launchd
+agent-dispatch schedule inspect --route wiki-maintenance --platform launchd
+```
+
+Review the rendered schedule before installing it. The generated configuration
+uses `after-command` notification draining, which requires its managed recovery
+schedule before activation. That schedule recovers notification delivery every
+15 minutes; it does not replace daily source reconciliation. For daily
+reconcile-and-drain behavior, configure `notifications.drain.mode: scheduled`
+before rendering and installing. Routes with manual draining use the separate
+[daily reconciliation recipe](docs/ops/installation.md#4-daily-reconciliation-scheduling-ops-006-ops-007).
+
+The current source requires the configured absolute vault root itself to be a
+Watchman watch root. If installation refuses an ancestor binding, follow the
+reported diagnosis and the [recovery guide](docs/ops/failure-recovery.md);
+removing another watch root can affect other tools.
+
+### 4. Enable the reviewed route
+
+For your first trial, activate the disposable vault and board prepared in step 1.
+After disabled setup succeeds, set the selected route's configuration `enabled`
+field to `true`, then inspect its final configuration:
+
+```sh
+agent-dispatch config validate --probe-targets
+agent-dispatch route preflight --route wiki-maintenance
+agent-dispatch route show --route wiki-maintenance
+```
+
+Use the computed route revision from this final configuration in the explicit
+activation command:
+
+```text
+agent-dispatch route enable --route wiki-maintenance --acknowledge-production-gate <computed-route-revision> --yes
+```
+
+This enables automatic submissions to Hermes. Editing YAML alone does not
+activate a route, and setup never executes this acknowledgement for you. Complete
+the checks below on the disposable instance first; then repeat the setup and
+reviewed activation for production with its own configuration and revision.
+
+### 5. Check the result
+
+```sh
+agent-dispatch status
+agent-dispatch doctor
+agent-dispatch dispatches list
+agent-dispatch receipts list --route wiki-maintenance
+```
+
+After an eligible Markdown edit, inspect the dispatch and its Hermes task.
+Delivery acceptance and completed agent work are separate states. `watchman test`
+checks fixture normalization; it does not prove that a live edit reached Hermes.
+
+## Everyday commands
+
+| Goal | Command |
+|---|---|
+| Inspect overall state | `agent-dispatch status` |
+| Diagnose configuration or runtime findings | `agent-dispatch doctor` |
+| Inspect one dispatch | `agent-dispatch dispatches show <dispatch-id>` |
+| Pause new submissions | `agent-dispatch route disable --route wiki-maintenance` |
+| Reconcile current files and submit eligible work | `agent-dispatch reconcile --route wiki-maintenance --reason manual --submit` |
+| Inspect notifications | `agent-dispatch notifications list` |
+| Back up state | `agent-dispatch maintenance backup --output /absolute/path/backup.db` |
+
+Most commands accept `--output json`. Product identity uses the separate
+`agent-dispatch version --json` form. The [CLI reference](docs/contracts/cli-spec.md)
+describes arguments, output, and state-changing commands.
+
+## Troubleshooting
+
+- **Setup stops:** use its finding and configuration path, prepare the missing
+  vault/profile/skill, then rerun. Setup keeps the route disabled.
+- **No task after an edit:** check route activation, Watchman status, protected
+  paths, and `doctor`. An unchanged digest may correctly produce no task.
+- **Delivery is unknown:** inspect the dispatch before retrying. An interrupted
+  request may already have created a Hermes task.
+- **Notifications are pending:** inspect notification and schedule state;
+  notification recovery does not require rerunning completed agent work.
+
+The [operations runbook](docs/ops/runbook.md) covers diagnosis, reconciliation,
+quarantine, backup, and recovery. Note bodies are not stored in the operational
+database, but relative paths can reveal note titles; see
+[retention and privacy](docs/ops/retention-and-privacy.md).
+
+## Contribute
+
+See the [changelog](CHANGELOG.md) for released and pending changes.
+
+Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the
+[developer documentation](docs/README.md) for architecture, contracts, tests,
+and the canonical roadmap. Agent Dispatch is [MIT licensed](LICENSE).

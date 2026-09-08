@@ -1,132 +1,130 @@
-# Agent Dispatch Documentation
+# Developer and Contributor Documentation
 
-> **Documentation profile:** Single delivery scope with an adopted legacy roadmap identity contract
-> **SOT version:** 1.4.0
-> **Shipped implementation:** Agent Dispatch v0.1.6 (published 2026-09-02)
-> **Document status:** Shipped release state with the adopted E18 remediation
-> **Language:** English
+Agent Dispatch has one delivery scope: the CLI and its local Watchman, SQLite,
+Hermes, and launchd integrations. This directory is its canonical specification
+and maintainer documentation package. For product introduction, installation,
+and everyday use, start with the [project README](../README.md).
 
-This directory is the canonical specification package for Agent Dispatch. It
-owns product requirements, architecture, decisions, delivery state, future
-candidates, deferred findings, executable contracts, and package evidence.
-Hermes remains the authoritative agent runtime; Agent Dispatch does not modify
-Hermes core, private storage, versions, tags, or plugin surfaces.
+**Profile:** `single-scope`, with preserved legacy roadmap identities.
+
+**Language:** English.
+
+**Documentation basis:** current source, including E18 / SOT 1.4.0, tracked under
+[v0.1.7 - Unreleased](../CHANGELOG.md#v017---unreleased). Versioned release notes and
+validation records describe their own snapshots, not proof for the current HEAD.
+
+## Start Here
+
+1. [Contributor setup](implementation-tips/getting-started.md): build, locate code,
+   choose the relevant tests, and verify a change.
+2. [Project charter](specs/project-charter.md) and
+   [terminology](specs/terminology.md): purpose and domain language.
+3. [Architecture overview](architecture/architecture-overview.md) and
+   [repository layout](implementation-tips/repository-layout.md): components and code.
+4. [Required specification](specs/required-spec.md),
+   [contracts](contracts/README.md), and [accepted decisions](architecture-decision-records/README.md):
+   the behavior a change must preserve.
+5. [Canonical roadmap](roadmap/roadmap.md): task ownership, dependencies,
+   status, and links to delivered outcomes.
+
+## Find Documentation by Work
+
+| Work | Start with |
+|---|---|
+| Change ingestion, dispatch, or reconciliation | [Architecture](architecture/README.md), [specifications](specs/README.md) |
+| Change CLI, configuration, or persisted records | [Contracts](contracts/README.md), [schemas](schemas/README.md), [examples](examples/README.md) |
+| Change Hermes or Watchman integration | [Integration evidence](integrations/README.md), [packaged skills](skills/README.md) |
+| Add or run tests | [Testing strategy](implementation-tips/testing-strategy.md), [validation evidence](VALIDATION.md) |
+| Operate, upgrade, or recover an installation | [Operations](ops/README.md) |
+| Prepare a release | [Release guide](implementation-tips/release-guide.md) |
+| Propose future work or record a postponed finding | [TODO](todo/README.md), [deferred feedback](deferred-feedback/README.md) |
 
 ## Canonical Role Owners
 
 | Semantic role | Canonical owner | Responsibility |
 |---|---|---|
-| Specifications | [`specs/`](specs/README.md) | Required and implemented behavior, release scope, terminology, acceptance, and traceability |
-| Architecture | [`architecture/`](architecture/README.md) | Current components, boundaries, data flow, and responsibilities |
-| Architecture decision records | [`architecture-decision-records/`](architecture-decision-records/README.md) | Accepted, superseded, rejected, and proposed design decisions |
-| Implementation tips | [`implementation-tips/`](implementation-tips/README.md) | Non-normative implementation, testing, migration, and release guidance |
-| Roadmap | [`roadmap/`](roadmap/README.md) | Adopted epic/task identity, order, dependencies, lifecycle, and current status |
-| Deferred feedback | [`deferred-feedback/`](deferred-feedback/README.md) | Small actionable findings intentionally postponed from current work |
-| TODO | [`todo/`](todo/README.md) | Future epic-sized candidates not yet admitted to the roadmap |
+| Specifications | [specs/](specs/README.md) | Required and implemented behavior, terminology, acceptance, traceability |
+| Architecture | [architecture/](architecture/README.md) | Components, boundaries, data flow, responsibilities |
+| Architecture decision records | [architecture-decision-records/](architecture-decision-records/README.md) | Decisions and their accepted, superseded, rejected, or proposed status |
+| Implementation tips | [implementation-tips/](implementation-tips/README.md) | Development, testing, migration design, release engineering |
+| Operations | [ops/](ops/README.md) | Host setup, scheduling, diagnosis, upgrades, backup, recovery |
+| Roadmap | [roadmap/](roadmap/README.md) | Adopted identity, ordering, dependencies, lifecycle, current status |
+| TODO | [todo/](todo/README.md) | Future epic-sized candidates and any explicitly adopted temporary dossiers |
+| Deferred feedback | [deferred-feedback/](deferred-feedback/README.md) | Small actionable postponed findings |
 
-There is one delivery scope. Its canonical roadmap namespace is
-`docs/roadmap/roadmap.md`; no other document may own work-unit status.
+Operations are owned by the operator of the local installation; maintainers own
+its documented CLI behavior and recovery procedures. Hermes owns its runtime,
+profiles, skills, and public Kanban surface. Agent Dispatch does not manage
+Hermes core or private storage.
 
 ## Supporting Collections
 
-- [`contracts/`](contracts/README.md) contains normative interface and record
-  contracts subordinate to `specs/required-spec.md`.
-- [`operations/`](operations/README.md) contains non-normative installation,
-  recovery, retention, and runbook guidance under the implementation-tips role.
-- [`source/`](source/README.md) preserves non-authoritative source inputs and
-  decision-resolution provenance.
-- [`schemas/`](schemas/), [`examples/`](examples/), and [`skills/`](skills/)
-  are executable or packaged contract artifacts owned by their roadmap tasks.
-- [`integrations/`](integrations/) contains bounded external-interface evidence;
-  [`VALIDATION.md`](VALIDATION.md), [`CHANGELOG.md`](CHANGELOG.md), and the
-  release notes record package validation and release history.
+- [contracts/](contracts/README.md), [schemas/](schemas/README.md), and
+  [examples/](examples/README.md) refine or illustrate the specifications.
+  Scheduling examples are maintained with the operations role.
+- [skills/](skills/README.md) packages public integration guidance under the
+  Hermes contract; it grants no runtime authority.
+- [integrations/](integrations/README.md) contains bounded evidence supporting
+  integration contracts. Captured fixtures keep their recorded version scope.
+- [source/](source/README.md) preserves non-authoritative original inputs.
+- [Product changelog](../CHANGELOG.md) is the sole release-note source. GitHub
+  Release descriptions use its version sections; the [v0.1.6 section](../CHANGELOG.md#v016---2026-09-02)
+  describes the release preceding E18.
+- [SOT-CHANGELOG.md](SOT-CHANGELOG.md) records specification-package version
+  history, under the specifications role. [VALIDATION.md](VALIDATION.md) owns
+  dated validation evidence. Neither is another product release changelog.
+- `scripts/generate-traceability.py` is developer tooling;
+  `MANIFEST.sha256` and `specs/traceability-matrix.md` are generated package artifacts.
+  Ignored runtime logs and workflow evidence are not documentation authorities.
 
 ## Source-of-Truth Precedence
 
-When documents conflict, use this order:
+1. [Required specification](specs/required-spec.md).
+2. Accepted [ADRs](architecture-decision-records/README.md).
+3. Normative [contracts](contracts/README.md).
+4. Current [architecture](architecture/README.md).
+5. [Roadmap](roadmap/roadmap.md) for adopted identity, order, dependencies, and status.
+6. Implementation and operations guidance, including public usage summaries.
+7. Schemas, examples, packaged skills, and evidence within their stated version scope.
+8. Original [source inputs](source/README.md).
 
-1. [`specs/required-spec.md`](specs/required-spec.md)
-2. Accepted ADRs under [`architecture-decision-records/`](architecture-decision-records/README.md)
-3. Normative documents under [`contracts/`](contracts/README.md)
-4. Current design under [`architecture/`](architecture/README.md)
-5. [`roadmap/roadmap.md`](roadmap/roadmap.md) for adopted identity, order, dependencies, and status
-6. Implementation and operations guidance
-7. Schemas, examples, packaged skills, and integration evidence within their explicitly stated version scope
-8. Original inputs under [`source/`](source/README.md)
+The roadmap exclusively owns lifecycle truth regardless of the product precedence
+above. Historical evidence does not certify a newer implementation. When code
+and a contract disagree, report and resolve the mismatch rather than silently
+changing the contract to match the code.
 
-The roadmap exclusively owns lifecycle truth even when a higher-ranked product
-document describes intended behavior. Source inputs remain provenance and do
-not override a resolved requirement or decision.
+## Roadmap Identity and Dossiers
 
-## Roadmap Identity Contract
+The canonical namespace is `docs/roadmap/roadmap.md`. Established IDs remain
+`E<n>` for epics and `E<n>-T<n>` for tasks. Epic numbers increase monotonically;
+task numbers increase within their epic. Allocated numbers are never reused.
+Explicit order and dependencies determine execution order.
 
-- Established epic IDs use `E<n>` and task IDs use `E<n>-T<n>`.
-- Epic numbers increase monotonically; task numbers increase within their epic.
-- An allocated number is never reused, and task identity does not encode
-  execution order beyond the explicit order and dependency fields in the roadmap.
-- Lifecycle values remain `Planned`, `In Progress`, `In Review`, `Completed`,
-  `Deferred`, and `Blocked`.
-- This documentation migration does not rename any work unit or change any
-  lifecycle state.
+Lifecycle values remain `Planned`, `In Progress`, `In Review`, `Completed`,
+`Deferred`, and `Blocked`. TODO candidates and deferred findings do not create a
+second status authority. Preserve existing Canonical Outcomes links and the
+repository's dossier closeout convention: durable results belong to their
+canonical role, and retired temporary dossiers are not recreated by docs setup.
 
-## v0.1.5 Baseline
+## Path Migration
 
-D-025 approves v0.1.5 as planned work across source and reconciliation
-integrity, Hermes capability-driven preflight and setup, multi-destination
-lifecycle, bounded completion evidence, durable notifications, and release
-proof. The feature-to-authority map is in [`specs/README.md`](specs/README.md),
-and the only execution/status authority is [`roadmap/roadmap.md`](roadmap/roadmap.md).
+This reorganization moves the five files formerly in `docs/operations/` to
+`docs/ops/`, keeping their filenames: `README.md`, `installation.md`,
+`runbook.md`, `failure-recovery.md`, and `retention-and-privacy.md`.
+Current references, including roadmap outcome links, use the new paths.
+This paragraph records the old path for discovery; it is not a second owner.
+Roadmap identities, lifecycle, and historical evidence are preserved apart from
+necessary path references. Contracts, schemas, examples, and integration fixtures keep their established
+locations. Product notes formerly in `docs/RELEASE-NOTES-v*.md` are consolidated
+in the matching `CHANGELOG.md` version sections at the repository root.
+The former `docs/CHANGELOG.md` is now `docs/SOT-CHANGELOG.md`; its SOT version
+identities and history remain unchanged apart from necessary path references.
 
-Gates G6 through G9 carry their executable evidence: the G6 through G8
-rows live in [`VALIDATION.md`](VALIDATION.md) with their E10-E12 suites, and
-G9 (notifications and the release proof) closed with E13 on 2026-08-30 —
-the notification outbox, sinks, retry and drain surface, skills, and the
-two byte-identical `make release VERSION=v0.1.5` builds recorded there.
-v0.1.5 is the published latest release (2026-08-30): the candidate was
-re-cut from the post-validation final tree and published with its tag
-and hosted Release.
+## Documentation Checks
 
-## v0.1.6 Operational Follow-up (shipped 2026-09-02)
-
-D-027 approved four sequential epics, E14 through E17, closing the
-three operational gaps found during a real v0.1.5 deployment, with
-acceptance gates G10 through G13 (the delivery contract's durable
-content lives in the requirements, contracts, ADRs 0020-0022, and the
-roadmap's Canonical Outcomes; the temporary follow-up dossier was
-retired at the E17 closeout). All four epics delivered and
-evidenced: E14 closed gate G10 on 2026-08-31 (the explicit setup route
-selection, the disabled baseline-only reconciliation, and the
-rerunnable five-state walkthrough), E15 closed gate G11 on 2026-08-31
-(the Hermes v0.20.5 floor with certified serialization modes and the
-real-environment walkthrough), E16 closed gate G12 on 2026-09-01 (the
-drain policy and migration groundwork, the lease-safe bounded delivery,
-the post-commit after-command integration, and the managed launchd
-scheduler), and E17 closed gate G13 on 2026-09-02 (the documentation
-truth, the cold validation with its real-environment evidence record,
-and the reproducible release proof). v0.1.6 is the published latest
-release — the roadmap's task index is the current-status authority,
-and the delivered outcomes live in the roadmap's Canonical Outcomes
-links. The separately requested general `make verify` remediation
-remained outside this release's scope and is reported, not absorbed.
-
-## E18 Absolute Watch-Root Remediation (delivered 2026-09-08)
-
-D-028 reverses the ancestor-plus-`relative_root` Watchman binding after
-the production route's live events died as binding mismatches while
-manual exact-root dispatch ingested: acceptance under the ancestor
-binding depended on a persisted record and case-sensitive equivalence
-across separately spelled paths. E18 binds the configured absolute
-resource root itself, fails closed with unwatch guidance when that is
-impossible, and re-bound the operator's production route with live
-end-to-end evidence at gate G14 (VALIDATION.md): the exact-root
-trigger, a live observation-to-task round trip on the production board,
-and a clean doctor posture. v0.1.6 remains the shipped release; E18
-claims no release and the operator-host binary reports 0.1.7-dev.
-
-## Repository-Native Checks
-
-Run `make verify` at the repository root. It is the single deterministic
-entrypoint for format, vet, staticcheck, import direction, unit and race tests,
-manifest checksums, schema/example validation, traceability regeneration, and
-schedule validation. See [`VALIDATION.md`](VALIDATION.md) for bounded evidence
-and reproduction details.
+Run `make verify` at the repository root. It covers build, format, vet,
+staticcheck, import direction, unit and race tests, manifest verification,
+schema/example validation, traceability regeneration, and scheduling artifacts.
+The [contributor guide](../CONTRIBUTING.md) explains generated-file handling.
+Review Markdown links, anchors, command examples, and version claims as well:
+checksums and schema validation do not prove prose correctness.

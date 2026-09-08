@@ -1,147 +1,63 @@
 # Repository Layout
 
-Recommended v0.1 repository structure:
+The current implementation is a Go module with one CLI. Start at
+`cmd/agent-dispatch/main.go`, then follow the command into `internal/cli` and
+its application service. The [architecture overview](../architecture/architecture-overview.md)
+explains runtime responsibility and data flow.
 
-```text
-agent-dispatch/
-├── cmd/
-│   └── agent-dispatch/
-│       └── main.go
-├── internal/
-│   ├── app/
-│   │   ├── ingest/
-│   │   ├── dispatch/
-│   │   ├── reconcile/
-│   │   ├── workreceipt/
-│   │   ├── quarantine/
-│   │   ├── maintenance/
-│   │   └── doctor/
-│   ├── domain/
-│   │   ├── ids/
-│   │   ├── records/
-│   │   ├── policy/
-│   │   ├── state/
-│   │   ├── fingerprint/
-│   │   └── errors/
-│   ├── ports/
-│   │   ├── source.go
-│   │   ├── sink.go
-│   │   ├── store.go
-│   │   ├── filesystem.go
-│   │   ├── process.go
-│   │   ├── secrets.go
-│   │   ├── clock.go
-│   │   └── git.go
-│   ├── adapters/
-│   │   ├── watchman/
-│   │   ├── localfs/
-│   │   ├── sqlite/
-│   │   ├── hermeskanban/
-│   │   ├── hermeswebhook/
-│   │   ├── processrunner/
-│   │   ├── secretresolver/
-│   │   └── gitlocal/
-│   ├── config/
-│   ├── cli/
-│   ├── observability/
-│   └── platformpaths/
-├── migrations/
-├── schemas/
-├── examples/
-├── docs/
-├── test/
-│   ├── e2e/
-│   └── helpers/
-├── testdata/
-│   ├── watchman/
-│   ├── hermes/
-│   ├── filesystem/
-│   └── sqlite/
-├── scripts/
-├── Makefile
-├── go.mod
-├── go.sum
-├── LICENSE
-└── README.md
-```
+| Location | Responsibility |
+|---|---|
+| `cmd/agent-dispatch/` | Executable entry point |
+| `internal/cli/` | Command parsing, operator output, and public CLI gate tests |
+| `internal/app/` | Ingest, dispatch, reconciliation, receipts, work receipts, quarantine, maintenance, doctor, notifications |
+| `internal/domain/` | IDs, records, policy, state, and fingerprints |
+| `internal/ports/` | Behavioral interfaces by domain family |
+| `internal/adapters/` | Watchman, local files, SQLite, Hermes Kanban/webhook, notification sinks, secret resolution |
+| `internal/config/` | Configuration loading, semantic checks, revisions, and disabled example generation |
+| `internal/observability/`, `internal/platformpaths/`, `internal/version/` | Diagnostics, platform paths, and product/build identity |
+| `internal/schemavalid/`, `internal/tools/`, `internal/importlint/` | Schema engine, check entrypoints, and package import enforcement |
+| `internal/testsupport/` | Crash binaries, fake sinks, stub Hermes, and isolated Hermes environments |
+| `docs/` | Canonical contracts, design, operations, roadmap, and evidence |
+| `Makefile`, `go.mod`, `go.sum` | Build/verification entrypoints and pinned dependencies/tools |
+
+SQL migrations live in `internal/adapters/sqlite`, not a top-level migration
+package. Hand-maintained schemas and examples remain in `docs/schemas` and
+`docs/examples`. Python traceability tooling lives in `docs/scripts`. Gate tests
+live beside the packages they verify, particularly `internal/cli` and the relevant
+app/adapter packages; test data lives beside its owning tests or in the recorded
+`docs/integrations/fixtures` corpus.
+
+`bin/` and `dist/` are generated build/release output. Ignored machine-local
+configuration, workflow runtime history, and provider logs are not source or
+documentation authorities. Some reserved packages and `test/e2e` / `test/helpers`
+retain `doc.go` placeholders; their existence does not certify an implemented
+feature or end-to-end suite.
 
 ## Package Rules
 
-- `internal/domain` cannot import `internal/app`, `config`, `cli`, adapters, `observability`, or `platformpaths` (the full enforced set is listed below).
-- `internal/ports` contains behavior interfaces, not shared dumping-ground DTOs.
-- source-specific DTOs stay in `adapters/watchman`.
-- target-specific DTOs stay in `adapters/hermeskanban` or `hermeswebhook`.
-- SQL statements and row models stay in `adapters/sqlite`.
-- config structs are converted to immutable domain snapshots before application use.
-- generated JSON Schemas remain under top-level `schemas`; their source may be hand-maintained or generated, but drift tests are required.
+- Domain logic does not import application services, configuration, CLI, adapters,
+  observability, or platform paths.
+- Ports define behavior interfaces; source/target DTOs stay in their adapters,
+  and SQL statements and rows stay in SQLite.
+- Configuration becomes immutable domain snapshots before application use.
+- Schemas, example records, and their Go producers/consumers change together
+  under the owning contract, with observable compatibility tests.
 
-The import-direction rules are enforced by `internal/importlint` through `make check-imports` (part of `make verify`): `internal/domain` may not import `internal/{app,config,cli,adapters,observability,platformpaths}`, `internal/ports` may not import `internal/{app,adapters,config,cli,observability}`, and `internal/config` may not import `internal/{app,cli,adapters,observability}`, including each family's root package.
-
-Until generated schemas exist (E2 and later), the hand-maintained SOT schemas and examples remain under `docs/schemas` and `docs/examples` inside the checksummed docs package; the top-level `schemas/` directory appears with the first generated schema.
-
-## Test Placement
-
-- package unit tests beside code;
-- cross-package integration tests under relevant adapter package or `internal/integrationtest` if necessary;
-- end-to-end tests under `test/e2e` only after E4;
-- immutable fixtures under `testdata` with provenance notes;
-- crash helper binaries under `internal/testsupport` or `test/helpers`.
+`make check-imports` enforces the exact directions: `internal/domain` cannot
+import `internal/{app,config,cli,adapters,observability,platformpaths}`;
+`internal/ports` cannot import `internal/{app,adapters,config,cli,observability}`;
+and `internal/config` cannot import `internal/{app,cli,adapters,observability}`,
+including the family root packages. The check is part of `make verify`.
 
 ## Documentation Placement
 
-This SOT directory layout should be preserved. Implementation-specific capability reports go under:
+Use the [documentation role map](../README.md#canonical-role-owners) to select
+one owner. Requirements and contracts describe behavior, architecture describes
+structure, ADRs explain decisions, implementation tips describe development and
+release engineering, and ops contains installation and recovery procedures.
 
-```text
-docs/integrations/
-  hermes-public-interface-report.md
-  watchman-public-interface-report.md
-```
-
-Task evidence may go under:
-
-```text
-docs/reports/
-  E2-T5-g1-acceptance.md
-  E3-T5-g2-acceptance.md
-  ...
-```
-
-Do not overwrite historical reports when rerunning a released gate; create a versioned report.
-
-
-## Layout Deviations (E7-T10, M-31)
-
-The v0.1 tree deviates from the layout above in the named places below;
-each deviation is intentional and explained here (E8-T6 corrects the
-earlier "six" undercount and adds the undocumented packages):
-
-- `LICENSE` at the repository root was absent through v0.1.0 and added
-  2026-08-23 (M-27), together with
-  `docs/implementation-tips/dependency-licenses.md`.
-- `migrations/` is an empty untracked directory: SQL migrations live
-  inside `internal/adapters/sqlite` (schema.go consts, migrate.go) by
-  D-015's single-entrypoint design; the directory exists only for some
-  tooling expectations and is not part of the package.
-- `test/e2e` and `test/helpers` hold only `doc.go` placeholders: the
-  gate suites (G1-G5) live beside the packages they verify
-  (`internal/cli`, `internal/app/dispatch`), and the crash helpers live
-  under `internal/testsupport` (crashbin, stubhermes, fakesink) so they
-  build with the module's pinned toolchain.
-- The ports are declared as `internal/ports/*.go` files by domain
-  (dispatch, inspection, quarantine, coordination) rather than one file
-  per interface; the per-domain split is the deliberate unit.
-- `internal/adapters/gitlocal`, `internal/adapters/processrunner`, and
-  `internal/domain/errors` are empty placeholder packages reserved by
-  the repository layout for post-v0.1 sources (SCP-009 Git evidence,
-  the reusable process runner, and the typed error domain); they carry
-  only `doc.go`.
-- `internal/adapters/watchman`, `internal/config`, and
-  `internal/app/reconcile` retain their placeholder `doc.go` files
-  alongside real implementations; the placeholders predate the code and
-  are retained as package documentation anchors.
-- `internal/app/receipts/` — the acceptance/execution receipt projection service delivered with E4-T4; a real, tested package under the app layer rather than a named deviation.
-- `internal/tools/` — the schemavalid tool (D-015) and the import-direction linter; build-time verification tooling beside the packages they verify.
-- `internal/version/` — the build-metadata package the version command reports; shared by the CLI and the tests.
-- `internal/ports/sink.go` and `internal/ports/workreceipt.go` — the two port files beyond the four the layout lists; the ports layer grew one file per port family as the contract matured.
-- The pictured top-level `testdata/` and `scripts/` never materialized: fixture corpora live beside their packages (`internal/adapters/watchman/testdata/`) and the Python tooling lives under `docs/scripts/` inside the manifest-verified package.
-
+Keep user-facing setup in the root README. Only the canonical roadmap owns
+adopted task state; temporary dossiers follow its existing closeout convention.
+Preserve dated integration reports and fixtures when collecting new evidence,
+with explicit snapshot/version scope for each new record. Generated traceability
+and checksums must be reviewed after regeneration.

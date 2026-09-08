@@ -40,6 +40,11 @@ precedence over skill defaults.
 
 - Source of truth: `docs/` is the specification package; the authoritative roadmap
   is `docs/roadmap/roadmap.md`.
+- Release history: root `CHANGELOG.md` is the sole product release-note source;
+  use its version sections for GitHub Release descriptions. Pending changes use
+  `Unreleased` (or `vX.Y.Z - Unreleased` once selected). Released headings use
+  `vX.Y.Z - YYYY-MM-DD` with concise `Added`, `Changed`, and `Fixed` outcomes.
+  `docs/SOT-CHANGELOG.md` records specification-package versions.
 - Verification: `make verify` (D-015) is the single deterministic entrypoint covering
   format, vet, staticcheck, import direction, unit and race tests, docs manifest
   checksums, schema/example validation, and traceability regeneration.

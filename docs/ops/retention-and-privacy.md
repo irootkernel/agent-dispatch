@@ -1,5 +1,10 @@
 # Retention and Privacy
 
+This guide is for the operator responsible for local macOS arm64 state and
+backups. Inspect retention settings and unresolved lineage before removal;
+pruning needs the state owner's authority and a verified backup. The normative
+policy belongs to the specifications and configuration contract.
+
 ## 1. Data Minimization
 
 Agent Dispatch stores operational evidence, not knowledge content.
@@ -67,3 +72,21 @@ Secret reference is stored; value is resolved immediately before call, held only
 ## 7. User-Controlled Erasure
 
 An explicit purge operation may be added after v0.1. Until then, operators may prune resolved data through supported commands and delete the entire retained state only after disabling triggers, backing up if needed, and accepting loss of dedup/reconciliation history.
+
+## 8. Safe Retention Procedure
+
+1. Inspect `agent-dispatch status` and `doctor` for active or unresolved work.
+2. Stop competing maintenance and back up the database and matching configuration
+   using [installation §6](installation.md#6-backup).
+3. Run `agent-dispatch maintenance prune --before <duration> --dry-run` for the
+   reviewed age (for example, `30d`), which narrows the retention horizons; inspect the selected counts and retained unresolved lineage.
+4. Only after approving the result, repeat with `--yes` instead of `--dry-run`.
+5. Run `agent-dispatch maintenance integrity --full` and inspect status/audit
+   results. Confirm unresolved dispatches and receipts still have their lineage.
+
+Pruning is irreversible without a backup. If it fails or deletes unexpected data,
+stop further maintenance and submissions, preserve the failed state and evidence,
+and restore only through the verified backup procedure. The installation owner
+approves retention and restoration; maintainers handle unexpected selection,
+referential-integrity failures, or suspected disclosure. Share redacted metadata,
+not sensitive path lists or secret-bearing output.

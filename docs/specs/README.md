@@ -13,6 +13,9 @@ accepted ADRs and the contract collection refine it without overriding it.
 - [`traceability-matrix.md`](traceability-matrix.md): generated requirement-to-task mapping.
 - [`decision-log.md`](decision-log.md): append-only SOT admission, amendment, and errata decisions.
 
+The [SOT changelog](../SOT-CHANGELOG.md) preserves specification-package version
+history. Product release history belongs to the root [changelog](../../CHANGELOG.md).
+
 ## v0.1.5 Feature-to-Authority Map
 
 | Capability group | Normative groups | Acceptance gate | Roadmap owner |
@@ -30,10 +33,9 @@ owns task identity, ordering, dependencies, and current status.
 The v0.1.5 feature baseline is executable proof: the owning E10-E13 tasks
 delivered the schemas, examples, packaged skills, code, and the local
 v0.1.5 release, with the G6-G9 gate evidence recorded in
-[`../VALIDATION.md`](../VALIDATION.md). v0.1.5 is the published latest
-release (2026-08-30).
+[`../VALIDATION.md`](../VALIDATION.md). The v0.1.5 release record is dated 2026-08-30.
 
-## v0.1.6 Planned Feature-to-Authority Map
+## v0.1.6 Feature-to-Authority Map
 
 | Capability group | Normative groups | Acceptance gate | Roadmap owner |
 |---|---|---|---|
@@ -48,9 +50,8 @@ evidenced: E14 closed
 gate G10 (2026-08-31), E15 closed gate G11 (2026-08-31), E16 closed
 gate G12 (2026-09-01), and E17 closed gate G13 (2026-09-02) — the
 documentation truth, the cold validation with its real-environment
-evidence record, and the reproducible release proof. v0.1.6 is the
-published latest release (2026-09-02); the roadmap's task index at
-89/89 is the current-status authority. The separately requested general
+evidence record, and the reproducible release proof. The v0.1.6 release record is dated 2026-09-02; consult the roadmap's
+task index for current status, including subsequent work. The separately requested general
 `make verify` remediation stayed outside the release scope and is
 reported, not absorbed.
 

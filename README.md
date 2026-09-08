@@ -47,14 +47,14 @@ release; that release predates this fix. These changes are recorded under
 From the repository root:
 
 ```sh
-make build VERSION=0.0.0-dev
+make build
 ./bin/agent-dispatch version
 mkdir -p "$HOME/.local/bin"
 install -m 755 bin/agent-dispatch "$HOME/.local/bin/agent-dispatch"
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-`0.0.0-dev` labels this as a source build. The install command replaces any
+The default build reports `agent-dispatch v0.1.7`. The install command replaces any
 binary at the destination; retain the previous binary and back up an existing
 installation before upgrading. Add the PATH entry to your shell configuration
 if needed. Keep the installed path stable because managed triggers and schedules

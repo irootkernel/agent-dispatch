@@ -13,13 +13,13 @@ Watchman and Hermes 0.20.5+ are prerequisites for real integration scenarios.
 ```sh
 go version
 python3 --version
-make build VERSION=0.0.0-dev
+make build
 ./bin/agent-dispatch version --json
 ```
 
 Building creates `bin/agent-dispatch`; it does not install or activate an instance.
-Use explicit version metadata for a candidate build. The Makefile's default
-version is a development placeholder, not a release selection.
+The default version is `v0.1.7`; use `make build VERSION=<version>` to override
+that metadata for a candidate build.
 
 ## Understand One Change Path
 

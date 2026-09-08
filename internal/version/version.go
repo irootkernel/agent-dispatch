@@ -1,11 +1,11 @@
 // Package version exposes build metadata reported by the version command.
 //
 // Values are injected at build time via -ldflags; the defaults describe a
-// build from an untagged working tree.
+// build of the current source version.
 package version
 
 // Version is the semantic version of the binary.
-var Version = "0.1.0-dev"
+var Version = "v0.1.7"
 
 // Commit is the source revision the binary was built from.
 var Commit = "unknown"

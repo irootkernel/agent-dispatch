@@ -441,7 +441,7 @@ func TestG5AC506ReleaseArtifactsPresent(t *testing.T) {
 	}
 	bout.Reset()
 	berr.Reset()
-	if code := runExternal(t, bin, []string{"version"}, &bout, &berr); code != 0 || bout.String() != "agent-dispatch "+strings.TrimPrefix(version, "v")+"\n" {
+	if code := runExternal(t, bin, []string{"version"}, &bout, &berr); code != 0 || bout.String() != "agent-dispatch "+version+"\n" {
 		t.Fatalf("AC-506 human version = %q, exit %d, stderr %s", bout.String(), code, berr.String())
 	}
 }

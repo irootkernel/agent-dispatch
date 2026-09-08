@@ -6,6 +6,7 @@ This file records concise shipped outcomes and pending changes.
 
 ### Changed
 
+- Report `v0.1.7` by default and include the `v` prefix in both human and JSON version output.
 - Reorganize the README for users and `docs/` for contributors and operators.
 - Consolidate product release history in root `CHANGELOG.md` and keep specification
   history separately in `docs/SOT-CHANGELOG.md`.

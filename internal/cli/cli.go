@@ -276,7 +276,7 @@ func runVersion(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	fmt.Fprintf(stdout, "agent-dispatch %s\n", strings.TrimPrefix(version.Version, "v"))
+	fmt.Fprintf(stdout, "agent-dispatch v%s\n", strings.TrimPrefix(version.Version, "v"))
 	return 0
 }
 

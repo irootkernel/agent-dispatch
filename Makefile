@@ -4,7 +4,7 @@
 GO      ?= go
 BINARY  := bin/agent-dispatch
 PKG     := github.com/irootkernel/agent-dispatch
-VERSION ?= 0.1.0-dev
+VERSION ?= v0.1.7
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILDTIME ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -X $(PKG)/internal/version.Version=$(VERSION) \

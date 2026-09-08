@@ -16,7 +16,7 @@ import (
 const helpExit = 0
 
 // rootHelp is the root command's discoverability text.
-const rootHelp = `agent-dispatch — durable vault-to-Hermes dispatch (v0.1.6)
+const rootHelp = `agent-dispatch — durable vault-to-Hermes dispatch
 
 Usage: agent-dispatch <command> [flags]
 

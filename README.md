@@ -39,10 +39,8 @@ commands. Install and select skills explicitly in Hermes; setup does not do this
 
 ### Build this checkout
 
-This README describes the current source, including the absolute watch-root
-fix delivered by E18. The repository records v0.1.6 as the preceding published
-release; that release predates this fix. These changes are recorded under
-[v0.1.7 - Unreleased](CHANGELOG.md#v017---unreleased).
+This README describes v0.1.7, including the absolute watch-root fix delivered
+by E18. See [v0.1.7](CHANGELOG.md#v017---2026-09-09) for the release changes.
 
 From the repository root:
 
@@ -64,8 +62,8 @@ refer to the executable.
 
 Choose a version from the repository's
 [GitHub Releases](https://github.com/irootkernel/agent-dispatch/releases), and read
-that version's section in the [changelog](CHANGELOG.md). Once v0.1.7 is published,
-download and install its macOS Apple Silicon binary as follows; no Go toolchain
+that version's section in the [changelog](CHANGELOG.md). Download and install
+the v0.1.7 macOS Apple Silicon binary as follows; no Go toolchain
 is needed. Watchman and Hermes remain separate requirements.
 
 ```sh

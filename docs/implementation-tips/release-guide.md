@@ -11,7 +11,7 @@ Record the explicitly selected version, full Git commit, and documentation scope
 Use the [roadmap](../roadmap/roadmap.md) for delivery status, the
 [acceptance criteria](../specs/acceptance-criteria.md) for gates, and
 [validation records](../VALIDATION.md) for evidence tied to an exact snapshot.
-The next version is [v0.1.7 - Unreleased](../../CHANGELOG.md#v017---unreleased),
+The current release is [v0.1.7 - 2026-09-09](../../CHANGELOG.md#v017---2026-09-09),
 including E18 after v0.1.6.
 
 Reconcile public usage, contracts, compatibility, packaged skill versions, and

@@ -10,7 +10,7 @@ and everyday use, start with the [project README](../README.md).
 **Language:** English.
 
 **Documentation basis:** current source, including E18 / SOT 1.4.0, tracked under
-[v0.1.7 - Unreleased](../CHANGELOG.md#v017---unreleased). Versioned release notes and
+[v0.1.7 - 2026-09-09](../CHANGELOG.md#v017---2026-09-09). Versioned release notes and
 validation records describe their own snapshots, not proof for the current HEAD.
 
 ## Start Here

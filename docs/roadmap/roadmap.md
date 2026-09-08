@@ -1,23 +1,23 @@
 # Agent Dispatch Implementation Roadmap
 
-> **Roadmap version:** 1.4
-> **Release target:** v0.1.6 (released 2026-09-02)
+> **Roadmap version:** 1.5
+> **Release target:** post-v0.1.7 (Official Linux Support; next release TBD)
 > **Execution model:** Strictly linear, one active task globally  
-> **Epics:** 19
-> **Tasks:** 91
+> **Epics:** 20
+> **Tasks:** 101
 
 ## 1. Current State
 
 | Field | Value |
 |---|---|
 | Shipped release | v0.1.6 (published 2026-09-02) |
-| Planned SOT baseline | 1.4.0 ([D-028](../specs/decision-log.md) delivered) |
-| Release target | v0.1.6 (released; E18 claims no release) |
-| Current epic | None (E18 Completed 2026-09-08; the roadmap is complete) |
-| Current active task | None |
-| Next task | None (91/91; the roadmap is complete) |
-| Completed tasks | 91 / 91 |
-| Planned tasks | 0 / 91 |
+| Planned SOT baseline | 1.4.0 ([D-028](../specs/decision-log.md) delivered; Linux policy reserved as [D-029](../specs/decision-log.md) in E19-T2) |
+| Release target | post-v0.1.7 (Official Linux Support; next release TBD) |
+| Current epic | E19 Official Linux Support |
+| Current active task | None (E19-T1 Completed; awaiting E19-T2) |
+| Next task | E19-T2 (92/101 completed through E19-T1) |
+| Completed tasks | 92 / 101 |
+| Planned tasks | 9 / 101 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -53,6 +53,7 @@
 | E16 | Automatic Durable Notification Draining | **Completed** | 4 | G12 |
 | E17 | Documentation, Cold Validation, and v0.1.6 Release | **Completed** | 3 | G13 |
 | E18 | Absolute Watch-Root Binding | **Completed** | 2 | G14 |
+| E19 | Official Linux Support (darwin/arm64 + linux/amd64 + linux/arm64) | **In Progress** | 10 | G15 |
 
 ## 3. Task Status Index
 
@@ -149,6 +150,16 @@
 | 89 | E17-T3 | Completed | Reproducible v0.1.6 release and publication |
 | 90 | E18-T1 | Completed | Absolute watch-root binding contract |
 | 91 | E18-T2 | Completed | Operator-host re-binding and live verification |
+| 92 | E19-T1 | Completed | Roadmap epic and task registration for Official Linux Support |
+| 93 | E19-T2 | Planned | Policy decision superseding D-023; SCP-008/AC-505/charter |
+| 94 | E19-T3 | Planned | README and installation support-matrix documentation |
+| 95 | E19-T4 | Planned | Three-arch release artifacts and checksum portability |
+| 96 | E19-T5 | Planned | Watchman version-gate normalization for Linux zip formats |
+| 97 | E19-T6 | Planned | Paths, secrets, and skills documentation and test-guard alignment |
+| 98 | E19-T7 | Planned | Schedule contract (cli-spec/OPS) adds systemd |
+| 99 | E19-T8 | Planned | Managed `--platform systemd` CLI lifecycle |
+| 100 | E19-T9 | Planned | systemd examples and schedule-check |
+| 101 | E19-T10 | Planned | VALIDATION evidence (amd64 + arm64) and closeout notes |
 
 ---
 
@@ -4510,11 +4521,347 @@ the closing tree.
 
 ---
 
+# E19: Official Linux Support
+
+**Epic status:** In Progress
+**Purpose:** Officially support `linux/amd64` and `linux/arm64` alongside `darwin/arm64` for agent-dispatch (Hermes plugin remains out of scope), with managed systemd scheduling, portable release artifacts, and recorded verification evidence.
+**Gate:** G15
+**Canonical Outcomes:** [decision-log.md](../specs/decision-log.md) (D-023 supersession; D-029 reserved for E19-T2) · [required-spec.md](../specs/required-spec.md) (SCP-008) · [acceptance-criteria.md](../specs/acceptance-criteria.md) (AC-505 / G15) · [cli-spec.md](../contracts/cli-spec.md) §19 · [ops/installation.md](../ops/installation.md) · [VALIDATION.md](../VALIDATION.md)
+
+**Master-approved constraints (2026-09-08):**
+- Platforms: `darwin/arm64`, `linux/amd64`, `linux/arm64`
+- Managed `--platform systemd` is **Must** (not example-only)
+- Linux secrets: env / file / fd only (`keychain:` remains darwin-only)
+- Hermes **plugin** is out of scope for this epic
+- linux/arm64 runtime evidence: container `make verify`; Watchman real legs may be an explicit gap
+
+## E19-T1: Roadmap Epic and Task Registration
+
+**Status:** Completed
+
+### Objective
+
+Open the post-E18 roadmap sequence by registering epic E19 and its ten linear tasks in the authoritative roadmap, with clear epic/task separation and no implementation beyond registration.
+
+### Deliverables
+
+- E19 epic header, purpose, gate, constraints, and Canonical Outcomes in `docs/roadmap/roadmap.md`
+- Ten task records (E19-T1 through E19-T10) with Objective, Deliverables, Requirements, Dependencies, Acceptance
+- Updated roadmap header counts, Current State, Epic Summary, and Task Status Index
+- Deferred Future Work section adjusted so Official Linux Support is tracked on-roadmap (not as a deferred candidate)
+
+### Requirements
+
+`TST-009`
+
+### Dependencies
+
+E18-T2 Completed; Master approval of the Official Linux Support epic (2026-09-08), renumbered from the retired E18 Linux registration to E19 so D-028 and G14 remain the Absolute Watch-Root Binding records.
+
+### Acceptance
+
+- Exactly one new epic (E19) and ten new tasks appear in the roadmap SOT
+- Epic vs task boundaries are explicit; Phase language is not used as a roadmap unit
+- Plugin work is stated out of scope on the epic record
+- No code, policy decision text, Makefile, or systemd implementation lands in this task
+- E18 Absolute Watch-Root Binding is unchanged; Linux policy is reserved as D-029 and the Linux gate is G15
+
+### Evidence
+
+Completed 2026-09-09. Registered E19 and E19-T1..T10 in `docs/roadmap/roadmap.md`, bumped roadmap version to 1.5, and pointed Current State at E19-T2 as next. E18 Absolute Watch-Root Binding, D-028, and G14 are left as shipped on origin/main. No implementation outside roadmap registration.
+
+## E19-T2: Policy Decision and Spec Reactivation
+
+**Status:** Planned
+
+### Objective
+
+Record decision D-029 that supersedes D-023 platform exclusivity and reactivate SCP-008 / AC-505 / charter success language for the three-platform matrix. D-028 remains the Absolute Watch-Root Binding decision.
+
+### Deliverables
+
+- New decision-log entry D-029 superseding D-023/D-024 exclusivity
+- Updated `required-spec.md` (SCP-008), `acceptance-criteria.md` (AC-505), `project-charter.md`
+- Traceability touch-points required for the reopened clauses
+
+### Requirements
+
+`SCP-008`, `AC-505`, `TST-009`
+
+### Dependencies
+
+E19-T1 Completed.
+
+### Acceptance
+
+- Active SOT has no present-tense "darwin/arm64 only" support claim (history/supersession notes OK)
+- Supported set is explicitly `{darwin/arm64, linux/amd64, linux/arm64}`
+- Plugin remains documented out of scope for this epic
+- The Linux policy decision is D-029, not D-028
+
+### Evidence
+
+Pending.
+
+## E19-T3: Public Support-Matrix Documentation
+
+**Status:** Planned
+
+### Objective
+
+Align README, installation, and related operator-facing docs with the three-platform support matrix.
+
+### Deliverables
+
+- Present-tense support lines in `README.md`, `docs/README.md`, and `docs/ops/installation.md`
+- Release-checklist / testing-strategy lines that still claim macOS-only updated
+
+### Requirements
+
+`OPS-*` (installation truth), `TST-009`
+
+### Dependencies
+
+E19-T2 Completed.
+
+### Acceptance
+
+- Operator docs state the three supported platforms consistently
+- Linux path table rows restored where code already has XDG behavior
+
+### Evidence
+
+Pending.
+
+## E19-T4: Three-Arch Release and Checksum Portability
+
+**Status:** Planned
+
+### Objective
+
+Make `make release` produce darwin/arm64, linux/amd64, and linux/arm64 artifacts with portable checksum verification on Linux hosts.
+
+### Deliverables
+
+- `Makefile` `RELEASE_OS_ARCH` expanded to three platforms
+- `shasum` / `sha256sum` fallback for manifest-check and release checksums
+- Artifact-presence tests updated for the three-file set
+
+### Requirements
+
+`OPS-*`, `TST-009`
+
+### Dependencies
+
+E19-T3 Completed.
+
+### Acceptance
+
+- `make release` emits three binaries + SHA256SUMS
+- Double-build byte identity holds per platform
+- `make manifest-check` passes on linux/amd64
+
+### Evidence
+
+Pending.
+
+## E19-T5: Watchman Version-Gate Normalization
+
+**Status:** Planned
+
+### Objective
+
+Accept Linux zip Watchman version strings (e.g. `20260727.012849.0`) as comparable to the baseline `2026.07.27.00` without weakening fail-closed behavior for older or malformed versions.
+
+### Deliverables
+
+- Normalized parsing/comparison in the Watchman lifecycle/version gate
+- Expanded unit coverage for both version dialects
+
+### Requirements
+
+Watchman integration requirements; doctor/lifecycle contracts; `TST-009`
+
+### Dependencies
+
+E19-T4 Completed.
+
+### Acceptance
+
+- `CheckVersionSupported` accepts the installed Linux zip version when ≥ baseline
+- macOS dotted baseline still passes; below-baseline and garbage inputs fail closed
+- Prior `watchman_version_unsupported` false positives on this host are gone
+
+### Evidence
+
+Pending.
+
+## E19-T6: Paths, Secrets, and Skills Alignment
+
+**Status:** Planned
+
+### Objective
+
+Promote existing Linux path/secret behavior to documented truth and unlock roadmap/test guards that still forbid systemd surfaces.
+
+### Deliverables
+
+- Installation/path and secret-resolver documentation for Linux (env/file/fd; keychain darwin-only)
+- Skills `platforms` documentation alignment
+- Reversal of negative guards that require systemd examples to stay deleted
+
+### Requirements
+
+`SEC-*` (secret refs), platform path requirements, `TST-009`
+
+### Dependencies
+
+E19-T5 Completed.
+
+### Acceptance
+
+- Docs match `platformpaths` / `secretresolver` behavior
+- Test guards no longer block restoring systemd examples in later tasks
+
+### Evidence
+
+Pending.
+
+## E19-T7: Schedule Contract Adds systemd
+
+**Status:** Planned
+
+### Objective
+
+Extend cli-spec §19 / OPS-018 so managed schedules accept `--platform launchd|systemd` before implementation lands.
+
+### Deliverables
+
+- Contract and operations wording for systemd managed units
+- Installation §4 / §4a Linux schedule procedure outline in `docs/ops/installation.md`
+
+### Requirements
+
+`CLI-018`, `OPS-018`, `TST-009`
+
+### Dependencies
+
+E19-T6 Completed.
+
+### Acceptance
+
+- Contracts name both platforms; launchd behavior remains the darwin path
+- No premature CLI implementation beyond what this task owns (docs/contracts only)
+
+### Evidence
+
+Pending.
+
+## E19-T8: Managed systemd Schedule CLI
+
+**Status:** Planned
+
+### Objective
+
+Implement managed `--platform systemd` lifecycle symmetric with launchd (render/install/inspect/disable/uninstall).
+
+### Deliverables
+
+- `internal/cli/schedule.go` (and collaborators) systemd support
+- Deterministic tests with injectable systemctl behavior
+- launchd regression suite still green in intent (darwin CI/host when available)
+
+### Requirements
+
+`CLI-018`, `OPS-018`, `SEC-007`, `TST-009`
+
+### Dependencies
+
+E19-T7 Completed.
+
+### Acceptance
+
+- systemd: render → install → inspect healthy → disable preserves → uninstall removes only managed units
+- Foreign definition at the same path → exit 14 `transition_invalid`
+- Shell-less direct `schedule run` invocation preserved
+
+### Evidence
+
+Pending.
+
+## E19-T9: systemd Examples and schedule-check
+
+**Status:** Planned
+
+### Objective
+
+Restore systemd user unit/timer examples and extend `schedule-check` to verify them when `systemd-analyze` is present.
+
+### Deliverables
+
+- Example service + timer under `docs/examples/scripts/`
+- Makefile `schedule-check` coverage for systemd examples
+
+### Requirements
+
+`OPS-018`, `TST-009`
+
+### Dependencies
+
+E19-T8 Completed.
+
+### Acceptance
+
+- Examples match the managed CLI identity and ProgramArguments contract
+- `make schedule-check` validates launchd and systemd examples (skip+message when tool absent, symmetric with plutil)
+
+### Evidence
+
+Pending.
+
+## E19-T10: VALIDATION Evidence and Closeout
+
+**Status:** Planned
+
+### Objective
+
+Record platform×leg evidence for official Linux support and close G15 without overclaiming arm64 Watchman/Hermes legs.
+
+### Deliverables
+
+- `docs/VALIDATION.md` matrix for darwin/arm64, linux/amd64, linux/arm64
+- linux/amd64 `make verify` evidence; linux/arm64 container verify and/or explicit gaps
+- CHANGELOG / RELEASE-NOTES updates for the support claim
+- Roadmap Evidence closeout for E19
+
+### Requirements
+
+`AC-505`, G15 criteria, `TST-007`, `TST-009`
+
+### Dependencies
+
+E19-T9 Completed.
+
+### Acceptance
+
+- VALIDATION states what ran vs what is an explicit environment gap
+- DoD for official Linux support is satisfied under Master-approved constraints
+- Plugin remains absent from the epic outcomes
+
+### Evidence
+
+Pending.
+
+---
+
 # 4. Deferred Future Work
 
-The following do not count toward the 91 tracked roadmap tasks (89
-Completed through v0.1.6, released 2026-09-02; E18 Completed 2026-09-08
-under D-028) and remain Deferred until a new roadmap is approved:
+Official Linux Support is tracked on-roadmap as **E19** (not deferred).
+E18 remains Absolute Watch-Root Binding (Completed 2026-09-08 under D-028).
+
+The following do not count toward the 101 tracked roadmap tasks (91
+Completed through E18 Absolute Watch-Root Binding; E19-T1 Completed
+2026-09-09) and remain Deferred until a later roadmap opens them:
 
 - Agent Dispatch managed daemon;
 - multi-vault production certification and global budgets;

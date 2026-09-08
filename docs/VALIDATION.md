@@ -503,7 +503,7 @@ described dispatch reading the persisted binding (three sites in
 one in `internal/adapters/sqlite/migrate.go`); the same delivery
 recorded DF-001 (`deferred-feedback/001`) after the capability cache was
 contaminated a second time by a direct `go test` run and restored by
-re-probing. Ordinal 3 (confirmation) closes the audit below.
+re-probing. Ordinal 3 (run `r_01a07ff0-6be9-7bfe-a39d-3d17c776887d`, confirmation, ci pass, findings: none at low or above) confirmed the final delta clean; every finding across the audit carries a completed local disposition and the DF-001 deferral is recorded with its reconsideration condition.
 
 ## MUST-Closure Matrix (E8-T6, D-020) — supersedes the E7-T12 matrix
 

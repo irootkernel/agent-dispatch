@@ -1,23 +1,23 @@
 # Agent Dispatch Implementation Roadmap
 
-> **Roadmap version:** 1.3
+> **Roadmap version:** 1.4
 > **Release target:** v0.1.6 (released 2026-09-02)
 > **Execution model:** Strictly linear, one active task globally  
-> **Epics:** 18
-> **Tasks:** 89
+> **Epics:** 19
+> **Tasks:** 91
 
 ## 1. Current State
 
 | Field | Value |
 |---|---|
 | Shipped release | v0.1.6 (published 2026-09-02) |
-| Planned SOT baseline | 1.3.0 ([D-027](../specs/decision-log.md) delivered) |
-| Release target | v0.1.6 (released) |
-| Current epic | None (E17 Completed 2026-09-02; the roadmap is complete) |
+| Planned SOT baseline | 1.4.0 ([D-028](../specs/decision-log.md) adopted) |
+| Release target | v0.1.6 (released; E18 claims no release) |
+| Current epic | E18 (absolute watch-root binding, adopted 2026-09-08) |
 | Current active task | None |
-| Next task | None (89/89; the roadmap is complete) |
-| Completed tasks | 89 / 89 |
-| Planned tasks | 0 / 89 |
+| Next task | E18-T1 |
+| Completed tasks | 89 / 91 |
+| Planned tasks | 2 / 91 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -50,7 +50,8 @@
 | E14 | Guided Setup and Disabled Baseline | **Completed** | 3 | G10 |
 | E15 | Hermes v0.20.5+ Compatibility and Serialization Groups | **Completed** | 4 | G11 |
 | E16 | Automatic Durable Notification Draining | **Completed** | 4 | G12 |
-| E17 | Documentation, Cold Validation, and v0.1.6 Release | **In Progress** | 3 | G13 |
+| E17 | Documentation, Cold Validation, and v0.1.6 Release | **Completed** | 3 | G13 |
+| E18 | Absolute Watch-Root Binding | **Planned** | 2 | G14 |
 
 ## 3. Task Status Index
 
@@ -145,6 +146,8 @@
 | 87 | E17-T1 | Completed | CLI, configuration, operations, and skill truth |
 | 88 | E17-T2 | Completed | Cold validation and required deployment evidence |
 | 89 | E17-T3 | Completed | Reproducible v0.1.6 release and publication |
+| 90 | E18-T1 | Planned | Absolute watch-root binding contract |
+| 91 | E18-T2 | Planned | Operator-host re-binding and live verification |
 
 ---
 
@@ -4334,11 +4337,113 @@ changed: the release is explicitly a no-production-activation record.
 
 ---
 
+# E18: Absolute Watch-Root Binding
+
+**Epic status:** Planned
+**Purpose:** Bind the configured absolute resource root itself as the Watchman watch root, fail closed when that is impossible, and re-bind the operator's production route with live end-to-end evidence.
+**Gate:** G14
+**Canonical Outcomes:** [required-spec.md](../specs/required-spec.md) (SRC-009/SRC-011 amendments, SRC-013) · [acceptance-criteria.md](../specs/acceptance-criteria.md) (AC-601 amendment, G14 scenarios) · [decision-log.md](../specs/decision-log.md) (D-028) · [watchman-integration.md](../architecture/watchman-integration.md) (current binding design) · [VALIDATION.md](../VALIDATION.md) (G14 evidence)
+
+## E18-T1: Absolute Watch-Root Binding Contract
+
+**Status:** Planned
+
+### Objective
+
+Replace the ancestor-plus-`relative_root` binding with the exact
+configured-root contract across the adapter, the lifecycle CLI,
+dispatch-side validation, the persisted-binding semantics, the test
+suites, and the specification truth.
+
+### Deliverables
+
+- adapter: exact-root `watch` establishment with fail-closed unwatch
+  guidance, `relative_root`-free managed trigger definitions, exact-match
+  watch-list coverage, and config-anchored `ValidateBinding`;
+- CLI: one resolver reporting the identical exact-root binding on
+  install/status/test/remove, drift detection without the relative axis,
+  and dispatch validation that reads no persisted binding;
+- rewritten adapter and CLI suites proving exact-root install, the
+  blocked-ancestor failure, and the dispatch accept/reject matrix;
+- amended SRC-009/SRC-011, new SRC-013, restated TST-010, amended AC-601,
+  G14 registration, D-028, synchronized architecture/contract/schema/
+  example truth, and the Watchman 2026.07.27.00 live-environment evidence
+  recorded beside the frozen interface corpus;
+- regenerated traceability and docs manifest with `make verify` green.
+
+### Requirements
+
+`SRC-002`, `SRC-003`, `SRC-007`, `SRC-009`, `SRC-011`, `SRC-013`, `TST-010`
+
+### Dependencies
+
+E17-T3 Completed.
+
+### Acceptance
+
+- installation establishes the configured absolute root as the watch root
+  and never persists or sends a non-`.` relative root;
+- a watched parent that blocks the exact root produces an actionable
+  fail-closed error, never an ancestor binding;
+- dispatch accepts only a `WATCHMAN_ROOT` that canonicalizes to the
+  configured resource root, rejects a present `WATCHMAN_RELATIVE_ROOT`,
+  and reads no persisted binding for validation;
+- every ancestor-encoded test is replaced by the new contract and
+  `make verify` is green.
+
+### Evidence
+
+Pending.
+
+## E18-T2: Operator-Host Re-Binding and Live Verification
+
+**Status:** Planned
+
+### Objective
+
+Re-bind the production `wiki-maintenance` route to the vault's absolute
+root on the operator host and prove the live pipe end to end.
+
+### Deliverables
+
+- rebuilt operator binary installed at the pinned executable path;
+- `watchman install --route wiki-maintenance` with the exact-root binding
+  reported, surfacing — not papering over — any ancestor unwatch required
+  to establish the vault as its own watch root;
+- one live Markdown change under the configured root producing a new
+  source observation and its destination task on board
+  `llm-wiki-maintenance` assigned to profile `wolyoung`;
+- a clean `agent-dispatch doctor` posture and the G14 evidence rows in
+  VALIDATION.md.
+
+### Requirements
+
+`SRC-010`, `SRC-011`, `SRC-013`
+
+### Dependencies
+
+E18-T1 Completed.
+
+### Acceptance
+
+- AC-1401 through AC-1403 pass with the recorded observation and task
+  identities;
+- no Hermes core, plugin, profile, or vault-content change is made;
+- the only production state changes are the Watchman watch/trigger
+  topology and Agent Dispatch's own binding and observation records
+  (D-028's bounded waiver).
+
+### Evidence
+
+Pending.
+
+---
+
 # 4. Deferred Future Work
 
-The following do not count toward the 89 tracked roadmap tasks (all 89
-Completed through v0.1.6, released 2026-09-02) and remain Deferred until a
-new roadmap is approved:
+The following do not count toward the 91 tracked roadmap tasks (89
+Completed through v0.1.6, released 2026-09-02; E18 adopted 2026-09-08
+under D-028) and remain Deferred until a new roadmap is approved:
 
 - Agent Dispatch managed daemon;
 - multi-vault production certification and global budgets;

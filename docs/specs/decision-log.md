@@ -492,3 +492,48 @@ E14-T1 is next, and gates G10 through G13 block v0.1.6. Configuration remains
 version 1 with additive planned fields; SQLite remains forward-only; current
 schemas, examples, code, tests, validation evidence, release artifacts, tags,
 and production state do not change in this design adoption. SOT 1.2.0.
+
+## D-028 - 2026-09-08 - Absolute Watchman watch-root binding adopted
+
+**Decision.** The managed Watchman binding binds the configured absolute
+resource root itself as the watch root. Installation uses `watch` (not
+`watch-project`), never sends `relative_root` on the managed trigger
+definition, and fails closed with actionable unwatch guidance when the
+server cannot establish the configured root as its own watch root (the
+typical cause: a parent directory is already a watch root). Dispatch
+accepts a live invocation only when the canonicalized `WATCHMAN_ROOT`
+equals the configured resource root; a present `WATCHMAN_RELATIVE_ROOT`
+is rejected as a stale relative-root trigger and never acts as a second
+binding axis. The `watch_bindings.relative_root` column stays with the
+constant `.` as a schema-vestigial value. Epic E18 delivers the reversal
+and gates it at G14; v0.1.6 remains the shipped release and E18 claims
+no release.
+
+**Context.** The operator's production host already watched
+`/Users/draccoon/Workspace/Hermes` before installation, so the E10-T2
+`watch-project` resolver bound that ancestor with `relative_root:
+vault/Hermes`. The live Watchman 2026.07.27.00 trigger environment —
+observed in the server state log and recorded as frozen evidence with
+E18-T1 — carries `WATCHMAN_ROOT` set to the ancestor watch root and does
+not set `WATCHMAN_RELATIVE_ROOT`, contradicting the E0-T5 frozen interface
+evidence that motivated the ancestor-acceptance arms of `ValidateBinding`.
+Every live event therefore failed in the no-relative arm as
+`source_binding_mismatch` while manual exact-root dispatch ingested, and
+`watchman test` (which contacts no server) could not expose the gap. The
+product intent is one operator-configured absolute directory as the watch
+root: the word "vault" is not special, there is no ancestor-watch binding,
+and include/exclude patterns stay scoped to `**/*.md` under the configured
+root.
+
+**Consequences.** SRC-009 and SRC-011 are amended, SRC-013 is added, and
+TST-010's evidence coverage is restated for the exact root; AC-601 is
+amended and gate G14 is registered (AC-1401 through AC-1403). The roadmap
+becomes 19 epics and 91 tasks with E18 Planned. Existing
+`source_observations` rows and content fingerprints are unaffected (live
+events already carried no relative root); reinstallation replaces the
+persisted ancestor binding row and the install topology self-heal removes
+the stale ancestor trigger. E18-T2 re-binds the production route on the
+operator host under explicit operator authorization: D-028 waives the
+E17-T2 no-production-state boundary for that task's Watchman topology,
+binding, and observation changes only, and no Hermes core, plugin,
+profile, or vault-content change is authorized. SOT 1.4.0.

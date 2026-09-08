@@ -53,3 +53,14 @@ published latest release (2026-09-02); the roadmap's task index at
 89/89 is the current-status authority. The separately requested general
 `make verify` remediation stayed outside the release scope and is
 reported, not absorbed.
+
+## E18 Absolute Watch-Root Remediation Map
+
+| Capability group | Normative groups | Acceptance gate | Roadmap owner |
+|---|---|---|---|
+| Absolute watch-root binding and live re-binding | `SRC-*`, `TST-*` | G14 | E18 |
+
+D-028 owns the reversal decision: the configured absolute resource root
+is itself the watch root, `relative_root` is never sent or used as a
+binding axis, and a blocked exact root fails closed with unwatch
+guidance. v0.1.6 remains the shipped release; E18 claims no release.

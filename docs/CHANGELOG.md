@@ -1,5 +1,25 @@
 # SOT Changelog
 
+## 1.4.0 - 2026-09-08
+
+D-028 adopts the absolute watch-root binding remediation as documentation-only
+planned work:
+
+- E18-T1 owns the exact-root contract: `watch`-based establishment with
+  fail-closed unwatch guidance, `relative_root`-free managed trigger
+  definitions, exact-match watch-list coverage, config-anchored dispatch
+  validation that rejects a present `WATCHMAN_RELATIVE_ROOT`, the
+  schema-vestigial `.` relative root, the rewritten suites, and the
+  synchronized specification truth (SRC-009 and SRC-011 amended, SRC-013
+  added, TST-010 restated, AC-601 amended, G14 registered);
+- E18-T2 owns the operator-host re-binding of the production
+  `wiki-maintenance` route with live end-to-end evidence (a new source
+  observation and destination task under the exact root) and the G14 gate
+  rows, under D-028's bounded production-state waiver.
+
+v0.1.6 remains the shipped release; E18 claims no release. The roadmap
+becomes 19 epics and 91 tasks with E18 Planned.
+
 ## 1.3.0 - 2026-09-02
 
 The v0.1.6 operational follow-up is delivered and published; the

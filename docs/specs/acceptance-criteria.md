@@ -97,7 +97,7 @@ The release gate is cumulative. A later gate cannot pass while an earlier gate i
 
 | ID | Given / When / Then |
 |---|---|
-| AC-601 | Given a configured Wiki below an existing Watchman ancestor, when the trigger is installed, then status reports the configured root, actual root, effective relative root, and a subtree-constrained trigger. |
+| AC-601 | Given a configured resource root, when the trigger is installed, then Watchman watches that absolute root itself and status reports the configured root, the same root as the actual root, the schema-vestigial relative root `.`, and a trigger definition without `relative_root` (amended by D-028; the ancestor-binding scenario is retired). |
 | AC-602 | Given changes outside the configured root or inside any exact/recursive exclusion, when Watchman delivers them, then no event, child task, hash, or notification is created. |
 | AC-603 | Given a stored binding and changed Watchman topology, when remove succeeds, then no trigger with the managed name remains on any applicable watch root. |
 | AC-604 | Given ordinary ingestion advances path facts during full enumeration, when reconciliation commits, then the stale snapshot is refused, newer facts survive, and one retryable reconciliation remains. |
@@ -184,6 +184,14 @@ The release gate is cumulative. A later gate cannot pass while an earlier gate i
 | AC-1303 | Given two release builds from the same clean commit, when darwin/arm64 artifacts are compared, then binaries and checksums are byte-identical and versioned documentation and skills agree on v0.1.6. |
 | AC-1304 | Given upgrade or rollback, when the documented procedure is followed, then forward-only migrations preserve identities, rollback restores the verified pre-upgrade database/config/binary set, and scheduler uninstall preserves state. |
 
+### G14: Absolute Watch-Root Binding
+
+| ID | Given / When / Then |
+|---|---|
+| AC-1401 | Given a parent of the configured resource root is already a Watchman watch root, when installation cannot establish the configured root as its own watch root, then the command fails closed with actionable unwatch guidance and binds no ancestor (D-028). |
+| AC-1402 | Given a live trigger invocation, when `WATCHMAN_ROOT` canonicalizes to the configured resource root, then it is accepted; an ancestor root or a present `WATCHMAN_RELATIVE_ROOT` is rejected as a binding mismatch with no persisted-binding second axis (D-028). |
+| AC-1403 | Given the operator host with a production route previously bound to an ancestor watch root, when the route is reinstalled and a Markdown file changes under the configured root, then a new source observation and its destination task exist and `agent-dispatch doctor` reports no binding-mismatch or staleness fallout caused by the re-binding. |
+
 ## 3. Automatic-Write Gate
 
-Automatic Hermes writes to the real vault are prohibited until all scenarios in gates G0 through G13 pass in a test vault and the operator explicitly enables the production route. Dry-run, audit-only, baseline-only, or no-write Hermes profiles may be used earlier. Historical v0.1.5 evidence remains valid for its shipped scope but does not satisfy the new G10-G13 requirements.
+Automatic Hermes writes to the real vault are prohibited until all scenarios in gates G0 through G14 pass in a test vault and the operator explicitly enables the production route. Dry-run, audit-only, baseline-only, or no-write Hermes profiles may be used earlier. Historical v0.1.5 evidence remains valid for its shipped scope but does not satisfy the new G10-G13 requirements; G14's live re-binding evidence (AC-1403) runs on the operator-enabled production route under D-028's bounded waiver.

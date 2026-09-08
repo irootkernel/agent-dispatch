@@ -1,9 +1,9 @@
 # Agent Dispatch Documentation
 
 > **Documentation profile:** Single delivery scope with an adopted legacy roadmap identity contract
-> **SOT version:** 1.3.0
+> **SOT version:** 1.4.0
 > **Shipped implementation:** Agent Dispatch v0.1.6 (published 2026-09-02)
-> **Document status:** Shipped release state
+> **Document status:** Shipped release state with the adopted E18 remediation
 > **Language:** English
 
 This directory is the canonical specification package for Agent Dispatch. It
@@ -108,6 +108,17 @@ release — the roadmap's task index is the current-status authority,
 and the delivered outcomes live in the roadmap's Canonical Outcomes
 links. The separately requested general `make verify` remediation
 remained outside this release's scope and is reported, not absorbed.
+
+## E18 Absolute Watch-Root Remediation (adopted 2026-09-08)
+
+D-028 reverses the ancestor-plus-`relative_root` Watchman binding after
+live evidence showed Watchman 2026.07.27.00 delivers trigger environments
+without `WATCHMAN_RELATIVE_ROOT`, killing every live event as a binding
+mismatch while manual exact-root dispatch ingested. E18 binds the
+configured absolute resource root itself, fails closed with unwatch
+guidance when that is impossible, and re-binds the operator's production
+route with live end-to-end evidence at gate G14. v0.1.6 remains the
+shipped release; E18 claims no release.
 
 ## Repository-Native Checks
 

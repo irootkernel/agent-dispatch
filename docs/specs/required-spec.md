@@ -46,10 +46,11 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | SRC-006 | Agent Dispatch **MUST NOT** add a second time-based settle delay in one-shot trigger mode. It **MUST** treat the Watchman trigger input as the source batch. |
 | SRC-007 | Trigger registration **MUST** use an explicit unique trigger name and **MUST** avoid destructive unnecessary re-registration. |
 | SRC-008 | The source adapter **MUST** support deterministic fixture input without a running Watchman daemon for tests. |
-| SRC-009 | A managed Watchman binding **MUST** retain the configured resource root, actual Watchman root, effective relative root, and trigger name as distinct values. |
+| SRC-009 | A managed Watchman binding **MUST** retain the configured resource root, actual Watchman root, relative root, and trigger name as distinct recorded values. Since D-028 the actual Watchman root **MUST** be the configured resource root itself and the relative root **MUST** be the schema-vestigial constant `.`. |
 | SRC-010 | `watchman install`, `status`, `test`, and `remove` **MUST** resolve and report the same effective binding. |
-| SRC-011 | Installation **MUST** constrain the trigger to the configured resource subtree with `relative_root` or an equivalent expression. |
+| SRC-011 | Installation **MUST** establish the configured absolute resource root itself as the Watchman watch root. It **MUST NOT** bind an ancestor watch root, **MUST NOT** send `relative_root` on the managed trigger definition, and **MUST** fail closed with actionable unwatch guidance when the server cannot watch that root as its own watch root (amended by D-028; the ancestor-plus-`relative_root` constraint is retired). |
 | SRC-012 | A successful remove **MUST** prove that no trigger with the managed identity remains on any applicable Watchman root. |
+| SRC-013 | A live trigger invocation **MUST** be accepted only when its canonicalized `WATCHMAN_ROOT` equals the configured resource root. `WATCHMAN_RELATIVE_ROOT` **MUST NOT** act as a second binding axis, and its presence **MUST** fail closed as a stale relative-root trigger (D-028). |
 
 ## 5. Meaningful Change and Path Policy
 
@@ -271,7 +272,7 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | TST-007 | A real Hermes compatibility test **MUST** run before release when a real public interface is available. |
 | TST-008 | Automatic agent writes **MUST NOT** be enabled until all production-capable acceptance gates pass. |
 | TST-009 | Every roadmap task **MUST** add or update tests, documentation, and traceability before completion. |
-| TST-010 | Real or frozen-real Watchman evidence **MUST** cover ancestor roots, relative roots, exclusion forms, drift, test, and complete removal. |
+| TST-010 | Real or frozen-real Watchman evidence **MUST** cover the exact configured watch root, the blocked-ancestor failure guidance, exclusion forms, drift, test, and complete removal (restated by D-028; ancestor-root and relative-root acceptance coverage is retired). |
 | TST-011 | Reconciliation tests **MUST** race ordinary path-fact updates against full enumeration and prove that a growing file cannot exceed the read bound. |
 | TST-012 | The same probe path **MUST** evaluate the real Hermes 0.20.5 interface and synthetic probe-compatible later interfaces without modifying the Hermes installation, while 0.20.4 and lower fail before side effects. |
 | TST-013 | Fan-out tests **MUST** cover different profiles, repeated profiles with distinct workstreams, sibling isolation, independent retry, destination revision changes, and aggregate reruns. |

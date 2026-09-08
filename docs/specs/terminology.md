@@ -15,7 +15,7 @@ Normative words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** 
 | **Serialization group** | The effective per-destination group (`serialization_group`, the deprecated `mutex_key` alias, or `resource:<resource_id>`) that admits at most one active child per state database; an optional target-side mutex complements it and never replaces it (ADR-0021). |
 | **Aggregate event** | Durable parent record for one normalized source/policy occurrence and the destination-selection results. Its status is derived from child records. |
 | **Child dispatch** | One destination-specific durable dispatch intent and lifecycle beneath an aggregate event. |
-| **Effective Watchman binding** | Configured logical resource root, actual Watchman root, effective relative root, and managed trigger identity treated as one lifecycle binding. |
+| **Effective Watchman binding** | Configured logical resource root, actual Watchman root (the configured root itself since D-028), the schema-vestigial relative root `.`, and managed trigger identity treated as one lifecycle binding. |
 | **Resource observation revision** | Monotonic fence advanced by path-fact mutation and compared before a full snapshot may replace resource facts. |
 | **Route revision** | A canonical digest Agent Dispatch computes from behavior-affecting normalized route configuration. Decisions and records carry it; a change requires explicit operator acknowledgement before the route activates. |
 | **Policy revision** | A canonical digest of the policy subset of route configuration. A not-yet-submitted batch is re-evaluated against the active policy revision before dispatch. |

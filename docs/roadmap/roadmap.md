@@ -14,11 +14,11 @@
 | Planned SOT baseline | 1.4.0 ([D-028](../specs/decision-log.md) adopted) |
 | Release target | v0.1.6 (released; E18 claims no release) |
 | Current epic | E18 (absolute watch-root binding, adopted 2026-09-08) |
-| Current active task | None |
-| Next task | E18-T1 |
-| Completed tasks | 89 / 91 |
-| Planned tasks | 2 / 91 |
-| In progress tasks | 0 |
+| Current active task | None (E18-T1 Completed 2026-09-08) |
+| Next task | E18-T2 |
+| Completed tasks | 90 / 91 |
+| Planned tasks | 1 / 91 |
+| In progress tasks | 1 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
@@ -51,7 +51,7 @@
 | E15 | Hermes v0.20.5+ Compatibility and Serialization Groups | **Completed** | 4 | G11 |
 | E16 | Automatic Durable Notification Draining | **Completed** | 4 | G12 |
 | E17 | Documentation, Cold Validation, and v0.1.6 Release | **Completed** | 3 | G13 |
-| E18 | Absolute Watch-Root Binding | **Planned** | 2 | G14 |
+| E18 | Absolute Watch-Root Binding | **In Progress** | 2 | G14 |
 
 ## 3. Task Status Index
 
@@ -146,7 +146,7 @@
 | 87 | E17-T1 | Completed | CLI, configuration, operations, and skill truth |
 | 88 | E17-T2 | Completed | Cold validation and required deployment evidence |
 | 89 | E17-T3 | Completed | Reproducible v0.1.6 release and publication |
-| 90 | E18-T1 | Planned | Absolute watch-root binding contract |
+| 90 | E18-T1 | Completed | Absolute watch-root binding contract |
 | 91 | E18-T2 | Planned | Operator-host re-binding and live verification |
 
 ---
@@ -4339,14 +4339,14 @@ changed: the release is explicitly a no-production-activation record.
 
 # E18: Absolute Watch-Root Binding
 
-**Epic status:** Planned
+**Epic status:** In Progress
 **Purpose:** Bind the configured absolute resource root itself as the Watchman watch root, fail closed when that is impossible, and re-bind the operator's production route with live end-to-end evidence.
 **Gate:** G14
 **Canonical Outcomes:** [required-spec.md](../specs/required-spec.md) (SRC-009/SRC-011 amendments, SRC-013) · [acceptance-criteria.md](../specs/acceptance-criteria.md) (AC-601 amendment, G14 scenarios) · [decision-log.md](../specs/decision-log.md) (D-028) · [watchman-integration.md](../architecture/watchman-integration.md) (current binding design) · [VALIDATION.md](../VALIDATION.md) (G14 evidence)
 
 ## E18-T1: Absolute Watch-Root Binding Contract
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -4393,7 +4393,47 @@ E17-T3 Completed.
 
 ### Evidence
 
-Pending.
+Completed 2026-09-08. The exact-root contract is delivered end to end.
+`EnsureWatch` issues `watch` (never `watch-project`) and fails closed —
+with unwatch guidance on ancestor reuse or server refusal, and with
+spelling guidance on a case-divergent canonical root — so no ancestor
+binding can be resolved; `ManagedTrigger` never carries `relative_root`
+while `TriggerDefinition` retains the field so a stale ancestor-era
+definition fails `Equal` and the conflict gate demands `--replace`;
+`IsWatched` matches the exact canonical root only; `ValidateBinding`
+anchors on the configuration alone (trigger match, rejection of a
+present `WATCHMAN_RELATIVE_ROOT` as stale, canonicalized `WATCHMAN_ROOT`
+equality) and dispatch reads no persisted binding (the `bindingSource`
+plumbing and the dispatch-time `watch_bindings` load are removed). The
+status drift predicate drops the relative axis (always "."), and
+`RelativeRootBetween`, `ToSlashClean`, and `coversRoot` are gone. The
+rewritten suites pin the contract: the adapter's
+`TestE18T1ManagedTriggerNeverCarriesRelativeRoot`,
+`TestE18T1ValidateBindingExactRootOnly`, and
+`TestE18T1EnsureWatchFailsClosedOnAncestorReuse` (fake-server fail-closed
+arms including the case-divergent spelling), and the CLI's
+`TestE18T1ExactRootBindingLifecycle` (real Watchman with the ancestor
+watched first — the live failure topology — binding the exact root),
+`TestE18T1DriftDetection` (a stale ancestor-shaped record surfaces as
+drifted), `TestE18T1DispatchValidatesExactRootBinding` (ancestor and
+relative-root environments refused even against a persisted ancestor
+binding; the exact root flows with none), plus the rewritten G6
+AC-601/AC-602/AC-603 legs. D-028's live-evidence rationale was
+corrected during the task: a controlled probe on the production server
+(frozen as `trigger-invocation-environment-e18.txt`, interface report
+§12) re-confirms that relative-root triggers do set
+`WATCHMAN_RELATIVE_ROOT`, so the pre-E18 failure was the ancestor arm's
+case-sensitive multi-path equivalence, not a missing environment member;
+the decision log, architecture §12, and the docs README now state the
+corrected diagnosis. `make verify` is green in full (race included) and
+the Gaori-routed manifest-check, schema-validation, and traceability
+checks pass. The member-task Mulgae review (ordinal 1, six roles, full
+dirty target) completed with complete coverage, a passing CI decision,
+committed publication, and zero findings at low or above; its one prose
+recommendation — the case-divergent root refusal — was applied after
+the review as a bounded low correction with focused tests, so the
+review predates those bytes.
+
 
 ## E18-T2: Operator-Host Re-Binding and Live Verification
 

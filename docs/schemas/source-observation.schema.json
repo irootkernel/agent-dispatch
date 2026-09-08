@@ -69,7 +69,8 @@
               "type": [
                 "string",
                 "null"
-              ]
+              ],
+              "description": "Historical: relative-root triggers were retired by D-028; accepted invocations always record null here."
             }
           }
         }

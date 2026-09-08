@@ -18,56 +18,52 @@ import (
 )
 
 // Gate G6 (E10-T3): the source and reconciliation integrity gate. Every
-// acceptance criterion drives the real CLI surface: the effective
-// binding, subtree constraint, exclusions, and removal proof over a
-// disposable nested real-Watchman tree (AC-601 through AC-603), the
-// fenced reconciliation and bounded hashing (AC-604/605), and the
+// acceptance criterion drives the real CLI surface: the exact-root
+// effective binding, exclusions, and removal proof over a disposable
+// real-Watchman tree (AC-601 through AC-603, AC-601 amended by D-028),
+// the fenced reconciliation and bounded hashing (AC-604/605), and the
 // fresh-database migration leg. The per-criterion evidence table lives
 // in docs/VALIDATION.md under Gate G6; the deterministic conflict and
 // bound proofs live at the store and service levels and are named by
 // each criterion below.
 
-// The gate shares the e10t2 lifecycle helpers (runWatchmanArgs drives one
+// The gate shares the e18t1 lifecycle helpers (runWatchmanArgs drives one
 // watchman subcommand; bindingOf decodes the binding member) so the two
 // surfaces cannot drift apart.
 
-// TestG6AC601EffectiveBindingReported pins AC-601 against the real
-// Watchman: a configured resource nested under an already-watched
-// ancestor root installs through the subtree constraint, and status
-// reports the configured root, the actual ancestor root, the relative
-// root, and the trigger identity — the same binding watchman test
-// reports without server contact.
+// TestG6AC601EffectiveBindingReported pins AC-601 (amended by D-028)
+// against the real Watchman: a configured resource root installs as its
+// own watch root, and status reports the configured root, the same root
+// as the actual root, the schema-vestigial relative root ".", and the
+// trigger identity on an unconstrained trigger — the same binding
+// watchman test reports without server contact.
 func TestG6AC601EffectiveBindingReported(t *testing.T) {
 	if _, err := exec.LookPath("watchman"); err != nil {
 		t.Skip("watchman binary not available")
 	}
-	configPath, ancestor, vault := e10t2Fixture(t)
+	configPath, _, vault := watchmanFixture(t)
 	client := watchman.NewClient("")
 	ctx := context.Background()
-	actual, err := client.EnsureWatch(ctx, ancestor)
-	if err != nil {
-		t.Fatalf("watch ancestor: %v", err)
-	}
 	t.Cleanup(func() {
 		_, _, _, _ = runWatchmanArgs(t, configPath, "remove", "--yes")
-		_ = client.WatchDelete(context.Background(), actual)
+		_ = client.WatchDelete(context.Background(), vault)
 	})
 	res, _, errb, code := runWatchmanArgs(t, configPath, "install")
 	if code != 0 {
 		t.Fatalf("install: %s", errb.String())
 	}
 	binding := bindingOf(t, res)
-	if filepath.Clean(binding.ActualRoot) != filepath.Clean(actual) || binding.RelativeRoot != "workspace/vault" ||
-		binding.ConfiguredRoot != vault || binding.TriggerName != "agent-dispatch.wiki.e10t2" {
-		t.Fatalf("AC-601: the four binding values must be distinct and reported: %+v", binding)
+	if watchman.CanonicalRoot(binding.ActualRoot) != watchman.CanonicalRoot(vault) || binding.RelativeRoot != "." ||
+		binding.ConfiguredRoot != vault || binding.TriggerName != "agent-dispatch.wiki.e18t1" {
+		t.Fatalf("AC-601: the four binding values must be reported with the exact root: %+v", binding)
 	}
-	defs, err := client.TriggerList(ctx, actual)
+	defs, err := client.TriggerList(ctx, vault)
 	if err != nil {
 		t.Fatal(err)
 	}
-	def, ok := watchman.FindTrigger(defs, "agent-dispatch.wiki.e10t2")
-	if !ok || def.RelativeRoot != "workspace/vault" {
-		t.Fatalf("AC-601: the trigger must be subtree-constrained: %+v", def)
+	def, ok := watchman.FindTrigger(defs, "agent-dispatch.wiki.e18t1")
+	if !ok || def.RelativeRoot != "" {
+		t.Fatalf("AC-601: the trigger must never be subtree-constrained: %+v", def)
 	}
 	st, _, errb, code := runWatchmanArgs(t, configPath, "status")
 	if code != 0 {
@@ -86,15 +82,13 @@ func TestG6AC601EffectiveBindingReported(t *testing.T) {
 }
 
 // TestG6AC602OutOfRootAndExcludedCreateNoRecords pins AC-602 at the
-// gate level: an excluded burst through the real binding creates no
-// child task and never hashes, while an in-scope burst under the
-// ancestor environment creates exactly one.
+// gate level: an excluded burst through the exact-root environment
+// creates no child task and never hashes, while an in-scope burst
+// creates exactly one.
 func TestG6AC602OutOfRootAndExcludedCreateNoRecords(t *testing.T) {
-	configPath, ancestor, _ := e10t2Fixture(t)
-	t.Setenv("WATCHMAN_TRIGGER", "agent-dispatch.wiki.e10t2")
-	t.Setenv("WATCHMAN_ROOT", ancestor)
-	// The frozen-evidence form: the subdirectory's absolute path.
-	t.Setenv("WATCHMAN_RELATIVE_ROOT", configVaultRoot(t, configPath))
+	configPath, _, vault := watchmanFixture(t)
+	t.Setenv("WATCHMAN_TRIGGER", "agent-dispatch.wiki.e18t1")
+	t.Setenv("WATCHMAN_ROOT", vault)
 	t.Setenv("WATCHMAN_SINCE", "c:1:2:3:3")
 	t.Setenv("WATCHMAN_CLOCK", "c:1:2:3:4")
 	g6RegisterEnabled(t, configPath)
@@ -113,7 +107,7 @@ func TestG6AC602OutOfRootAndExcludedCreateNoRecords(t *testing.T) {
 	if res := decodeEnvelope(t, &out); res["disposition"] != "drop" {
 		t.Fatalf("AC-602: the excluded burst must drop: %v", res)
 	}
-	// The in-scope burst under the same ancestor environment flows.
+	// The in-scope burst under the same exact-root environment flows.
 	out.Reset()
 	errb.Reset()
 	withStdin(t, `[{"name":"Inbox/flow.md","exists":true,"new":true,"size":4,"type":"f"}]`, func() {
@@ -139,23 +133,9 @@ func TestG6AC602OutOfRootAndExcludedCreateNoRecords(t *testing.T) {
 	}
 }
 
-// configVaultRoot reads the fixture's configured vault root through the
-// configuration loader, never a textual parse.
-func configVaultRoot(t *testing.T, configPath string) string {
-	t.Helper()
-	cfg, err := config.Load(configPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resource, ok := cfg.Resources["vault-main"]
-	if !ok {
-		t.Fatal("fixture has no vault-main resource")
-	}
-	return resource.Root
-}
-
 // g6RegisterEnabled materializes the durable route registration and the
-// enabled acknowledgement exactly as first use does.
+// enabled acknowledgement exactly as first use does; D-028 needs no
+// persisted binding for dispatch, so none is written here.
 func g6RegisterEnabled(t *testing.T, configPath string) {
 	t.Helper()
 	_, store, exit := openOperatorStore("g6", configPath, &bytes.Buffer{})
@@ -168,21 +148,6 @@ func g6RegisterEnabled(t *testing.T, configPath string) {
 	}
 	if err := registerRouteState(requestCtx(), store, cfg, "wiki"); err != nil {
 		t.Fatal(err)
-	}
-	// Persist the ancestor binding the burst environment claims; the
-	// fixture vault is nested under the test's ancestor, which the
-	// caller placed in the environment.
-	if root := os.Getenv("WATCHMAN_ROOT"); root != "" {
-		if rel, relErr := watchman.RelativeRootBetween(root, configVaultRoot(t, configPath)); relErr == nil {
-			if err := store.SaveWatchBinding(context.Background(), watchman.Binding{
-				RouteID: "wiki", ResourceID: "vault-main",
-				ConfiguredRoot: configVaultRoot(t, configPath), ActualRoot: root,
-				RelativeRoot: rel, TriggerName: "agent-dispatch.wiki.e10t2",
-				UpdatedAt: "2026-08-26T00:00:00Z",
-			}); err != nil {
-				t.Fatal(err)
-			}
-		}
 	}
 	rev, ok := config.RouteRevision(cfg, "wiki")
 	if !ok {
@@ -202,10 +167,10 @@ func TestG6AC603RemoveProvesAbsenceEverywhere(t *testing.T) {
 	if _, err := exec.LookPath("watchman"); err != nil {
 		t.Skip("watchman binary not available")
 	}
-	configPath, ancestor, _ := e10t2Fixture(t)
+	configPath, _, vault := watchmanFixture(t)
 	client := watchman.NewClient("")
 	ctx := context.Background()
-	actual, err := client.EnsureWatch(ctx, ancestor)
+	actual, err := client.EnsureWatch(ctx, vault)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +187,7 @@ func TestG6AC603RemoveProvesAbsenceEverywhere(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = client.WatchDelete(context.Background(), secondRoot) })
-	stray := watchman.ManagedTrigger("agent-dispatch.wiki.e10t2", []string{"/bin/true"}, "")
+	stray := watchman.ManagedTrigger("agent-dispatch.wiki.e18t1", []string{"/bin/true"})
 	if _, err := client.TriggerInstall(ctx, secondRoot, stray); err != nil {
 		t.Fatalf("plant stray: %v", err)
 	}
@@ -244,14 +209,14 @@ func TestG6AC603RemoveProvesAbsenceEverywhere(t *testing.T) {
 		}
 	}
 	if !covered[filepath.Clean(actual)] || !covered[filepath.Clean(secondRoot)] {
-		t.Fatalf("AC-603: the proof must cover the ancestor and the changed-topology root: %v", covered)
+		t.Fatalf("AC-603: the proof must cover the exact root and the changed-topology root: %v", covered)
 	}
 	for _, root := range []string{actual, secondRoot} {
 		defs, err := client.TriggerList(ctx, root)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, present := watchman.FindTrigger(defs, "agent-dispatch.wiki.e10t2"); present {
+		if _, present := watchman.FindTrigger(defs, "agent-dispatch.wiki.e18t1"); present {
 			t.Fatalf("AC-603: the managed trigger must be absent on %s", root)
 		}
 	}
@@ -265,7 +230,7 @@ func TestG6AC603RemoveProvesAbsenceEverywhere(t *testing.T) {
 // deterministic interleaving is pinned by
 // TestE10T1ConcurrentFactUpdateSurvivesFullReconciliation.
 func TestG6AC604FencedReconciliation(t *testing.T) {
-	configPath, _, vault := e10t2Fixture(t)
+	configPath, _, vault := watchmanFixture(t)
 	g6RegisterEnabled(t, configPath)
 	// A vault wide enough to give the concurrent writer a real window.
 	dir := filepath.Join(vault, "Inbox", "g6")
@@ -353,7 +318,7 @@ func g6Lineage(suffix, path string) ports.Lineage {
 	return ports.Lineage{
 		Observation: ports.ObservationInput{
 			ObservationID: "obs-g6-" + suffix, SchemaVersion: "agent-dispatch.source-observation/v1",
-			SourceType: "watchman", SourceID: "watchman-main", TriggerName: "agent-dispatch.wiki.e10t2", ResourceID: "vault-main",
+			SourceType: "watchman", SourceID: "watchman-main", TriggerName: "agent-dispatch.wiki.e18t1", ResourceID: "vault-main",
 			ObservedAt: now, ReceivedAt: now, RawPayloadDigest: digest, IngestStatus: "accepted",
 			Changes: []ports.ObservationChange{
 				{Ordinal: 1, Path: path, Operation: "create", ExistsAfter: true, FileType: "regular", AfterDigest: digest, DigestStatus: "known"},
@@ -386,7 +351,7 @@ func g6Lineage(suffix, path string) ports.Lineage {
 // never an unbounded read. The exact max+1 bound is pinned by
 // TestE10T1BoundedReadNeverExceedsMaxPlusOne.
 func TestG6AC605BoundedHashingEvidence(t *testing.T) {
-	configPath, _, vault := e10t2Fixture(t)
+	configPath, _, vault := watchmanFixture(t)
 	g6RegisterEnabled(t, configPath)
 	// Rewrite the fixture config with a 16-byte hash bound.
 	e10t1SetHashLimit(t, configPath, 16)
@@ -482,7 +447,7 @@ func listedAs(res map[string]any, key, path string) bool {
 // store level by TestFreshAndMigratedSchemasIdentical; the interrupted
 // upgrade window by TestE10T1MigrationV8BackfillAndIntegrity).
 func TestG6FreshDatabaseMigration(t *testing.T) {
-	configPath, _, _ := e10t2Fixture(t)
+	configPath, _, _ := watchmanFixture(t)
 	// The fixture's state dir is fresh: the first operator surface
 	// (registration, then reconciliation) migrates it on first open.
 	g6RegisterEnabled(t, configPath)

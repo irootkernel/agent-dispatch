@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
 	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
 	"github.com/irootkernel/agent-dispatch/internal/app/ingest"
 	"github.com/irootkernel/agent-dispatch/internal/config"
@@ -96,10 +95,6 @@ func staleRebuilderOf(store storeOp, cfg *config.Config) func(context.Context, s
 	}
 }
 
-// storedBinding feeds the dispatch-side ancestor-root validation
-// (E10-T2, SRC-011) from the one shared loader; a route with no
-// persisted binding returns nil, leaving the exact-root validation in
-// force.
-func storedBinding(configPath, routeID string) (*watchman.Binding, error) {
-	return loadStoredBinding(resolveConfigPath(configPath), routeID)
-}
+// D-028 (SRC-013): dispatch no longer reads the persisted Watchman
+// binding — validation is anchored on the configuration alone, so the
+// shared loader serves only the lifecycle commands.

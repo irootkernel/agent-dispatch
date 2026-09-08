@@ -79,11 +79,15 @@ The application layer maps errors to rejection, quarantine, or reconciliation ac
 
 Future adapters for Git, webhook ingress, timers, processes, or queues must implement the same observation boundary. They may have different source-position structures, but they cannot add authority-bearing route hints to the canonical observation.
 
-## 8. v0.1.5 Watchman Binding Contract
+## 8. Absolute Watch-Root Binding Contract (D-028)
 
-The Watchman adapter receives and validates both the actual root and effective
-relative root. Their canonical combination must resolve exactly to the trusted
-configured resource root before any path is accepted. Trigger lifecycle output
-exposes the four binding fields and effective patterns. A binding mismatch,
-missing relative root for an ancestor watch, or out-of-subtree path is a typed
-source-binding refusal and creates no event or task.
+The Watchman adapter receives `WATCHMAN_ROOT` and validates that it
+canonicalizes exactly to the trusted configured resource root before any
+path is accepted. `WATCHMAN_RELATIVE_ROOT` is parsed for diagnostics
+only and never acts as a binding axis; its presence is the signature of
+a stale relative-root trigger and fails closed with reinstall guidance.
+Trigger lifecycle output exposes the four binding fields (the relative
+root is the schema-vestigial `.`) and effective patterns. A binding
+mismatch, a present relative root, an ancestor watch root, or an
+out-of-root path is a typed source-binding refusal and creates no event
+or task.

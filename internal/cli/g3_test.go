@@ -301,7 +301,7 @@ func TestG3AC301And305RealTriggerEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ensure watch: %v", err)
 	}
-	trigger := watchman.ManagedTrigger("agent-dispatch.wiki.g3", []string{h.bin, "dispatch", "--route", "wiki", "--config", h.configPath, "--input", "watchman"}, "")
+	trigger := watchman.ManagedTrigger("agent-dispatch.wiki.g3", []string{h.bin, "dispatch", "--route", "wiki", "--config", h.configPath, "--input", "watchman"})
 	if _, err := client.TriggerInstall(ctx, watchRoot, trigger); err != nil {
 		t.Fatalf("trigger install: %v", err)
 	}

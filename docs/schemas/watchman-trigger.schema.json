@@ -29,7 +29,7 @@
       "name": {
         "type": "string",
         "minLength": 1,
-        "description": "Path relative to the watch root (or relative root). Untrusted input."
+        "description": "Path relative to the watch root, which since D-028 is the configured resource root itself. Untrusted input."
       },
       "exists": {
         "type": "boolean"

@@ -22,7 +22,7 @@ Fields to capture when present (the verified allowlist; `WATCHMAN_FILES_OVERFLOW
 
 - `WATCHMAN_TRIGGER`
 - `WATCHMAN_ROOT`
-- `WATCHMAN_RELATIVE_ROOT`
+- `WATCHMAN_RELATIVE_ROOT` (parsed for diagnostics only; since D-028 its presence fails binding validation as a stale relative-root trigger — it is never a binding axis)
 - `WATCHMAN_SINCE`
 - `WATCHMAN_CLOCK`
 - `WATCHMAN_SOCK` (diagnostics only; never part of the source model)
@@ -131,16 +131,39 @@ Fixtures must cover:
 - non-UTF-8 or invalid path representation supported by the platform abstraction;
 - concurrent trigger processes.
 
-## 12. v0.1.5 Effective Binding Target
-E10 replaces exact-root assumptions with the four-part managed binding defined
-in ADR-0018's companion design: configured root, actual Watchman root,
-configured-root-relative `relative_root`, and stable trigger name. Installation
-persists the binding. Status reports it and compares it with current Watchman
-state; test uses its logical root; remove searches stored and current watch
-roots and succeeds only after the exact managed trigger is absent everywhere.
+## 12. Absolute Watch-Root Binding (D-028)
 
-The trigger is subtree-constrained before input reaches the adapter. The
-adapter still validates `WATCHMAN_ROOT` plus `WATCHMAN_RELATIVE_ROOT` against
-the configured root, so a forged or drifted environment fails closed. Route
-patterns remain configured-root-relative and exclusions run before every read
-or downstream record. See SRC-009 through SRC-012 and AC-601 through AC-603.
+E10 originally replaced exact-root assumptions with a four-part managed
+binding whose actual root could be an ancestor of the configured root,
+constrained through the trigger's `relative_root`. D-028 reverses that
+shape after the production route's live events died as binding
+mismatches while manual exact-root dispatch ingested: acceptance under
+the ancestor binding depended on a persisted record and case-sensitive
+equivalence across separately spelled canonical paths (see
+`trigger-invocation-environment-e18.txt` for the live-server
+re-verification).
+
+The binding is still four recorded values — configured root, actual
+Watchman root, relative root, stable trigger name — but the actual root
+is the configured absolute resource root itself, established through
+Watchman's `watch` command (never `watch-project`), and the relative
+root is the schema-vestigial constant `.`. Installation fails closed
+with unwatch guidance when the server cannot watch the configured root
+as its own watch root; it never binds an ancestor. The managed trigger
+definition carries no `relative_root`, so payload paths arrive
+configured-root-relative by Watchman's normal exact-root behavior. On
+the live server a watched parent does not block this: `watch` on the
+nested root establishes it as an independent watch
+(`trigger-invocation-environment-e18.txt`).
+
+The adapter validates the canonicalized `WATCHMAN_ROOT` against the
+configured root alone; a present `WATCHMAN_RELATIVE_ROOT` is the
+signature of a stale relative-root trigger and fails closed. A root
+spelling that differs from the canonical spelling only by letter case —
+the same directory on a case-insensitive volume, where symlink
+resolution does not fold case — gets its own actionable refusal in both
+`EnsureWatch` and `ValidateBinding` instead of a generic mismatch, and
+is never silently accepted. Route
+patterns remain configured-root-relative and exclusions run before every
+read or downstream record. See SRC-009 through SRC-013, AC-601, and
+AC-1401 through AC-1403.

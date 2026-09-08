@@ -160,7 +160,8 @@ func managedCommand(routeID, configPath string) ([]string, error) {
 
 // effectiveBinding is one resolved managed Watchman binding (E10-T2,
 // SRC-009/SRC-010): the identical four values install, status, test, and
-// remove resolve and report.
+// remove resolve and report. D-028: the actual root is the configured
+// resource root itself and relative_root is the schema-vestigial ".".
 type effectiveBinding struct {
 	ConfiguredRoot string `json:"configured_root"`
 	ActualRoot     string `json:"actual_root"`
@@ -169,24 +170,20 @@ type effectiveBinding struct {
 }
 
 // resolveServerBinding resolves the effective binding against the live
-// Watchman server: the configured root is watched (EnsureWatch
-// canonicalizes the actual root, which may be an ancestor), and the
-// relative root is the pure configured-root-relative path between the
-// two (SRC-011). This is the one resolver every server-contacting
-// lifecycle command shares.
+// Watchman server: the configured absolute root is established as its
+// own watch root (D-028, SRC-011) — EnsureWatch fails closed with
+// unwatch guidance when the server cannot watch exactly that root, so
+// no ancestor binding can be resolved here. This is the one resolver
+// every server-contacting lifecycle command shares.
 func resolveServerBinding(ctx context.Context, client *watchman.Client, resource config.Resource, triggerName string) (string, effectiveBinding, error) {
 	actual, err := client.EnsureWatch(ctx, resource.Root)
 	if err != nil {
 		return "", effectiveBinding{}, err
 	}
-	rel, err := watchman.RelativeRootBetween(actual, resource.Root)
-	if err != nil {
-		return "", effectiveBinding{}, &watchman.LifecycleError{Command: "watch-project", Message: err.Error()}
-	}
 	return actual, effectiveBinding{
 		ConfiguredRoot: resource.Root,
 		ActualRoot:     actual,
-		RelativeRoot:   rel,
+		RelativeRoot:   ".",
 		TriggerName:    triggerName,
 	}, nil
 }
@@ -257,9 +254,9 @@ func runWatchmanInstall(args []string, stdout, stderr io.Writer) int {
 		return code
 	}
 	// The effective binding resolves against the live server before
-	// anything is installed (E10-T2, SRC-009/SRC-011): the actual watch
-	// root may be an ancestor of the configured root, and the trigger is
-	// then subtree-constrained through its relative_root.
+	// anything is installed (E10-T2, SRC-009/SRC-011): the configured
+	// absolute root must be its own watch root — a server that cannot
+	// watch it exactly fails closed with unwatch guidance (D-028).
 	watchRoot, binding, err := resolveServerBinding(ctx, client, resource, route.Source.TriggerName)
 	if err != nil {
 		return lifecycleErr(stderr, command, err)
@@ -268,7 +265,7 @@ func runWatchmanInstall(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return planErr(stderr, command, "internal_unclassified", "internal", err.Error(), 40)
 	}
-	expected := watchman.ManagedTrigger(route.Source.TriggerName, cmdArgv, binding.RelativeRoot)
+	expected := watchman.ManagedTrigger(route.Source.TriggerName, cmdArgv)
 
 	// The install is the operator's first-use entry point: it also
 	// materializes the route's durable registration (resource, route
@@ -422,8 +419,9 @@ func runWatchmanStatus(args []string, stdout, stderr io.Writer) int {
 		})
 	}
 	// The same server resolver install uses resolves the effective
-	// binding (SRC-010): configured root, actual watch root (possibly an
-	// ancestor), relative root, and trigger identity.
+	// binding (SRC-010): configured root, actual watch root (the
+	// configured root itself, D-028), relative root, and trigger
+	// identity.
 	watchRoot, binding, err := resolveServerBinding(ctx, client, resource, route.Source.TriggerName)
 	if err != nil {
 		return lifecycleErr(stderr, command, err)
@@ -436,15 +434,15 @@ func runWatchmanStatus(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return planErr(stderr, command, "internal_unclassified", "internal", err.Error(), 40)
 	}
-	expected := watchman.ManagedTrigger(route.Source.TriggerName, cmdArgv, binding.RelativeRoot)
+	expected := watchman.ManagedTrigger(route.Source.TriggerName, cmdArgv)
 	// Drift (OPS-010): the persisted binding no longer matches the live
-	// watch topology — the actual root moved (a different ancestor is
-	// watched now) or the trigger identity changed — independent of the
-	// trigger definition comparison.
+	// watch topology — the actual root moved or the configured root or
+	// trigger identity changed — independent of the trigger definition
+	// comparison. The relative root is not an axis: it is the
+	// schema-vestigial "." on both sides (D-028).
 	drifted := hasStored && (watchman.CanonicalRoot(stored.ActualRoot) != watchman.CanonicalRoot(binding.ActualRoot) ||
 		stored.TriggerName != binding.TriggerName ||
-		stored.ConfiguredRoot != binding.ConfiguredRoot ||
-		watchman.ToSlashClean(stored.RelativeRoot) != watchman.ToSlashClean(binding.RelativeRoot))
+		stored.ConfiguredRoot != binding.ConfiguredRoot)
 	state := "missing"
 	current, exists := watchman.FindTrigger(installed, expected.Name)
 	if exists {

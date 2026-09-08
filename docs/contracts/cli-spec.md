@@ -117,7 +117,7 @@ Side-effect-free. Prints a versioned dispatch plan. It may read files under the 
 agent-dispatch watchman install --route <id> [--replace]
 ```
 
-Creates or verifies the route trigger. No replacement occurs without `--replace`. Install resolves and persists the managed binding (E10-T2, SRC-009): the configured resource root, the actual watch root Watchman canonicalized (which may be an ancestor of the configured root), the configured-root-relative path between them, and the trigger name. When the actual root is an ancestor, the trigger is installed with `relative_root` so only the configured subtree can invoke the managed command; a reinstall after the watch moved also removes the stale managed trigger from the previous actual root. The success envelope reports the binding alongside the watch root and disposition.
+Creates or verifies the route trigger. No replacement occurs without `--replace`. Install resolves and persists the managed binding (E10-T2, SRC-009, amended by D-028): the configured resource root, the actual watch root — the configured absolute root itself, established through Watchman's `watch` command — the schema-vestigial relative root `.`, and the trigger name. When the server cannot watch the configured root as its own watch root (typically because a parent directory is already a watch root), the command fails closed with actionable unwatch guidance instead of binding an ancestor; a reinstall after the watch moved also removes the stale managed trigger from the previous actual root. The success envelope reports the binding alongside the watch root and disposition.
 
 ### `watchman status`
 
@@ -141,7 +141,7 @@ Removes only the exact managed trigger, searching the persisted binding's actual
 agent-dispatch watchman test [--fixture <path>] [--route <id>]
 ```
 
-Uses a temporary or supplied fixture and prints normalized source input without Hermes side effects. With `--route`, it also resolves and reports the same effective binding the other lifecycle commands use, from the persisted record (or the configured root with a trivial relative root when none is persisted) — with no server contact.
+Uses a temporary or supplied fixture and prints normalized source input without Hermes side effects. With `--route`, it also resolves and reports the same effective binding the other lifecycle commands use, from the persisted record (or the configured root with the vestigial relative root `.` when none is persisted) — with no server contact, so it never proves the live pipe (D-028).
 
 ## 5. Dispatch Command
 

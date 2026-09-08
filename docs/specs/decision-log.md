@@ -512,25 +512,31 @@ no release.
 **Context.** The operator's production host already watched
 `/Users/draccoon/Workspace/Hermes` before installation, so the E10-T2
 `watch-project` resolver bound that ancestor with `relative_root:
-vault/Hermes`. The live Watchman 2026.07.27.00 trigger environment —
-observed in the server state log and recorded as frozen evidence with
-E18-T1 — carries `WATCHMAN_ROOT` set to the ancestor watch root and does
-not set `WATCHMAN_RELATIVE_ROOT`, contradicting the E0-T5 frozen interface
-evidence that motivated the ancestor-acceptance arms of `ValidateBinding`.
-Every live event therefore failed in the no-relative arm as
-`source_binding_mismatch` while manual exact-root dispatch ingested, and
-`watchman test` (which contacts no server) could not expose the gap. The
-product intent is one operator-configured absolute directory as the watch
-root: the word "vault" is not special, there is no ancestor-watch binding,
-and include/exclude patterns stay scoped to `**/*.md` under the configured
-root.
+vault/Hermes`. Live events then died as `source_binding_mismatch`
+while manual exact-root dispatch ingested, and `watchman test` (which
+contacts no server) could not expose the gap. A controlled probe on
+the live server (2026.07.27.00, frozen as
+`trigger-invocation-environment-e18.txt`) shows the failure was not a
+missing environment member: a relative-root trigger does set
+`WATCHMAN_RELATIVE_ROOT` to the absolute subdirectory path, matching
+the E0-T5 evidence. The defect is the ancestor arm itself — acceptance
+depended on a persisted record plus case-sensitive string equivalence
+across three separately spelled paths (the environment watch root, the
+server-canonicalized relative root, and the configured root), and on
+this case-insensitive APFS volume an operator-configured root spelled
+with a different case than the canonical spelling can never bind. The
+product intent is one operator-configured absolute directory as the
+watch root: the word "vault" is not special, there is no
+ancestor-watch binding, and include/exclude patterns stay scoped to
+`**/*.md` under the configured root.
 
 **Consequences.** SRC-009 and SRC-011 are amended, SRC-013 is added, and
 TST-010's evidence coverage is restated for the exact root; AC-601 is
 amended and gate G14 is registered (AC-1401 through AC-1403). The roadmap
 becomes 19 epics and 91 tasks with E18 Planned. Existing
-`source_observations` rows and content fingerprints are unaffected (live
-events already carried no relative root); reinstallation replaces the
+`source_observations` rows and content fingerprints are unaffected (no
+live observation was ever persisted under the ancestor binding — every
+live event failed validation); reinstallation replaces the
 persisted ancestor binding row and the install topology self-heal removes
 the stale ancestor trigger. E18-T2 re-binds the production route on the
 operator host under explicit operator authorization: D-028 waives the

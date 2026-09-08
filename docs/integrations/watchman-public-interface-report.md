@@ -302,3 +302,29 @@ accidentally spawned by the `--unix-listener-path` failure-path probe and
 was immediately shut down through that same socket path; the user's primary
 server was never shut down, and `watch-del-all` and `shutdown-server`
 against the primary were never issued.
+
+## 12. E18 Live-Server Re-Verification (D-028 context)
+
+A controlled probe on the operator's production server (same
+`2026.07.27.00` build, 2026-09-08) re-verified the two behaviors the
+absolute watch-root binding relies on (fixture
+`fixtures/watchman/trigger-invocation-environment-e18.txt`):
+
+- A trigger defined with `relative_root` under an already-watched
+  ancestor still sets `WATCHMAN_RELATIVE_ROOT` to the subdirectory's
+  absolute server-canonical path while `WATCHMAN_ROOT` remains the
+  ancestor — re-confirming the E0-T5 frozen evidence on the live
+  server. The pre-D-028 production `source_binding_mismatch` therefore
+  stemmed from the ancestor arm's equivalence chain (persisted record
+  plus case-sensitive comparison of separately spelled canonical
+  paths), not from a missing environment member.
+- `watch` on a nested subdirectory while its parent is already watched
+  succeeds and establishes the subdirectory as its own independent
+  watch root, returning no `relative_path` — a watched parent does not
+  block the exact-root binding on this server version.
+
+Boundary: the probe used `watch`, `trigger` (add), `trigger-del`,
+`watch-del`, and `watch-list` on a disposable `/tmp` tree only; the
+production watch roots and triggers were only read through
+`watch-list`/`trigger-list`. The disposable root, its trigger, and its
+watch were deleted after capture.

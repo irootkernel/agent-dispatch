@@ -1,0 +1,29 @@
+# Trigger invocation environment under a watched ancestor with a relative_root
+# trigger, observed 2026-09-08 (Watchman 2026.07.27.00, the operator production
+# server). Controlled probe: the ancestor was watched first, the trigger was defined
+# with relative_root "workspace/vault" exactly as the pre-D-028 managed install did,
+# and the child dumped its own environment. Paths masked: <user>.
+
+# The invocation re-confirms the E0-T5 frozen evidence (trigger-invocation-environment.txt)
+# on the live production server: a relative_root trigger DOES set WATCHMAN_RELATIVE_ROOT
+# to the subdirectory's absolute server-canonical path while WATCHMAN_ROOT remains the
+# ancestor watch root. The pre-D-028 live source_binding_mismatch therefore did not come
+# from a missing WATCHMAN_RELATIVE_ROOT: it came from the ancestor arm's multi-path
+# equivalence chain, which compares the configured root spelling against the
+# server-canonical spelling case-sensitively (symlink resolution does not case-fold on
+# this volume), so an operator-configured root spelled differently from the canonical
+# case can never bind while manual exact-root dispatch ingests. D-028 removes the chain
+# by binding the configured absolute root itself.
+cwd=/private/tmp/e18-probe/ancestor/workspace/vault
+WATCHMAN_CLOCK=c:1788472786:1494:40:3
+WATCHMAN_RELATIVE_ROOT=/private/tmp/e18-probe/ancestor/workspace/vault
+WATCHMAN_ROOT=/private/tmp/e18-probe/ancestor
+WATCHMAN_SINCE=c:1788472786:1494:40:2
+WATCHMAN_SOCK=/Users/<user>/.local/state/watchman/<user>-state/sock
+WATCHMAN_TRIGGER=e18-probe-rel
+
+# Companion observation (same probe session): `watch` on the nested subdirectory while
+# the ancestor is already watched succeeds and establishes the subdirectory as its own
+# independent watch root, returning no relative_path — the server behavior D-028's
+# managed install relies on, and the reason a watched parent does not block the
+# exact-root binding on this server version.

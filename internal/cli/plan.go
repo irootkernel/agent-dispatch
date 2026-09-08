@@ -122,13 +122,12 @@ type planArtifacts struct {
 // fallback (CLI-003: they open no database).
 type factsSource func(configPath, resourceID string) (ingest.PathFacts, error)
 
-// bindingSource supplies the persisted managed Watchman binding for the
-// ancestor-root validation (E10-T2, SRC-011). The durable dispatch path
-// wires the stored record; plan and dry-run keep the conservative
-// exact-root-only validation (CLI-003: they open no database).
-type bindingSource func(configPath, routeID string) (*watchman.Binding, error)
+// D-028 (SRC-013): binding validation is anchored on the configuration
+// alone — the canonicalized WATCHMAN_ROOT must equal the configured
+// resource root — so dispatch reads no persisted Watchman binding and
+// plan, dry-run, and dispatch validate identically.
 
-func planPipeline(command string, args []string, stderr io.Writer, facts factsSource, bindings bindingSource) (*planArtifacts, int) {
+func planPipeline(command string, args []string, stderr io.Writer, facts factsSource) (*planArtifacts, int) {
 	opts, code := parsePlanFlags(command, args, nil, stderr)
 	if code != 0 {
 		return nil, code
@@ -163,15 +162,7 @@ func planPipeline(command string, args []string, stderr io.Writer, facts factsSo
 	if err != nil {
 		return nil, planErr(stderr, command, "source_missing_required_metadata", "input_rejected", err.Error(), 4)
 	}
-	var stored *watchman.Binding
-	if bindings != nil && env.HasRelative {
-		binding, err := bindings(opts.configPath, opts.routeID)
-		if err != nil {
-			return nil, planErr(stderr, command, "sqlite_query_failed", "storage", err.Error(), 20)
-		}
-		stored = binding
-	}
-	if err := watchman.ValidateBinding(env, route.Source.TriggerName, resource.Root, stored); err != nil {
+	if err := watchman.ValidateBinding(env, route.Source.TriggerName, resource.Root); err != nil {
 		return nil, planErr(stderr, command, "source_binding_mismatch", "input_rejected", err.Error(), 4)
 	}
 
@@ -247,7 +238,7 @@ func planPipeline(command string, args []string, stderr io.Writer, facts factsSo
 // runPlan plans one Watchman invocation end to end with no SQLite
 // mutation and no target call.
 func runPlan(command string, args []string, stdout, stderr io.Writer) int {
-	artifacts, code := planPipeline(command, args, stderr, nil, nil)
+	artifacts, code := planPipeline(command, args, stderr, nil)
 	if code != 0 {
 		return code
 	}
@@ -292,7 +283,7 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	// The durable path plans against the stored path-facts snapshot so
 	// unchanged and metadata-only modifies suppress with audit
 	// (PTH-006/PTH-007, E7-T3/H-2).
-	artifacts, code := planPipeline(command, rest, stderr, durableFacts, storedBinding)
+	artifacts, code := planPipeline(command, rest, stderr, durableFacts)
 	if code != 0 {
 		return code
 	}

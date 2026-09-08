@@ -33,12 +33,14 @@ One managed binding contains four identities:
 | Field | Meaning |
 |---|---|
 | configured resource root | Trusted logical boundary used by policy and path containment |
-| actual Watchman root | Root returned by `watch-project`, which may be an ancestor |
-| effective relative root | Configured root relative to the actual Watchman root |
+| actual Watchman root | The configured root itself since D-028: established through `watch`, never an ancestor |
+| relative root | Schema-vestigial `.` since D-028 (the pre-E18 ancestor-relative form is retired) |
 | trigger name | Stable Agent Dispatch-owned trigger identity |
 
-Installation persists this binding and installs `relative_root` (or an
-equivalent subtree expression). Status, test, and removal use the same resolver.
+Installation persists this binding and installs the trigger on the exact
+configured root with no `relative_root` (D-028), failing closed with
+unwatch guidance when the server cannot watch that root as its own.
+Status, test, and removal use the same resolver.
 Removal checks the persisted root and every current Watchman root for the exact
 managed trigger name and succeeds only when none remains. Include and exclude
 patterns always evaluate relative to the configured resource root. Exclusion

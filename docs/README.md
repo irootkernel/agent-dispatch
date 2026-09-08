@@ -112,13 +112,14 @@ remained outside this release's scope and is reported, not absorbed.
 ## E18 Absolute Watch-Root Remediation (adopted 2026-09-08)
 
 D-028 reverses the ancestor-plus-`relative_root` Watchman binding after
-live evidence showed Watchman 2026.07.27.00 delivers trigger environments
-without `WATCHMAN_RELATIVE_ROOT`, killing every live event as a binding
-mismatch while manual exact-root dispatch ingested. E18 binds the
-configured absolute resource root itself, fails closed with unwatch
-guidance when that is impossible, and re-binds the operator's production
-route with live end-to-end evidence at gate G14. v0.1.6 remains the
-shipped release; E18 claims no release.
+the production route's live events died as binding mismatches while
+manual exact-root dispatch ingested: acceptance under the ancestor
+binding depended on a persisted record and case-sensitive equivalence
+across separately spelled paths. E18 binds the configured absolute
+resource root itself, fails closed with unwatch guidance when that is
+impossible, and re-binds the operator's production route with live
+end-to-end evidence at gate G14. v0.1.6 remains the shipped release;
+E18 claims no release.
 
 ## Repository-Native Checks
 

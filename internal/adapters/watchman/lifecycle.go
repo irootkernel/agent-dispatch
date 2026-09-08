@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -78,11 +78,11 @@ func NewClient(binary string) *Client {
 }
 
 // TriggerDefinition is the managed trigger definition (normalized form
-// used for comparison against trigger-list output). RelativeRoot carries
-// the configured-root-relative subtree constraint (SRC-011): when the
-// actual watch root is an ancestor of the configured resource root, the
-// definition installs with relative_root so only the configured subtree
-// can invoke the managed command.
+// used for comparison against trigger-list output). RelativeRoot is
+// retained for comparison fidelity only (D-028): a stale ancestor-era
+// definition reports relative_root from the server and must not compare
+// equal to the managed form, so the conflict gate can demand --replace.
+// Managed definitions never set it.
 type TriggerDefinition struct {
 	Name         string   `json:"name"`
 	Command      []string `json:"command"`
@@ -112,23 +112,18 @@ func (d TriggerDefinition) Equal(other TriggerDefinition) bool {
 // (SRC-007: one explicit unique trigger name per route; append_files
 // false so the payload arrives on stdin; the verified stdin field set;
 // and a coarse regular-file prefilter — the trusted pattern engine, not
-// the expression, remains the include/exclude authority). A non-empty
-// relativeRoot (E10-T2, SRC-011) constrains the trigger to the
-// configured resource subtree inside the actual — possibly ancestral —
-// watch root, so the delivered payload and WATCHMAN_RELATIVE_ROOT are
-// configured-root-relative.
-func ManagedTrigger(name string, command []string, relativeRoot string) TriggerDefinition {
-	def := TriggerDefinition{
+// the expression, remains the include/exclude authority). D-028
+// (SRC-011): the definition never carries relative_root — the watch
+// root is the configured resource root itself, so the delivered payload
+// and WATCHMAN_ROOT are already configured-root-scoped.
+func ManagedTrigger(name string, command []string) TriggerDefinition {
+	return TriggerDefinition{
 		Name:        name,
 		Command:     command,
 		AppendFiles: false,
 		StdinFields: []string{"name", "exists", "new", "size", "type"},
 		Expression:  []any{"type", "f"},
 	}
-	if relativeRoot != "" && relativeRoot != "." {
-		def.RelativeRoot = relativeRoot
-	}
-	return def
 }
 
 // response is the common envelope of every watchman reply.
@@ -142,6 +137,7 @@ type response struct {
 	Trigger      string              `json:"trigger"`
 	Triggers     []TriggerDefinition `json:"triggers"`
 	Watch        string              `json:"watch"`
+	RelativePath string              `json:"relative_path"`
 	Watcher      string              `json:"watcher"`
 	Clock        string              `json:"clock"`
 	Warning      string              `json:"warning"`
@@ -295,52 +291,53 @@ func parseVersion(v string) ([4]int, bool) {
 	return out, true
 }
 
-// EnsureWatch makes sure the root is watched and returns the canonical
-// watch root (macOS /tmp → /private/tmp), which callers must use for all
-// further commands and for binding validation.
+// EnsureWatch establishes the configured absolute root itself as the
+// watch root and returns the server-canonical spelling of exactly that
+// root (macOS /tmp → /private/tmp); callers must use it for all further
+// commands and for binding validation. D-028 (SRC-011): a response that
+// reuses an ancestor watch (a non-empty relative_path or a different
+// reported root) or a server refusal (the typical cause: a parent
+// directory is already a watch root) fails closed with unwatch guidance
+// — never an ancestor-plus-relative_root binding.
 func (c *Client) EnsureWatch(ctx context.Context, root string) (string, error) {
-	resp, err := c.run(ctx, []any{"watch-project", root})
+	resp, err := c.run(ctx, []any{"watch", root})
 	if err != nil {
+		var protocol *LifecycleError
+		if errors.As(err, &protocol) {
+			return "", &LifecycleError{Command: "watch", Message: fmt.Sprintf("%s; %q must be its own watch root — a parent directory that is already a watch root must be unwatched with `watchman watch-del <parent>` or a different root chosen", protocol.Message, root)}
+		}
 		return "", err
 	}
 	if resp.Watch == "" {
-		return "", &LifecycleError{Command: "watch-project", Message: "no watch root reported"}
+		return "", &LifecycleError{Command: "watch", Message: "no watch root reported"}
+	}
+	if resp.RelativePath != "" || !rootsEquivalent(resp.Watch, root) {
+		if caseInsensitiveEquivalent(resp.Watch, root) {
+			return "", &LifecycleError{Command: "watch", Message: fmt.Sprintf("watchman canonicalized the watch root as %q but the configured root %q is spelled differently; correct the configuration to the canonical spelling", resp.Watch, root)}
+		}
+		return "", &LifecycleError{Command: "watch", Message: fmt.Sprintf("watchman reported %q (relative path %q) instead of %q as the watch root; unwatch the covering root with `watchman watch-del %q` or choose a root that can be a Watchman watch root", resp.Watch, resp.RelativePath, root, resp.Watch)}
 	}
 	return resp.Watch, nil
 }
 
-// IsWatched reports whether the given root is currently watched, so
-// status and remove can inspect state without creating a watch
-// (EnsureWatch has the side effect of starting one). A root nested under
-// a watched ancestor is watched (E10-T2): the server covers it through
-// the ancestor's watch even though the nested root itself never appears
-// in watch-list.
+// IsWatched reports whether the given root is itself currently watched,
+// so status and remove can inspect state without creating a watch
+// (EnsureWatch has the side effect of starting one). D-028: only the
+// exact root counts — coverage through a watched ancestor is not a
+// binding, because the ancestor's events carry a different WATCHMAN_ROOT
+// and are rejected at dispatch.
 func (c *Client) IsWatched(ctx context.Context, root string) (bool, error) {
 	roots, err := c.WatchList(ctx)
 	if err != nil {
 		return false, err
 	}
-	want := filepath.Clean(root)
-	if resolved, err := filepath.EvalSymlinks(want); err == nil {
-		want = resolved
-	}
+	want := canonicalRoot(root)
 	for _, r := range roots {
-		cleaned := filepath.Clean(r)
-		if cleaned == want || coversRoot(cleaned, want) {
+		if canonicalRoot(r) == want {
 			return true, nil
 		}
 	}
 	return false, nil
-}
-
-// coversRoot reports whether a watched root covers want as an ancestor
-// (round-1 review: a filesystem-root watch "/" must cover every absolute
-// path, which a naive separator-append spelling missed).
-func coversRoot(watched, want string) bool {
-	if watched == string(filepath.Separator) {
-		return filepath.IsAbs(want)
-	}
-	return strings.HasPrefix(want, watched+string(filepath.Separator))
 }
 
 // WatchDelete drops the server's watch on one root. The managed remove

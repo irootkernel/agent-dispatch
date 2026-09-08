@@ -36,7 +36,8 @@
     "WATCHMAN_RELATIVE_ROOT": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 4096
+      "maxLength": 4096,
+      "description": "Parsed for diagnostics only since D-028: never a binding axis. Its presence fails binding validation as a stale relative-root trigger; the managed trigger never sets it because the watch root is the configured resource root itself."
     },
     "WATCHMAN_SOCK": {
       "type": "string",

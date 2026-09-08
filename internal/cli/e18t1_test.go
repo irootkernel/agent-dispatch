@@ -10,15 +10,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 )
 
-// e10t2Fixture writes one enabled watchman route whose configured vault
+// watchmanFixture writes one enabled watchman route whose configured vault
 // root is nested under a disposable ancestor directory, and returns the
 // config path, the ancestor, and the nested vault root.
-func e10t2Fixture(t *testing.T) (configPath, ancestor, vault string) {
+func watchmanFixture(t *testing.T) (configPath, ancestor, vault string) {
 	t.Helper()
 	ancestor = t.TempDir()
 	vault = filepath.Join(ancestor, "workspace", "vault")
@@ -37,7 +36,7 @@ func e10t2Fixture(t *testing.T) (configPath, ancestor, vault string) {
 	configPath = filepath.Join(ancestor, "config.yaml")
 	cfg := `version: 1
 instance:
-  id: e10t2-test
+  id: e18t1-test
 resources:
   vault-main:
     type: directory
@@ -56,7 +55,7 @@ routes:
       type: watchman-trigger
       source_id: vault-main-watchman
       resource: vault-main
-      trigger_name: agent-dispatch.wiki.e10t2
+      trigger_name: agent-dispatch.wiki.e18t1
       include: ["**/*.md"]
       exclude: ["Secrets", "Inbox/noise-*.md"]
     batching:
@@ -76,7 +75,7 @@ routes:
         target: hermes-main
         profile: wiki-maintainer
         skills: [llm-wiki]
-        mutex_key: wiki-e10t2
+        mutex_key: wiki-e18t1
         workstream: main
         execution_hints:
           max_runtime: 30m
@@ -115,26 +114,25 @@ func bindingOf(t *testing.T, res map[string]any) effectiveBinding {
 	return b
 }
 
-// TestE10T2AncestorRootBindingLifecycle pins AC-601 and TST-010 against
-// the real Watchman server over a disposable nested tree: watching the
-// ancestor first makes the actual watch root an ancestor of the
-// configured vault; install then reports and persists the four-part
-// binding, installs the subtree-constrained trigger, status resolves the
-// same binding, and remove proves the managed trigger absent on every
-// applicable root.
-func TestE10T2AncestorRootBindingLifecycle(t *testing.T) {
+// TestE18T1ExactRootBindingLifecycle pins AC-601 (amended by D-028) and
+// TST-010 against the real Watchman server over a disposable tree with
+// the live failure's topology: the ancestor is watched FIRST, and the
+// managed watch command must still establish the configured absolute
+// root as its own watch root — install reports and persists the
+// exact-root binding with the schema-vestigial ".", the installed
+// trigger carries no relative_root, status resolves the same binding,
+// and remove proves the managed trigger absent.
+func TestE18T1ExactRootBindingLifecycle(t *testing.T) {
 	if _, err := exec.LookPath("watchman"); err != nil {
 		t.Skip("watchman binary not available")
 	}
-	configPath, ancestor, vault := e10t2Fixture(t)
+	configPath, ancestor, vault := watchmanFixture(t)
 	client := watchman.NewClient("")
 	ctx := context.Background()
 
-	// Watch the ancestor BEFORE install: watch-project reuses the
-	// closest existing watch, so the configured nested root binds to the
-	// ancestral actual root.
-	actual, err := client.EnsureWatch(ctx, ancestor)
-	if err != nil {
+	// Watch the ancestor BEFORE install — exactly the operator-host
+	// topology that produced the live source_binding_mismatch.
+	if _, err := client.EnsureWatch(ctx, ancestor); err != nil {
 		t.Fatalf("watch ancestor: %v", err)
 	}
 	t.Cleanup(func() {
@@ -142,45 +140,51 @@ func TestE10T2AncestorRootBindingLifecycle(t *testing.T) {
 		if code != 0 {
 			t.Logf("cleanup remove: %s", errb.String())
 		}
-		// The disposable tree's watch is dropped so repeated runs do not
-		// accumulate FSEvent streams (the managed remove never touches
-		// watch roots by design).
-		if err := client.WatchDelete(context.Background(), actual); err != nil {
-			t.Logf("cleanup watch-del %s: %v", actual, err)
+		// The disposable trees' watches are dropped so repeated runs do
+		// not accumulate FSEvent streams (the managed remove never
+		// touches watch roots by design).
+		for _, root := range []string{vault, ancestor} {
+			if err := client.WatchDelete(context.Background(), root); err != nil {
+				t.Logf("cleanup watch-del %s: %v", root, err)
+			}
 		}
 	})
 
 	res, _, errb, code := runWatchmanArgs(t, configPath, "install")
 	if code != 0 {
-		t.Fatalf("install under an ancestor root failed: %s", errb.String())
+		t.Fatalf("install under a watched ancestor failed: %s", errb.String())
 	}
 	if res["action"] != "installed" {
 		t.Fatalf("install action wrong: %v", res)
 	}
+	watchRoot, _ := res["watch_root"].(string)
+	if watchRoot == "" {
+		t.Fatalf("install must report the watch root: %v", res)
+	}
 	binding := bindingOf(t, res)
-	if filepath.Clean(binding.ActualRoot) != filepath.Clean(actual) {
-		t.Fatalf("the actual root must be the watched ancestor: %+v (want %s)", binding, actual)
+	if watchman.CanonicalRoot(binding.ActualRoot) != watchman.CanonicalRoot(vault) ||
+		binding.RelativeRoot != "." || binding.ConfiguredRoot != vault || binding.TriggerName != "agent-dispatch.wiki.e18t1" {
+		t.Fatalf("the binding must be exact-root with the vestigial '.': %+v", binding)
 	}
-	if binding.RelativeRoot != "workspace/vault" || binding.ConfiguredRoot != vault || binding.TriggerName != "agent-dispatch.wiki.e10t2" {
-		t.Fatalf("the four binding values must be reported distinctly: %+v", binding)
-	}
-	// The installed definition carries the subtree constraint (SRC-011).
-	defs, err := client.TriggerList(ctx, actual)
+	// The installed definition carries no relative_root (SRC-011,
+	// amended by D-028).
+	defs, err := client.TriggerList(ctx, watchRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
-	installed, ok := watchman.FindTrigger(defs, "agent-dispatch.wiki.e10t2")
-	if !ok || installed.RelativeRoot != "workspace/vault" {
-		t.Fatalf("the trigger must be subtree-constrained: %+v", installed)
+	installed, ok := watchman.FindTrigger(defs, "agent-dispatch.wiki.e18t1")
+	if !ok || installed.RelativeRoot != "" {
+		t.Fatalf("the trigger must never be subtree-constrained: %+v", installed)
 	}
-	// The binding is durable (SRC-009): the persisted record round-trips.
+	// The binding is durable (SRC-009): the persisted record round-trips
+	// the exact root and the vestigial relative root.
 	_, store, exit := openOperatorStore("watchman status", configPath, &bytes.Buffer{})
 	if exit != 0 {
 		t.Fatal("store open failed")
 	}
 	stored, err := store.LoadWatchBinding(ctx, "wiki")
-	if err != nil || stored.ActualRoot != filepath.Clean(actual) || stored.RelativeRoot != "workspace/vault" {
-		t.Fatalf("the persisted binding must hold the resolved values: %+v %v", stored, err)
+	if err != nil || watchman.CanonicalRoot(stored.ActualRoot) != watchman.CanonicalRoot(vault) || stored.RelativeRoot != "." {
+		t.Fatalf("the persisted binding must hold the exact-root values: %+v %v", stored, err)
 	}
 	store.Close()
 
@@ -192,82 +196,40 @@ func TestE10T2AncestorRootBindingLifecycle(t *testing.T) {
 	if st["state"] != "installed" {
 		t.Fatalf("status state wrong: %v", st)
 	}
-	statusBinding := bindingOf(t, st)
-	if statusBinding != binding {
+	if statusBinding := bindingOf(t, st); statusBinding != binding {
 		t.Fatalf("status must report the same binding install reported: %+v vs %+v", statusBinding, binding)
 	}
 	if _, has := st["include"]; !has {
 		t.Fatalf("status must expose the effective patterns (OPS-010): %v", st)
 	}
 
-	// watchman test resolves the same binding from its logical root with
-	// no server contact (SRC-010): the persisted record is reported
-	// verbatim.
+	// watchman test resolves the same binding from the persisted record
+	// with no server contact (SRC-010).
 	te, _, errb, code := runWatchmanArgs(t, configPath, "test", "--route", "wiki", "--config", configPath)
 	if code != 0 {
 		t.Fatalf("watchman test --route failed: %s", errb.String())
 	}
-	testBinding := bindingOf(t, te)
-	if testBinding != binding {
+	if testBinding := bindingOf(t, te); testBinding != binding {
 		t.Fatalf("test must report the persisted binding: %+v vs %+v", testBinding, binding)
 	}
 
-	// Remove proves absence on every applicable root (AC-603): the
-	// managed trigger is additionally planted on a second watched root —
-	// exactly the changed-topology leftover the proof exists for — and
-	// the removal must find and delete it there too.
-	// A second watched root carrying the same managed trigger name: the
-	// removal proof must cover it (SRC-012's changed-topology arm).
-	second := t.TempDir()
-	if err := os.WriteFile(filepath.Join(second, "park.md"), []byte("park"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	secondRoot, err := client.EnsureWatch(ctx, second)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if err := client.WatchDelete(context.Background(), secondRoot); err != nil {
-			t.Logf("cleanup second watch-del %s: %v", secondRoot, err)
-		}
-	})
-	stray := watchman.ManagedTrigger("agent-dispatch.wiki.e10t2", []string{"/bin/true"}, "")
-	if _, err := client.TriggerInstall(ctx, secondRoot, stray); err != nil {
-		t.Fatalf("plant stray trigger: %v", err)
-	}
+	// Remove proves absence on the exact watch root (SRC-012's baseline).
 	proof, _, errb, code := runWatchmanArgs(t, configPath, "remove", "--yes")
 	if code != 0 {
 		t.Fatalf("remove failed: %s", errb.String())
 	}
-	roots := map[string]bool{}
 	list, _ := proof["proof"].([]any)
 	for _, entry := range list {
-		if m, ok := entry.(map[string]any); ok {
-			if m["present"] != false {
-				t.Fatalf("the proof must show absence everywhere: %v", entry)
-			}
-			roots[m["watch_root"].(string)] = true
+		if m, ok := entry.(map[string]any); ok && m["present"] != false {
+			t.Fatalf("the proof must show absence everywhere: %v", entry)
 		}
 	}
-	if !roots[filepath.Clean(actual)] {
-		t.Fatalf("the proof must cover the recorded ancestor root %s: %v", actual, roots)
-	}
-	if !roots[filepath.Clean(secondRoot)] {
-		t.Fatalf("the proof must cover every watched root including %s: %v", secondRoot, roots)
-	}
-	defs2, err := client.TriggerList(ctx, secondRoot)
+	defs2, err := client.TriggerList(ctx, watchRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, present := watchman.FindTrigger(defs2, "agent-dispatch.wiki.e10t2"); present {
-		t.Fatal("the stray managed trigger must be removed from the second root")
-	}
-	defs, err = client.TriggerList(ctx, actual)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, present := watchman.FindTrigger(defs, "agent-dispatch.wiki.e10t2"); present {
-		t.Fatal("the managed trigger must be gone from the ancestor root")
+	if _, present := watchman.FindTrigger(defs2, "agent-dispatch.wiki.e18t1"); present {
+		t.Fatal("the managed trigger must be gone from the exact watch root")
 	}
 }
 
@@ -287,15 +249,15 @@ func runWatchmanArgs(t *testing.T, configPath, sub string, extra ...string) (map
 	return decoded, &out, &errb, code
 }
 
-// TestE10T2DriftDetection pins OPS-010's drifted state: a persisted
-// binding that no longer matches the live watch topology (the actual
-// root moved) surfaces as drifted, independent of the trigger
-// definition comparison.
-func TestE10T2DriftDetection(t *testing.T) {
+// TestE18T1DriftDetection pins OPS-010's drifted state: a persisted
+// binding whose actual root no longer matches the live exact root (the
+// pre-E18 ancestor binding is exactly this shape) surfaces as drifted,
+// independent of the trigger definition comparison.
+func TestE18T1DriftDetection(t *testing.T) {
 	if _, err := exec.LookPath("watchman"); err != nil {
 		t.Skip("watchman binary not available")
 	}
-	configPath, _, vault := e10t2Fixture(t)
+	configPath, _, vault := watchmanFixture(t)
 	if _, _, errb, code := runWatchmanArgs(t, configPath, "install"); code != 0 {
 		t.Fatalf("install failed: %s", errb.String())
 	}
@@ -305,8 +267,8 @@ func TestE10T2DriftDetection(t *testing.T) {
 			_ = client.WatchDelete(context.Background(), vault)
 		}
 	})
-	// Simulate topology drift exactly as a re-watched ancestor would:
-	// the persisted actual root no longer matches the live one.
+	// Simulate the pre-E18 persisted ancestor binding: the stored actual
+	// root is not the live exact root.
 	_, store, exit := openOperatorStore("watchman status", configPath, &bytes.Buffer{})
 	if exit != 0 {
 		t.Fatal("store open failed")
@@ -326,25 +288,24 @@ func TestE10T2DriftDetection(t *testing.T) {
 		t.Fatalf("status failed: %s", errb.String())
 	}
 	if st["state"] != "drifted" {
-		t.Fatalf("a moved actual root must surface as drifted: %v", st)
+		t.Fatalf("a stale ancestor binding must surface as drifted: %v", st)
 	}
 	_ = errb
 }
 
-// TestE10T2ExcludedAndOutOfRootChangesCreateNoRecords pins AC-602 at the
+// TestE18T1ExcludedAndOutOfRootChangesCreateNoRecords pins AC-602 at the
 // dispatch layer: an out-of-root path and every exclusion form produce
 // no event record, no child task, and no hash — the batch is dropped
 // before any read (PTH-009).
-func TestE10T2ExcludedAndOutOfRootChangesCreateNoRecords(t *testing.T) {
-	configPath, _, vault := e10t2Fixture(t)
-	t.Setenv("WATCHMAN_TRIGGER", "agent-dispatch.wiki.e10t2")
+func TestE18T1ExcludedAndOutOfRootChangesCreateNoRecords(t *testing.T) {
+	configPath, _, vault := watchmanFixture(t)
+	t.Setenv("WATCHMAN_TRIGGER", "agent-dispatch.wiki.e18t1")
 	t.Setenv("WATCHMAN_ROOT", vault)
 	t.Setenv("WATCHMAN_SINCE", "c:1:2:3:3")
 	t.Setenv("WATCHMAN_CLOCK", "c:1:2:3:4")
 	// The exclusion forms: the exact directory and the file glob, both
-	// configured-root-relative (the relative-root environment makes the
-	// payload names configured-root-relative exactly as a subtree trigger
-	// delivers them).
+	// configured-root-relative exactly as an exact-root trigger delivers
+	// them.
 	payload := `[` +
 		`{"name":"Secrets/keep.md","exists":true,"new":true,"size":6,"type":"f"},` +
 		`{"name":"Inbox/noise-1.md","exists":true,"new":true,"size":4,"type":"f"}` + `]`
@@ -393,35 +354,19 @@ func TestE10T2ExcludedAndOutOfRootChangesCreateNoRecords(t *testing.T) {
 	}
 }
 
-// TestE10T2DispatchValidatesAncestorBinding pins the dispatch-side
-// defense (SRC-011): a trigger environment from the ancestral root
-// binds only through the exact persisted record; without it the
-// dispatch fails closed, and with it the configured-root-relative
-// payload flows.
-func TestE10T2DispatchValidatesAncestorBinding(t *testing.T) {
-	configPath, ancestor, vault := e10t2Fixture(t)
+// TestE18T1DispatchValidatesExactRootBinding pins the dispatch-side
+// defense (SRC-013): only a WATCHMAN_ROOT that canonicalizes to the
+// configured resource root is accepted — with no persisted-binding
+// second axis — and both an ancestor root and a present
+// WATCHMAN_RELATIVE_ROOT fail closed even when the ancestor binding is
+// exactly what is persisted.
+func TestE18T1DispatchValidatesExactRootBinding(t *testing.T) {
+	configPath, ancestor, vault := watchmanFixture(t)
 	payload := `[{"name":"Inbox/a.md","exists":true,"new":true,"size":5,"type":"f"}]`
-	rel := "workspace/vault"
-	// The frozen-evidence absolute form a real subtree trigger delivers.
-	t.Setenv("WATCHMAN_ROOT", ancestor)
-	t.Setenv("WATCHMAN_RELATIVE_ROOT", vault)
-	t.Setenv("WATCHMAN_TRIGGER", "agent-dispatch.wiki.e10t2")
-	t.Setenv("WATCHMAN_SINCE", "c:1:2:3:3")
-	t.Setenv("WATCHMAN_CLOCK", "c:1:2:3:4")
 
-	// Without the persisted binding the ancestor environment fails
-	// closed — even though the join would reach the configured root.
-	var out, errb bytes.Buffer
-	withStdin(t, payload, func() {
-		Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman", "--no-submit"}, &out, &errb)
-	})
-	if !strings.Contains(errb.String(), "source_binding_mismatch") {
-		t.Fatalf("an ancestor environment without the persisted binding must fail closed: %s", errb.String())
-	}
-
-	// Persisting the exact binding opens the ancestral dispatch path;
-	// the binding references the route registration install would have
-	// materialized, so it is registered first.
+	// The durable dispatch path needs the route registration install
+	// would have materialized; the enable gate the operator acknowledges
+	// in production (E8-T3).
 	_, store, exit := openOperatorStore("dispatch", configPath, &bytes.Buffer{})
 	if exit != 0 {
 		t.Fatal("store open failed")
@@ -433,7 +378,6 @@ func TestE10T2DispatchValidatesAncestorBinding(t *testing.T) {
 	if err := registerRouteState(requestCtx(), store, cfgRoute, "wiki"); err != nil {
 		t.Fatal(err)
 	}
-	// The enable gate the operator acknowledges in production (E8-T3).
 	rev, ok := config.RouteRevision(cfgRoute, "wiki")
 	if !ok {
 		t.Fatal("route wiki revision could not be computed")
@@ -441,45 +385,67 @@ func TestE10T2DispatchValidatesAncestorBinding(t *testing.T) {
 	if err := store.SetRouteActivation(context.Background(), "wiki", "enabled", rev, "", "2026-08-26T00:00:00Z"); err != nil {
 		t.Fatal(err)
 	}
+	// The pre-E18 ancestor binding is persisted exactly as the old
+	// contract stored it; it must not open any ancestor dispatch path.
 	if err := store.SaveWatchBinding(context.Background(), watchman.Binding{
 		RouteID: "wiki", ResourceID: "vault-main",
 		ConfiguredRoot: vault, ActualRoot: ancestor,
-		RelativeRoot: rel, TriggerName: "agent-dispatch.wiki.e10t2",
+		RelativeRoot: "workspace/vault", TriggerName: "agent-dispatch.wiki.e18t1",
 		UpdatedAt: "2026-08-26T00:00:00Z",
 	}); err != nil {
 		t.Fatal(err)
 	}
 	store.Close()
+
+	t.Setenv("WATCHMAN_TRIGGER", "agent-dispatch.wiki.e18t1")
+	t.Setenv("WATCHMAN_SINCE", "c:1:2:3:3")
+	t.Setenv("WATCHMAN_CLOCK", "c:1:2:3:4")
+
+	// An ancestor environment — with or without the frozen-evidence
+	// relative root — fails closed against the persisted ancestor
+	// binding: the configuration is the only trust anchor.
+	for _, env := range []map[string]string{
+		{"WATCHMAN_ROOT": ancestor},
+		{"WATCHMAN_ROOT": ancestor, "WATCHMAN_RELATIVE_ROOT": vault},
+	} {
+		for k, v := range env {
+			t.Setenv(k, v)
+		}
+		var out, errb bytes.Buffer
+		withStdin(t, payload, func() {
+			Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman", "--no-submit"}, &out, &errb)
+		})
+		if !strings.Contains(errb.String(), "source_binding_mismatch") {
+			t.Fatalf("an ancestor environment must fail closed despite the persisted binding: %s (env %v)", errb.String(), env)
+		}
+	}
+
+	// A present WATCHMAN_RELATIVE_ROOT fails closed even with the exact
+	// root: it is the signature of a stale relative-root trigger.
+	t.Setenv("WATCHMAN_ROOT", vault)
+	t.Setenv("WATCHMAN_RELATIVE_ROOT", vault)
+	var out, errb bytes.Buffer
+	withStdin(t, payload, func() {
+		Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman", "--no-submit"}, &out, &errb)
+	})
+	if !strings.Contains(errb.String(), "source_binding_mismatch") {
+		t.Fatalf("a present relative root must fail closed as stale: %s", errb.String())
+	}
+
+	// The exact root flows without consulting any persisted binding.
+	os.Unsetenv("WATCHMAN_RELATIVE_ROOT")
 	out.Reset()
 	errb.Reset()
 	withStdin(t, payload, func() {
 		Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman", "--no-submit"}, &out, &errb)
 	})
 	if errb.Len() != 0 {
-		t.Fatalf("the persisted ancestor binding must validate: %s", errb.String())
+		t.Fatalf("the exact-root environment must flow: %s", errb.String())
 	}
 	res := decodeEnvelope(t, &out)
 	if res["dispatch_id"] == nil || res["state"] != "ready" {
 		t.Fatalf("the configured-root-relative payload must flow: %v", res)
 	}
-	// A drifted binding (someone re-watched a different ancestor) fails
-	// closed again.
-	_, store, _ = openOperatorStore("dispatch", configPath, &bytes.Buffer{})
-	drifted, _ := store.LoadWatchBinding(context.Background(), "wiki")
-	drifted.RelativeRoot = "other/vault"
-	if err := store.SaveWatchBinding(context.Background(), drifted); err != nil {
-		t.Fatal(err)
-	}
-	store.Close()
-	out.Reset()
-	errb.Reset()
-	withStdin(t, payload, func() {
-		Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman", "--no-submit"}, &out, &errb)
-	})
-	if !strings.Contains(errb.String(), "source_binding_mismatch") {
-		t.Fatalf("a drifted relative root must fail closed: %s", errb.String())
-	}
-	_ = sqlite.ErrWatchBindingNotFound
 }
 
 // TestMain guards the real-trigger lifecycle tests: a managed Watchman

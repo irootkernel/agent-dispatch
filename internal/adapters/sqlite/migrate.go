@@ -531,12 +531,15 @@ ALTER TABLE resources ADD COLUMN observation_revision INTEGER NOT NULL DEFAULT 0
 
 // schemaV9WatchBindings persists the four-part managed Watchman binding
 // per route (E10-T2, SRC-009): the configured resource root, the actual
-// watch root Watchman canonicalized at install time (which may be an
-// ancestor of the configured root), the configured-root-relative path
-// between them, and the stable trigger name. Every lifecycle command
-// resolves and reports the same record; the dispatch-side binding
-// validation accepts an ancestor root only through this record, so a
-// forged or drifted environment fails closed (SRC-011).
+// watch root Watchman canonicalized at install time, the relative root,
+// and the stable trigger name. Since D-028 the actual root is the
+// configured root itself and the relative root is the vestigial ".".
+// Every lifecycle command resolves and reports the same record; dispatch
+// never reads it — binding validation is anchored on the configuration
+// alone (SRC-013) — and a forged or drifted environment fails closed
+// (SRC-011). The E10-era ancestor semantics are history: at adoption the
+// actual root "may be an ancestor" and dispatch accepted an ancestor
+// only through this record.
 const schemaV9WatchBindings = `
 CREATE TABLE watch_bindings (
 	route_id        TEXT PRIMARY KEY REFERENCES routes(route_id) ON DELETE CASCADE,

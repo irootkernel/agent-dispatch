@@ -189,8 +189,9 @@ func resolveServerBinding(ctx context.Context, client *watchman.Client, resource
 }
 
 // persistBinding stores the resolved binding on the route (SRC-009):
-// installation is the durable record the other commands and the
-// dispatch-side ancestor-root validation read.
+// installation is the durable record the other lifecycle commands
+// read — dispatch validates against the configuration alone (D-028,
+// SRC-013) and never consults it.
 func persistBinding(configPath, routeID, resourceID string, binding effectiveBinding) error {
 	store, err := openStateStore(resolveConfigPath(configPath))
 	if err != nil {
@@ -205,11 +206,11 @@ func persistBinding(configPath, routeID, resourceID string, binding effectiveBin
 	})
 }
 
-// storedBindingFor loads the persisted binding for every surface that
-// reads it — the lifecycle commands, the dispatch-side ancestor
-// validation, and test's logical root (round-1 review: one loader, one
-// absent contract). Absent is reported as hasStored=false, never an
-// error.
+// storedBindingFor loads the persisted binding for the lifecycle
+// surfaces that read it — status drift, remove's proof set, and test's
+// logical root (round-1 review: one loader, one absent contract).
+// Absent is reported as hasStored=false, never an error; dispatch never
+// reads it (D-028, SRC-013).
 func storedBindingFor(configPath, routeID string) (watchman.Binding, bool, error) {
 	binding, err := loadStoredBinding(resolveConfigPath(configPath), routeID)
 	if err != nil {
@@ -318,8 +319,9 @@ func runWatchmanInstall(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	// The resolved binding is durable from a successful install (and an
-	// identical no-op): every other lifecycle command and the
-	// dispatch-side ancestor-root validation read this record (SRC-009).
+	// identical no-op): every other lifecycle command reads this record
+	// (SRC-009); dispatch validates against the configuration alone
+	// (D-028, SRC-013).
 	if err := persistBinding(opts.configPath, opts.routeID, route.Source.Resource, binding); err != nil {
 		writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
 		return 20

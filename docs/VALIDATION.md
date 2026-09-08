@@ -488,6 +488,23 @@ recorded here and in the roadmap evidence: run repository test suites
 through `make verify`/`make test` only; a direct `go test` on this
 repository can reach real operator configuration paths.
 
+The whole-epic audit ran over the committed epic delta
+(`f47a911..HEAD`). Ordinal 1 (run `r_01a07fc5-7ea0-7f99-9485-20957bb903c5`,
+remediation-eligible, ci pass; findings: low 3) remediated all three Low
+findings — the EnsureWatch refusal guidance became conditional so
+unrelated protocol failures are not told to unwatch a parent, the
+case-divergent root refusal stopped asserting the volume's
+case-insensitivity as fact, and the dangling decision comment at the end
+of `staleness.go` was deleted. Ordinal 2 (run
+`r_01a07fd8-c0ee-7fb3-9f2d-ae8cdddf6250`, remediation-eligible, ci pass;
+findings: low 2) remediated the surviving stale comments that still
+described dispatch reading the persisted binding (three sites in
+`internal/cli/watchman.go`, one in `internal/adapters/sqlite/store.go`,
+one in `internal/adapters/sqlite/migrate.go`); the same delivery
+recorded DF-001 (`deferred-feedback/001`) after the capability cache was
+contaminated a second time by a direct `go test` run and restored by
+re-probing. Ordinal 3 (confirmation) closes the audit below.
+
 ## MUST-Closure Matrix (E8-T6, D-020) — supersedes the E7-T12 matrix
 
 Every MUST requirement the 2026-08-23 review judged FAIL or PARTIAL on

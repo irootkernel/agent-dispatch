@@ -490,8 +490,8 @@ func normalizeTimestamp(ts string) string {
 
 // ErrWatchBindingNotFound reports no persisted managed Watchman binding
 // for the route (E10-T2, SRC-009): the lifecycle surfaces materialize it
-// through install, and the dispatch-side ancestor-root validation treats
-// its absence as fail-closed.
+// through install; dispatch never reads it (D-028, SRC-013 — validation
+// is anchored on the configuration alone).
 var ErrWatchBindingNotFound = errors.New("watch binding not found")
 
 // SaveWatchBinding upserts the route's persisted managed Watchman

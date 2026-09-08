@@ -21,9 +21,12 @@ func TestParseVersionTable(t *testing.T) {
 		{"multi-line output keeps first line", "Hermes Agent v0.20.5 (2026.8.19)\nInstall directory: ~/.hermes/hermes-agent\nPython: 3.11.15\n", Version{0, 20, 5, "2026.8.19"}, false},
 		{"older patch", "Hermes Agent v0.19.0 (2026.7.01)", Version{0, 19, 0, "2026.7.01"}, false},
 		{"newer minor", "Hermes Agent v0.20.0 (2026.8.10)", Version{0, 20, 0, "2026.8.10"}, false},
+		{"git decoration upstream only", "Hermes Agent v0.21.0 (2026.8.31) · upstream d9833c56", Version{0, 21, 0, "2026.8.31"}, false},
+		{"git decoration upstream and local", "Hermes Agent v0.21.0 (2026.8.31) · upstream d9833c56 · local 29112bef (+1 carried commit)", Version{0, 21, 0, "2026.8.31"}, false},
 		{"garbage", "hermes version 19.1", Version{}, true},
 		{"empty", "", Version{}, true},
 		{"missing build date", "Hermes Agent v0.20.5", Version{}, true},
+		{"decoration without build date", "Hermes Agent v0.21.0 · upstream d9833c56", Version{}, true},
 		{"absurd component", "Hermes Agent v9999999999.0.0 (x)", Version{}, true},
 	}
 	for _, c := range cases {
@@ -49,6 +52,20 @@ func TestParseVersionFixture(t *testing.T) {
 		t.Fatalf("frozen fixture must parse: %v", err)
 	}
 	if v.String() != "0.20.5" {
+		t.Fatalf("fixture version = %q", v.String())
+	}
+}
+
+func TestParseVersionGitFixture(t *testing.T) {
+	raw, err := os.ReadFile(fixtureDir + "/version-output-git.txt")
+	if err != nil {
+		t.Fatalf("read frozen git-install version fixture: %v", err)
+	}
+	v, err := ParseVersionOutput(string(raw))
+	if err != nil {
+		t.Fatalf("frozen git fixture must parse through its provenance decoration: %v", err)
+	}
+	if v.String() != "0.21.0" {
 		t.Fatalf("fixture version = %q", v.String())
 	}
 }

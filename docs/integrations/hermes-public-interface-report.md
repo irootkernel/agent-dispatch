@@ -32,6 +32,16 @@ own database, workspaces directory, and dispatcher loop.
   JSON responses carry no version field. First line format:
   `Hermes Agent v<major>.<minor>.<patch> (<build date>)`
   (fixture: `fixtures/hermes/version-output.txt`, home path sanitized).
+- Git-install decoration (observed 2026-09-08 on Hermes 0.21.0): a git install
+  appends a provenance decoration to the first line after the build date —
+  `· upstream <sha>` when tracking upstream, plus `· local <sha> (+N carried
+  commit)` when local commits exist — while a release install prints no
+  decoration; machine-state lines (for example an update-available notice)
+  may also appear below the first line. The adapter contract is the anchored
+  prefix through the build date: version gating parses that prefix and
+  ignores the trailing decoration (fixture:
+  `fixtures/hermes/version-output-git.txt`, home path sanitized), so a git
+  install's git state is not misread as an unparsable version.
 - Consequence for the adapter (E4-T1): version gating must invoke
   `hermes --version`, match the documented first-line pattern, and compare the
   parsed semantic version against the supported range; a nonmatching or

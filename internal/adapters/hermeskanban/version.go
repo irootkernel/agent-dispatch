@@ -56,13 +56,19 @@ func EligibilityFloorText(minimum Version) string {
 
 // versionLine matches the documented first line. Version discovery is
 // human text only (E0-T4 §2); this pattern is the frozen contract for it
-// and an unparsable response fails closed (HER-002).
-var versionLine = regexp.MustCompile(`^Hermes Agent v([0-9]+)\.([0-9]+)\.([0-9]+) \(([^)]+)\)$`)
+// and an unparsable response fails closed (HER-002). The contract anchors
+// the identity, dotted triple, and build date: everything after the build
+// date is a git provenance decoration (`· upstream <sha>` and, with local
+// commits, `· local <sha> (+N carried commit)`; observed on Hermes 0.21.0,
+// interface report §2) that Hermes owns and this gate ignores, so a git
+// install is not misread as an unparsable version.
+var versionLine = regexp.MustCompile(`^Hermes Agent v([0-9]+)\.([0-9]+)\.([0-9]+) \(([^)]+)\)(?: .*)?$`)
 
 // ParseVersionOutput parses the first line of `hermes --version` output.
-// Anything else — including the multi-line installation detail that
-// follows the first line — below the first line is ignored; a first line
-// that does not match the documented format is an error.
+// Everything after the build date on the first line (git provenance
+// decoration) and every line below it (installation detail) is ignored; a
+// first line whose anchored prefix does not match the documented format is
+// an error.
 func ParseVersionOutput(output string) (Version, error) {
 	first := output
 	if i := strings.IndexByte(output, '\n'); i >= 0 {

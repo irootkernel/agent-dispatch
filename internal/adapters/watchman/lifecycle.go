@@ -304,7 +304,7 @@ func (c *Client) EnsureWatch(ctx context.Context, root string) (string, error) {
 	if err != nil {
 		var protocol *LifecycleError
 		if errors.As(err, &protocol) {
-			return "", &LifecycleError{Command: "watch", Message: fmt.Sprintf("%s; %q must be its own watch root — a parent directory that is already a watch root must be unwatched with `watchman watch-del <parent>` or a different root chosen", protocol.Message, root)}
+			return "", &LifecycleError{Command: "watch", Message: fmt.Sprintf("%s; %q must be established as its own watch root — if a parent directory is already a Watchman watch root, unwatch it with `watchman watch-del <parent>` or choose a root that can be a watch root", protocol.Message, root)}
 		}
 		return "", err
 	}

@@ -181,7 +181,7 @@ func ValidateBinding(env Env, triggerName, resourceRoot string) error {
 		return nil
 	}
 	if caseInsensitiveEquivalent(env.Root, resourceRoot) {
-		return fmt.Errorf("root binding mismatch: environment root %q and configured resource root %q are the same directory on this case-insensitive volume but spelled differently; correct the configured root to the canonical spelling %q", env.Root, resourceRoot, env.Root)
+		return fmt.Errorf("root binding mismatch: environment root %q and configured resource root %q differ only by letter case (the same directory on a case-insensitive volume); correct the configured root to the canonical spelling %q", env.Root, resourceRoot, env.Root)
 	}
 	return fmt.Errorf("root binding mismatch: environment root %q is not the configured resource root %q (symlinked roots must resolve to the same directory)", env.Root, resourceRoot)
 }

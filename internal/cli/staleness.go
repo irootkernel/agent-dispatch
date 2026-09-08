@@ -94,7 +94,3 @@ func staleRebuilderOf(store storeOp, cfg *config.Config) func(context.Context, s
 		return op.RebuildStale(ctx, dispatchID, "agent-dispatch")
 	}
 }
-
-// D-028 (SRC-013): dispatch no longer reads the persisted Watchman
-// binding — validation is anchored on the configuration alone, so the
-// shared loader serves only the lifecycle commands.

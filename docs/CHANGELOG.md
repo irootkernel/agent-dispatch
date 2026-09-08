@@ -2,8 +2,8 @@
 
 ## 1.4.0 - 2026-09-08
 
-D-028 adopts the absolute watch-root binding remediation as documentation-only
-planned work:
+D-028 adopted and delivered the absolute watch-root binding remediation
+(planned 2026-09-08, delivered the same day):
 
 - E18-T1 owns the exact-root contract: `watch`-based establishment with
   fail-closed unwatch guidance, `relative_root`-free managed trigger
@@ -17,8 +17,15 @@ planned work:
   observation and destination task under the exact root) and the G14 gate
   rows, under D-028's bounded production-state waiver.
 
-v0.1.6 remains the shipped release; E18 claims no release. The roadmap
-becomes 19 epics and 91 tasks with E18 Planned.
+E18-T2 re-bound the operator's production route to the vault's absolute
+root with the E18 binary and proved the live pipe end to end (source
+observation 01a07f9e-65a9-729d-ac32-db223d0b748d, dispatch accepted,
+Hermes task t_932e54fc on board llm-wiki-maintenance assigned to
+profile wolyoung, doctor clean) under D-028's bounded production-state
+waiver; gate G14's evidence rows are recorded in VALIDATION.md. v0.1.6
+remains the shipped release; E18 claims no release, and the binary
+installed on the operator host reports 0.1.7-dev. The roadmap closes
+at 19 epics and 91 tasks.
 
 ## 1.3.0 - 2026-09-02
 

@@ -63,4 +63,6 @@ reported, not absorbed.
 D-028 owns the reversal decision: the configured absolute resource root
 is itself the watch root, `relative_root` is never sent or used as a
 binding axis, and a blocked exact root fails closed with unwatch
-guidance. v0.1.6 remains the shipped release; E18 claims no release.
+guidance. E18 delivered both tasks on 2026-09-08 (gate G14 in
+VALIDATION.md); v0.1.6 remains the shipped release and E18 claims no
+release.

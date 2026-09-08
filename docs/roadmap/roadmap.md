@@ -11,14 +11,14 @@
 | Field | Value |
 |---|---|
 | Shipped release | v0.1.6 (published 2026-09-02) |
-| Planned SOT baseline | 1.4.0 ([D-028](../specs/decision-log.md) adopted) |
+| Planned SOT baseline | 1.4.0 ([D-028](../specs/decision-log.md) delivered) |
 | Release target | v0.1.6 (released; E18 claims no release) |
-| Current epic | E18 (absolute watch-root binding, adopted 2026-09-08) |
-| Current active task | None (E18-T1 Completed 2026-09-08) |
-| Next task | E18-T2 |
-| Completed tasks | 90 / 91 |
-| Planned tasks | 1 / 91 |
-| In progress tasks | 1 |
+| Current epic | None (E18 Completed 2026-09-08; the roadmap is complete) |
+| Current active task | None |
+| Next task | None (91/91; the roadmap is complete) |
+| Completed tasks | 91 / 91 |
+| Planned tasks | 0 / 91 |
+| In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
 
@@ -51,7 +51,7 @@
 | E15 | Hermes v0.20.5+ Compatibility and Serialization Groups | **Completed** | 4 | G11 |
 | E16 | Automatic Durable Notification Draining | **Completed** | 4 | G12 |
 | E17 | Documentation, Cold Validation, and v0.1.6 Release | **Completed** | 3 | G13 |
-| E18 | Absolute Watch-Root Binding | **In Progress** | 2 | G14 |
+| E18 | Absolute Watch-Root Binding | **Completed** | 2 | G14 |
 
 ## 3. Task Status Index
 
@@ -147,7 +147,7 @@
 | 88 | E17-T2 | Completed | Cold validation and required deployment evidence |
 | 89 | E17-T3 | Completed | Reproducible v0.1.6 release and publication |
 | 90 | E18-T1 | Completed | Absolute watch-root binding contract |
-| 91 | E18-T2 | Planned | Operator-host re-binding and live verification |
+| 91 | E18-T2 | Completed | Operator-host re-binding and live verification |
 
 ---
 
@@ -4339,7 +4339,7 @@ changed: the release is explicitly a no-production-activation record.
 
 # E18: Absolute Watch-Root Binding
 
-**Epic status:** In Progress
+**Epic status:** Completed
 **Purpose:** Bind the configured absolute resource root itself as the Watchman watch root, fail closed when that is impossible, and re-bind the operator's production route with live end-to-end evidence.
 **Gate:** G14
 **Canonical Outcomes:** [required-spec.md](../specs/required-spec.md) (SRC-009/SRC-011 amendments, SRC-013) · [acceptance-criteria.md](../specs/acceptance-criteria.md) (AC-601 amendment, G14 scenarios) · [decision-log.md](../specs/decision-log.md) (D-028) · [watchman-integration.md](../architecture/watchman-integration.md) (current binding design) · [VALIDATION.md](../VALIDATION.md) (G14 evidence)
@@ -4437,7 +4437,7 @@ review predates those bytes.
 
 ## E18-T2: Operator-Host Re-Binding and Live Verification
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -4475,14 +4475,44 @@ E18-T1 Completed.
 
 ### Evidence
 
-Pending.
+Completed 2026-09-08. The E18 binary (`0.1.7-dev`, commit e8d3ed0) was
+installed at the pinned executable path `~/.local/bin/agent-dispatch`
+and `watchman install --route wiki-maintenance` re-bound the production
+route to the exact root: `actual_root = configured_root =
+/Users/draccoon/Workspace/Hermes/vault/hermes`, the vestigial
+`relative_root "."`, and trigger `agent-dispatch.wiki-maintenance.4f8c21`
+created on that root with no `relative_root` (verified through
+`trigger-list`; the ancestor watch was already gone from `watch-list`,
+so no unwatch was required). One probe Markdown file
+(`00-inbox/e18-watch-root-verification.md`) then proved the live pipe:
+source observation `01a07f9e-65a9-729d-ac32-db223d0b748d` (incremental
+position, empty relative-root flag), dispatch intent
+`01a07f9e-65a9-747a-a3b1-023a512ac807` accepted, and Hermes task
+`t_932e54fc` on board `llm-wiki-maintenance` assigned to profile
+`wolyoung` with `created_by agent-dispatch`; `agent-dispatch doctor`
+reports zero findings. The first submission parked in `retry_wait`
+because a test run executed outside `make`'s isolated HOME had
+overwritten the per-target Hermes capability cache with a test-fixture
+record (keeping the frozen `--mutex-key` posture Hermes v0.21.0 no
+longer accepts); `agent-dispatch hermes probe --target hermes-main`
+refreshed the record to the live v0.21.0 group-enforced posture and
+`dispatches drain --route wiki-maintenance` delivered the intent on its
+second attempt — the documented recovery exits worked as designed, and
+the contamination is disclosed here and in the G14 operational note
+(run repository suites through `make verify`/`make test` only). No
+Hermes core, plugin, profile, or vault-content change was made: the
+only production state changes were the Watchman watch/trigger topology,
+the binary at the pinned path, the refreshed capability record, and
+Agent Dispatch's own binding and observation records. Gate G14's
+evidence rows are recorded in VALIDATION.md; `make verify` is green on
+the closing tree.
 
 ---
 
 # 4. Deferred Future Work
 
 The following do not count toward the 91 tracked roadmap tasks (89
-Completed through v0.1.6, released 2026-09-02; E18 adopted 2026-09-08
+Completed through v0.1.6, released 2026-09-02; E18 Completed 2026-09-08
 under D-028) and remain Deferred until a new roadmap is approved:
 
 - Agent Dispatch managed daemon;

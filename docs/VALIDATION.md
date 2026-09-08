@@ -460,6 +460,34 @@ rotation chain bound (`TestE17T2LogRotationChain`), the after-command
 recovery leg (`TestE17T2ScheduleRunAfterCommandRecoveryLeg`), and the
 schedule usage contracts (`TestE17T2ScheduleUsageContracts`).
 
+## Gate G14: Absolute Watch-Root Binding (E18)
+
+The behavioral criteria are the G14 acceptance scenarios of
+`specs/acceptance-criteria.md` (D-028). Validated 2026-09-08 on
+darwin/arm64 against the live Watchman 2026.07.27.00 server with
+`make verify` all checks green; the operator-host rows run under the
+D-028 bounded production-state waiver.
+
+| Criterion | Evidence |
+|---|---|
+| AC-1401 a watched parent that blocks the exact root fails the install closed with unwatch guidance and binds no ancestor | `TestE18T1EnsureWatchFailsClosedOnAncestorReuse` (fake-server arms: ancestor reuse with `relative_path`, a different reported root, and a server refusal each return the actionable unwatch guidance; the case-divergent canonical spelling returns the spelling guidance); the real-server counterpart — `TestE18T1ExactRootBindingLifecycle` watches the ancestor first and proves the exact root still binds — encodes this server version's verified behavior that `watch` establishes the nested root independently (frozen as `integrations/fixtures/watchman/trigger-invocation-environment-e18.txt`, interface report §12) |
+| AC-1402 only a canonicalized-root-equal `WATCHMAN_ROOT` is accepted, with no persisted-binding second axis | `TestE18T1ValidateBindingExactRootOnly` and `TestE18T1DispatchValidatesExactRootBinding` (an ancestor environment with or without `WATCHMAN_RELATIVE_ROOT` fails closed even when the ancestor binding is exactly what is persisted; a present `WATCHMAN_RELATIVE_ROOT` fails closed as stale even on the exact root; the exact root flows with no persisted binding); `TestE18T1ManagedTriggerNeverCarriesRelativeRoot` pins that a stale relative-root definition no longer compares equal |
+| AC-1403 the operator-host production route re-binds to the exact root and a live Markdown change produces a new observation and destination task with doctor clean | Live run 2026-09-08 with the E18 binary (`0.1.7-dev`, commit e8d3ed0) installed at the pinned executable path: `watchman install --route wiki-maintenance` reports `actual_root = configured_root = /Users/draccoon/Workspace/Hermes/vault/hermes` with the vestigial `.` and creates trigger `agent-dispatch.wiki-maintenance.4f8c21` on that root with no `relative_root` (verified through `trigger-list`); one probe file (`00-inbox/e18-watch-root-verification.md`) produced source observation `01a07f9e-65a9-729d-ac32-db223d0b748d` (incremental position `since c:1788472786:1494:22:193`, empty `relative_root` flag), dispatch intent `01a07f9e-65a9-747a-a3b1-023a512ac807` accepted, and Hermes task `t_932e54fc` ("[Agent Dispatch] LLM Wiki maintenance for vault-main generation 1", assignee `wolyoung`, created-by `agent-dispatch`) on board `llm-wiki-maintenance`; `agent-dispatch doctor` reports zero findings |
+
+Operational note from the live run: the first submission of the probe
+dispatch parked in `retry_wait` because the per-target Hermes capability
+cache had been overwritten minutes earlier by a test run executed
+outside `make`'s isolated HOME (the record carried a disposable
+test-fixture executable identity, so the renderer kept the frozen
+`--mutex-key` posture that Hermes v0.21.0's create surface no longer
+accepts). Re-probing the real target (`agent-dispatch hermes probe
+--target hermes-main`) refreshed the record to the live v0.21.0
+`group-enforced` posture and `dispatches drain --route wiki-maintenance`
+delivered the parked intent on its second attempt. The lesson is
+recorded here and in the roadmap evidence: run repository test suites
+through `make verify`/`make test` only; a direct `go test` on this
+repository can reach real operator configuration paths.
+
 ## MUST-Closure Matrix (E8-T6, D-020) — supersedes the E7-T12 matrix
 
 Every MUST requirement the 2026-08-23 review judged FAIL or PARTIAL on

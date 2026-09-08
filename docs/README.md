@@ -109,7 +109,7 @@ and the delivered outcomes live in the roadmap's Canonical Outcomes
 links. The separately requested general `make verify` remediation
 remained outside this release's scope and is reported, not absorbed.
 
-## E18 Absolute Watch-Root Remediation (adopted 2026-09-08)
+## E18 Absolute Watch-Root Remediation (delivered 2026-09-08)
 
 D-028 reverses the ancestor-plus-`relative_root` Watchman binding after
 the production route's live events died as binding mismatches while
@@ -117,9 +117,11 @@ manual exact-root dispatch ingested: acceptance under the ancestor
 binding depended on a persisted record and case-sensitive equivalence
 across separately spelled paths. E18 binds the configured absolute
 resource root itself, fails closed with unwatch guidance when that is
-impossible, and re-binds the operator's production route with live
-end-to-end evidence at gate G14. v0.1.6 remains the shipped release;
-E18 claims no release.
+impossible, and re-bound the operator's production route with live
+end-to-end evidence at gate G14 (VALIDATION.md): the exact-root
+trigger, a live observation-to-task round trip on the production board,
+and a clean doctor posture. v0.1.6 remains the shipped release; E18
+claims no release and the operator-host binary reports 0.1.7-dev.
 
 ## Repository-Native Checks
 

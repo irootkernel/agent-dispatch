@@ -13,6 +13,7 @@ This file records concise shipped outcomes and pending changes.
 
 ### Fixed
 
+- Accept Hermes Git-install version output with provenance decorations.
 - Bind Watchman triggers to the configured absolute vault root and reject ancestor
   bindings with recovery guidance. Existing ancestor-bound installations require
   an explicit re-binding before resuming delivery.

@@ -64,9 +64,24 @@ refer to the executable.
 
 Choose a version from the repository's
 [GitHub Releases](https://github.com/irootkernel/agent-dispatch/releases), and read
-that version's section in the [changelog](CHANGELOG.md). Download its `agent-dispatch-<version>-darwin-arm64` binary and
-`SHA256SUMS` into the same directory. Verify with `shasum -a 256 -c SHA256SUMS`,
-then install the binary as `agent-dispatch` on your PATH. Use documentation from
+that version's section in the [changelog](CHANGELOG.md). Once v0.1.7 is published,
+download and install its macOS Apple Silicon binary as follows; no Go toolchain
+is needed. Watchman and Hermes remain separate requirements.
+
+```sh
+mkdir agent-dispatch-v0.1.7-download &&
+cd agent-dispatch-v0.1.7-download &&
+curl --fail --location --remote-name https://github.com/irootkernel/agent-dispatch/releases/download/v0.1.7/agent-dispatch-v0.1.7-darwin-arm64 &&
+curl --fail --location --remote-name https://github.com/irootkernel/agent-dispatch/releases/download/v0.1.7/SHA256SUMS &&
+shasum -a 256 -c SHA256SUMS &&
+  mkdir -p "$HOME/.local/bin" &&
+  install -m 755 agent-dispatch-v0.1.7-darwin-arm64 "$HOME/.local/bin/agent-dispatch" &&
+"$HOME/.local/bin/agent-dispatch" version &&
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Installation replaces an existing binary at that path; retain the previous
+binary and back up existing state before upgrading. Use documentation from
 the matching tag when running an older release.
 
 See the [installation and upgrade guide](docs/ops/installation.md) for state

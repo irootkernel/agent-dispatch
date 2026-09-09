@@ -515,23 +515,35 @@ integration drift maps to target/capability refusal, ambiguous notification
 delivery remains notification state rather than a dispatch exit, and config
 mutation never partially writes a file.
 
-## 19. Managed launchd Drain Schedule (E16-T4, v0.1.6)
+## 19. Managed Drain Schedule (E16-T4 launchd; E19 systemd)
 
 ```text
 agent-dispatch schedule render|install|inspect|disable|uninstall \
-  --route <id> --platform launchd [--at HH:MM]
-agent-dispatch schedule run --route <id>   # internal; the plist's entrypoint
+  --route <id> --platform launchd|systemd [--at HH:MM]
+agent-dispatch schedule run --route <id>   # internal; the platform unit's entrypoint
 ```
 
-`--platform launchd` is the only supported v0.1.6 platform (usage error
-otherwise). Every lifecycle command resolves the ACTUAL binary path
-(`os.Executable`) and the absolute configuration path — no surface assumes
-a fixed binary location — and derives the managed identity from both: the
-label is `xyz.rootkernel.agent-dispatch.<instance-id>.<route-id>.<12-hex>`
-where the hex is the SHA-256 digest of the configuration's absolute path,
-and the plist lives at that label under `~/Library/LaunchAgents/`. Distinct
-configurations of one route therefore never share a schedule (CLI-018,
-OPS-018).
+`--platform` selects the host scheduler: `launchd` (darwin) or `systemd`
+(linux user units). Any other value is a usage error. The launchd path
+below is the shipped darwin behavior (v0.1.6, E16-T4). The systemd path
+is the contracted linux behavior (E19): this section names both platforms
+and the shared lifecycle semantics; the managed `--platform systemd` CLI
+implementation lands in E19-T8 (docs/contracts only here). D-028 and G14
+remain Absolute Watch-Root Binding; the Linux gate is G15.
+
+Every lifecycle command resolves the ACTUAL binary path (`os.Executable`)
+and the absolute configuration path — no surface assumes a fixed binary
+location — and derives the managed identity from both: the label is
+`xyz.rootkernel.agent-dispatch.<instance-id>.<route-id>.<12-hex>` where
+the hex is the SHA-256 digest of the configuration's absolute path.
+Distinct configurations of one route therefore never share a schedule
+(CLI-018, OPS-018). The platform unit that carries that identity is a
+launchd plist on darwin or a systemd user unit (service + timer) on
+linux.
+
+### 19a. `--platform launchd` (darwin)
+
+The plist lives at that label under `~/Library/LaunchAgents/`.
 
 - `render` prints the full definition without touching launchd: `label`,
   `plist_path`, `binary`, `config`, `mode`, `digest`, and the rendered
@@ -554,24 +566,59 @@ OPS-018).
 The plist invokes one direct internal `schedule run --route <id> --config
 <absolute-path>` command — never a shell chain (SEC-005); every
 interpolated path and identifier is XML-escaped, so hostile characters in a
-filesystem path stay inert element text. `schedule run`
-is mode-driven: in `after-command` recovery it performs the due-only drain
-plus the automatic OPS-013 drift evaluation; in `scheduled` mode it runs
-the scheduled reconciliation first (`reconcile --reason scheduled
---submit`) and chains the drift evaluation and drain only after a healthy
-exit-0 pass. After-command recovery runs every fifteen minutes
-(`StartInterval`); scheduled mode runs daily at 03:00 local time by
-default (`StartCalendarInterval`), and `--at HH:MM` overrides the time for
-render/install (a malformed value is a usage error, never a coerced
-default). The override is durable state keyed by the managed label:
-`inspect`, the status posture, and a flagless `render` reproduce the
-installed timing — a legitimate override is the intended definition,
-never drift — while a flagless `install` over an existing override
-refuses as a different definition (uninstall first) and `uninstall`
-clears the stored timing with the plist. Schedule logs rotate at 10 MiB
-retaining the latest three files total
-under the state directory's `logs/` (`schedule-<route>.out.log` /
-`.err.log`).
+filesystem path stay inert element text. After-command recovery runs every
+fifteen minutes (`StartInterval`); scheduled mode runs daily at 03:00 local
+time by default (`StartCalendarInterval`), and `--at HH:MM` overrides the
+time for render/install (a malformed value is a usage error, never a
+coerced default).
+
+### 19b. `--platform systemd` (linux)
+
+The managed unit pair lives under the current user's systemd unit
+directory (`~/.config/systemd/user/`): a oneshot `.service` and a matching
+`.timer` whose names derive from the same managed label (so distinct
+configurations never collide). The CLI lifecycle is symmetric with
+launchd (E19-T8):
+
+- `render` prints the full definition without touching systemd: `label`,
+  unit paths, `binary`, `config`, `mode`, `digest`, and the rendered
+  service and timer unit text.
+- `install` writes the managed units atomically with owner-only
+  permissions, runs `systemctl --user daemon-reload`, and enables/starts
+  the timer for the current user. It is idempotent for a byte-identical
+  definition and refuses a different definition at the same paths
+  (exit 14, `transition_invalid`) — uninstall first.
+- `inspect` reports the same posture fields as launchd (`present`,
+  `loaded`, `definition_matches`, digests, `healthy`), where `loaded`
+  means the user timer is enabled/active in the current session and
+  `healthy` requires loaded AND byte-identical unit text.
+- `disable` stops/disables the timer while preserving the unit files.
+- `uninstall` stops/disables the timer and removes ONLY the byte-identical
+  managed service and timer units, refusing a foreign file at the same
+  path (exit 14); configuration, SQLite state, logs, and notification
+  history are always preserved.
+
+The service `ExecStart` invokes one direct internal `schedule run --route
+<id> --config <absolute-path>` command — never a shell chain (SEC-005);
+interpolated paths and identifiers are unit-safe. After-command recovery
+runs every fifteen minutes; scheduled mode runs daily at 03:00 local by
+default (`OnCalendar`), and `--at HH:MM` overrides the time for
+render/install with the same durable-override rules as launchd.
+
+### 19c. Shared runner, timing store, and enablement gate
+
+`schedule run` is mode-driven on every platform: in `after-command`
+recovery it performs the due-only drain plus the automatic OPS-013 drift
+evaluation; in `scheduled` mode it runs the scheduled reconciliation first
+(`reconcile --reason scheduled --submit`) and chains the drift evaluation
+and drain only after a healthy exit-0 pass. The `--at` override is durable
+state keyed by the managed label: `inspect`, the status posture, and a
+flagless `render` reproduce the installed timing — a legitimate override
+is the intended definition, never drift — while a flagless `install` over
+an existing override refuses as a different definition (uninstall first)
+and `uninstall` clears the stored timing with the platform unit. Schedule
+logs rotate at 10 MiB retaining the latest three files total under the
+state directory's `logs/` (`schedule-<route>.out.log` / `.err.log`).
 
 Production enablement of an automatic mode (`after-command` or
 `scheduled`) requires an installed, loaded, definition-matching

@@ -114,27 +114,39 @@ for daily reconciliation; avoid installing two jobs for the same route's daily r
 
 | Drain mode | Schedule |
 |---|---|
-| `scheduled` | Managed launchd job runs reconciliation, then drains after a healthy pass; daily at 03:00 local by default |
+| `scheduled` | Managed launchd (macOS) or systemd (Linux, contracted) job runs reconciliation, then drains after a healthy pass; daily at 03:00 local by default |
 | `after-command` (generated default) | Managed job recovers notification drain every 15 minutes; use the manual recipe below for daily source reconciliation |
 | `manual` | No automatic drain job; use the manual recipe for daily source reconciliation and drain notifications explicitly |
 
 ### Managed Schedule
 
-Review, install, and inspect against the same absolute configuration path:
+Review, install, and inspect against the same absolute configuration path.
+`--platform` selects `launchd` (darwin, shipped) or `systemd` (linux,
+contracted in cli-spec §19; CLI lifecycle lands in E19-T8):
 
 ```sh
+# macOS (shipped)
 agent-dispatch schedule render --route wiki-maintenance --platform launchd
 agent-dispatch schedule install --route wiki-maintenance --platform launchd
 agent-dispatch schedule inspect --route wiki-maintenance --platform launchd
+
+# Linux (contracted; CLI lifecycle E19-T8)
+agent-dispatch schedule render --route wiki-maintenance --platform systemd
+agent-dispatch schedule install --route wiki-maintenance --platform systemd
+agent-dispatch schedule inspect --route wiki-maintenance --platform systemd
 ```
 
 Add `--config /absolute/path/config.yaml` when using a non-default configuration.
 For `scheduled` mode, `--at HH:MM` selects the local daily time. The managed label
-and path derive from the instance, route, and configuration-path digest. The plist
-invokes the internal `schedule run` command directly. An identical install is
+derives from the instance, route, and configuration-path digest. The platform
+unit — a launchd plist under `~/Library/LaunchAgents/` or a systemd user
+service+timer under `~/.config/systemd/user/` — invokes the internal
+`schedule run` command directly. An identical install is
 idempotent; a different installed definition is refused. Inspect and explicitly
 remove/replace the old managed definition when changing it. Logs rotate at 10 MiB
-with three files retained.
+with three files retained. Managed `--platform systemd` is Must under E19:
+this outline names the surface now; the CLI implementation lands in E19-T8
+and the example units in E19-T9.
 
 Automatic drain modes require an installed, loaded, definition-matching schedule
 before production activation. `route preflight` reports the install guidance and
@@ -153,11 +165,17 @@ drain command is not route-filtered; review its scope and pass the same custom
 `--config` to both commands if needed. The managed `scheduled` mode already owns
 a reconcile-and-drain chain, so it needs no additional daily plist.
 
-On Linux, schedule the same one-shot reconcile command through an
-operator-owned timer or cron until managed `--platform systemd` returns under
-E19 (Must; not shipped yet). Do not treat pre-D-023 systemd example units as
-current assets. Managed `--platform launchd` remains the shipped scheduler on
-macOS.
+On Linux, the contracted managed path is `--platform systemd` (cli-spec §19b;
+CLI lifecycle in E19-T8, example units in E19-T9). Until that CLI lands,
+schedule the same one-shot reconcile command through an operator-owned
+`systemd --user` timer or cron. Outline for the managed procedure once available:
+1. `agent-dispatch schedule render --route <id> --platform systemd`
+   (review the oneshot service + timer under `~/.config/systemd/user/`);
+2. `agent-dispatch schedule install --route <id> --platform systemd`;
+3. `agent-dispatch schedule inspect --route <id> --platform systemd`
+   (expect `healthy`).
+Do not treat pre-D-023 systemd example units as current assets. Managed
+`--platform launchd` remains the shipped scheduler on macOS.
 
 The submit leg requires an acknowledged production revision; before acknowledgement
 it fails closed. After acknowledgement, disabling the YAML route retains

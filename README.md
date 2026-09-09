@@ -16,12 +16,14 @@ processing every save as a separate job.
 Watchman detects changes; Agent Dispatch records and coordinates work in a
 local SQLite database; Hermes runs the agent tasks. Each Agent Dispatch
 command does bounded work and exits. Watchman and the platform scheduler
-(launchd on macOS; managed systemd user units on Linux in the current checkout)
+(launchd on macOS; managed systemd user units on Linux)
 provide the ongoing triggers and scheduling.
 
 ## Requirements
 
-- **Supported platforms** are `darwin/arm64`, `linux/amd64`, and `linux/arm64` ([D-029](docs/specs/decision-log.md)). The current checkout builds all three artifacts; the published v0.1.7 release remains darwin/arm64-only.
+- **Supported platforms** are `darwin/arm64`, `linux/amd64`, and `linux/arm64`
+  ([D-029](docs/specs/decision-log.md)). The v0.1.8 release provides binaries
+  for all three platform and architecture pairs.
 - Watchman, and Hermes **0.20.5 or newer** with the public Kanban interface.
   Version eligibility is checked separately from the capabilities of your
   installed executable.
@@ -40,9 +42,9 @@ commands. Install and select skills explicitly in Hermes; setup does not do this
 
 ### Build this checkout
 
-This README describes the current checkout, including the v0.1.7 absolute
-watch-root fix and the subsequent Unreleased Linux support. See
-[v0.1.7](CHANGELOG.md#v017---2026-09-09) for the last published release changes.
+This README describes v0.1.8, including the v0.1.7 absolute watch-root fix and
+official Linux support. See [v0.1.8](CHANGELOG.md#v018---2026-09-10) for the
+release changes.
 
 From the repository root:
 
@@ -54,7 +56,7 @@ install -m 755 bin/agent-dispatch "$HOME/.local/bin/agent-dispatch"
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-The default build reports `agent-dispatch v0.1.7`. The install command replaces any
+The default build reports `agent-dispatch v0.1.8`. The install command replaces any
 binary at the destination; retain the previous binary and back up an existing
 installation before upgrading. Add the PATH entry to your shell configuration
 if needed. Keep the installed path stable because managed triggers and schedules
@@ -65,20 +67,34 @@ refer to the executable.
 Choose a version from the repository's
 [GitHub Releases](https://github.com/irootkernel/agent-dispatch/releases), and read
 that version's section in the [changelog](CHANGELOG.md). Download and install
-the published v0.1.7 macOS Apple Silicon binary as follows; no Go toolchain
-is needed. Linux release artifacts are not in the v0.1.7 set; build the current
-checkout on the target host until a later release publishes the three-arch set.
-Watchman and Hermes remain separate requirements.
+the published v0.1.8 binary for the current supported host as follows; no Go
+toolchain is needed. Watchman and Hermes remain separate requirements.
 
 ```sh
-mkdir agent-dispatch-v0.1.7-download &&
-cd agent-dispatch-v0.1.7-download &&
-curl --fail --location --remote-name https://github.com/irootkernel/agent-dispatch/releases/download/v0.1.7/agent-dispatch-v0.1.7-darwin-arm64 &&
-curl --fail --location --remote-name https://github.com/irootkernel/agent-dispatch/releases/download/v0.1.7/SHA256SUMS &&
-shasum -a 256 -c SHA256SUMS &&
-  mkdir -p "$HOME/.local/bin" &&
-  install -m 755 agent-dispatch-v0.1.7-darwin-arm64 "$HOME/.local/bin/agent-dispatch" &&
-"$HOME/.local/bin/agent-dispatch" version &&
+set -eu
+release_version=v0.1.8
+case "$(uname -s)/$(uname -m)" in
+  Darwin/arm64) platform=darwin-arm64 ;;
+  Linux/x86_64) platform=linux-amd64 ;;
+  Linux/aarch64|Linux/arm64) platform=linux-arm64 ;;
+  *) echo "unsupported platform" >&2; exit 1 ;;
+esac
+artifact="agent-dispatch-${release_version}-${platform}"
+mkdir "agent-dispatch-${release_version}-download"
+cd "agent-dispatch-${release_version}-download"
+curl --fail --location --remote-name \
+  "https://github.com/irootkernel/agent-dispatch/releases/download/${release_version}/${artifact}"
+curl --fail --location --remote-name \
+  "https://github.com/irootkernel/agent-dispatch/releases/download/${release_version}/SHA256SUMS"
+grep -F "  ${artifact}" SHA256SUMS > "${artifact}.sha256"
+if command -v shasum >/dev/null 2>&1; then
+  shasum -a 256 -c "${artifact}.sha256"
+else
+  sha256sum -c "${artifact}.sha256"
+fi
+mkdir -p "$HOME/.local/bin"
+install -m 755 "$artifact" "$HOME/.local/bin/agent-dispatch"
+"$HOME/.local/bin/agent-dispatch" version
 export PATH="$HOME/.local/bin:$PATH"
 ```
 

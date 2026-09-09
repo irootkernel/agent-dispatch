@@ -4,7 +4,17 @@ This file records concise shipped outcomes and pending changes.
 
 ## Unreleased
 
-- Official Linux support is on-tree for `darwin/arm64`, `linux/amd64`, and `linux/arm64` (D-029, epic E19, gate G15). No product version is cut for this claim yet. Managed `--platform systemd` is shipped; the Hermes plugin remains out of scope.
+## v0.1.8 - 2026-09-10
+
+### Added
+
+- Support `darwin/arm64`, `linux/amd64`, and `linux/arm64` with matching release
+  artifacts and managed systemd user schedules (D-029, E19, G15).
+
+### Changed
+
+- Use XDG config/state paths and env/file/fd secrets on Linux, keep keychain
+  macOS-only, and accept the official Linux Watchman version-output dialect.
 
 ### Fixed
 

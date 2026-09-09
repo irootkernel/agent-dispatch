@@ -1,11 +1,13 @@
 # Contributor Getting Started
 
-This guide targets contributors changing Agent Dispatch on macOS arm64.
+This guide targets contributors changing Agent Dispatch on a supported platform.
 For installation and normal operation, use the [public README](../../README.md).
 
 ## Prepare and Build
 
-Use Go 1.26.6 (the `go.mod` pin), Python 3, and macOS's `shasum` and `plutil`.
+Use Go 1.26.6 (the `go.mod` pin), Python 3, and the platform checksum and
+scheduler validation tools (`shasum` and `plutil` on macOS; `sha256sum` and
+`systemd-analyze` on Linux).
 The Go command must have access to the pinned module dependencies; staticcheck
 is already declared as a tool dependency. No global staticcheck install is needed.
 Watchman and Hermes 0.20.5+ are prerequisites for real integration scenarios.
@@ -18,7 +20,7 @@ make build
 ```
 
 Building creates `bin/agent-dispatch`; it does not install or activate an instance.
-The default version is `v0.1.7`; use `make build VERSION=<version>` to override
+The default version is `v0.1.8`; use `make build VERSION=<version>` to override
 that metadata for a candidate build.
 
 ## Understand One Change Path

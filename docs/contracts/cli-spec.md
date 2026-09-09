@@ -63,7 +63,7 @@ agent-dispatch version --json
 ```
 
 Prints only the compact product identity. Human output is
-`agent-dispatch v<version>` (for example, `agent-dispatch v0.1.7`); JSON output is exactly one object with
+`agent-dispatch v<version>` (for example, `agent-dispatch v0.1.8`); JSON output is exactly one object with
 `name: "agent-dispatch"` and a `v`-prefixed `version`. Commit, build time,
 configuration version, schema range, and adapter details are not exposed by
 this command. The former `--output human|json` forms are rejected.

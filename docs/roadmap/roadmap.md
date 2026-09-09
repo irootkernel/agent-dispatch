@@ -1,7 +1,7 @@
 # Agent Dispatch Implementation Roadmap
 
 > **Roadmap version:** 1.5
-> **Release target:** post-v0.1.7 (Official Linux Support delivered on-tree; next product version TBD)
+> **Release target:** v0.1.8 (Official Linux Support; released 2026-09-10)
 > **Execution model:** Strictly linear, one active task globally  
 > **Epics:** 20
 > **Tasks:** 101
@@ -10,9 +10,9 @@
 
 | Field | Value |
 |---|---|
-| Shipped release | v0.1.6 (published 2026-09-02) |
-| Planned SOT baseline | 1.4.0 ([D-028](../specs/decision-log.md) delivered; [D-029](../specs/decision-log.md) three-platform support; G15 closed 2026-09-09) |
-| Release target | post-v0.1.7 (Official Linux Support delivered on-tree; next product version TBD) |
+| Shipped release | v0.1.8 (published 2026-09-10) |
+| Planned SOT baseline | 1.5.0 ([D-028](../specs/decision-log.md) delivered; [D-029](../specs/decision-log.md) three-platform support; G15 closed 2026-09-09) |
+| Release target | v0.1.8 (Official Linux Support; released 2026-09-10) |
 | Current epic | None (E19 Official Linux Support Completed) |
 | Current active task | None |
 | Next task | None (101/101 completed; await next roadmap admission) |

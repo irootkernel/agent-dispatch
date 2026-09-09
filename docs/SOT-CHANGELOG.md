@@ -5,12 +5,11 @@ SOT snapshots, not product releases. Product release notes and pending user-faci
 changes belong to the root [changelog](../CHANGELOG.md). Historical entries below
 retain their recorded scope; migrated document pointers use their current paths.
 
-## Unreleased (post-v0.1.7 / post-1.4.0)
+## 1.5.0 - 2026-09-10
 
-E19 Official Linux Support closes gate G15 under D-029 (2026-09-09). The
-next product version is not cut yet; this entry records the on-tree support
-claim until release notes name a version. D-028 and gate G14 remain the
-Absolute Watch-Root Binding records.
+E19 Official Linux Support closes gate G15 under D-029 and ships as product
+release v0.1.8 (2026-09-10). D-028 and gate G14 remain the Absolute Watch-Root
+Binding records.
 
 - Supported platforms are `{darwin/arm64, linux/amd64, linux/arm64}`
   (D-029 supersedes D-023/D-024 exclusivity; SCP-008 / AC-505 reactivated).

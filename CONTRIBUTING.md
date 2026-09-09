@@ -7,10 +7,11 @@ use English.
 
 ## Development Environment
 
-Use macOS on Apple Silicon and the Go 1.26.6 toolchain pinned in `go.mod`.
-Python 3 runs the traceability generator. Staticcheck is a pinned Go tool
-dependency. Watchman and Hermes are needed for their real integration scenarios;
-use disposable fixtures and the repository's test isolation, not production data.
+Use a supported platform (`darwin/arm64`, `linux/amd64`, or `linux/arm64`) and
+the Go 1.26.6 toolchain pinned in `go.mod`. Python 3 runs the traceability
+generator. Staticcheck is a pinned Go tool dependency. Watchman and Hermes are
+needed for their real integration scenarios; use disposable fixtures and the
+repository's test isolation, not production data.
 
 ```sh
 make build

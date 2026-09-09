@@ -1,7 +1,7 @@
 # Developer and Contributor Documentation
 
 Agent Dispatch has one delivery scope: the CLI and its local Watchman, SQLite,
-Hermes, and launchd integrations. This directory is its canonical specification
+Hermes, launchd, and systemd integrations. This directory is its canonical specification
 and maintainer documentation package. For product introduction, installation,
 and everyday use, start with the [project README](../README.md).
 
@@ -9,8 +9,8 @@ and everyday use, start with the [project README](../README.md).
 
 **Language:** English.
 
-**Documentation basis:** current source, including E18 / SOT 1.4.0, tracked under
-[v0.1.7 - 2026-09-09](../CHANGELOG.md#v017---2026-09-09). Versioned release notes and
+**Documentation basis:** v0.1.8, including E19 / SOT 1.5.0, tracked under
+[v0.1.8 - 2026-09-10](../CHANGELOG.md#v018---2026-09-10). Versioned release notes and
 validation records describe their own snapshots, not proof for the current HEAD.
 
 ## Start Here

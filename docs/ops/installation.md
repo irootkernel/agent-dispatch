@@ -6,8 +6,7 @@ E19; superseding the D-023/E9-T8 darwin/arm64-only exclusivity). The operator
 owns the configuration, vault/board selection, backups, and authority to install
 binaries, triggers, or schedules. Agent Dispatch runs one-shot commands:
 Watchman owns event sensing and the platform scheduler owns scheduling
-(launchd on macOS; managed `--platform systemd` user units on Linux in the
-current checkout); there is no Agent Dispatch
+(launchd on macOS; managed `--platform systemd` user units on Linux); there is no Agent Dispatch
 daemon. Start with the [public quick start](../../README.md#quick-start) for a new instance.
 
 Before changing an existing installation, record `agent-dispatch version --json`,
@@ -21,13 +20,12 @@ Hermes access and shared Watchman topology changes belong to their host owners.
 Build the current checkout or install a verified published binary using the
 [README](../../README.md#install). Artifact names follow
 `agent-dispatch-<version>-<os>-<arch>` plus `SHA256SUMS`. `make release` emits
-darwin/arm64, linux/amd64, and linux/arm64 (E19-T4). The published v0.1.7
-set is still `agent-dispatch-<version>-darwin-arm64`. Verify downloaded bytes
+darwin/arm64, linux/amd64, and linux/arm64 (E19-T4). The published v0.1.8 set
+contains one binary for each supported platform and architecture. Verify downloaded bytes
 before copying the binary onto
 PATH (`shasum -a 256 -c SHA256SUMS`, or `sha256sum -c SHA256SUMS` on Linux).
-Source builds and older releases must
-use documentation matching their source/version. The current E18 watch-root
-behavior is newer than the v0.1.6 release record.
+Source builds and older releases must use documentation matching their
+source/version.
 
 Keep the installed executable at a stable absolute path because Watchman triggers
 and launchd jobs refer to it. Release artifact generation and publication belong

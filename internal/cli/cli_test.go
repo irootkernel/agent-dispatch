@@ -23,10 +23,10 @@ func TestVersionJSONSummary(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &summary); err != nil {
 		t.Fatalf("stdout is not valid JSON (%v): %s", err, out.String())
 	}
-	if len(summary) != 2 || summary["name"] != "agent-dispatch" || summary["version"] != "v0.1.7" {
+	if len(summary) != 2 || summary["name"] != "agent-dispatch" || summary["version"] != "v0.1.8" {
 		t.Fatalf("unexpected version summary: %#v", summary)
 	}
-	if got := out.String(); got != "{\"name\":\"agent-dispatch\",\"version\":\"v0.1.7\"}\n" {
+	if got := out.String(); got != "{\"name\":\"agent-dispatch\",\"version\":\"v0.1.8\"}\n" {
 		t.Fatalf("version JSON bytes = %q", got)
 	}
 }
@@ -40,7 +40,7 @@ func TestVersionHumanOutputIsNotJSON(t *testing.T) {
 	if json.Valid(out.Bytes()) {
 		t.Errorf("human output must not be a JSON document: %q", out.String())
 	}
-	if got := out.String(); got != "agent-dispatch v0.1.7\n" {
+	if got := out.String(); got != "agent-dispatch v0.1.8\n" {
 		t.Errorf("human output = %q", got)
 	}
 }
@@ -49,16 +49,16 @@ func TestVersionNormalizesLeadingV(t *testing.T) {
 	original := buildversion.Version
 	t.Cleanup(func() { buildversion.Version = original })
 
-	for _, value := range []string{"0.1.7", "v0.1.7"} {
+	for _, value := range []string{"0.1.8", "v0.1.8"} {
 		t.Run(value, func(t *testing.T) {
 			buildversion.Version = value
 			var out, errb bytes.Buffer
-			if code := Run([]string{"version"}, &out, &errb); code != 0 || out.String() != "agent-dispatch v0.1.7\n" || errb.Len() != 0 {
+			if code := Run([]string{"version"}, &out, &errb); code != 0 || out.String() != "agent-dispatch v0.1.8\n" || errb.Len() != 0 {
 				t.Fatalf("human version = %q, exit %d, stderr %s", out.String(), code, errb.String())
 			}
 			out.Reset()
 			errb.Reset()
-			if code := Run([]string{"version", "--json"}, &out, &errb); code != 0 || out.String() != "{\"name\":\"agent-dispatch\",\"version\":\"v0.1.7\"}\n" || errb.Len() != 0 {
+			if code := Run([]string{"version", "--json"}, &out, &errb); code != 0 || out.String() != "{\"name\":\"agent-dispatch\",\"version\":\"v0.1.8\"}\n" || errb.Len() != 0 {
 				t.Fatalf("JSON version = %q, exit %d, stderr %s", out.String(), code, errb.String())
 			}
 		})

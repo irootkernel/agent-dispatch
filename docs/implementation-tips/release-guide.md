@@ -1,6 +1,7 @@
 # Release Engineering Guide
 
-This is the repeatable process for maintainers preparing a macOS arm64 release.
+This is the repeatable process for maintainers preparing a release for
+`darwin/arm64`, `linux/amd64`, and `linux/arm64`.
 The [release checklist](release-checklist.md) is a dated v0.1.6 evidence record;
 its checked boxes do not certify another candidate. Runtime upgrade and rollback
 belong to [operations](../ops/installation.md#5-upgrade-ops-009).
@@ -11,8 +12,8 @@ Record the explicitly selected version, full Git commit, and documentation scope
 Use the [roadmap](../roadmap/roadmap.md) for delivery status, the
 [acceptance criteria](../specs/acceptance-criteria.md) for gates, and
 [validation records](../VALIDATION.md) for evidence tied to an exact snapshot.
-The current release is [v0.1.7 - 2026-09-09](../../CHANGELOG.md#v017---2026-09-09),
-including E18 after v0.1.6.
+The current release is [v0.1.8 - 2026-09-10](../../CHANGELOG.md#v018---2026-09-10),
+including E19 Official Linux Support after v0.1.7.
 
 Reconcile public usage, contracts, compatibility, packaged skill versions, and
 the root [changelog](../../CHANGELOG.md) with the candidate. Do not advance a versioned skill's compatibility
@@ -46,20 +47,25 @@ first_checksums=$(mktemp)
 cp dist/SHA256SUMS "$first_checksums"
 make release VERSION="$release_version"
 cmp "$first_checksums" dist/SHA256SUMS
-(cd dist && shasum -a 256 -c SHA256SUMS)
+(cd dist &&
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 -c SHA256SUMS
+  else
+    sha256sum -c SHA256SUMS
+  fi)
 rm "$first_checksums"
 ```
 
 Keep the first build's checksum evidence before the second invocation. Both
 builds must use the same version, commit, commit date, and pinned toolchain.
-The artifacts are a bare `agent-dispatch-<version>-darwin-arm64` binary and
-`SHA256SUMS`, not archives. `make release` is an artifact build; it does not run
+The artifacts are bare binaries named `agent-dispatch-<version>-<os>-<arch>`
+for all three supported pairs plus `SHA256SUMS`, not archives. `make release` does not run
 `make verify`, create a Git tag, or publish a release.
 
 ## Publish and Record
 
 Publication requires its own authorization. Verify the tag resolves to the
-accepted commit and publish that commit's binary and checksum list. Use the
+accepted commit and publish that commit's binaries and checksum list. Use the
 approved changelog entry as the GitHub Release body, with no separately maintained
 release-note file. Check the uploaded identity and artifact checksums before
 recording publication as complete. Date the published entry as

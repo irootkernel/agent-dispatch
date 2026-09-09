@@ -466,7 +466,7 @@ func TestE17T2DayUnitDrainDurations(t *testing.T) {
 
 // TestE17T2ScheduleUsageContracts pins round-4 F019: the schedule
 // lifecycle's usage contract fails closed at exit 2 — missing --route,
-// a non-launchd platform, a malformed --at, and an unknown subcommand.
+// an unknown platform, a malformed --at, and an unknown subcommand.
 func TestE17T2ScheduleUsageContracts(t *testing.T) {
 	configPath := e16t4Env(t, "scheduled")
 	cases := []struct {
@@ -475,7 +475,7 @@ func TestE17T2ScheduleUsageContracts(t *testing.T) {
 		want string
 	}{
 		{"missing route", []string{"schedule", "render", "--platform", "launchd", "--config", configPath}, "requires --route"},
-		{"non-launchd platform", []string{"schedule", "render", "--route", "wiki", "--platform", "systemd", "--config", configPath}, "--platform must be launchd"},
+		{"unknown platform", []string{"schedule", "render", "--route", "wiki", "--platform", "cron", "--config", configPath}, "--platform must be launchd or systemd"},
 		{"malformed at", []string{"schedule", "render", "--route", "wiki", "--platform", "launchd", "--at", "25:99", "--config", configPath}, "must be HH:MM"},
 		{"malformed at alpha", []string{"schedule", "render", "--route", "wiki", "--platform", "launchd", "--at", "ab:cd", "--config", configPath}, "must be HH:MM"},
 	}

@@ -292,6 +292,9 @@ func TestG5AC504CleanHostInstallDispatchScheduleUninstall(t *testing.T) {
 	savedAgents := launchAgentsDir
 	launchAgentsDir = func() string { return agents }
 	t.Cleanup(func() { launchAgentsDir = savedAgents })
+	savedPlatform := hostSchedulePlatform
+	hostSchedulePlatform = func() string { return "launchd" }
+	t.Cleanup(func() { hostSchedulePlatform = savedPlatform })
 	if code := Run([]string{"schedule", "install", "--route", "wiki-maintenance", "--platform", "launchd", "--config", cfgPath}, &out, &errb); code != 0 {
 		t.Fatalf("AC-504 managed schedule install failed: %s", errb.String())
 	}

@@ -122,7 +122,7 @@ for daily reconciliation; avoid installing two jobs for the same route's daily r
 
 Review, install, and inspect against the same absolute configuration path.
 `--platform` selects `launchd` (darwin, shipped) or `systemd` (linux,
-contracted in cli-spec §19; CLI lifecycle lands in E19-T8):
+managed systemd shipped in E19-T8):
 
 ```sh
 # macOS (shipped)
@@ -130,7 +130,7 @@ agent-dispatch schedule render --route wiki-maintenance --platform launchd
 agent-dispatch schedule install --route wiki-maintenance --platform launchd
 agent-dispatch schedule inspect --route wiki-maintenance --platform launchd
 
-# Linux (contracted; CLI lifecycle E19-T8)
+# Linux (managed systemd; E19-T8)
 agent-dispatch schedule render --route wiki-maintenance --platform systemd
 agent-dispatch schedule install --route wiki-maintenance --platform systemd
 agent-dispatch schedule inspect --route wiki-maintenance --platform systemd
@@ -144,9 +144,9 @@ service+timer under `~/.config/systemd/user/` — invokes the internal
 `schedule run` command directly. An identical install is
 idempotent; a different installed definition is refused. Inspect and explicitly
 remove/replace the old managed definition when changing it. Logs rotate at 10 MiB
-with three files retained. Managed `--platform systemd` is Must under E19:
-this outline names the surface now; the CLI implementation lands in E19-T8
-and the example units in E19-T9.
+with three files retained. Managed `--platform launchd` is the shipped scheduler
+on macOS. Managed `--platform systemd` is the shipped scheduler on Linux
+(E19-T8); example units return under E19-T9.
 
 Automatic drain modes require an installed, loaded, definition-matching schedule
 before production activation. `route preflight` reports the install guidance and
@@ -165,10 +165,8 @@ drain command is not route-filtered; review its scope and pass the same custom
 `--config` to both commands if needed. The managed `scheduled` mode already owns
 a reconcile-and-drain chain, so it needs no additional daily plist.
 
-On Linux, the contracted managed path is `--platform systemd` (cli-spec §19b;
-CLI lifecycle in E19-T8, example units in E19-T9). Until that CLI lands,
-schedule the same one-shot reconcile command through an operator-owned
-`systemd --user` timer or cron. Outline for the managed procedure once available:
+On Linux, the managed path is `--platform systemd` (cli-spec §19b; managed CLI
+shipped in E19-T8, example units in E19-T9). Procedure:
 1. `agent-dispatch schedule render --route <id> --platform systemd`
    (review the oneshot service + timer under `~/.config/systemd/user/`);
 2. `agent-dispatch schedule install --route <id> --platform systemd`;

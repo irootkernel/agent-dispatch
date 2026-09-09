@@ -105,9 +105,8 @@ state: every mutating action stays an explicit operator command.
   managed definition (label, plist, binary, digest) without touching
   launchd; `schedule install` writes and loads it idempotently,
   refusing a different definition at the same path. On Linux, managed
-  `--platform systemd` is Must under E19 and is not yet implemented —
-  keep an external one-shot reconcile/drain schedule until that surface
-  lands (installation §4).
+  `--platform systemd` is the shipped scheduler (E19-T8); example units
+  return under E19-T9 (installation §4).
 - `after-command` recovery runs every fifteen minutes; `scheduled`
   mode reconciles first at 03:00 local by default (`--at HH:MM`
   overrides) and chains the drain only after a healthy pass.

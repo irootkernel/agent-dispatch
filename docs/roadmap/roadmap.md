@@ -14,10 +14,10 @@
 | Planned SOT baseline | 1.4.0 ([D-028](../specs/decision-log.md) delivered; [D-029](../specs/decision-log.md) three-platform support; operator docs aligned by E19-T3) |
 | Release target | post-v0.1.7 (Official Linux Support; next release TBD) |
 | Current epic | E19 Official Linux Support |
-| Current active task | None (E19-T7 Completed; awaiting E19-T8) |
-| Next task | E19-T8 (98/101 completed through E19-T7) |
-| Completed tasks | 98 / 101 |
-| Planned tasks | 3 / 101 |
+| Current active task | None (E19-T8 Completed; awaiting E19-T9) |
+| Next task | E19-T9 (99/101 completed through E19-T8) |
+| Completed tasks | 99 / 101 |
+| Planned tasks | 2 / 101 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -157,7 +157,7 @@
 | 96 | E19-T5 | Completed | Watchman version-gate normalization for Linux zip formats |
 | 97 | E19-T6 | Completed | Paths, secrets, and skills documentation and test-guard alignment |
 | 98 | E19-T7 | Completed | Schedule contract (cli-spec/OPS) adds systemd |
-| 99 | E19-T8 | Planned | Managed `--platform systemd` CLI lifecycle |
+| 99 | E19-T8 | Completed | Managed `--platform systemd` CLI lifecycle |
 | 100 | E19-T9 | Planned | systemd examples and schedule-check |
 | 101 | E19-T10 | Planned | VALIDATION evidence (amd64 + arm64) and closeout notes |
 
@@ -4789,7 +4789,7 @@ systemd implementation. D-028/G14 remain watch-root.
 
 ## E19-T8: Managed systemd Schedule CLI
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -4817,7 +4817,12 @@ E19-T7 Completed.
 
 ### Evidence
 
-Pending.
+Completed 2026-09-09. `--platform systemd` renders, installs, inspects,
+disables, and uninstalls XDG user units symmetrically with launchd:
+injectable `systemctl --user`, shell-less `schedule run` ExecStart, durable
+`--at`, and foreign-definition exit 14. Hermetic `TestE19T8*` coverage is
+green. Launchd regression suites pin `hostSchedulePlatform` to launchd.
+Absolute watch-root behavior is unchanged.
 
 ## E19-T9: systemd Examples and schedule-check
 

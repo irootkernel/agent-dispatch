@@ -203,8 +203,8 @@ func runRouteEnable(command string, args []string, stdout, stderr io.Writer) int
 	// a legitimately overridden scheduled time must not read as drift.
 	if posture := schedulePostureWithStore(cfg, routeID, resolveConfigPath(flags.val("--config")), closer, stderr); posture != nil && posture["expected"] == true && posture["healthy"] != true {
 		return planErr(stderr, command, "config_invalid", "configuration",
-			fmt.Sprintf("drain mode %v requires an installed, loaded, definition-matching managed schedule before production enablement (present=%v loaded=%v); run 'agent-dispatch schedule install --route %s --platform launchd' first",
-				posture["mode"], posture["installed"], posture["loaded"], routeID), 3)
+			fmt.Sprintf("drain mode %v requires an installed, loaded, definition-matching managed schedule before production enablement (present=%v loaded=%v); run '%s' first",
+				posture["mode"], posture["installed"], posture["loaded"], scheduleInstallRemediation(routeID, "")), 3)
 	}
 	revision, ok := config.RouteRevision(cfg, routeID)
 	if !ok {

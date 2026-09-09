@@ -526,9 +526,8 @@ agent-dispatch schedule run --route <id>   # internal; the platform unit's entry
 `--platform` selects the host scheduler: `launchd` (darwin) or `systemd`
 (linux user units). Any other value is a usage error. The launchd path
 below is the shipped darwin behavior (v0.1.6, E16-T4). The systemd path
-is the contracted linux behavior (E19): this section names both platforms
-and the shared lifecycle semantics; the managed `--platform systemd` CLI
-implementation lands in E19-T8 (docs/contracts only here). D-028 and G14
+is the shipped linux behavior (E19-T8): this section names both platforms
+and the shared lifecycle semantics. D-028 and G14
 remain Absolute Watch-Root Binding; the Linux gate is G15.
 
 Every lifecycle command resolves the ACTUAL binary path (`os.Executable`)
@@ -578,7 +577,7 @@ The managed unit pair lives under the current user's systemd unit
 directory (`~/.config/systemd/user/`): a oneshot `.service` and a matching
 `.timer` whose names derive from the same managed label (so distinct
 configurations never collide). The CLI lifecycle is symmetric with
-launchd (E19-T8):
+launchd:
 
 - `render` prints the full definition without touching systemd: `label`,
   unit paths, `binary`, `config`, `mode`, `digest`, and the rendered

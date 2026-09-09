@@ -184,12 +184,14 @@ func TestUninstallExampleRetainsStateAndConfig(t *testing.T) {
 }
 
 // TestScheduleExamplesInvokeVerifiedCommands proves the schedule
-// examples drive the verified reconcile command shape (OPS-006/007)
-// and introduce no daemon. The invocations carry --submit (T2-F001,
+// examples drive the verified command shapes (OPS-006/007/018) and
+// introduce no daemon. The launchd recipe carries --submit (T2-F001,
 // E9-T4): the runbook's automatic-recovery claim relies on the
 // scheduled submit leg, and the two-key gate makes it safe before the
 // production acknowledgement — a route that is not enabled in
 // configuration persists decisions and recovers but submits nothing.
+// The systemd pair mirrors the managed CLI identity (E19-T8 / §19b):
+// shell-less ExecStart of schedule run --route … --config ….
 func TestScheduleExamplesInvokeVerifiedCommands(t *testing.T) {
 	plist, err := os.ReadFile("../../docs/examples/scripts/agent-dispatch-reconcile.launchd.plist.example")
 	if err != nil {
@@ -212,44 +214,77 @@ func TestScheduleExamplesInvokeVerifiedCommands(t *testing.T) {
 	if strings.Contains(string(plist), "/tmp") {
 		t.Fatalf("launchd plist must not log to fixed /tmp paths")
 	}
-	// The systemd service and timer examples are retired with the
-	// Linux packaging surface (D-023, E9-T8); the launchd recipe is
-	// the supported scheduling artifact.
+	service, err := os.ReadFile("../../docs/examples/scripts/agent-dispatch-reconcile.systemd.service.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := string(service)
+	if !strings.Contains(svc, "Type=oneshot") {
+		t.Fatalf("systemd service must be oneshot")
+	}
+	if !strings.Contains(svc, "schedule") || !strings.Contains(svc, "run") || !strings.Contains(svc, "--route") || !strings.Contains(svc, "--config") {
+		t.Fatalf("systemd ExecStart must invoke schedule run --route/--config: %.120s", svc)
+	}
+	if strings.Contains(svc, "/bin/sh") || strings.Contains(svc, "bash -c") {
+		t.Fatalf("systemd service must never carry a shell chain")
+	}
+	timer, err := os.ReadFile("../../docs/examples/scripts/agent-dispatch-reconcile.systemd.timer.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmr := string(timer)
+	if !strings.Contains(tmr, "OnCalendar=") || !strings.Contains(tmr, "Persistent=true") {
+		t.Fatalf("systemd timer must carry OnCalendar and Persistent=true")
+	}
+	if !strings.Contains(tmr, "xyz.rootkernel.agent-dispatch.") {
+		t.Fatalf("systemd timer must reference the managed label identity")
+	}
 	var zout, zerr bytes.Buffer
 	if code := Run([]string{"completion", "zsh"}, &zout, &zerr); code != 0 || !strings.HasPrefix(zout.String(), "#compdef agent-dispatch") {
 		t.Fatalf("zsh completion lacks its header: %q", zout.String())
 	}
 }
 
-// TestScheduleExamplesExistForMacOS guards the example set under the
-// D-023 macOS-only policy (E9-T8): the launchd recipe and the
-// uninstall script; the systemd examples are retired.
+// TestScheduleExamplesExistForMacOS guards the shipped schedule
+// example set under D-029 (E19-T6/T9): launchd, the managed systemd
+// user unit/timer pair, and the uninstall script must exist. systemd
+// examples match the managed shell-less schedule run contract
+// (OPS-018 / cli-spec §19b), not the hand-maintained reconcile recipe.
 func TestScheduleExamplesExistForMacOS(t *testing.T) {
+	dir := filepath.Join("../../docs/examples/scripts")
 	for _, name := range []string{
 		"agent-dispatch-reconcile.launchd.plist.example",
+		"agent-dispatch-reconcile.systemd.service.example",
+		"agent-dispatch-reconcile.systemd.timer.example",
 		"agent-dispatch-uninstall.sh.example",
 	} {
-		if _, err := os.Stat(filepath.Join("../../docs/examples/scripts", name)); err != nil {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
 			t.Fatalf("scheduling example %s missing: %v", name, err)
 		}
 	}
-	// The retired Linux surface stays retired (D-023): the systemd
-	// examples must remain deleted and the uninstall script must not
-	// regress into systemctl guidance.
 	for _, name := range []string{
-		"agent-dispatch-reconcile.service.example",
-		"agent-dispatch-reconcile.timer.example",
+		"agent-dispatch-reconcile.systemd.service.example",
+		"agent-dispatch-reconcile.systemd.timer.example",
 	} {
-		if _, err := os.Stat(filepath.Join("../../docs/examples/scripts", name)); err == nil {
-			t.Fatalf("retired systemd example %s must stay deleted under the D-023 macOS-only policy", name)
+		body, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatalf("reading %s: %v", name, err)
 		}
-	}
-	body, err := os.ReadFile(filepath.Join("../../docs/examples/scripts", "agent-dispatch-uninstall.sh.example"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(body), "systemctl") {
-		t.Fatal("the uninstall script must not reference systemctl under the D-023 macOS-only policy")
+		text := string(body)
+		if strings.Contains(text, "/bin/sh") || strings.Contains(text, "bash -c") {
+			t.Fatalf("%s must not introduce a shell", name)
+		}
+		if name == "agent-dispatch-reconcile.systemd.service.example" {
+			if !strings.Contains(text, "schedule") || !strings.Contains(text, "run") || !strings.Contains(text, "--route") {
+				t.Fatalf("%s must invoke schedule run --route", name)
+			}
+			if !strings.Contains(text, "Type=oneshot") {
+				t.Fatalf("%s must be Type=oneshot", name)
+			}
+		}
+		if !strings.Contains(text, "xyz.rootkernel.agent-dispatch.") {
+			t.Fatalf("%s must carry the managed label identity", name)
+		}
 	}
 }
 

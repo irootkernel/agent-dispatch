@@ -1,0 +1,28 @@
+# E19-T9 systemd --user managed-schedule example (OPS-018 / cli-spec §19b).
+# Mirrors the managed CLI identity and shell-less ExecStart contract from
+# E19-T8: oneshot service whose argv is exactly
+#   <binary> schedule run --route <id> --config <absolute-path>
+# Prefer the managed lifecycle over hand-editing these files:
+#   agent-dispatch schedule render  --route <id> --platform systemd
+#   agent-dispatch schedule install --route <id> --platform systemd
+#   agent-dispatch schedule inspect --route <id> --platform systemd
+# Manual install (review first; replace placeholders):
+#   cp agent-dispatch-reconcile.systemd.service.example \
+#      ~/.config/systemd/user/xyz.rootkernel.agent-dispatch.local.wiki-maintenance.0123456789ab.service
+#   cp agent-dispatch-reconcile.systemd.timer.example \
+#      ~/.config/systemd/user/xyz.rootkernel.agent-dispatch.local.wiki-maintenance.0123456789ab.timer
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now xyz.rootkernel.agent-dispatch.local.wiki-maintenance.0123456789ab.timer
+# Replace the binary path, route id, configuration path, log paths, and the
+# managed label (instance + route + 12-hex config-path digest). schedule run
+# owns the reconcile-then-drain chain in scheduled mode (cli-spec §19c) —
+# never wrap ExecStart in a shell.
+# agent-dispatch managed schedule; safe to remove only through 'schedule uninstall'
+[Unit]
+Description=agent-dispatch managed schedule (xyz.rootkernel.agent-dispatch.local.wiki-maintenance.0123456789ab)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/agent-dispatch schedule run --route wiki-maintenance --config /var/lib/agent-dispatch/config.yaml
+StandardOutput=append:/var/lib/agent-dispatch/logs/schedule-wiki-maintenance.out.log
+StandardError=append:/var/lib/agent-dispatch/logs/schedule-wiki-maintenance.err.log

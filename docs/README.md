@@ -120,6 +120,16 @@ in the matching `CHANGELOG.md` version sections at the repository root.
 The former `docs/CHANGELOG.md` is now `docs/SOT-CHANGELOG.md`; its SOT version
 identities and history remain unchanged apart from necessary path references.
 
+## Supported Platforms
+
+Under [D-029](specs/decision-log.md) (epic E19), Agent Dispatch is supported on
+`darwin/arm64`, `linux/amd64`, and `linux/arm64`. Hosted CI is not used; run
+`make verify` on each target platform. Default configuration and state paths,
+including Linux XDG locations, are documented in
+[`ops/installation.md`](ops/installation.md). The Hermes plugin
+remains out of scope for this support matrix. E18 remains Absolute Watch-Root
+Binding (D-028 / G14), not the Linux epic.
+
 ## Documentation Checks
 
 Run `make verify` at the repository root. It covers build, format, vet,

@@ -246,20 +246,21 @@ Example:
   agent-dispatch events show <aggregate-id>
 
 Next safe command: agent-dispatch receipts list --kind work`,
-	"schedule": `schedule — the managed launchd drain schedule (E16-T4)
+	"schedule": `schedule — the managed drain schedule (E16-T4 launchd; E19-T8 systemd)
 
-Usage: agent-dispatch schedule <render|install|inspect|disable|uninstall|run> --route <id> --platform launchd [flags]
+Usage: agent-dispatch schedule <render|install|inspect|disable|uninstall|run> --route <id> --platform launchd|systemd [flags]
 
 Flags: --config; --at HH:MM overrides the scheduled mode's 03:00 local
-default. The managed label and plist path derive from the instance ID,
-route ID, and a digest of the configuration's absolute path; the plist
-invokes the internal 'schedule run' command directly, never a shell
-chain. Install is idempotent for an identical definition and refuses a
-different one; disable unloads while preserving the plist; uninstall
-removes only that exact managed plist. After-command recovery runs
-every fifteen minutes; scheduled mode runs the reconciliation first
-and drains only after a healthy pass. Schedule logs rotate at 10 MiB
-with three files retained.
+default. The managed label derives from the instance ID, route ID, and
+a digest of the configuration's absolute path; launchd writes a plist
+under LaunchAgents and systemd writes a oneshot service+timer under
+the XDG user unit directory. Both invoke the internal 'schedule run'
+command directly, never a shell chain. Install is idempotent for an
+identical definition and refuses a different one; disable unloads while
+preserving the unit; uninstall removes only that exact managed unit.
+After-command recovery runs every fifteen minutes; scheduled mode runs
+the reconciliation first and drains only after a healthy pass. Schedule
+logs rotate at 10 MiB with three files retained.
 
 Next safe command: agent-dispatch schedule render --route <id> --platform launchd`,
 	"notifications": `notifications — the notification delivery surface

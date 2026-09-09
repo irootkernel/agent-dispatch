@@ -84,10 +84,15 @@ go-version-check:
 	@test -n "$(GO_VERSION_PIN)" || { echo "go-version-check: go.mod carries no go directive"; exit 1; }
 	@$(GO) run ./internal/tools/toolchaincheck -want $(GO_VERSION_PIN)
 
-# Checksum verification of the SOT docs package (macOS-only policy,
-# D-023: shasum is the supported host's tool).
+# Checksum verification of the SOT docs package (D-029 three-platform
+# hosts): prefer shasum -a 256 when present, otherwise sha256sum.
 manifest-check:
-	cd docs && shasum -a 256 -c MANIFEST.sha256
+	@cd docs && \
+	  if command -v shasum >/dev/null 2>&1; then \
+	    shasum -a 256 -c MANIFEST.sha256; \
+	  else \
+	    sha256sum -c MANIFEST.sha256; \
+	  fi
 
 # Draft 2020-12 schema and example validation (D-015; Python validator retired).
 schema-validation:
@@ -106,15 +111,16 @@ traceability:
 verify: go-version-check build fmt-check vet staticcheck check-imports test test-race manifest-check schema-validation traceability schedule-check
 	@echo "verify: all checks passed"
 
-# E6-T3 release process, restricted by the D-023 support policy
-# (E9-T8): darwin/arm64 is the only supported platform, so the release
-# output is exactly one artifact set plus its checksum list under
-# dist/. The Go toolchain with -trimpath and the commit-pinned version,
-# commit, and build time produces byte-identical binaries for one
-# commit, so the checksums are generated over the binaries directly
-# (archives would embed machine-specific metadata).
+# E6-T3 release process under the D-029 three-platform support policy:
+# darwin/arm64, linux/amd64, and linux/arm64 — one artifact per platform
+# plus a shared checksum list under dist/. The Go toolchain with
+# -trimpath and the commit-pinned version, commit, and build time
+# produces byte-identical binaries for one commit, so the checksums are
+# generated over the binaries directly (archives would embed
+# machine-specific metadata). Checksums use shasum -a 256 when present,
+# otherwise sha256sum (portable across the supported hosts).
 DIST_DIR := dist
-RELEASE_OS_ARCH := darwin/arm64
+RELEASE_OS_ARCH := darwin/arm64 linux/amd64 linux/arm64
 COMMIT_DATE ?= $(shell git show -s --format=%cI HEAD 2>/dev/null || echo 1970-01-01T00:00:00Z)
 RELEASE_COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 
@@ -128,19 +134,39 @@ release: go-version-check
 	  -ldflags "-X $(PKG)/internal/version.Version=$(VERSION) -X $(PKG)/internal/version.Commit=$(RELEASE_COMMIT) -X $(PKG)/internal/version.BuildTime=$(COMMIT_DATE)" \
 	  -o $(DIST_DIR)/agent-dispatch-$(VERSION)-$$tag ./cmd/agent-dispatch || exit 1; \
 	done
-	@cd $(DIST_DIR) && shasum -a 256 agent-dispatch-$(VERSION)-* | LC_ALL=C sort > SHA256SUMS
+	@cd $(DIST_DIR) && \
+	  if command -v shasum >/dev/null 2>&1; then \
+	    shasum -a 256 agent-dispatch-$(VERSION)-* | LC_ALL=C sort > SHA256SUMS; \
+	  else \
+	    sha256sum agent-dispatch-$(VERSION)-* | LC_ALL=C sort > SHA256SUMS; \
+	  fi
 	@cat $(DIST_DIR)/SHA256SUMS
 	@echo "release: artifacts in $(DIST_DIR) for $(VERSION)"
 
-# E6-T3 scheduling-artifact validation under the macOS-only policy
-# (D-023/E9-T8): the launchd example is linted with the platform tool
-# and the uninstall script with sh -n; the systemd examples are
-# superseded history (D-023).
+# E6-T3 / E19-T9 scheduling-artifact validation under D-029 three-platform
+# support: lint the launchd example with plutil when present, the systemd
+# user unit/timer examples with systemd-analyze verify when present, and
+# the uninstall script with sh -n. Missing platform tools skip with a
+# message (symmetric: plutil absent on Linux, systemd-analyze absent on
+# macOS / minimal hosts).
 schedule-check:
 	@if command -v plutil >/dev/null 2>&1; then \
 	  plutil -lint docs/examples/scripts/agent-dispatch-reconcile.launchd.plist.example || exit 1; \
 	else \
-	  echo "schedule-check: plutil absent; validated the shell script only (run on macOS to lint the launchd artifact)"; \
+	  echo "schedule-check: plutil absent; skipped launchd lint (run on macOS to lint the launchd artifact)"; \
+	fi; \
+	if command -v systemd-analyze >/dev/null 2>&1; then \
+	  tmp=$$(mktemp -d) || exit 1; \
+	  trap 'rm -rf "$$tmp"' EXIT HUP INT TERM; \
+	  label=xyz.rootkernel.agent-dispatch.local.wiki-maintenance.0123456789ab; \
+	  cp docs/examples/scripts/agent-dispatch-reconcile.systemd.service.example "$$tmp/$$label.service" || exit 1; \
+	  cp docs/examples/scripts/agent-dispatch-reconcile.systemd.timer.example "$$tmp/$$label.timer" || exit 1; \
+	  stub=$$tmp/agent-dispatch; cp /bin/true "$$stub" && chmod +x "$$stub" || exit 1; \
+	  sed "s|/usr/local/bin/agent-dispatch|$$stub|g" "$$tmp/$$label.service" > "$$tmp/$$label.service.rewritten" || exit 1; \
+	  mv "$$tmp/$$label.service.rewritten" "$$tmp/$$label.service" || exit 1; \
+	  systemd-analyze verify "$$tmp/$$label.service" "$$tmp/$$label.timer" || exit 1; \
+	else \
+	  echo "schedule-check: systemd-analyze absent; skipped systemd unit lint (run on a systemd host to verify the user units)"; \
 	fi; \
 	sh -n docs/examples/scripts/agent-dispatch-uninstall.sh.example || exit 1; \
 	echo "schedule-check: done"

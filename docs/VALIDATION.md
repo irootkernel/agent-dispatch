@@ -168,7 +168,7 @@ Verified 2026-08-22 by executable acceptance tests in `internal/cli/e6t4_test.go
 | AC-502 doctor returns actionable structured findings | `TestG5AC502DoctorStableFindings` plus `TestDoctorDetectsFailureClasses`, the `doctor.Examine` unit table, `TestE8T4DoctorReportsUnreadableRoot` (the real root access probe), and `TestE8T4DoctorNeverFabricatesWatchman` (E8-T4: every AC-502 condition is error-severity and exits 3) |
 | AC-503 prune removes resolved expired data without breaking unresolved lineage or audit | `TestG5AC503PrunePreservesLineageAndAudit` (E8-T4: seeds an active accepted dispatch and asserts its lineage survives), `TestMaintenancePruneDryRunThenExecute`, and `TestMaintenancePrunePreservesHeldQuarantineLineage` |
 | AC-504 clean macOS host install works without manual database edits | `TestG5AC504CleanHostInstallDispatchScheduleUninstall` (init → validate → dry-run dispatch → route registration and gate acknowledgement → scheduled reconciliation → doctor) and `TestCleanHostInstallationScenario` (platform default paths, owner-only state, fail-closed re-init) |
-| AC-505 supported-Linux suite pass | Closed under D-020: `make verify` in full (including `test-race`, manifest, schema, traceability) passed on linux/arm64 as a non-root user at `f00ed30` in a `golang:1.26` container, and `make test` passed on linux/amd64; the two permission-expectation tests self-skip under root. The real Hermes and Watchman legs and `systemd-analyze verify` remain macOS-verified only. (Historical record: the scenario itself is superseded by D-023/E9-T8 — darwin/arm64 is the only supported platform.) |
+| AC-505 supported-Linux suite pass | Historical D-020 closure (linux/arm64 container `make verify`; linux/amd64 `make test`) then retired under D-023/E9-T8. **Reopened by D-029 / E19:** current platform×leg evidence is Gate G15 below (do not treat this G5 row as the living Linux claim). G14 remains Absolute Watch-Root Binding. |
 | AC-506 release artifacts present and version-compatible | `TestG5AC506ReleaseArtifactsPresent` selects the latest release notes semantically (numeric version components, never lexical), derives the version from that one file with a body assertion, proves the release-way build reports it, and — when the release artifacts are present (a fresh checkout without `make release` skips this leg) — verifies every `dist/SHA256SUMS` digest against the hashed artifact itself, not just the line structure (E8-T6 audit); the digest-identical double `make release VERSION=v0.1.2` and the tag close the set |
 
 Upgrade and backup rehearsal (release-checklist durability): `TestG5UpgradeAndBackupRehearsal` drives the documented procedure — built-in backup with verification, doctor, full integrity, one reconciliation — and restores the backup standalone with its lineage intact. The migration interruption and checksum-immutability evidence remains `internal/adapters/sqlite` (`TestBackupBeforeMigration`, `TestMigrationChecksumImmutability`, `TestNewerSchemaRefused`, `TestFreshAndMigratedSchemasIdentical`).
@@ -510,6 +510,35 @@ one in `internal/adapters/sqlite/migrate.go`); the same delivery
 recorded DF-001 (`deferred-feedback/001`) after the capability cache was
 contaminated a second time by a direct `go test` run and restored by
 re-probing. Ordinal 3 (run `r_01a07ff0-6be9-7bfe-a39d-3d17c776887d`, confirmation, ci pass, findings: none at low or above) confirmed the final delta clean; every finding across the audit carries a completed local disposition and the DF-001 deferral is recorded with its reconsideration condition.
+
+
+## Gate G15: Official Linux Support (E19 / D-029)
+
+Verified 2026-09-09 and refreshed after post-closeout review remediation on the
+local working tree based on `82070ce` under Master-approved constraints for the
+supported set `{darwin/arm64, linux/amd64, linux/arm64}`. G15 records
+platform×leg evidence for SCP-008 / AC-505 reactivation; it does not overclaim
+environment-dependent Hermes or Watchman legs, and the Hermes **plugin** remains
+out of scope / absent from epic outcomes. Gate G14 remains Absolute Watch-Root
+Binding (D-028) and is not rewritten by this record.
+
+### Platform × leg matrix
+
+| Leg | darwin/arm64 | linux/amd64 (this host) | linux/arm64 |
+|---|---|---|---|
+| Unit / integration / fixture / migration / crash suites (`make test`) | **PASS** inside the full native `make verify`; Watchman 2026.07.27.00 and Hermes 0.21.0 were present, with real tests retaining their disposable-environment guards | **PASS** inside the full `make verify` in `golang:1.26.6-trixie`; supported Watchman `20260727.012849.0` installed from the official x86-64 bundle | **PASS** inside the full `make verify` in an emulated `linux/arm64` `golang:1.26.6-trixie` container; non-lifecycle tests use the hermetic fake Watchman |
+| Full `make verify` (incl. `test-race`, manifest, schema, traceability, schedule-check) | **PASS**, native darwin/arm64, exit 0 | **PASS**, Docker `--platform linux/amd64`, exit 0; Python and systemd tooling installed in the disposable container | **PASS**, Docker `--platform linux/arm64`, exit 0; Python and systemd tooling installed in the disposable container |
+| Real Watchman lifecycle / trigger legs | Watchman 2026.07.27.00 present; historical disposable real-trigger evidence remains G14's authority | Watchman `20260727.012849.0` present and the full suite's real-Watchman tests are eligible | **Explicit gap** per Master approval: the official Linux bundle is x86-64; real Watchman tests remain skip-guarded |
+| Real Hermes Kanban legs | Hermes 0.21.0 present; historical real-board evidence remains G11/G13/G14's authority rather than a new production claim | Hermes absent; real-board tests remain skip-guarded | Hermes absent; real-board tests remain skip-guarded |
+| Managed schedule | Launchd lifecycle regression passes; `plutil` validates the example | `systemd-analyze verify` validates both shipped examples and the hostile `$`/`%Z` dynamically rendered service/timer | `systemd-analyze verify` validates both shipped examples and the hostile `$`/`%Z` dynamically rendered service/timer under arm64 |
+| Release artifacts | Fresh `make release` emits the darwin/arm64 Mach-O plus shared `SHA256SUMS` | The same fresh set contains linux/amd64 ELF64 x86-64 | The same fresh set contains linux/arm64 ELF64 AArch64; all checksums verify. This dirty review tree is build evidence, not a tag or publication |
+
+### AC-505 / SCP-008 disposition
+
+- **Claimed:** full `make verify` passes on all three supported platform/architecture pairs; managed systemd is shipped and parsed on both Linux architectures; the Linux Watchman version dialect is accepted; secrets on Linux are `env:`/`file:`/`fd:` only; a fresh local three-arch artifact set verifies.
+- **Not claimed:** a new real-Hermes cold walkthrough on Linux; real Watchman trigger validation on linux/arm64; a clean-commit reproducibility result, tag, release, installation, or publication from this uncommitted remediation tree.
+- **Plugin:** absent from outcomes (out of scope for E19).
+- **Watch-root:** E18 / D-028 / G14 content is unchanged.
 
 ## MUST-Closure Matrix (E8-T6, D-020) — supersedes the E7-T12 matrix
 

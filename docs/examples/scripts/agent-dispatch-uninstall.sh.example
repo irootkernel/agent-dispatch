@@ -26,9 +26,8 @@ done
 # 2. Remove the managed Watchman trigger (never removes the watch root).
 "$BINARY" watchman remove --route "$ROUTE" --config "$CONFIG" --yes || true
 
-# 3. Remove the scheduled reconciliation LaunchAgent (the retired
-# systemd units are superseded history under the D-023 macOS-only
-# policy).
+# 3. Remove the scheduled reconciliation LaunchAgent (managed systemd
+# returns under E19; this example remains macOS/launchd-oriented).
 if [ -f "$PLIST" ]; then
     launchctl unload "$PLIST" 2>/dev/null || true
     rm -f "$PLIST"

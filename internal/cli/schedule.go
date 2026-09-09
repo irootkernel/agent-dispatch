@@ -1,15 +1,17 @@
-// Managed launchd schedule lifecycle of E16-T4 (ADR-0022, v0.1.6 §4,
+// Managed schedule lifecycle of E16-T4 / E19-T8 (ADR-0022, v0.1.6 §4,
 // CLI-009/CLI-018, OPS-017/OPS-018, SEC-007): `schedule
 // render|install|inspect|disable|uninstall --route <id> --platform
-// launchd` resolves the actual binary and configuration paths, derives
-// the managed label and plist path from the instance ID, route ID, and
-// a digest of the configuration absolute path, and invokes one direct
-// internal `schedule run` command — never a shell chain. Install is
-// idempotent for an identical definition and refuses a different one;
-// disable unloads while preserving the plist; uninstall unloads and
-// removes only that exact managed plist. After-command recovery runs
-// every fifteen minutes; scheduled mode runs daily at 03:00 local time
-// by default (`--at HH:MM` overrides).
+// launchd|systemd` resolves the actual binary and configuration paths,
+// derives the managed label from the instance ID, route ID, and a
+// digest of the configuration absolute path, and invokes one direct
+// internal `schedule run` command — never a shell chain. launchd writes
+// a plist under LaunchAgents; systemd writes a oneshot service+timer
+// under the XDG user unit directory. Install is idempotent for an
+// identical definition and refuses a different one; disable unloads
+// while preserving the unit; uninstall removes only that exact managed
+// unit. After-command recovery runs every fifteen minutes; scheduled
+// mode runs daily at 03:00 local time by default (`--at HH:MM`
+// overrides).
 package cli
 
 import (
@@ -24,6 +26,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -47,6 +50,16 @@ const (
 var launchctlRun = func(args ...string) (string, error) {
 	out, err := exec.Command("launchctl", args...).CombinedOutput()
 	return string(out), err
+}
+
+// hostSchedulePlatform selects the host's managed scheduler for posture
+// and remediation strings. It is injectable so the launchd regression
+// suite stays hermetic on linux hosts (E19-T8).
+var hostSchedulePlatform = func() string {
+	if runtime.GOOS == "linux" {
+		return "systemd"
+	}
+	return "launchd"
 }
 
 // scheduleLabel derives the managed label from the instance ID, route
@@ -77,18 +90,23 @@ func schedulePlistPath(label string) string {
 // property list text plus its canonical digest, the resolved binary and
 // configuration paths, and the mode-specific timing.
 type scheduleDefinition struct {
-	RouteID    string
-	Label      string
-	PlistPath  string
-	BinaryPath string
-	ConfigPath string
-	Mode       string // after-command | scheduled
-	Plist      string
-	Digest     string
-	StdoutPath string
-	StderrPath string
-	Calendar   string // HH:MM for scheduled mode; empty for interval mode
-	Interval   int    // seconds; 0 for calendar mode
+	RouteID     string
+	Label       string
+	PlistPath   string
+	ServicePath string
+	TimerPath   string
+	BinaryPath  string
+	ConfigPath  string
+	Mode        string // after-command | scheduled
+	Platform    string // launchd | systemd
+	Plist       string
+	ServiceUnit string
+	TimerUnit   string
+	Digest      string
+	StdoutPath  string
+	StderrPath  string
+	Calendar    string // HH:MM for scheduled mode; empty for interval mode
+	Interval    int    // seconds; 0 for calendar mode
 }
 
 // renderSchedulePlist renders the launchd definition. The internal
@@ -158,7 +176,7 @@ func renderSchedulePlist(d scheduleDefinition) string {
 // from the current executable, the absolute configuration path, and the
 // route's effective drain mode, mapping failures to the CLI's error
 // classes.
-func buildScheduleDefinition(command string, configPath, routeID, at string, stderr io.Writer) (scheduleDefinition, int) {
+func buildScheduleDefinition(command string, configPath, routeID, at, platform string, stderr io.Writer) (scheduleDefinition, int) {
 	def, err := scheduleDefinitionFor(configPath, routeID, at)
 	if err != nil {
 		if _, usage := err.(*scheduleUsageError); usage {
@@ -166,6 +184,7 @@ func buildScheduleDefinition(command string, configPath, routeID, at string, std
 		}
 		return scheduleDefinition{}, planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
 	}
+	finalizeScheduleDigest(&def, platform)
 	return def, 0
 }
 
@@ -204,23 +223,37 @@ func scheduleDefinitionFor(configPath, routeID, at string) (scheduleDefinition, 
 	plistPath := schedulePlistPath(label)
 	logDir := filepath.Join(stateDirOf(cfg), "logs")
 	d := scheduleDefinition{
-		Label:      label,
-		PlistPath:  plistPath,
-		BinaryPath: binaryPath,
-		ConfigPath: absConfig,
-		Mode:       policy.Mode,
-		Calendar:   at,
-		StdoutPath: filepath.Join(logDir, "schedule-"+routeID+".out.log"),
-		StderrPath: filepath.Join(logDir, "schedule-"+routeID+".err.log"),
+		Label:       label,
+		PlistPath:   plistPath,
+		ServicePath: scheduleServicePath(label),
+		TimerPath:   scheduleTimerPath(label),
+		BinaryPath:  binaryPath,
+		ConfigPath:  absConfig,
+		Mode:        policy.Mode,
+		Calendar:    at,
+		StdoutPath:  filepath.Join(logDir, "schedule-"+routeID+".out.log"),
+		StderrPath:  filepath.Join(logDir, "schedule-"+routeID+".err.log"),
 	}
 	if policy.Mode == config.DrainModeAfterCommand {
 		d.Interval = afterCommandRecoverySeconds
 	}
 	d.RouteID = routeID
 	d.Plist = renderSchedulePlist(d)
+	d.ServiceUnit = renderScheduleService(d)
+	d.TimerUnit = renderScheduleTimer(d)
+	return d, nil
+}
+
+// finalizeScheduleDigest pins the platform-specific managed digest:
+// launchd hashes the plist; systemd hashes the service+timer pair.
+func finalizeScheduleDigest(d *scheduleDefinition, platform string) {
+	d.Platform = platform
+	if platform == "systemd" {
+		d.Digest = systemdDigest(d.ServiceUnit, d.TimerUnit)
+		return
+	}
 	sum := sha256.Sum256([]byte(d.Plist))
 	d.Digest = "sha256:" + hex.EncodeToString(sum[:])
-	return d, nil
 }
 
 // stateDirOf resolves the configuration's state directory through the
@@ -247,8 +280,8 @@ func runSchedule(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
-// runScheduleLifecycle handles the managed-definition surfaces. Only
-// --platform launchd exists in v0.1.6.
+// runScheduleLifecycle handles the managed-definition surfaces for
+// `--platform launchd|systemd` (cli-spec §19).
 func runScheduleLifecycle(command, sub string, args []string, stdout, stderr io.Writer) int {
 	flags, code := parseDispatchesFlags(command, args, stderr, map[string]bool{"--config": true, "--route": true, "--platform": true, "--at": true})
 	if code != 0 {
@@ -258,8 +291,9 @@ func runScheduleLifecycle(command, sub string, args []string, stdout, stderr io.
 	if routeID == "" {
 		return usageError(stderr, command, command+" requires --route <id>")
 	}
-	if platform := flags.val("--platform"); platform != "launchd" {
-		return usageError(stderr, command, "--platform must be launchd (the only supported v0.1.6 platform)")
+	platform := flags.val("--platform")
+	if platform != "launchd" && platform != "systemd" {
+		return usageError(stderr, command, "--platform must be launchd or systemd")
 	}
 	// A malformed --at is a usage defect, never a silently coerced
 	// default (round-1 F008).
@@ -285,23 +319,30 @@ func runScheduleLifecycle(command, sub string, args []string, stdout, stderr io.
 	if at == "" && sub != "install" {
 		at = scheduleAtOverrideUnmigrated(configPath, label, stderr)
 	}
-	def, exit := buildScheduleDefinition(command, configPath, routeID, at, stderr)
+	def, exit := buildScheduleDefinition(command, configPath, routeID, at, platform, stderr)
 	if exit != 0 {
 		return exit
 	}
 	switch sub {
 	case "render":
+		if platform == "systemd" {
+			return writeEnvelope(stdout, command, map[string]any{
+				"label": def.Label, "service_path": def.ServicePath, "timer_path": def.TimerPath,
+				"binary": def.BinaryPath, "config": def.ConfigPath, "mode": def.Mode,
+				"digest": def.Digest, "service": def.ServiceUnit, "timer": def.TimerUnit,
+			})
+		}
 		return writeEnvelope(stdout, command, map[string]any{
 			"label": def.Label, "plist_path": def.PlistPath, "binary": def.BinaryPath,
 			"config": def.ConfigPath, "mode": def.Mode, "digest": def.Digest, "plist": def.Plist,
 		})
 	case "install":
-		// The timing persists BEFORE the plist write and is reverted on a
+		// The timing persists BEFORE the unit write and is reverted on a
 		// refused install (E17 audit F007): persisting only after the
 		// write left a crash window where an installed --at override had
 		// no durable row and the posture re-read the drift the round-4
 		// F004 fix closed. Writing first inverts the window — a crash
-		// after the row but before the plist converges by re-running the
+		// after the row but before the unit converges by re-running the
 		// same install — and a REFUSED install (a different definition
 		// at the path) restores the prior row so the existing schedule's
 		// definition match survives the refusal untouched.
@@ -315,7 +356,12 @@ func runScheduleLifecycle(command, sub string, args []string, stdout, stderr io.
 			return planErr(stderr, command, "sqlite_query_failed", "storage", err.Error(), 20)
 		}
 		store.Close()
-		installed := scheduleInstall(command, def, stdout, stderr)
+		var installed int
+		if platform == "systemd" {
+			installed = scheduleInstallSystemd(command, def, stdout, stderr)
+		} else {
+			installed = scheduleInstall(command, def, stdout, stderr)
+		}
 		if installed != 0 && prior != explicitAt {
 			if _, rstore, rerr := openOperatorStore(command, flags.val("--config"), stderr); rerr == 0 {
 				if err := rstore.SetScheduleAtOverride(requestCtx(), label, prior); err != nil {
@@ -326,11 +372,22 @@ func runScheduleLifecycle(command, sub string, args []string, stdout, stderr io.
 		}
 		return installed
 	case "inspect":
+		if platform == "systemd" {
+			return scheduleInspectSystemd(command, def, stdout, stderr)
+		}
 		return scheduleInspect(command, def, stdout, stderr)
 	case "disable":
+		if platform == "systemd" {
+			return scheduleDisableSystemd(command, def, stdout, stderr)
+		}
 		return scheduleDisable(command, def, stdout, stderr)
 	default:
-		code := scheduleUninstall(command, def, stdout, stderr)
+		var code int
+		if platform == "systemd" {
+			code = scheduleUninstallSystemd(command, def, stdout, stderr)
+		} else {
+			code = scheduleUninstall(command, def, stdout, stderr)
+		}
 		if code == 0 {
 			// The override row outliving its schedule would resurface as
 			// the next install's timing; the clear is best-effort because
@@ -655,33 +712,55 @@ func schedulePostureCore(cfg *config.Config, routeID, configPath string, overrid
 	}
 	posture["expected"] = true
 	label := scheduleLabelFor(cfg, routeID, configPath)
-	def := scheduleDefinition{Label: label, PlistPath: schedulePlistPath(label)}
+	platform := hostSchedulePlatform()
+	posture["platform"] = platform
 	present := false
-	raw := []byte(nil)
-	if r, err := os.ReadFile(def.PlistPath); err == nil {
-		raw = r
-		present = true
-		sum := sha256.Sum256(raw)
-		posture["installed_digest"] = "sha256:" + hex.EncodeToString(sum[:])
-	}
 	loaded := false
-	// launchctl print takes ONE joined service target (`gui/<uid>/<label>`):
-	// the domain and label as separate argv entries make real launchd print
-	// the whole domain dump — no "Could not find service" line — so an
-	// absent schedule read as loaded (the E17-T2 real-launchd cold
-	// validation finding).
-	if out, err := launchctlRun("print", fmt.Sprintf("gui/%d/%s", os.Getuid(), label)); err == nil && !strings.Contains(out, "Could not find service") {
-		loaded = true
-	}
-	// Definition matching (round-1 F003/F005): the installed bytes must
-	// equal the currently rendered managed definition, so a drifted
-	// definition (a moved binary, a retargeted configuration, a mode
-	// change) is unhealthy even while loaded.
 	definitionMatches := false
-	if present {
-		if def, derr := scheduleDefinitionFor(configPath, routeID, overrideFor(label)); derr == nil {
-			definitionMatches = string(raw) == def.Plist
-			posture["expected_digest"] = def.Digest
+	if platform == "systemd" {
+		servicePath := scheduleServicePath(label)
+		timerPath := scheduleTimerPath(label)
+		serviceRaw, serviceOK := readOptionalFile(servicePath)
+		timerRaw, timerOK := readOptionalFile(timerPath)
+		present = serviceOK && timerOK
+		if present {
+			posture["installed_digest"] = systemdDigest(serviceRaw, timerRaw)
+		}
+		loaded = systemdTimerLoaded(label)
+		if present {
+			if def, derr := scheduleDefinitionFor(configPath, routeID, overrideFor(label)); derr == nil {
+				finalizeScheduleDigest(&def, "systemd")
+				definitionMatches = serviceRaw == def.ServiceUnit && timerRaw == def.TimerUnit
+				posture["expected_digest"] = def.Digest
+			}
+		}
+	} else {
+		plistPath := schedulePlistPath(label)
+		raw := []byte(nil)
+		if r, err := os.ReadFile(plistPath); err == nil {
+			raw = r
+			present = true
+			sum := sha256.Sum256(raw)
+			posture["installed_digest"] = "sha256:" + hex.EncodeToString(sum[:])
+		}
+		// launchctl print takes ONE joined service target (`gui/<uid>/<label>`):
+		// the domain and label as separate argv entries make real launchd print
+		// the whole domain dump — no "Could not find service" line — so an
+		// absent schedule read as loaded (the E17-T2 real-launchd cold
+		// validation finding).
+		if out, err := launchctlRun("print", fmt.Sprintf("gui/%d/%s", os.Getuid(), label)); err == nil && !strings.Contains(out, "Could not find service") {
+			loaded = true
+		}
+		// Definition matching (round-1 F003/F005): the installed bytes must
+		// equal the currently rendered managed definition, so a drifted
+		// definition (a moved binary, a retargeted configuration, a mode
+		// change) is unhealthy even while loaded.
+		if present {
+			if def, derr := scheduleDefinitionFor(configPath, routeID, overrideFor(label)); derr == nil {
+				finalizeScheduleDigest(&def, "launchd")
+				definitionMatches = string(raw) == def.Plist
+				posture["expected_digest"] = def.Digest
+			}
 		}
 	}
 	posture["installed"] = present
@@ -691,6 +770,12 @@ func schedulePostureCore(cfg *config.Config, routeID, configPath string, overrid
 	posture["healthy"] = present && loaded && definitionMatches
 	posture["label"] = label
 	return posture
+}
+
+// scheduleInstallRemediation returns the exact `schedule install` command
+// for the host platform (OPS-018 enablement remediation).
+func scheduleInstallRemediation(routeID, atHint string) string {
+	return fmt.Sprintf("agent-dispatch schedule install --route %s --platform %s%s", routeID, hostSchedulePlatform(), atHint)
 }
 
 // scheduleAtPattern is the closed HH:MM grammar of --at.

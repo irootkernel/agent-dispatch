@@ -543,3 +543,34 @@ operator host under explicit operator authorization: D-028 waives the
 E17-T2 no-production-state boundary for that task's Watchman topology,
 binding, and observation changes only, and no Hermes core, plugin,
 profile, or vault-content change is authorized. SOT 1.4.0.
+
+## D-029 - 2026-09-09 - Official three-platform support; D-023/D-024 exclusivity superseded
+
+**Decision.** Official support for agent-dispatch is the three-platform set
+`{darwin/arm64, linux/amd64, linux/arm64}`, superseding the D-023/D-024
+darwin/arm64-only exclusivity recorded by E9-T8. SCP-008 and AC-505 are
+reactivated for that matrix, and the project-charter success definition follows.
+The Hermes plugin remains out of scope for epic E19. Managed `--platform
+systemd` scheduling is Must as a follow-on (E19-T7 through E19-T9) and is not
+implemented by this decision. On Linux, secret references are `env:`, `file:`,
+and `fd:` only; `keychain:` remains darwin-only. Historical D-020 Linux
+verification and D-023 retirement annotations stand as history; this decision
+is the reopen authority. Packaging, README/installation matrix, Makefile/release,
+Watchman, and systemd implementation land in later E19 tasks. D-028 remains
+the Absolute Watch-Root Binding decision and is not a platform-policy record;
+the Linux gate is G15, not G14.
+
+**Context.** Master approval (2026-09-08) opened Official Linux Support after
+v0.1.6. That work was first drafted as E18, which origin/main already used for
+Absolute Watch-Root Binding, so it is registered as E19. D-023 retired Linux
+because the claimed support surface exceeded the demonstrated evidence; E19
+reopens Linux with an explicit three-arch matrix, managed systemd as Must, and
+recorded G15 evidence rather than restoring the pre-D-023 packaging claims
+wholesale.
+
+**Consequences.** E19-T2 updates the normative specs and regenerates
+traceability for the reopened SCP-008 citation; E19-T3 aligns operator-facing
+docs; later tasks deliver three-arch artifacts, Watchman/secrets alignment,
+managed systemd, and VALIDATION evidence. Active present-tense support claims in
+the normative specs use the three-platform set. E18 Absolute Watch-Root Binding
+and gate G14 are unchanged.

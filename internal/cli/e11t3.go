@@ -350,7 +350,7 @@ func runRoutePreflight(command string, args []string, stdout, stderr io.Writer) 
 	if posture := schedulePosture(cfg, routeID, resolveConfigPath(flags.val("--config")), stderr); posture != nil && posture["expected"] == true {
 		if posture["healthy"] == true {
 			checks = append(checks, map[string]any{"check": "schedule", "state": "pass",
-				"detail": fmt.Sprintf("managed launchd schedule %v installed, loaded, and matching the current definition", posture["label"])})
+				"detail": fmt.Sprintf("managed %s schedule %v installed, loaded, and matching the current definition", hostSchedulePlatform(), posture["label"])})
 		} else {
 			// The schedule is a production-enablement prerequisite
 			// (v0.1.6 §4), reported here as a warning with its
@@ -359,7 +359,7 @@ func runRoutePreflight(command string, args []string, stdout, stderr io.Writer) 
 			// completes with the install command printed, never run.
 			checks = append(checks, map[string]any{"check": "schedule", "state": "warn",
 				"detail":      fmt.Sprintf("drain mode %v requires an installed, loaded, definition-matching managed schedule before production enablement (present=%v loaded=%v)", posture["mode"], posture["installed"], posture["loaded"]),
-				"remediation": fmt.Sprintf("agent-dispatch schedule install --route %s --platform launchd%s", routeID, scheduleAtHint(posture))})
+				"remediation": scheduleInstallRemediation(routeID, scheduleAtHint(posture))})
 		}
 	}
 

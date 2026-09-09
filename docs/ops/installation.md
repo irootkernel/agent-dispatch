@@ -1,9 +1,13 @@
 # Installation, Scheduling, Upgrade, and Backup
 
-This guide is for the operator of a local macOS arm64 installation. The operator
+This guide is for the operator of a local installation on a supported platform
+(`darwin/arm64`, `linux/amd64`, or `linux/arm64` under [D-029](../specs/decision-log.md),
+E19; superseding the D-023/E9-T8 darwin/arm64-only exclusivity). The operator
 owns the configuration, vault/board selection, backups, and authority to install
-binaries, triggers, or LaunchAgents. Agent Dispatch runs one-shot commands:
-Watchman owns event sensing and launchd owns scheduling; there is no Agent Dispatch
+binaries, triggers, or schedules. Agent Dispatch runs one-shot commands:
+Watchman owns event sensing and the platform scheduler owns scheduling
+(launchd on macOS; managed `--platform systemd` user units on Linux in the
+current checkout); there is no Agent Dispatch
 daemon. Start with the [public quick start](../../README.md#quick-start) for a new instance.
 
 Before changing an existing installation, record `agent-dispatch version --json`,
@@ -15,9 +19,13 @@ Hermes access and shared Watchman topology changes belong to their host owners.
 ## 1. Install the Binary
 
 Build the current checkout or install a verified published binary using the
-[README](../../README.md#install). Release artifacts are a bare
-`agent-dispatch-<version>-darwin-arm64` binary and `SHA256SUMS`; verify the downloaded
-bytes before copying the binary onto PATH. Source builds and older releases must
+[README](../../README.md#install). Artifact names follow
+`agent-dispatch-<version>-<os>-<arch>` plus `SHA256SUMS`. `make release` emits
+darwin/arm64, linux/amd64, and linux/arm64 (E19-T4). The published v0.1.7
+set is still `agent-dispatch-<version>-darwin-arm64`. Verify downloaded bytes
+before copying the binary onto
+PATH (`shasum -a 256 -c SHA256SUMS`, or `sha256sum -c SHA256SUMS` on Linux).
+Source builds and older releases must
 use documentation matching their source/version. The current E18 watch-root
 behavior is newer than the v0.1.6 release record.
 
@@ -27,10 +35,10 @@ to the [release engineering guide](../implementation-tips/release-guide.md).
 
 ## 2. Platform Configuration and State Paths
 
-| Setting | macOS default |
-|---|---|
-| Configuration | `~/.config/agent-dispatch/config.yaml` |
-| State directory | `~/Library/Application Support/Agent Dispatch` |
+| Setting | macOS (`darwin/arm64`) | Linux (`linux/amd64`, `linux/arm64`) |
+|---|---|---|
+| Configuration | `~/.config/agent-dispatch/config.yaml` | `$XDG_CONFIG_HOME/agent-dispatch/config.yaml` when `XDG_CONFIG_HOME` is absolute; else `~/.config/agent-dispatch/config.yaml` |
+| State directory | `~/Library/Application Support/Agent Dispatch` | `$XDG_STATE_HOME/agent-dispatch` when `XDG_STATE_HOME` is absolute; else `~/.local/state/agent-dispatch` |
 
 Configuration precedence is `--config`, then `AGENT_DISPATCH_CONFIG`, then the
 platform default. The global `--state-dir` override takes precedence when supplied;
@@ -38,6 +46,25 @@ otherwise the state directory comes from `instance.state_dir`, then
 `AGENT_DISPATCH_STATE_DIR`, then the platform default. Use an absolute local state
 path outside the watched vault and cloud-sync folders. See the
 [configuration contract](../contracts/configuration-spec.md) for enforcement.
+Relative `XDG_CONFIG_HOME` / `XDG_STATE_HOME` values are ignored per the
+XDG base-directory specification (`internal/platformpaths`).
+
+### 2a. Secret references (SEC-006)
+
+Webhook and notification sinks carry secret *references*, never inline
+secret values (configuration-spec §11). Supported forms:
+
+| Form | macOS (`darwin/arm64`) | Linux (`linux/amd64`, `linux/arm64`) |
+|---|---|---|
+| `env:NAME` | yes | yes |
+| `file:/absolute/path` (owner-only mode 600) | yes | yes |
+| `fd:N` (inherited descriptor) | yes | yes |
+| `keychain:<item>` | yes (controlled Keychain lookup) | no — typed unsupported (`UnresolvedError`) |
+
+Resolution happens immediately before each submission; the value never
+enters SQLite or logs. On Linux prefer `env:`, `file:`, or `fd:` —
+a `keychain:` reference fails closed naming the unsupported kind
+(D-029, E19-T6).
 
 Watchman uses a minimal environment. Configure the Hermes target's `executable`
 as an absolute path, such as `/Users/<user>/.local/bin/hermes`. A PATH-relative
@@ -63,7 +90,10 @@ and runs `reconcile --reason initial --baseline-only` while the route is disable
 The vault must already exist. An enabled base produces a disabled draft beside
 it; subsequent steps must use the printed draft path. Multiple routes require
 an explicit route choice. Missing prerequisites stop the walkthrough with a
-finding; reruns converge on the same disabled baseline.
+finding; reruns converge on the same disabled baseline. On Linux the same
+commands apply; configuration and state resolve through the XDG defaults
+in section 2 (absolute `XDG_CONFIG_HOME` / `XDG_STATE_HOME` replace the
+home-relative prefixes).
 
 After the disabled baseline succeeds, install the exact-root Watchman trigger
 and the appropriate schedule (§4), inspect both, and complete the disposable
@@ -84,27 +114,40 @@ for daily reconciliation; avoid installing two jobs for the same route's daily r
 
 | Drain mode | Schedule |
 |---|---|
-| `scheduled` | Managed launchd job runs reconciliation, then drains after a healthy pass; daily at 03:00 local by default |
+| `scheduled` | Managed launchd (macOS) or systemd (Linux, contracted) job runs reconciliation, then drains after a healthy pass; daily at 03:00 local by default |
 | `after-command` (generated default) | Managed job recovers notification drain every 15 minutes; use the manual recipe below for daily source reconciliation |
 | `manual` | No automatic drain job; use the manual recipe for daily source reconciliation and drain notifications explicitly |
 
 ### Managed Schedule
 
-Review, install, and inspect against the same absolute configuration path:
+Review, install, and inspect against the same absolute configuration path.
+`--platform` selects `launchd` (darwin, shipped) or `systemd` (linux,
+managed systemd shipped in E19-T8):
 
 ```sh
+# macOS (shipped)
 agent-dispatch schedule render --route wiki-maintenance --platform launchd
 agent-dispatch schedule install --route wiki-maintenance --platform launchd
 agent-dispatch schedule inspect --route wiki-maintenance --platform launchd
+
+# Linux (managed systemd; E19-T8)
+agent-dispatch schedule render --route wiki-maintenance --platform systemd
+agent-dispatch schedule install --route wiki-maintenance --platform systemd
+agent-dispatch schedule inspect --route wiki-maintenance --platform systemd
 ```
 
 Add `--config /absolute/path/config.yaml` when using a non-default configuration.
 For `scheduled` mode, `--at HH:MM` selects the local daily time. The managed label
-and path derive from the instance, route, and configuration-path digest. The plist
-invokes the internal `schedule run` command directly. An identical install is
+derives from the instance, route, and configuration-path digest. The platform
+unit — a launchd plist under `~/Library/LaunchAgents/` or a systemd user
+service+timer under `~/.config/systemd/user/` — invokes the internal
+`schedule run` command directly. An identical install is
 idempotent; a different installed definition is refused. Inspect and explicitly
 remove/replace the old managed definition when changing it. Logs rotate at 10 MiB
-with three files retained.
+with three files retained. Managed `--platform launchd` is the shipped scheduler
+on macOS. Managed `--platform systemd` is the shipped scheduler on Linux
+(E19-T8); reviewed example units ship as
+`agent-dispatch-reconcile.systemd.*.example` (E19-T9).
 
 Automatic drain modes require an installed, loaded, definition-matching schedule
 before production activation. `route preflight` reports the install guidance and
@@ -122,6 +165,18 @@ an explicit notification drain after successful reconciliation. The shipped
 drain command is not route-filtered; review its scope and pass the same custom
 `--config` to both commands if needed. The managed `scheduled` mode already owns
 a reconcile-and-drain chain, so it needs no additional daily plist.
+
+On Linux, the managed path is `--platform systemd` (cli-spec §19b; managed CLI
+shipped in E19-T8). Reviewed example units live at
+`agent-dispatch-reconcile.systemd.service.example` and
+`.systemd.timer.example` (E19-T9; managed identity / shell-less
+`schedule run`). Prefer the managed lifecycle:
+1. `agent-dispatch schedule render --route <id> --platform systemd`
+   (review the oneshot service + timer under `~/.config/systemd/user/`);
+2. `agent-dispatch schedule install --route <id> --platform systemd`;
+3. `agent-dispatch schedule inspect --route <id> --platform systemd`
+   (expect `healthy`).
+Managed `--platform launchd` remains the shipped scheduler on macOS.
 
 The submit leg requires an acknowledged production revision; before acknowledgement
 it fails closed. After acknowledgement, disabling the YAML route retains

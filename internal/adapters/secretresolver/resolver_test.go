@@ -113,6 +113,23 @@ func TestResolveKeychainStubbed(t *testing.T) {
 	}
 }
 
+// TestResolveKeychainUnsupportedOffDarwin pins the D-029/E19-T6 Linux
+// posture: keychain references fail closed as a typed UnresolvedError
+// on non-darwin builds (never a panic, never a credential value).
+func TestResolveKeychainUnsupportedOffDarwin(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("keychain is supported on darwin; this pins the off-platform typed refusal")
+	}
+	_, err := Resolve(context.Background(), ref(t, "keychain:agent-dispatch-test-item"))
+	var unresolved *UnresolvedError
+	if !errors.As(err, &unresolved) {
+		t.Fatalf("err = %v, want typed UnresolvedError", err)
+	}
+	if !strings.Contains(err.Error(), "keychain references are not supported on this platform") {
+		t.Fatalf("err = %v, want platform unsupported cause", err)
+	}
+}
+
 // TestResolveNilRef proves the degenerate input fails closed.
 func TestResolveNilRef(t *testing.T) {
 	if _, err := Resolve(context.Background(), nil); err == nil {

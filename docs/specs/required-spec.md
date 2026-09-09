@@ -31,7 +31,7 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | SCP-005 | The implementation **MUST** be written in Go and pin its toolchain and dependencies. |
 | SCP-006 | Operator configuration **MUST** be YAML and validated before side effects. |
 | SCP-007 | Durable local state **MUST** use SQLite on a local filesystem. Network filesystem state is unsupported. |
-| SCP-008 | v0.1 **MUST** be verified on macOS and one supported Linux environment. Hosted CI is not used; run `make verify` on each target platform. *(Superseded by D-023, E9-T8: darwin/arm64 is the only supported platform for the current product line — the Linux verification clause is retired with the Linux packaging surface; the historical D-020 closure record stands as history.)* |
+| SCP-008 | Agent Dispatch **MUST** be verified on each supported platform: `darwin/arm64`, `linux/amd64`, and `linux/arm64`. Hosted CI is not used; run `make verify` on each target platform. *(Reactivated by D-029, E19-T2: supersedes the D-023/D-024 darwin/arm64-only exclusivity; the D-023 retirement note and the historical D-020 Linux closure stand as history. D-028 remains the Absolute Watch-Root Binding decision.)* |
 | SCP-009 | Git **MAY** enrich evidence but **MUST NOT** be required for basic ingestion and dispatch. |
 
 ## 4. Watchman Source
@@ -214,7 +214,7 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | CLI-015 | Configuration-mutating helpers **MUST** validate a candidate and replace the file atomically without modifying unrelated routes or destinations. |
 | CLI-016 | `setup wiki` **MUST** accept an explicit route, require or clearly prompt for selection when multiple routes exist, and pass the selected route to every route-scoped command and instruction. |
 | CLI-017 | `reconcile --baseline-only` **MUST** be a documented disabled-route operation with no submit path and **MUST** refuse active, uncertain, quarantined, or production-enabled state. |
-| CLI-018 | The product **MUST** render, install, inspect, disable, and uninstall one exact managed launchd schedule per route using resolved binary and configuration paths, bounded explicit logs, and history-preserving lifecycle operations. |
+| CLI-018 | The product **MUST** render, install, inspect, disable, and uninstall one exact managed schedule per route for `--platform launchd|systemd` using resolved binary and configuration paths, bounded explicit logs, and history-preserving lifecycle operations. |
 | CLI-019 | `hermes set-minimum-version <target> <version>` **MUST** accept only a floor at or above 0.20.5, atomically update only the selected target, preserve unrelated configuration, and stale every affected route for re-probe, preflight, and production re-acknowledgement. |
 
 ## 14. Security and Privacy
@@ -257,7 +257,7 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | OPS-015 | Rollback **MUST** preserve the upgraded database separately and restore the verified pre-migration backup with the previous readable binary and configuration; down migrations are not required. |
 | OPS-016 | Setup output **MUST** distinguish configuration enabled state, runtime activation, Watchman binding, initial baseline, and production acknowledgement, and **MUST** print but never execute the reviewed enable command. |
 | OPS-017 | Status and doctor **MUST** expose pending notification count and age, latest drain evidence, automatic mode and limit, expected scheduler state, overdue scheduled delivery, repeated ambiguous or retryable outcomes, and unresolvable sinks. |
-| OPS-018 | Automatic notification modes **MUST** require an installed, loaded, definition-matching schedule before production enablement; managed identity **MUST** bind instance, route, and configuration-path digest; the plist **MUST** invoke an internal runner without a shell; install **MUST** be idempotent and refuse a different definition; disable and uninstall **MUST** preserve configuration, SQLite state, logs, and notification history; after-command recovery runs every fifteen minutes, scheduled mode defaults to 03:00 local and drains only after healthy submitted reconciliation, and logs retain at most three 10 MiB files. |
+| OPS-018 | Automatic notification modes **MUST** require an installed, loaded, definition-matching schedule before production enablement; managed identity **MUST** bind instance, route, and configuration-path digest; the platform unit (launchd plist or systemd user unit/timer) **MUST** invoke an internal runner without a shell; install **MUST** be idempotent and refuse a different definition; disable and uninstall **MUST** preserve configuration, SQLite state, logs, and notification history; after-command recovery runs every fifteen minutes, scheduled mode defaults to 03:00 local and drains only after healthy submitted reconciliation, and logs retain at most three 10 MiB files. |
 
 ## 16. Test and Release Quality
 

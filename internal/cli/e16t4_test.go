@@ -30,6 +30,11 @@ func e16t4Env(t *testing.T, mode string) string {
 	savedAgents := launchAgentsDir
 	launchAgentsDir = func() string { return agents }
 	t.Cleanup(func() { launchAgentsDir = savedAgents })
+	// Pin the host posture platform to launchd so the regression suite
+	// stays hermetic on linux CI hosts (E19-T8).
+	savedPlatform := hostSchedulePlatform
+	hostSchedulePlatform = func() string { return "launchd" }
+	t.Cleanup(func() { hostSchedulePlatform = savedPlatform })
 	cfg := e16t1BaseConfigCLI()
 	cfg.Instance.StateDir = filepath.Join(dir, "state")
 	cfg.Routes["wiki"].Notifications.Drain = &config.NotificationDrain{Mode: mode}

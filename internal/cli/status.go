@@ -94,7 +94,7 @@ func runStatus(args []string, stdout, stderr io.Writer) int {
 			}
 			if expected, _ := row["scheduler_expected"].(bool); expected {
 				if schedOverdue, _ := row["scheduler_overdue"].(bool); schedOverdue {
-					warnings = append(warnings, fmt.Sprintf("route %s expects a managed schedule that is not installed and loaded; run 'agent-dispatch schedule install --route %s --platform launchd'", routeID, routeID))
+					warnings = append(warnings, fmt.Sprintf("route %s expects a managed schedule that is not installed and loaded; run '%s'", routeID, scheduleInstallRemediation(routeID, "")))
 				}
 			}
 		}
@@ -315,7 +315,7 @@ func drainDoctorFindings(posture map[string]map[string]any) []doctor.Finding {
 			if schedOverdue, _ := row["scheduler_overdue"].(bool); schedOverdue {
 				findings = append(findings, doctor.Finding{Code: "schedule_overdue", Severity: doctor.SeverityError,
 					Summary:     fmt.Sprintf("route %s expects a managed launchd schedule that is not installed and loaded (mode %v)", routeID, row["mode"]),
-					Remediation: fmt.Sprintf("agent-dispatch schedule install --route %s --platform launchd", routeID)})
+					Remediation: scheduleInstallRemediation(routeID, "")})
 			}
 		}
 	}

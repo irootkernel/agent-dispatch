@@ -193,7 +193,8 @@ upgrade sequence:
    invocation is not expressible, §cli-spec 18);
 4. only when enabling automatic draining: declare the `drain` block,
    install the managed schedule for the route
-   (`schedule install --route <id> --platform launchd`, cli-spec §19),
+   (`schedule install --route <id> --platform launchd|systemd` as
+   appropriate for the host, cli-spec §19),
    and re-run `route preflight` — a declared block whose effective
    policy differs from the manual default changes the route revision,
    the preflight schedule check warns with the exact install command

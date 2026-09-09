@@ -5,6 +5,33 @@ SOT snapshots, not product releases. Product release notes and pending user-faci
 changes belong to the root [changelog](../CHANGELOG.md). Historical entries below
 retain their recorded scope; migrated document pointers use their current paths.
 
+## Unreleased (post-v0.1.7 / post-1.4.0)
+
+E19 Official Linux Support closes gate G15 under D-029 (2026-09-09). The
+next product version is not cut yet; this entry records the on-tree support
+claim until release notes name a version. D-028 and gate G14 remain the
+Absolute Watch-Root Binding records.
+
+- Supported platforms are `{darwin/arm64, linux/amd64, linux/arm64}`
+  (D-029 supersedes D-023/D-024 exclusivity; SCP-008 / AC-505 reactivated).
+- `make release` emits three-arch artifacts with portable checksums
+  (`shasum` / `sha256sum`); managed `--platform systemd` is Must and
+  shipped with examples and `schedule-check` coverage; Linux Watchman zip
+  version dialects compare against the baseline; Linux secrets remain
+  `env:` / `file:` / `fd:` only (`keychain:` darwin-only).
+- Gate G15 in `docs/VALIDATION.md` records full `make verify` passes on
+  darwin/arm64 and disposable linux/amd64 plus linux/arm64 containers. The
+  amd64 container carries the supported official Watchman build; real Watchman
+  on arm64 and real Hermes on Linux remain explicit environment gaps. The
+  Hermes plugin remains out of scope / absent from outcomes.
+- Roadmap closes at 101/101 (E19-T10 Completed; epic E19 Completed). E18
+  Absolute Watch-Root Binding is unchanged.
+- Post-closeout review remediation makes general CLI tests independent of a
+  host Watchman installation and hardens the managed systemd lifecycle: unit
+  values escape literal expansion markers, loaded requires enabled and active,
+  failed enable operations remain unknown, and uninstall validates both files
+  before any side effect. G15 evidence is refreshed on the remediated tree.
+
 ## 1.4.0 - 2026-09-08
 
 D-028 adopted and delivered the absolute watch-root binding remediation

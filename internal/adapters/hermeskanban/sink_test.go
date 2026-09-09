@@ -265,8 +265,14 @@ func TestSinkLookupTransportFailureIsError(t *testing.T) {
 	versionOK := `if [ "$1" = "--version" ]; then printf 'Hermes Agent v0.20.5 (2026.8.19)\n'; exit 0; fi
 `
 	bin := newStubHermes(t, versionOK+`sleep 30`)
-	sink := sinkFixture(t, bin)
-	_, err := sink.LookupByExternalRef(context.Background(), "t_6253023d")
+	sink, err := NewSink("hermes-main", bin, "", "agent-dispatch-test", ProcessLimits{
+		SubmitTimeout: time.Second,
+		LookupTimeout: 200 * time.Millisecond,
+	}, 262144)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = sink.LookupByExternalRef(context.Background(), "t_6253023d")
 	var timeout *TimeoutError
 	if err == nil || !errors.As(err, &timeout) {
 		t.Fatalf("transport failure must surface the typed error for ambiguous treatment, got %v", err)

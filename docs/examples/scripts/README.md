@@ -2,14 +2,16 @@
 
 The `launchd` scheduled-reconciliation example and the uninstall
 procedure script are the shipped E6-T3 deliverables for macOS scheduling
-under the D-029 three-platform support matrix (managed systemd examples
-return under E19 and are not shipped yet), generated from the verified
-`reconcile` and `watchman` command shapes (OPS-006/007): `make
-schedule-check` lints the launchd artifact where `plutil` is present and
-the CLI test suite pins the safety properties. Replace the placeholder
-binary path, route id, and review the uninstall script before use — see
-[the installation guide](../../ops/installation.md) for the full install,
-schedule, upgrade, and backup procedures.
+under the D-029 three-platform support matrix. Managed systemd user
+unit/timer examples return under E19-T9 (not shipped yet; the E19-T6
+test guard no longer forbids restoring them). Examples are generated
+from the verified `reconcile` and `watchman` command shapes
+(OPS-006/007): `make schedule-check` lints the launchd artifact where
+`plutil` is present and the CLI test suite pins the safety properties.
+Replace the placeholder binary path, route id, and review the uninstall
+script before use — see
+[the installation guide](../../ops/installation.md) for the full
+install, schedule, upgrade, and backup procedures.
 
 - `agent-dispatch-reconcile.launchd.plist.example` — macOS LaunchAgent
 - `agent-dispatch-uninstall.sh.example` — runbook §10 uninstall order; retains SQLite and configuration

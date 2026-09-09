@@ -51,16 +51,30 @@ Config loading precedence:
 2. `AGENT_DISPATCH_CONFIG`;
 3. platform default.
 
+Platform defaults (`internal/platformpaths`): macOS uses
+`~/.config/agent-dispatch/config.yaml` and
+`~/Library/Application Support/Agent Dispatch` for state; Linux follows
+the XDG base-directory rules — absolute `XDG_CONFIG_HOME` /
+`XDG_STATE_HOME` replace the home-relative `~/.config` /
+`~/.local/state` prefixes (relative `XDG_*` values are ignored). See
+`docs/ops/installation.md` §2.
+
 Config includes secret references, never secret values where avoidable.
 
 ## 5. Secret Resolution
 
-Allowed mechanisms:
+Allowed mechanisms (configuration-spec §11, `secretresolver`):
 
-- environment variable reference;
-- owner-readable file reference;
-- OS credential-store reference through a small resolver interface;
-- inherited file descriptor.
+- `env:` environment variable reference (all supported platforms);
+- `file:` owner-readable, owner-only file reference (all supported platforms);
+- `fd:` inherited file descriptor (all supported platforms);
+- `keychain:` macOS Keychain reference through the controlled `security`
+  lookup (darwin-only).
+
+On Linux, only `env:`, `file:`, and `fd:` resolve. A `keychain:`
+reference fails closed as a typed unresolved secret (`UnresolvedError`)
+with cause `keychain references are not supported on this platform` —
+never a panic and never a credential value (D-029, E19-T6).
 
 The resolved secret exists only in memory for the outbound call. It is excluded from canonical route digests except for the reference identifier.
 

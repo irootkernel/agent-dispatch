@@ -212,44 +212,51 @@ func TestScheduleExamplesInvokeVerifiedCommands(t *testing.T) {
 	if strings.Contains(string(plist), "/tmp") {
 		t.Fatalf("launchd plist must not log to fixed /tmp paths")
 	}
-	// The systemd service and timer examples are retired with the
-	// Linux packaging surface (D-023, E9-T8); the launchd recipe is
-	// the supported scheduling artifact.
+	// systemd user unit/timer examples return under E19-T9; this
+	// test pins the shipped launchd recipe. Optional systemd contract
+	// checks live in TestScheduleExamplesExistForMacOS when those
+	// files are present.
 	var zout, zerr bytes.Buffer
 	if code := Run([]string{"completion", "zsh"}, &zout, &zerr); code != 0 || !strings.HasPrefix(zout.String(), "#compdef agent-dispatch") {
 		t.Fatalf("zsh completion lacks its header: %q", zout.String())
 	}
 }
 
-// TestScheduleExamplesExistForMacOS guards the example set under the
-// D-023 macOS-only policy (E9-T8): the launchd recipe and the
-// uninstall script; the systemd examples are retired.
+// TestScheduleExamplesExistForMacOS guards the shipped schedule
+// example set under D-029 (E19-T6): launchd and the uninstall script
+// must exist. systemd user unit/timer examples are owned by E19-T9 —
+// missing files are OK here; when present they must match the
+// one-shot reconcile contract (OPS-006/007, --submit).
 func TestScheduleExamplesExistForMacOS(t *testing.T) {
+	dir := filepath.Join("../../docs/examples/scripts")
 	for _, name := range []string{
 		"agent-dispatch-reconcile.launchd.plist.example",
 		"agent-dispatch-uninstall.sh.example",
 	} {
-		if _, err := os.Stat(filepath.Join("../../docs/examples/scripts", name)); err != nil {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
 			t.Fatalf("scheduling example %s missing: %v", name, err)
 		}
 	}
-	// The retired Linux surface stays retired (D-023): the systemd
-	// examples must remain deleted and the uninstall script must not
-	// regress into systemctl guidance.
+	// Optional systemd examples (restored by E19-T9): when present,
+	// pin the same one-shot reconcile contract as the launchd recipe.
 	for _, name := range []string{
 		"agent-dispatch-reconcile.service.example",
 		"agent-dispatch-reconcile.timer.example",
 	} {
-		if _, err := os.Stat(filepath.Join("../../docs/examples/scripts", name)); err == nil {
-			t.Fatalf("retired systemd example %s must stay deleted under the D-023 macOS-only policy", name)
+		body, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue // T9 owns creating these files
+			}
+			t.Fatalf("reading %s: %v", name, err)
 		}
-	}
-	body, err := os.ReadFile(filepath.Join("../../docs/examples/scripts", "agent-dispatch-uninstall.sh.example"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(body), "systemctl") {
-		t.Fatal("the uninstall script must not reference systemctl under the D-023 macOS-only policy")
+		text := string(body)
+		if !strings.Contains(text, "reconcile") || !strings.Contains(text, "scheduled") {
+			t.Fatalf("%s must invoke scheduled reconciliation", name)
+		}
+		if !strings.Contains(text, "--submit") {
+			t.Fatalf("%s must carry --submit (T2-F001)", name)
+		}
 	}
 }
 

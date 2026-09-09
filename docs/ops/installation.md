@@ -46,6 +46,25 @@ otherwise the state directory comes from `instance.state_dir`, then
 `AGENT_DISPATCH_STATE_DIR`, then the platform default. Use an absolute local state
 path outside the watched vault and cloud-sync folders. See the
 [configuration contract](../contracts/configuration-spec.md) for enforcement.
+Relative `XDG_CONFIG_HOME` / `XDG_STATE_HOME` values are ignored per the
+XDG base-directory specification (`internal/platformpaths`).
+
+### 2a. Secret references (SEC-006)
+
+Webhook and notification sinks carry secret *references*, never inline
+secret values (configuration-spec §11). Supported forms:
+
+| Form | macOS (`darwin/arm64`) | Linux (`linux/amd64`, `linux/arm64`) |
+|---|---|---|
+| `env:NAME` | yes | yes |
+| `file:/absolute/path` (owner-only mode 600) | yes | yes |
+| `fd:N` (inherited descriptor) | yes | yes |
+| `keychain:<item>` | yes (controlled Keychain lookup) | no — typed unsupported (`UnresolvedError`) |
+
+Resolution happens immediately before each submission; the value never
+enters SQLite or logs. On Linux prefer `env:`, `file:`, or `fd:` —
+a `keychain:` reference fails closed naming the unsupported kind
+(D-029, E19-T6).
 
 Watchman uses a minimal environment. Configure the Hermes target's `executable`
 as an absolute path, such as `/Users/<user>/.local/bin/hermes`. A PATH-relative

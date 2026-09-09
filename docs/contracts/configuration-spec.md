@@ -10,6 +10,17 @@ Configuration precedence:
 2. `AGENT_DISPATCH_CONFIG`
 3. platform default config path
 
+Platform defaults (`internal/platformpaths`, D-029): on macOS the
+config default is `~/.config/agent-dispatch/config.yaml` and the state
+default is `~/Library/Application Support/Agent Dispatch`; on Linux the
+config default is `$XDG_CONFIG_HOME/agent-dispatch/config.yaml` when
+`XDG_CONFIG_HOME` is absolute (else `~/.config/agent-dispatch/config.yaml`)
+and the state default is `$XDG_STATE_HOME/agent-dispatch` when
+`XDG_STATE_HOME` is absolute (else `~/.local/state/agent-dispatch`).
+Relative `XDG_*` values are ignored. State-directory precedence is
+`instance.state_dir`, then `AGENT_DISPATCH_STATE_DIR`, then the platform
+default (see `docs/ops/installation.md` §2).
+
 No event payload may override configuration.
 
 ## 2. Top-Level Shape
@@ -246,6 +257,11 @@ fd:<positive-integer>
 ```
 
 The config loader parses the reference but resolves its value only immediately before use. JSON display redacts the resolved value and may display the reference identifier.
+
+Platform support (D-029, E19-T6; `internal/adapters/secretresolver`):
+
+- `env:`, `file:`, and `fd:` resolve on every supported platform (`darwin/arm64`, `linux/amd64`, `linux/arm64`).
+- `keychain:` is darwin-only. On Linux (and any non-darwin build) a `keychain:` reference fails closed as a typed unresolved secret (`UnresolvedError`) naming the reference kind — never a panic and never a resolved value — with cause `keychain references are not supported on this platform`.
 
 A `file:` reference must be owner-only (mode 600): a file with group or other permission bits fails closed with the mode named, before any read (SEC-006, E7-T9).
 

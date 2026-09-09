@@ -14,10 +14,10 @@
 | Planned SOT baseline | 1.4.0 ([D-028](../specs/decision-log.md) delivered; [D-029](../specs/decision-log.md) three-platform support; operator docs aligned by E19-T3) |
 | Release target | post-v0.1.7 (Official Linux Support; next release TBD) |
 | Current epic | E19 Official Linux Support |
-| Current active task | None (E19-T5 Completed; awaiting E19-T6) |
-| Next task | E19-T6 (96/101 completed through E19-T5) |
-| Completed tasks | 96 / 101 |
-| Planned tasks | 5 / 101 |
+| Current active task | None (E19-T6 Completed; awaiting E19-T7) |
+| Next task | E19-T7 (97/101 completed through E19-T6) |
+| Completed tasks | 97 / 101 |
+| Planned tasks | 4 / 101 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -155,7 +155,7 @@
 | 94 | E19-T3 | Completed | README and installation support-matrix documentation |
 | 95 | E19-T4 | Completed | Three-arch release artifacts and checksum portability |
 | 96 | E19-T5 | Completed | Watchman version-gate normalization for Linux zip formats |
-| 97 | E19-T6 | Planned | Paths, secrets, and skills documentation and test-guard alignment |
+| 97 | E19-T6 | Completed | Paths, secrets, and skills documentation and test-guard alignment |
 | 98 | E19-T7 | Planned | Schedule contract (cli-spec/OPS) adds systemd |
 | 99 | E19-T8 | Planned | Managed `--platform systemd` CLI lifecycle |
 | 100 | E19-T9 | Planned | systemd examples and schedule-check |
@@ -4721,7 +4721,7 @@ malformed inputs still fail closed. Absolute watch-root binding in
 
 ## E19-T6: Paths, Secrets, and Skills Alignment
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -4748,7 +4748,10 @@ E19-T5 Completed.
 
 ### Evidence
 
-Pending.
+Completed 2026-09-09. Documented XDG path defaults and Linux `env:`/`file:`/`fd:`
+secrets with darwin-only `keychain:` typed unsupported; skills declare
+`platforms: [macos, linux]`; the E6-T3 forbid-systemd-examples guard now
+allows E19-T9 to restore units. Absolute watch-root content is unchanged.
 
 ## E19-T7: Schedule Contract Adds systemd
 

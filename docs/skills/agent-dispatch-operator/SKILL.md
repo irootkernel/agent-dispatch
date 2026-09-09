@@ -3,7 +3,7 @@ name: agent-dispatch-operator
 version: 2.1.0
 author: Agent Dispatch
 license: MIT
-platforms: [macos]
+platforms: [macos, linux]
 metadata:
   hermes:
     tags: [Agent Dispatch, operator, setup, preflight, evidence, notifications, schedule]
@@ -101,10 +101,13 @@ state: every mutating action stays an explicit operator command.
 
 ## Managed drain schedule
 
-- `schedule render --route <id> --platform launchd` reviews the exact
+- On macOS, `schedule render --route <id> --platform launchd` reviews the exact
   managed definition (label, plist, binary, digest) without touching
   launchd; `schedule install` writes and loads it idempotently,
-  refusing a different definition at the same path.
+  refusing a different definition at the same path. On Linux, managed
+  `--platform systemd` is Must under E19 and is not yet implemented —
+  keep an external one-shot reconcile/drain schedule until that surface
+  lands (installation §4).
 - `after-command` recovery runs every fifteen minutes; `scheduled`
   mode reconciles first at 03:00 local by default (`--at HH:MM`
   overrides) and chains the drain only after a healthy pass.

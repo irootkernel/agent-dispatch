@@ -27,7 +27,7 @@ OUT = DOCS / "specs/traceability-matrix.md"
 # endpoints, not citation coverage.
 FINAL_VERIFICATION = {
     "BND": "E6-T4, E13-T4, E15-T4, E17-T2, E17-T3",
-    "SCP": "E6-T3, E6-T4, E17-T3",
+    "SCP": "E6-T3, E6-T4, E17-T3, E19-T10",
     "SRC": "E2-T5, E6-T3, E10-T3, E13-T4, E17-T3",
     "PTH": "E2-T5, E5-T5, E10-T3, E13-T4, E17-T3",
     "DAT": "E3-T5, E12-T4, E13-T4, E17-T3",
@@ -65,7 +65,9 @@ EPIC_CONTRIBUTION = """\
 | E14 | Makes guided setup route-correct and safely establishes a disabled baseline. |
 | E15 | Makes target mutex optional while enforcing explicit local serialization groups. |
 | E16 | Adds bounded post-commit and scheduled progress for the durable notification outbox. |
-| E17 | Reconciles documentation and real evidence, then releases v0.1.6 reproducibly. |"""
+| E17 | Reconciles documentation and real evidence, then releases v0.1.6 reproducibly. |
+| E18 | Binds the configured absolute resource root as the Watchman watch root. |
+| E19 | Reopens official linux/amd64 and linux/arm64 support beside darwin/arm64. |"""
 
 
 def load_spec_groups() -> dict[str, list[int]]:

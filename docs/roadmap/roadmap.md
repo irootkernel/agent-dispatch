@@ -11,13 +11,13 @@
 | Field | Value |
 |---|---|
 | Shipped release | v0.1.6 (published 2026-09-02) |
-| Planned SOT baseline | 1.4.0 ([D-028](../specs/decision-log.md) delivered; Linux policy reserved as [D-029](../specs/decision-log.md) in E19-T2) |
+| Planned SOT baseline | 1.4.0 ([D-028](../specs/decision-log.md) delivered; [D-029](../specs/decision-log.md) reopens `{darwin/arm64, linux/amd64, linux/arm64}`; operator docs pending E19-T3) |
 | Release target | post-v0.1.7 (Official Linux Support; next release TBD) |
 | Current epic | E19 Official Linux Support |
-| Current active task | None (E19-T1 Completed; awaiting E19-T2) |
-| Next task | E19-T2 (92/101 completed through E19-T1) |
-| Completed tasks | 92 / 101 |
-| Planned tasks | 9 / 101 |
+| Current active task | None (E19-T2 Completed; awaiting E19-T3) |
+| Next task | E19-T3 (93/101 completed through E19-T2) |
+| Completed tasks | 93 / 101 |
+| Planned tasks | 8 / 101 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -151,7 +151,7 @@
 | 90 | E18-T1 | Completed | Absolute watch-root binding contract |
 | 91 | E18-T2 | Completed | Operator-host re-binding and live verification |
 | 92 | E19-T1 | Completed | Roadmap epic and task registration for Official Linux Support |
-| 93 | E19-T2 | Planned | Policy decision superseding D-023; SCP-008/AC-505/charter |
+| 93 | E19-T2 | Completed | Policy decision D-029; SCP-008/AC-505/charter reactivated |
 | 94 | E19-T3 | Planned | README and installation support-matrix documentation |
 | 95 | E19-T4 | Planned | Three-arch release artifacts and checksum portability |
 | 96 | E19-T5 | Planned | Watchman version-gate normalization for Linux zip formats |
@@ -4526,7 +4526,7 @@ the closing tree.
 **Epic status:** In Progress
 **Purpose:** Officially support `linux/amd64` and `linux/arm64` alongside `darwin/arm64` for agent-dispatch (Hermes plugin remains out of scope), with managed systemd scheduling, portable release artifacts, and recorded verification evidence.
 **Gate:** G15
-**Canonical Outcomes:** [decision-log.md](../specs/decision-log.md) (D-023 supersession; D-029 reserved for E19-T2) · [required-spec.md](../specs/required-spec.md) (SCP-008) · [acceptance-criteria.md](../specs/acceptance-criteria.md) (AC-505 / G15) · [cli-spec.md](../contracts/cli-spec.md) §19 · [ops/installation.md](../ops/installation.md) · [VALIDATION.md](../VALIDATION.md)
+**Canonical Outcomes:** [decision-log.md](../specs/decision-log.md) (D-029 supersedes D-023/D-024 exclusivity; D-028 remains watch-root) · [required-spec.md](../specs/required-spec.md) (SCP-008) · [acceptance-criteria.md](../specs/acceptance-criteria.md) (AC-505 / G15) · [cli-spec.md](../contracts/cli-spec.md) §19 · [ops/installation.md](../ops/installation.md) · [VALIDATION.md](../VALIDATION.md)
 
 **Master-approved constraints (2026-09-08):**
 - Platforms: `darwin/arm64`, `linux/amd64`, `linux/arm64`
@@ -4572,7 +4572,7 @@ Completed 2026-09-09. Registered E19 and E19-T1..T10 in `docs/roadmap/roadmap.md
 
 ## E19-T2: Policy Decision and Spec Reactivation
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -4601,7 +4601,7 @@ E19-T1 Completed.
 
 ### Evidence
 
-Pending.
+Completed 2026-09-09. Recorded D-029 superseding D-023/D-024 darwin/arm64-only exclusivity for the supported set `{darwin/arm64, linux/amd64, linux/arm64}`; reactivated SCP-008 and AC-505; updated the project-charter success definition; regenerated the requirement traceability matrix for the reopened SCP-008 citation. D-028 and G14 remain Absolute Watch-Root Binding. Plugin remains out of scope; managed systemd is Must as follow-on (not implemented here). Linux secrets intent (`env:`/`file:`/`fd:` only; `keychain:` darwin-only) is recorded in D-029.
 
 ## E19-T3: Public Support-Matrix Documentation
 

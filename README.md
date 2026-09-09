@@ -15,12 +15,13 @@ processing every save as a separate job.
 
 Watchman detects changes; Agent Dispatch records and coordinates work in a
 local SQLite database; Hermes runs the agent tasks. Each Agent Dispatch
-command does bounded work and exits. Watchman and macOS launchd provide the
-ongoing triggers and scheduling.
+command does bounded work and exits. Watchman and the platform scheduler
+(launchd on macOS; managed systemd returns under E19 and is not shipped yet)
+provide the ongoing triggers and scheduling.
 
 ## Requirements
 
-- **macOS on Apple Silicon (`darwin/arm64`)** is the supported platform.
+- **Supported platforms** are `darwin/arm64`, `linux/amd64`, and `linux/arm64` ([D-029](docs/specs/decision-log.md)). The published v0.1.7 artifact is still darwin/arm64; Linux release binaries land with three-arch packaging in E19-T4.
 - Watchman, and Hermes **0.20.5 or newer** with the public Kanban interface.
   Version eligibility is checked separately from the capabilities of your
   installed executable.
@@ -63,8 +64,8 @@ refer to the executable.
 Choose a version from the repository's
 [GitHub Releases](https://github.com/irootkernel/agent-dispatch/releases), and read
 that version's section in the [changelog](CHANGELOG.md). Download and install
-the v0.1.7 macOS Apple Silicon binary as follows; no Go toolchain
-is needed. Watchman and Hermes remain separate requirements.
+the published v0.1.7 macOS Apple Silicon binary as follows; no Go toolchain
+is needed. Linux release artifacts are not in the v0.1.7 set — build on the target host until E19-T4. Watchman and Hermes remain separate requirements.
 
 ```sh
 mkdir agent-dispatch-v0.1.7-download &&

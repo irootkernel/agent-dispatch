@@ -11,13 +11,13 @@
 | Field | Value |
 |---|---|
 | Shipped release | v0.1.6 (published 2026-09-02) |
-| Planned SOT baseline | 1.4.0 ([D-028](../specs/decision-log.md) delivered; [D-029](../specs/decision-log.md) reopens `{darwin/arm64, linux/amd64, linux/arm64}`; operator docs pending E19-T3) |
+| Planned SOT baseline | 1.4.0 ([D-028](../specs/decision-log.md) delivered; [D-029](../specs/decision-log.md) three-platform support; operator docs aligned by E19-T3) |
 | Release target | post-v0.1.7 (Official Linux Support; next release TBD) |
 | Current epic | E19 Official Linux Support |
-| Current active task | None (E19-T2 Completed; awaiting E19-T3) |
-| Next task | E19-T3 (93/101 completed through E19-T2) |
-| Completed tasks | 93 / 101 |
-| Planned tasks | 8 / 101 |
+| Current active task | None (E19-T3 Completed; awaiting E19-T4) |
+| Next task | E19-T4 (94/101 completed through E19-T3) |
+| Completed tasks | 94 / 101 |
+| Planned tasks | 7 / 101 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -152,7 +152,7 @@
 | 91 | E18-T2 | Completed | Operator-host re-binding and live verification |
 | 92 | E19-T1 | Completed | Roadmap epic and task registration for Official Linux Support |
 | 93 | E19-T2 | Completed | Policy decision D-029; SCP-008/AC-505/charter reactivated |
-| 94 | E19-T3 | Planned | README and installation support-matrix documentation |
+| 94 | E19-T3 | Completed | README and installation support-matrix documentation |
 | 95 | E19-T4 | Planned | Three-arch release artifacts and checksum portability |
 | 96 | E19-T5 | Planned | Watchman version-gate normalization for Linux zip formats |
 | 97 | E19-T6 | Planned | Paths, secrets, and skills documentation and test-guard alignment |
@@ -4605,7 +4605,7 @@ Completed 2026-09-09. Recorded D-029 superseding D-023/D-024 darwin/arm64-only e
 
 ## E19-T3: Public Support-Matrix Documentation
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -4631,7 +4631,21 @@ E19-T2 Completed.
 
 ### Evidence
 
-Pending.
+Completed 2026-09-09. Aligned living operator docs with the D-029 support
+matrix `{darwin/arm64, linux/amd64, linux/arm64}`: root `README.md` names
+the three platforms; `docs/README.md` adds a Supported Platforms section;
+`docs/ops/installation.md` restores the Linux XDG config/state path table
+rows (matching `internal/platformpaths`), drops present-tense macOS-only
+exclusivity, and states that managed systemd returns under later E19 tasks
+without restoring retired example units; `docs/implementation-tips/release-checklist.md`
+and `testing-strategy.md` replace darwin/arm64-only present-tense claims.
+Related living exclusivity one-liners in architecture guidance,
+configuration-spec pattern wording, the implementation-guide SQLite
+row, and `docs/examples/scripts` README/uninstall comments are aligned
+the same way. Makefile `RELEASE_OS_ARCH`, Watchman parser, systemd CLI,
+example units, and skill `platforms:` declarations remain for later
+E19 tasks. Historical RELEASE-NOTES, VALIDATION rows, and decision-log
+entries keep past claims. E18 Absolute Watch-Root Binding is unchanged.
 
 ## E19-T4: Three-Arch Release and Checksum Portability
 

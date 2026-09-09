@@ -22,7 +22,7 @@ candidate. Original checked items retain their historical scope.
 ## Build and Supply Chain
 
 - [x] Go toolchain and dependencies are pinned (go 1.26.6; staticcheck as a tool dependency, SCP-005); `make verify` and `make release` enforce the exact pin through `go-version-check` before any build step.
-- [x] Clean reproducible builds pass on macOS (darwin/arm64 — the only supported platform under the D-023 policy).
+- [x] Clean reproducible builds pass on each supported platform (`darwin/arm64`, `linux/amd64`, and `linux/arm64` under the D-029 policy; three-arch `make release` packaging lands in E19-T4).
 - [x] Binaries and checksums are generated with the byte-reproducibility double build verified for v0.1.6 (two consecutive `make release VERSION=v0.1.6` builds byte-identical on the tagged implementation tree; the published SHA256SUMS carries the final artifact digest).
 - [x] Dependency/license review is complete (dependency-licenses.md; no new dependencies since the v0.1.5 review).
 - [x] Build metadata remains embedded while the public identity is compact (`version`: `agent-dispatch 0.1.6`; `version --json`: exactly `name` and `version: v0.1.6`; schema range 1-20 remains internally drift-checked).

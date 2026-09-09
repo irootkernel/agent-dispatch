@@ -1,9 +1,13 @@
 # Installation, Scheduling, Upgrade, and Backup
 
-This guide is for the operator of a local macOS arm64 installation. The operator
+This guide is for the operator of a local installation on a supported platform
+(`darwin/arm64`, `linux/amd64`, or `linux/arm64` under [D-029](../specs/decision-log.md),
+E19; superseding the D-023/E9-T8 darwin/arm64-only exclusivity). The operator
 owns the configuration, vault/board selection, backups, and authority to install
-binaries, triggers, or LaunchAgents. Agent Dispatch runs one-shot commands:
-Watchman owns event sensing and launchd owns scheduling; there is no Agent Dispatch
+binaries, triggers, or schedules. Agent Dispatch runs one-shot commands:
+Watchman owns event sensing and the platform scheduler owns scheduling
+(launchd on macOS; managed `--platform systemd` returns under E19 and is not
+shipped yet); there is no Agent Dispatch
 daemon. Start with the [public quick start](../../README.md#quick-start) for a new instance.
 
 Before changing an existing installation, record `agent-dispatch version --json`,
@@ -15,9 +19,13 @@ Hermes access and shared Watchman topology changes belong to their host owners.
 ## 1. Install the Binary
 
 Build the current checkout or install a verified published binary using the
-[README](../../README.md#install). Release artifacts are a bare
-`agent-dispatch-<version>-darwin-arm64` binary and `SHA256SUMS`; verify the downloaded
-bytes before copying the binary onto PATH. Source builds and older releases must
+[README](../../README.md#install). Artifact names follow
+`agent-dispatch-<version>-<os>-<arch>` plus `SHA256SUMS`. The published v0.1.7
+set is still `agent-dispatch-<version>-darwin-arm64`; three-arch `make release`
+packaging lands in E19-T4. Until then, build on the target host with `make build`
+(or set `GOOS`/`GOARCH`). Verify downloaded bytes before copying the binary onto
+PATH (`shasum -a 256 -c SHA256SUMS`, or `sha256sum -c SHA256SUMS` on Linux).
+Source builds and older releases must
 use documentation matching their source/version. The current E18 watch-root
 behavior is newer than the v0.1.6 release record.
 
@@ -27,10 +35,10 @@ to the [release engineering guide](../implementation-tips/release-guide.md).
 
 ## 2. Platform Configuration and State Paths
 
-| Setting | macOS default |
-|---|---|
-| Configuration | `~/.config/agent-dispatch/config.yaml` |
-| State directory | `~/Library/Application Support/Agent Dispatch` |
+| Setting | macOS (`darwin/arm64`) | Linux (`linux/amd64`, `linux/arm64`) |
+|---|---|---|
+| Configuration | `~/.config/agent-dispatch/config.yaml` | `$XDG_CONFIG_HOME/agent-dispatch/config.yaml` when `XDG_CONFIG_HOME` is absolute; else `~/.config/agent-dispatch/config.yaml` |
+| State directory | `~/Library/Application Support/Agent Dispatch` | `$XDG_STATE_HOME/agent-dispatch` when `XDG_STATE_HOME` is absolute; else `~/.local/state/agent-dispatch` |
 
 Configuration precedence is `--config`, then `AGENT_DISPATCH_CONFIG`, then the
 platform default. The global `--state-dir` override takes precedence when supplied;
@@ -63,7 +71,10 @@ and runs `reconcile --reason initial --baseline-only` while the route is disable
 The vault must already exist. An enabled base produces a disabled draft beside
 it; subsequent steps must use the printed draft path. Multiple routes require
 an explicit route choice. Missing prerequisites stop the walkthrough with a
-finding; reruns converge on the same disabled baseline.
+finding; reruns converge on the same disabled baseline. On Linux the same
+commands apply; configuration and state resolve through the XDG defaults
+in section 2 (absolute `XDG_CONFIG_HOME` / `XDG_STATE_HOME` replace the
+home-relative prefixes).
 
 After the disabled baseline succeeds, install the exact-root Watchman trigger
 and the appropriate schedule (§4), inspect both, and complete the disposable
@@ -122,6 +133,12 @@ an explicit notification drain after successful reconciliation. The shipped
 drain command is not route-filtered; review its scope and pass the same custom
 `--config` to both commands if needed. The managed `scheduled` mode already owns
 a reconcile-and-drain chain, so it needs no additional daily plist.
+
+On Linux, schedule the same one-shot reconcile command through an
+operator-owned timer or cron until managed `--platform systemd` returns under
+E19 (Must; not shipped yet). Do not treat pre-D-023 systemd example units as
+current assets. Managed `--platform launchd` remains the shipped scheduler on
+macOS.
 
 The submit leg requires an acknowledged production revision; before acknowledgement
 it fails closed. After acknowledgement, disabling the YAML route retains

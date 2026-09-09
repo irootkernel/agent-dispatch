@@ -188,7 +188,7 @@ routes:
 - Exclude patterns are directory-aware (E10-T2, PTH-009): a pattern that matches a path prefix at a segment boundary excludes everything inside that directory, so an exact-directory exclusion (`Secrets`) covers its whole subtree exactly like a recursive one (`Secrets/**`), and a file or glob pattern also covers a same-named directory.
 - Exclude takes precedence over include.
 - Protected and immutable patterns are evaluated after include/exclude.
-- Pattern behavior is explicit per host through the resolved case mode (the supported host is macOS/darwin-arm64, D-023; the resolver stays host-derived so a future platform carries its own explicit mode).
+- Pattern behavior is explicit per host through the resolved case mode (supported hosts are `darwin/arm64`, `linux/amd64`, and `linux/arm64` under D-029; the resolver stays host-derived so each platform carries its own explicit mode).
 - Case sensitivity follows the configured policy, not an accidental host filesystem behavior. v0.1 default is `filesystem`, and the resolved behavior is recorded in the route revision.
 
 ## 8. Policy Actions

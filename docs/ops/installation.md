@@ -146,7 +146,8 @@ idempotent; a different installed definition is refused. Inspect and explicitly
 remove/replace the old managed definition when changing it. Logs rotate at 10 MiB
 with three files retained. Managed `--platform launchd` is the shipped scheduler
 on macOS. Managed `--platform systemd` is the shipped scheduler on Linux
-(E19-T8); example units return under E19-T9.
+(E19-T8); reviewed example units ship as
+`agent-dispatch-reconcile.systemd.*.example` (E19-T9).
 
 Automatic drain modes require an installed, loaded, definition-matching schedule
 before production activation. `route preflight` reports the install guidance and
@@ -166,14 +167,16 @@ drain command is not route-filtered; review its scope and pass the same custom
 a reconcile-and-drain chain, so it needs no additional daily plist.
 
 On Linux, the managed path is `--platform systemd` (cli-spec §19b; managed CLI
-shipped in E19-T8, example units in E19-T9). Procedure:
+shipped in E19-T8). Reviewed example units live at
+`agent-dispatch-reconcile.systemd.service.example` and
+`.systemd.timer.example` (E19-T9; managed identity / shell-less
+`schedule run`). Prefer the managed lifecycle:
 1. `agent-dispatch schedule render --route <id> --platform systemd`
    (review the oneshot service + timer under `~/.config/systemd/user/`);
 2. `agent-dispatch schedule install --route <id> --platform systemd`;
 3. `agent-dispatch schedule inspect --route <id> --platform systemd`
    (expect `healthy`).
-Do not treat pre-D-023 systemd example units as current assets. Managed
-`--platform launchd` remains the shipped scheduler on macOS.
+Managed `--platform launchd` remains the shipped scheduler on macOS.
 
 The submit leg requires an acknowledged production revision; before acknowledgement
 it fails closed. After acknowledgement, disabling the YAML route retains

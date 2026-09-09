@@ -1,0 +1,17 @@
+# E19-T9 systemd --user managed-schedule timer example (OPS-018 / cli-spec §19b).
+# Pairs with agent-dispatch-reconcile.systemd.service.example under the same
+# managed label. Scheduled mode defaults to 03:00 local (OnCalendar); the
+# managed CLI's --at HH:MM overrides at render/install time. Prefer
+# `agent-dispatch schedule install --platform systemd` over hand-editing.
+# agent-dispatch managed schedule; safe to remove only through 'schedule uninstall'
+[Unit]
+Description=agent-dispatch managed schedule timer (xyz.rootkernel.agent-dispatch.local.wiki-maintenance.0123456789ab)
+Requires=xyz.rootkernel.agent-dispatch.local.wiki-maintenance.0123456789ab.service
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+Unit=xyz.rootkernel.agent-dispatch.local.wiki-maintenance.0123456789ab.service
+
+[Install]
+WantedBy=timers.target

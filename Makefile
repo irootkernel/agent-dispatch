@@ -143,15 +143,30 @@ release: go-version-check
 	@cat $(DIST_DIR)/SHA256SUMS
 	@echo "release: artifacts in $(DIST_DIR) for $(VERSION)"
 
-# E6-T3 scheduling-artifact validation under D-029 three-platform
-# support: the launchd example is linted with the platform tool when
-# present and the uninstall script with sh -n; managed systemd example
-# units return under later E19 tasks (not restored here).
+# E6-T3 / E19-T9 scheduling-artifact validation under D-029 three-platform
+# support: lint the launchd example with plutil when present, the systemd
+# user unit/timer examples with systemd-analyze verify when present, and
+# the uninstall script with sh -n. Missing platform tools skip with a
+# message (symmetric: plutil absent on Linux, systemd-analyze absent on
+# macOS / minimal hosts).
 schedule-check:
 	@if command -v plutil >/dev/null 2>&1; then \
 	  plutil -lint docs/examples/scripts/agent-dispatch-reconcile.launchd.plist.example || exit 1; \
 	else \
-	  echo "schedule-check: plutil absent; validated the shell script only (run on macOS to lint the launchd artifact)"; \
+	  echo "schedule-check: plutil absent; skipped launchd lint (run on macOS to lint the launchd artifact)"; \
+	fi; \
+	if command -v systemd-analyze >/dev/null 2>&1; then \
+	  tmp=$$(mktemp -d) || exit 1; \
+	  trap 'rm -rf "$$tmp"' EXIT HUP INT TERM; \
+	  label=xyz.rootkernel.agent-dispatch.local.wiki-maintenance.0123456789ab; \
+	  cp docs/examples/scripts/agent-dispatch-reconcile.systemd.service.example "$$tmp/$$label.service" || exit 1; \
+	  cp docs/examples/scripts/agent-dispatch-reconcile.systemd.timer.example "$$tmp/$$label.timer" || exit 1; \
+	  stub=$$tmp/agent-dispatch; cp /bin/true "$$stub" && chmod +x "$$stub" || exit 1; \
+	  sed "s|/usr/local/bin/agent-dispatch|$$stub|g" "$$tmp/$$label.service" > "$$tmp/$$label.service.rewritten" || exit 1; \
+	  mv "$$tmp/$$label.service.rewritten" "$$tmp/$$label.service" || exit 1; \
+	  systemd-analyze verify "$$tmp/$$label.service" "$$tmp/$$label.timer" || exit 1; \
+	else \
+	  echo "schedule-check: systemd-analyze absent; skipped systemd unit lint (run on a systemd host to verify the user units)"; \
 	fi; \
 	sh -n docs/examples/scripts/agent-dispatch-uninstall.sh.example || exit 1; \
 	echo "schedule-check: done"

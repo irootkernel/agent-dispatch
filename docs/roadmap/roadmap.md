@@ -1,7 +1,7 @@
 # Agent Dispatch Implementation Roadmap
 
 > **Roadmap version:** 1.5
-> **Release target:** post-v0.1.7 (Official Linux Support; next release TBD)
+> **Release target:** post-v0.1.7 (Official Linux Support delivered on-tree; next product version TBD)
 > **Execution model:** Strictly linear, one active task globally  
 > **Epics:** 20
 > **Tasks:** 101
@@ -11,13 +11,13 @@
 | Field | Value |
 |---|---|
 | Shipped release | v0.1.6 (published 2026-09-02) |
-| Planned SOT baseline | 1.4.0 ([D-028](../specs/decision-log.md) delivered; [D-029](../specs/decision-log.md) three-platform support; operator docs aligned by E19-T3) |
-| Release target | post-v0.1.7 (Official Linux Support; next release TBD) |
-| Current epic | E19 Official Linux Support |
-| Current active task | None (E19-T9 Completed; awaiting E19-T10) |
-| Next task | E19-T10 (100/101 completed through E19-T9) |
-| Completed tasks | 100 / 101 |
-| Planned tasks | 1 / 101 |
+| Planned SOT baseline | 1.4.0 ([D-028](../specs/decision-log.md) delivered; [D-029](../specs/decision-log.md) three-platform support; G15 closed 2026-09-09) |
+| Release target | post-v0.1.7 (Official Linux Support delivered on-tree; next product version TBD) |
+| Current epic | None (E19 Official Linux Support Completed) |
+| Current active task | None |
+| Next task | None (101/101 completed; await next roadmap admission) |
+| Completed tasks | 101 / 101 |
+| Planned tasks | 0 / 101 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -53,7 +53,7 @@
 | E16 | Automatic Durable Notification Draining | **Completed** | 4 | G12 |
 | E17 | Documentation, Cold Validation, and v0.1.6 Release | **Completed** | 3 | G13 |
 | E18 | Absolute Watch-Root Binding | **Completed** | 2 | G14 |
-| E19 | Official Linux Support (darwin/arm64 + linux/amd64 + linux/arm64) | **In Progress** | 10 | G15 |
+| E19 | Official Linux Support (darwin/arm64 + linux/amd64 + linux/arm64) | **Completed** | 10 | G15 |
 
 ## 3. Task Status Index
 
@@ -159,7 +159,7 @@
 | 98 | E19-T7 | Completed | Schedule contract (cli-spec/OPS) adds systemd |
 | 99 | E19-T8 | Completed | Managed `--platform systemd` CLI lifecycle |
 | 100 | E19-T9 | Completed | systemd examples and schedule-check |
-| 101 | E19-T10 | Planned | VALIDATION evidence (amd64 + arm64) and closeout notes |
+| 101 | E19-T10 | Completed | VALIDATION evidence (amd64 + arm64) and closeout notes |
 
 ---
 
@@ -4523,7 +4523,7 @@ the closing tree.
 
 # E19: Official Linux Support
 
-**Epic status:** In Progress
+**Epic status:** Completed
 **Purpose:** Officially support `linux/amd64` and `linux/arm64` alongside `darwin/arm64` for agent-dispatch (Hermes plugin remains out of scope), with managed systemd scheduling, portable release artifacts, and recorded verification evidence.
 **Gate:** G15
 **Canonical Outcomes:** [decision-log.md](../specs/decision-log.md) (D-029 supersedes D-023/D-024 exclusivity; D-028 remains watch-root) · [required-spec.md](../specs/required-spec.md) (SCP-008) · [acceptance-criteria.md](../specs/acceptance-criteria.md) (AC-505 / G15) · [cli-spec.md](../contracts/cli-spec.md) §19 · [ops/installation.md](../ops/installation.md) · [VALIDATION.md](../VALIDATION.md)
@@ -4859,7 +4859,7 @@ absent. Launchd and uninstall checks remain.
 
 ## E19-T10: VALIDATION Evidence and Closeout
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -4888,7 +4888,18 @@ E19-T9 Completed.
 
 ### Evidence
 
-Pending.
+Completed 2026-09-09. Gate G15 recorded in `docs/VALIDATION.md` with a
+platform×leg matrix under D-029 / AC-505 / SCP-008. On this linux/amd64
+host: `make test` passed; full `make verify` including `test-race` was
+not rerun. `make schedule-check` green with `systemd-analyze verify` on
+the restored systemd examples. linux/arm64: host `dist/` holds a
+pre-existing ELF64 AArch64 `agent-dispatch-v0.1.6-dev-linux-arm64`;
+container/native `make verify` was not executed (explicit gap).
+darwin/arm64 retains historical G13/G14 evidence. Product
+`CHANGELOG.md` Unreleased and `docs/SOT-CHANGELOG.md` record the
+post-v0.1.7 support claim (next product version TBD). Plugin remains
+absent. E18 Absolute Watch-Root Binding, D-028, and G14 are unchanged.
+Epic E19 Completed; roadmap 101/101; next task none.
 
 ---
 

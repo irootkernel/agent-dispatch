@@ -4,6 +4,8 @@ This file records concise shipped outcomes and pending changes.
 
 ## Unreleased
 
+- Official Linux support is on-tree for `darwin/arm64`, `linux/amd64`, and `linux/arm64` (D-029, epic E19, gate G15). No product version is cut for this claim yet. Managed `--platform systemd` is shipped; the Hermes plugin remains out of scope.
+
 ## v0.1.7 - 2026-09-09
 
 ### Changed

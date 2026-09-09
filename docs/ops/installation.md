@@ -20,10 +20,10 @@ Hermes access and shared Watchman topology changes belong to their host owners.
 
 Build the current checkout or install a verified published binary using the
 [README](../../README.md#install). Artifact names follow
-`agent-dispatch-<version>-<os>-<arch>` plus `SHA256SUMS`. The published v0.1.7
-set is still `agent-dispatch-<version>-darwin-arm64`; three-arch `make release`
-packaging lands in E19-T4. Until then, build on the target host with `make build`
-(or set `GOOS`/`GOARCH`). Verify downloaded bytes before copying the binary onto
+`agent-dispatch-<version>-<os>-<arch>` plus `SHA256SUMS`. `make release` emits
+darwin/arm64, linux/amd64, and linux/arm64 (E19-T4). The published v0.1.7
+set is still `agent-dispatch-<version>-darwin-arm64`. Verify downloaded bytes
+before copying the binary onto
 PATH (`shasum -a 256 -c SHA256SUMS`, or `sha256sum -c SHA256SUMS` on Linux).
 Source builds and older releases must
 use documentation matching their source/version. The current E18 watch-root

@@ -383,35 +383,61 @@ func TestG5AC506ReleaseArtifactsPresent(t *testing.T) {
 		}
 	}
 	// The release artifacts: when dist/ exists it carries exactly the
-	// one shipped darwin/arm64 binary (the only supported platform,
-	// D-023) and one SHA256SUMS line per artifact.
+	// three D-029 supported-platform binaries (darwin/arm64,
+	// linux/amd64, linux/arm64) and one SHA256SUMS line per artifact.
+	// Product changelog version selection above stays the origin/main
+	// release-test contract (root CHANGELOG.md, not a nested notes file).
 	dist := filepath.Join(root, "dist")
 	if _, err := os.Stat(dist); err == nil {
 		sums, rerr := os.ReadFile(filepath.Join(dist, "SHA256SUMS"))
 		if rerr != nil {
 			t.Fatalf("AC-506: dist/SHA256SUMS missing: %v", rerr)
 		}
+		wantSuffixes := map[string]bool{
+			"darwin-arm64": false,
+			"linux-amd64":  false,
+			"linux-arm64":  false,
+		}
 		lines := 0
 		for _, l := range strings.Split(strings.TrimSpace(string(sums)), "\n") {
-			if l != "" {
-				lines++
+			if l == "" {
+				continue
 			}
-		}
-		if lines != 1 {
-			t.Fatalf("AC-506: SHA256SUMS must carry exactly the one darwin/arm64 artifact under the D-023 policy, got %d: %q", lines, string(sums))
-		}
-		for _, l := range strings.Split(strings.TrimSpace(string(sums)), "\n") {
+			lines++
 			fields := strings.Fields(l)
 			if len(fields) != 2 {
 				t.Fatalf("AC-506: malformed SHA256SUMS line %q", l)
 			}
-			artifact, serr := os.ReadFile(filepath.Join(dist, fields[1]))
+			name := fields[1]
+			suffix := ""
+			for s := range wantSuffixes {
+				if strings.HasSuffix(name, "-"+s) {
+					suffix = s
+					break
+				}
+			}
+			if suffix == "" {
+				t.Fatalf("AC-506: unexpected SHA256SUMS artifact %q under the D-029 three-platform set", name)
+			}
+			if wantSuffixes[suffix] {
+				t.Fatalf("AC-506: duplicate platform suffix %s in SHA256SUMS", suffix)
+			}
+			wantSuffixes[suffix] = true
+			artifact, serr := os.ReadFile(filepath.Join(dist, name))
 			if serr != nil {
-				t.Fatalf("AC-506: checksummed artifact missing: %s (%v)", fields[1], serr)
+				t.Fatalf("AC-506: checksummed artifact missing: %s (%v)", name, serr)
 			}
 			sum := sha256.Sum256(artifact)
 			if hex.EncodeToString(sum[:]) != fields[0] {
-				t.Fatalf("AC-506: digest mismatch for %s: SHA256SUMS says %s, file hashes %s", fields[1], fields[0], hex.EncodeToString(sum[:]))
+				t.Fatalf("AC-506: digest mismatch for %s: SHA256SUMS says %s, file hashes %s", name, fields[0], hex.EncodeToString(sum[:]))
+			}
+		}
+		if lines != 3 {
+			t.Fatalf("AC-506: SHA256SUMS must carry exactly the three D-029 platform artifacts, got %d: %q", lines, string(sums))
+		}
+		for suffix, seen := range wantSuffixes {
+			if !seen {
+				t.Fatalf("AC-506: SHA256SUMS missing required platform suffix %s", suffix)
 			}
 		}
 	}

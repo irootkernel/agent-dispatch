@@ -14,10 +14,10 @@
 | Planned SOT baseline | 1.4.0 ([D-028](../specs/decision-log.md) delivered; [D-029](../specs/decision-log.md) three-platform support; operator docs aligned by E19-T3) |
 | Release target | post-v0.1.7 (Official Linux Support; next release TBD) |
 | Current epic | E19 Official Linux Support |
-| Current active task | None (E19-T3 Completed; awaiting E19-T4) |
-| Next task | E19-T4 (94/101 completed through E19-T3) |
-| Completed tasks | 94 / 101 |
-| Planned tasks | 7 / 101 |
+| Current active task | None (E19-T4 Completed; awaiting E19-T5) |
+| Next task | E19-T5 (95/101 completed through E19-T4) |
+| Completed tasks | 95 / 101 |
+| Planned tasks | 6 / 101 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -153,7 +153,7 @@
 | 92 | E19-T1 | Completed | Roadmap epic and task registration for Official Linux Support |
 | 93 | E19-T2 | Completed | Policy decision D-029; SCP-008/AC-505/charter reactivated |
 | 94 | E19-T3 | Completed | README and installation support-matrix documentation |
-| 95 | E19-T4 | Planned | Three-arch release artifacts and checksum portability |
+| 95 | E19-T4 | Completed | Three-arch release artifacts and checksum portability |
 | 96 | E19-T5 | Planned | Watchman version-gate normalization for Linux zip formats |
 | 97 | E19-T6 | Planned | Paths, secrets, and skills documentation and test-guard alignment |
 | 98 | E19-T7 | Planned | Schedule contract (cli-spec/OPS) adds systemd |
@@ -4649,7 +4649,7 @@ entries keep past claims. E18 Absolute Watch-Root Binding is unchanged.
 
 ## E19-T4: Three-Arch Release and Checksum Portability
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -4677,7 +4677,12 @@ E19-T3 Completed.
 
 ### Evidence
 
-Pending.
+Completed 2026-09-09. `make release` emits darwin/arm64, linux/amd64, and
+linux/arm64 artifacts plus SHA256SUMS. Manifest-check and release checksums
+prefer `shasum -a 256` and fall back to `sha256sum`. AC-506 keeps the
+origin/main product-changelog version source and now expects the three-arch
+artifact set when `dist/` is present. D-029 names the platform set; E18
+watch-root behavior is unchanged.
 
 ## E19-T5: Watchman Version-Gate Normalization
 

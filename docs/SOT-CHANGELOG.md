@@ -19,15 +19,18 @@ Absolute Watch-Root Binding records.
   shipped with examples and `schedule-check` coverage; Linux Watchman zip
   version dialects compare against the baseline; Linux secrets remain
   `env:` / `file:` / `fd:` only (`keychain:` darwin-only).
-- Gate G15 in `docs/VALIDATION.md` records platform×leg evidence honestly:
-  linux/amd64 `make test` passed on this host (2026-09-09); full `make verify`
-  including `test-race` was not rerun in this closeout; linux/arm64 contributes
-  the cross-compiled release-artifact shape plus a documented container/native
-  verify strategy (runtime verify and Watchman real legs are explicit gaps on
-  this closeout host). The Hermes plugin remains out of scope / absent from
-  outcomes.
+- Gate G15 in `docs/VALIDATION.md` records full `make verify` passes on
+  darwin/arm64 and disposable linux/amd64 plus linux/arm64 containers. The
+  amd64 container carries the supported official Watchman build; real Watchman
+  on arm64 and real Hermes on Linux remain explicit environment gaps. The
+  Hermes plugin remains out of scope / absent from outcomes.
 - Roadmap closes at 101/101 (E19-T10 Completed; epic E19 Completed). E18
   Absolute Watch-Root Binding is unchanged.
+- Post-closeout review remediation makes general CLI tests independent of a
+  host Watchman installation and hardens the managed systemd lifecycle: unit
+  values escape literal expansion markers, loaded requires enabled and active,
+  failed enable operations remain unknown, and uninstall validates both files
+  before any side effect. G15 evidence is refreshed on the remediated tree.
 
 ## 1.4.0 - 2026-09-08
 

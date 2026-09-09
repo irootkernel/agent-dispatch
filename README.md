@@ -16,12 +16,12 @@ processing every save as a separate job.
 Watchman detects changes; Agent Dispatch records and coordinates work in a
 local SQLite database; Hermes runs the agent tasks. Each Agent Dispatch
 command does bounded work and exits. Watchman and the platform scheduler
-(launchd on macOS; managed systemd returns under E19 and is not shipped yet)
+(launchd on macOS; managed systemd user units on Linux in the current checkout)
 provide the ongoing triggers and scheduling.
 
 ## Requirements
 
-- **Supported platforms** are `darwin/arm64`, `linux/amd64`, and `linux/arm64` ([D-029](docs/specs/decision-log.md)). The published v0.1.7 artifact is still darwin/arm64; Linux release binaries land with three-arch packaging in E19-T4.
+- **Supported platforms** are `darwin/arm64`, `linux/amd64`, and `linux/arm64` ([D-029](docs/specs/decision-log.md)). The current checkout builds all three artifacts; the published v0.1.7 release remains darwin/arm64-only.
 - Watchman, and Hermes **0.20.5 or newer** with the public Kanban interface.
   Version eligibility is checked separately from the capabilities of your
   installed executable.
@@ -40,8 +40,9 @@ commands. Install and select skills explicitly in Hermes; setup does not do this
 
 ### Build this checkout
 
-This README describes v0.1.7, including the absolute watch-root fix delivered
-by E18. See [v0.1.7](CHANGELOG.md#v017---2026-09-09) for the release changes.
+This README describes the current checkout, including the v0.1.7 absolute
+watch-root fix and the subsequent Unreleased Linux support. See
+[v0.1.7](CHANGELOG.md#v017---2026-09-09) for the last published release changes.
 
 From the repository root:
 
@@ -65,7 +66,9 @@ Choose a version from the repository's
 [GitHub Releases](https://github.com/irootkernel/agent-dispatch/releases), and read
 that version's section in the [changelog](CHANGELOG.md). Download and install
 the published v0.1.7 macOS Apple Silicon binary as follows; no Go toolchain
-is needed. Linux release artifacts are not in the v0.1.7 set — build on the target host until E19-T4. Watchman and Hermes remain separate requirements.
+is needed. Linux release artifacts are not in the v0.1.7 set; build the current
+checkout on the target host until a later release publishes the three-arch set.
+Watchman and Hermes remain separate requirements.
 
 ```sh
 mkdir agent-dispatch-v0.1.7-download &&

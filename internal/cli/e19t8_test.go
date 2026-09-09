@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -178,6 +179,13 @@ func TestE19T8DisablePreservesAndUninstallRemoves(t *testing.T) {
 			t.Fatalf("uninstall must remove %s", path)
 		}
 	}
+	// Repeating uninstall after both files are absent is idempotent.
+	out.Reset()
+	errb.Reset()
+	markInvocationStart()
+	if code := Run([]string{"schedule", "uninstall", "--route", "wiki", "--platform", "systemd", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("absent uninstall: %d %s", code, errb.String())
+	}
 	// Foreign file at the same path is refused.
 	if err := os.MkdirAll(filepath.Dir(servicePath), 0o700); err != nil {
 		t.Fatal(err)
@@ -187,6 +195,11 @@ func TestE19T8DisablePreservesAndUninstallRemoves(t *testing.T) {
 	}
 	out.Reset()
 	errb.Reset()
+	var calls []string
+	systemctlRun = func(args ...string) (string, error) {
+		calls = append(calls, strings.Join(args, " "))
+		return "", nil
+	}
 	markInvocationStart()
 	code := Run([]string{"schedule", "uninstall", "--route", "wiki", "--platform", "systemd", "--config", configPath}, &out, &errb)
 	if code != 14 {
@@ -194,6 +207,9 @@ func TestE19T8DisablePreservesAndUninstallRemoves(t *testing.T) {
 	}
 	if _, err := os.Stat(servicePath); err != nil {
 		t.Fatal("the foreign unit must survive the refusal")
+	}
+	if len(calls) != 0 {
+		t.Fatalf("foreign ownership refusal must not call systemctl: %v", calls)
 	}
 }
 
@@ -246,14 +262,186 @@ func TestE19T8InspectReportsHealth(t *testing.T) {
 }
 
 func TestE19T8SystemdQuoteEscapesMetacharacters(t *testing.T) {
-	if got := systemdQuote(`/usr/bin/agent-dispatch`); got != `/usr/bin/agent-dispatch` {
-		t.Fatalf("plain path stays bare: %q", got)
+	if got := systemdQuote(`/usr/bin/agent-dispatch`); got != `"/usr/bin/agent-dispatch"` {
+		t.Fatalf("plain path is one quoted argv token: %q", got)
 	}
 	if got := systemdQuote(`/tmp/path with spaces/bin`); !strings.HasPrefix(got, `"`) || !strings.Contains(got, `path with spaces`) {
 		t.Fatalf("whitespace must quote: %q", got)
 	}
-	if got := systemdQuote(`/tmp/odd$path`); !strings.Contains(got, `\$`) {
-		t.Fatalf("$ must be escaped inside quotes: %q", got)
+	got := systemdQuote("/tmp/odd$path/%Z/back\\slash/\"quote\"/line\nfeed")
+	for _, want := range []string{"$$path", "%%Z", `back\\slash`, `\"quote\"`, `line\nfeed`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("ExecStart token missing %q escape: %q", want, got)
+		}
+	}
+	if strings.Contains(got, `\$`) {
+		t.Fatalf("systemd does not accept \\$ as a C-style escape: %q", got)
+	}
+	value := systemdQuotedValue("append:/tmp/log $cash/%Z file")
+	if !strings.Contains(value, "$cash") || strings.Contains(value, "$$cash") || !strings.Contains(value, "%%Z") {
+		t.Fatalf("non-Exec values keep dollars literal and escape specifiers: %q", value)
+	}
+}
+
+func TestE19T8SystemdTimerLoadedRequiresEnabledAndActive(t *testing.T) {
+	saved := systemctlRun
+	t.Cleanup(func() { systemctlRun = saved })
+	cases := []struct {
+		name, enabled, active string
+		enabledErr, activeErr bool
+		want                  bool
+	}{
+		{name: "healthy", enabled: "enabled\n", active: "waiting\n", want: true},
+		{name: "enabled inactive", enabled: "enabled\n", active: "inactive\n"},
+		{name: "disabled active", enabled: "disabled\n", active: "active\n"},
+		{name: "enabled query error", enabledErr: true, active: "active\n"},
+		{name: "active query error", enabled: "enabled\n", activeErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			systemctlRun = func(args ...string) (string, error) {
+				switch args[0] {
+				case "is-enabled":
+					if tc.enabledErr {
+						return "", errors.New("is-enabled failed")
+					}
+					return tc.enabled, nil
+				case "is-active":
+					if tc.activeErr {
+						return "", errors.New("is-active failed")
+					}
+					return tc.active, nil
+				default:
+					return "", nil
+				}
+			}
+			if got := systemdTimerLoaded("test"); got != tc.want {
+				t.Fatalf("loaded=%v want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestE19T8InstallPropagatesEnableFailure(t *testing.T) {
+	configPath := e18t8Env(t, "after-command")
+	systemctlRun = func(args ...string) (string, error) {
+		if args[0] == "enable" {
+			return "Failed to enable unit: File exists", errors.New("exit status 1")
+		}
+		return "", nil
+	}
+	var out, errb bytes.Buffer
+	markInvocationStart()
+	code := Run([]string{"schedule", "install", "--route", "wiki", "--platform", "systemd", "--config", configPath}, &out, &errb)
+	if code != 21 || out.Len() != 0 || !strings.Contains(errb.String(), "target_response_invalid") {
+		t.Fatalf("enable failure must remain unknown at exit 21, got %d stdout=%s stderr=%s", code, out.String(), errb.String())
+	}
+}
+
+func TestE19T8UninstallPreflightsCompletePair(t *testing.T) {
+	configPath := e18t8Env(t, "after-command")
+	var out, errb bytes.Buffer
+	markInvocationStart()
+	if code := Run([]string{"schedule", "install", "--route", "wiki", "--platform", "systemd", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("install: %d %s", code, errb.String())
+	}
+	env := decodeEnvelope(t, &out)
+	servicePath := env["service_path"].(string)
+	timerPath := env["timer_path"].(string)
+	if err := os.WriteFile(timerPath, []byte("[Timer]\nOnCalendar=never\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var calls []string
+	systemctlRun = func(args ...string) (string, error) {
+		calls = append(calls, strings.Join(args, " "))
+		return "", nil
+	}
+	out.Reset()
+	errb.Reset()
+	markInvocationStart()
+	code := Run([]string{"schedule", "uninstall", "--route", "wiki", "--platform", "systemd", "--config", configPath}, &out, &errb)
+	if code != 14 {
+		t.Fatalf("foreign timer must be refused: %d %s", code, errb.String())
+	}
+	if len(calls) != 0 {
+		t.Fatalf("preflight refusal must not call systemctl: %v", calls)
+	}
+	for _, path := range []string{servicePath, timerPath} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("preflight refusal changed %s: %v", path, err)
+		}
+	}
+}
+
+func TestE19T8UninstallHandlesMissingMemberAndDisableFailure(t *testing.T) {
+	configPath := e18t8Env(t, "after-command")
+	var out, errb bytes.Buffer
+	markInvocationStart()
+	if code := Run([]string{"schedule", "install", "--route", "wiki", "--platform", "systemd", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("install: %d %s", code, errb.String())
+	}
+	env := decodeEnvelope(t, &out)
+	servicePath := env["service_path"].(string)
+	timerPath := env["timer_path"].(string)
+	if err := os.Remove(timerPath); err != nil {
+		t.Fatal(err)
+	}
+	systemctlRun = func(args ...string) (string, error) {
+		if args[0] == "disable" {
+			return "permission denied", errors.New("exit status 1")
+		}
+		return "", nil
+	}
+	out.Reset()
+	errb.Reset()
+	markInvocationStart()
+	code := Run([]string{"schedule", "uninstall", "--route", "wiki", "--platform", "systemd", "--config", configPath}, &out, &errb)
+	if code != 21 {
+		t.Fatalf("disable failure must stop uninstall: %d %s", code, errb.String())
+	}
+	if _, err := os.Stat(servicePath); err != nil {
+		t.Fatalf("disable failure removed the validated service: %v", err)
+	}
+	systemctlRun = func(args ...string) (string, error) { return "", nil }
+	out.Reset()
+	errb.Reset()
+	markInvocationStart()
+	if code := Run([]string{"schedule", "uninstall", "--route", "wiki", "--platform", "systemd", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("missing-member uninstall: %d %s", code, errb.String())
+	}
+	if _, err := os.Stat(servicePath); !os.IsNotExist(err) {
+		t.Fatalf("missing-member uninstall did not remove exact survivor: %v", err)
+	}
+}
+
+func TestE19T8RenderedHostilePathsPassSystemdAnalyze(t *testing.T) {
+	tool, err := exec.LookPath("systemd-analyze")
+	if err != nil {
+		t.Skip("systemd-analyze not available")
+	}
+	label := "xyz.rootkernel.agent-dispatch.hostile"
+	def := scheduleDefinition{
+		Label:      label,
+		BinaryPath: "/bin/true",
+		RouteID:    `route $cash %Z \"quoted\"`,
+		ConfigPath: `/tmp/config $cash %Z \"quoted\".yaml`,
+		StdoutPath: "/tmp/output $cash %Z.log",
+		StderrPath: "/tmp/error $cash %Z.log",
+		Interval:   900,
+	}
+	service := renderScheduleService(def)
+	timer := renderScheduleTimer(def)
+	dir := t.TempDir()
+	servicePath := filepath.Join(dir, label+".service")
+	timerPath := filepath.Join(dir, label+".timer")
+	if err := os.WriteFile(servicePath, []byte(service), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(timerPath, []byte(timer), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command(tool, "verify", servicePath, timerPath).CombinedOutput(); err != nil {
+		t.Fatalf("hostile rendered units failed systemd-analyze: %v: %s\nservice:\n%s", err, out, service)
 	}
 }
 

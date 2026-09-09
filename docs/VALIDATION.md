@@ -514,28 +514,29 @@ re-probing. Ordinal 3 (run `r_01a07ff0-6be9-7bfe-a39d-3d17c776887d`, confirmatio
 
 ## Gate G15: Official Linux Support (E19 / D-029)
 
-Verified 2026-09-09 under Master-approved constraints for the supported set
-`{darwin/arm64, linux/amd64, linux/arm64}`. G15 records platform×leg evidence
-for SCP-008 / AC-505 reactivation; it does not overclaim environment-dependent
-Hermes or Watchman legs, and the Hermes **plugin** remains out of scope /
-absent from epic outcomes. Gate G14 remains Absolute Watch-Root Binding
-(D-028) and is not rewritten by this record.
+Verified 2026-09-09 and refreshed after post-closeout review remediation on the
+local working tree based on `82070ce` under Master-approved constraints for the
+supported set `{darwin/arm64, linux/amd64, linux/arm64}`. G15 records
+platform×leg evidence for SCP-008 / AC-505 reactivation; it does not overclaim
+environment-dependent Hermes or Watchman legs, and the Hermes **plugin** remains
+out of scope / absent from epic outcomes. Gate G14 remains Absolute Watch-Root
+Binding (D-028) and is not rewritten by this record.
 
 ### Platform × leg matrix
 
 | Leg | darwin/arm64 | linux/amd64 (this host) | linux/arm64 |
 |---|---|---|---|
-| Unit / integration / fixture / migration / crash suites (`make test`) | Historical green through G13 / v0.1.6 and G14 / v0.1.7 on darwin/arm64 | **PASS** on 2026-09-09 at the E19 closeout tree (`make test` exit 0, all packages ok or no test files) | Strategy: native or `golang:1.26.6` container `make test` / `make verify` on an aarch64 host or qemu user-mode; **not executed on this amd64 box** (no docker/podman/qemu available) |
-| Full `make verify` (incl. `test-race`, manifest, schema, traceability, schedule-check) | Historical green through G13 / v0.1.6 and G14 watch-root | **Not rerun** in this closeout. Focused packages `internal/adapters/watchman`, `internal/cli`, and `internal/adapters/secretresolver` passed. `make schedule-check` green separately (`systemd-analyze verify` exit 0 on the restored user unit/timer examples; plutil skipped on Linux) | Cross-compiled artifact shape is present on this host as a pre-existing `dist/agent-dispatch-v0.1.6-dev-linux-arm64` ELF64 AArch64 (machine 183); this closeout did not re-run `make release`. Native/container `make verify` is an **explicit environment gap** |
-| Real Watchman lifecycle / trigger legs | Historical macOS evidence (Watchman 2026.07.27.00 Homebrew) through prior gates including G14 | Installed Watchman `20260727.012849.0` at `/usr/local/bin/watchman`; version-gate accepts the Linux zip dialect (E19-T5, `TestParseVersionDialects` / `TestVersionComparisonTable`). Real trigger end-to-end legs were not freshly claimed as a new G15 cold walkthrough | **Explicit gap** per Master approval: Watchman real may be absent on arm64 evidence hosts |
-| Real Hermes Kanban legs | Historical real-Hermes evidence through G11/G13/G14 | Hermes CLI **absent** on this host; real-board tests skip with recorded environment gaps | Same strategy: skip-guarded; do not claim without a recorded arm64 transcript |
-| Managed schedule | launchd lifecycle evidenced historically (G12/G13) | Managed `--platform systemd` shipped (E19-T8); examples + `systemd-analyze verify` via `make schedule-check` on this host (E19-T9) | Same systemd user unit/timer surface; verify when `systemd-analyze` exists on the arm64 host/container |
-| Release artifacts | `make release` is defined to emit `darwin-arm64` plus the shared `SHA256SUMS` (E19-T4 three-arch set) | Host `dist/` holds `agent-dispatch-v0.1.6-dev-linux-amd64` (ELF64 x86-64) with `SHA256SUMS`; not rebuilt here | `linux-arm64` ELF64 AArch64 present in that same host `dist/` set; not rebuilt here |
+| Unit / integration / fixture / migration / crash suites (`make test`) | **PASS** inside the full native `make verify`; Watchman 2026.07.27.00 and Hermes 0.21.0 were present, with real tests retaining their disposable-environment guards | **PASS** inside the full `make verify` in `golang:1.26.6-trixie`; supported Watchman `20260727.012849.0` installed from the official x86-64 bundle | **PASS** inside the full `make verify` in an emulated `linux/arm64` `golang:1.26.6-trixie` container; non-lifecycle tests use the hermetic fake Watchman |
+| Full `make verify` (incl. `test-race`, manifest, schema, traceability, schedule-check) | **PASS**, native darwin/arm64, exit 0 | **PASS**, Docker `--platform linux/amd64`, exit 0; Python and systemd tooling installed in the disposable container | **PASS**, Docker `--platform linux/arm64`, exit 0; Python and systemd tooling installed in the disposable container |
+| Real Watchman lifecycle / trigger legs | Watchman 2026.07.27.00 present; historical disposable real-trigger evidence remains G14's authority | Watchman `20260727.012849.0` present and the full suite's real-Watchman tests are eligible | **Explicit gap** per Master approval: the official Linux bundle is x86-64; real Watchman tests remain skip-guarded |
+| Real Hermes Kanban legs | Hermes 0.21.0 present; historical real-board evidence remains G11/G13/G14's authority rather than a new production claim | Hermes absent; real-board tests remain skip-guarded | Hermes absent; real-board tests remain skip-guarded |
+| Managed schedule | Launchd lifecycle regression passes; `plutil` validates the example | `systemd-analyze verify` validates both shipped examples and the hostile `$`/`%Z` dynamically rendered service/timer | `systemd-analyze verify` validates both shipped examples and the hostile `$`/`%Z` dynamically rendered service/timer under arm64 |
+| Release artifacts | Fresh `make release` emits the darwin/arm64 Mach-O plus shared `SHA256SUMS` | The same fresh set contains linux/amd64 ELF64 x86-64 | The same fresh set contains linux/arm64 ELF64 AArch64; all checksums verify. This dirty review tree is build evidence, not a tag or publication |
 
 ### AC-505 / SCP-008 disposition
 
-- **Claimed:** three-platform support policy is active (D-029); linux/amd64 `make test` passed on this host; managed systemd is Must and shipped; Linux Watchman version dialect is accepted; secrets on Linux are `env:`/`file:`/`fd:` only.
-- **Not claimed:** a fully green `make verify` including `test-race` on this linux/amd64 host; a native/container linux/arm64 `make verify` run from this closeout; a fresh `make release` cut in this closeout; real Hermes on Linux; real Watchman trigger cold-validation on linux/arm64.
+- **Claimed:** full `make verify` passes on all three supported platform/architecture pairs; managed systemd is shipped and parsed on both Linux architectures; the Linux Watchman version dialect is accepted; secrets on Linux are `env:`/`file:`/`fd:` only; a fresh local three-arch artifact set verifies.
+- **Not claimed:** a new real-Hermes cold walkthrough on Linux; real Watchman trigger validation on linux/arm64; a clean-commit reproducibility result, tag, release, installation, or publication from this uncommitted remediation tree.
 - **Plugin:** absent from outcomes (out of scope for E19).
 - **Watch-root:** E18 / D-028 / G14 content is unchanged.
 

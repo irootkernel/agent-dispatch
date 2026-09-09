@@ -153,6 +153,24 @@ routes:
 	return path, vault
 }
 
+// useStubWatchman makes non-lifecycle CLI tests independent of an installed
+// Watchman. The canned response satisfies both the read-only version probe and
+// an empty watch-list; tests of the real server keep their explicit LookPath
+// guards and do not use this helper.
+func useStubWatchman(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "watchman")
+	script := `#!/bin/sh
+cat >/dev/null
+printf '%s\n' '{"version":"2026.07.27.00","roots":[]}'
+`
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
 // twoDestinationFixture rewrites the e4t3 fixture's single-destination
 // block into TWO destinations over the one shared Hermes target (FAN-011)
 // — the single surgery every multi-destination test (e12t2, e12t3, g8)

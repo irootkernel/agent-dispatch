@@ -447,6 +447,7 @@ func TestDispatchLifecycleLogCarriesCausalIDs(t *testing.T) {
 // check and --probe-targets augments the target findings without
 // duplicating them.
 func TestDoctorProbeTargetsAndIntegrityFull(t *testing.T) {
+	useStubWatchman(t)
 	configPath, _ := cliStoreFixture(t)
 	var out, errb bytes.Buffer
 	code := Run([]string{"doctor", "--config", configPath, "--integrity", "full", "--probe-targets"}, &out, &errb)

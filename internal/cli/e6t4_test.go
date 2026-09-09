@@ -496,6 +496,7 @@ func runExternal(t *testing.T, bin string, args []string, stdout, stderr *bytes.
 // durability): backup through the built-in path with verification,
 // doctor with the new binary, integrity, and one reconciliation.
 func TestG5UpgradeAndBackupRehearsal(t *testing.T) {
+	useStubWatchman(t)
 	configPath, dispatchID := cliStoreFixture(t)
 	store := e6t2Open(t, configPath)
 	// Fixture seeding only (not the flow under test): the dispatch

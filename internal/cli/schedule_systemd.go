@@ -50,34 +50,19 @@ func scheduleTimerPath(label string) string {
 	return filepath.Join(systemdUserDir(), label+".timer")
 }
 
-// systemdQuote renders one ExecStart argv token as unit-safe text:
-// paths and identifiers with whitespace or unit metacharacters are
-// double-quoted with `\`, `"`, and `$` escaped so the unit never
-// introduces a shell (SEC-007).
+// systemdQuote renders one ExecStart argv token as unit-safe text. The
+// general unit grammar accepts C-style quoting, while ExecStart additionally
+// expands $ variables and % specifiers. Doubling them preserves the literal
+// bytes without introducing a shell (SEC-007).
 func systemdQuote(s string) string {
-	need := s == ""
-	for _, r := range s {
-		if r <= ' ' || strings.ContainsRune(`"'\$;|&<>()#`, r) {
-			need = true
-			break
-		}
-	}
-	if !need {
-		return s
-	}
-	var b strings.Builder
-	b.WriteByte('"')
-	for _, r := range s {
-		switch r {
-		case '\\', '"', '$':
-			b.WriteByte('\\')
-			b.WriteRune(r)
-		default:
-			b.WriteRune(r)
-		}
-	}
-	b.WriteByte('"')
-	return b.String()
+	return strconv.Quote(strings.NewReplacer("$", "$$", "%", "%%").Replace(s))
+}
+
+// systemdQuotedValue renders one complete non-Exec directive value. Dollar
+// signs are ordinary bytes there; percent still needs doubling because unit
+// specifier expansion applies to path-bearing settings.
+func systemdQuotedValue(s string) string {
+	return strconv.Quote(strings.ReplaceAll(s, "%", "%%"))
 }
 
 // renderScheduleService renders the oneshot service unit. ExecStart is
@@ -99,9 +84,9 @@ Description=agent-dispatch managed schedule (%s)
 [Service]
 Type=oneshot
 ExecStart=%s
-StandardOutput=append:%s
-StandardError=append:%s
-`, d.Label, execStart, d.StdoutPath, d.StderrPath)
+StandardOutput=%s
+StandardError=%s
+`, d.Label, execStart, systemdQuotedValue("append:"+d.StdoutPath), systemdQuotedValue("append:"+d.StderrPath))
 }
 
 // renderScheduleTimer renders the matching timer: after-command recovery
@@ -228,10 +213,7 @@ func scheduleInstallSystemd(command string, def scheduleDefinition, stdout, stde
 		return planErr(stderr, command, "target_response_invalid", "acceptance_unknown", out, 21)
 	}
 	if out, err := systemctlRun("enable", "--now", def.Label+".timer"); err != nil {
-		// An identical already-enabled timer is the idempotent posture.
-		if !strings.Contains(out, "already enabled") && !strings.Contains(strings.ToLower(out), "exists") {
-			return planErr(stderr, command, "target_response_invalid", "acceptance_unknown", out, 21)
-		}
+		return planErr(stderr, command, "target_response_invalid", "acceptance_unknown", out, 21)
 	}
 	return writeEnvelope(stdout, command, map[string]any{
 		"label": def.Label, "service_path": def.ServicePath, "timer_path": def.TimerPath,
@@ -239,22 +221,24 @@ func scheduleInstallSystemd(command string, def scheduleDefinition, stdout, stde
 	})
 }
 
-// systemdTimerLoaded reports whether the user timer is enabled and/or
+// systemdTimerLoaded reports whether the user timer is both enabled and
 // active in the current session (cli-spec §19b `loaded`).
 func systemdTimerLoaded(label string) bool {
+	enabled := false
 	if out, err := systemctlRun("is-enabled", label+".timer"); err == nil {
 		switch strings.TrimSpace(out) {
 		case "enabled", "enabled-runtime", "static", "indirect":
-			return true
+			enabled = true
 		}
 	}
+	active := false
 	if out, err := systemctlRun("is-active", label+".timer"); err == nil {
 		switch strings.TrimSpace(out) {
 		case "active", "waiting":
-			return true
+			active = true
 		}
 	}
-	return false
+	return enabled && active
 }
 
 // scheduleInspectSystemd reports unit presence, loaded state, and the
@@ -288,38 +272,62 @@ func readOptionalFile(path string) (string, bool) {
 // scheduleDisableSystemd stops/disables the timer while preserving the
 // unit files.
 func scheduleDisableSystemd(command string, def scheduleDefinition, stdout, stderr io.Writer) int {
-	if out, err := systemctlRun("disable", "--now", def.Label+".timer"); err != nil {
-		lower := strings.ToLower(out)
-		if !strings.Contains(lower, "not loaded") && !strings.Contains(lower, "does not exist") &&
-			!strings.Contains(lower, "not found") && !strings.Contains(lower, "no such file") &&
-			!strings.Contains(lower, "not enabled") {
-			return planErr(stderr, command, "target_response_invalid", "acceptance_unknown", out, 21)
-		}
+	if out, err := disableSystemdTimer(def.Label); err != nil {
+		return planErr(stderr, command, "target_response_invalid", "acceptance_unknown", out, 21)
 	}
 	return writeEnvelope(stdout, command, map[string]any{
 		"label": def.Label, "disabled": true, "units_preserved": true,
 	})
 }
 
+// disableSystemdTimer accepts only the idempotent absence states. Any other
+// systemctl failure leaves ownership-bearing unit files in place for recovery.
+func disableSystemdTimer(label string) (string, error) {
+	out, err := systemctlRun("disable", "--now", label+".timer")
+	if err == nil {
+		return out, nil
+	}
+	lower := strings.ToLower(out)
+	if strings.Contains(lower, "not loaded") || strings.Contains(lower, "does not exist") ||
+		strings.Contains(lower, "not found") || strings.Contains(lower, "no such file") ||
+		strings.Contains(lower, "not enabled") {
+		return out, nil
+	}
+	return out, err
+}
+
 // scheduleUninstallSystemd stops/disables the timer and removes only
 // the byte-identical managed service and timer units.
 func scheduleUninstallSystemd(command string, def scheduleDefinition, stdout, stderr io.Writer) int {
-	_, _ = systemctlRun("disable", "--now", def.Label+".timer")
-	removed := []string{}
-	for _, pair := range []struct {
+	pairs := []struct {
 		path    string
 		content string
+		present bool
 	}{
-		{def.ServicePath, def.ServiceUnit},
-		{def.TimerPath, def.TimerUnit},
-	} {
-		if _, err := os.Stat(pair.path); err != nil {
+		{path: def.ServicePath, content: def.ServiceUnit},
+		{path: def.TimerPath, content: def.TimerUnit},
+	}
+	// Establish ownership of the complete pair before any external or file
+	// mutation. A conflict at the second path must not disable the timer or
+	// leave the first path partially removed.
+	for i := range pairs {
+		raw, err := os.ReadFile(pairs[i].path)
+		if os.IsNotExist(err) {
 			continue
 		}
-		raw, rerr := os.ReadFile(pair.path)
-		if rerr != nil || string(raw) != pair.content {
+		if err != nil || string(raw) != pairs[i].content {
 			return planErr(stderr, command, "transition_invalid", "conflict",
-				pair.path+" is not the exact current managed definition; refusing to remove it", 14)
+				pairs[i].path+" is not the exact current managed definition; refusing to remove it", 14)
+		}
+		pairs[i].present = true
+	}
+	if out, err := disableSystemdTimer(def.Label); err != nil {
+		return planErr(stderr, command, "target_response_invalid", "acceptance_unknown", out, 21)
+	}
+	removed := []string{}
+	for _, pair := range pairs {
+		if !pair.present {
+			continue
 		}
 		if err := os.Remove(pair.path); err != nil {
 			return planErr(stderr, command, "sqlite_query_failed", "storage", err.Error(), 20)

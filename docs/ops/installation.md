@@ -6,8 +6,8 @@ E19; superseding the D-023/E9-T8 darwin/arm64-only exclusivity). The operator
 owns the configuration, vault/board selection, backups, and authority to install
 binaries, triggers, or schedules. Agent Dispatch runs one-shot commands:
 Watchman owns event sensing and the platform scheduler owns scheduling
-(launchd on macOS; managed `--platform systemd` returns under E19 and is not
-shipped yet); there is no Agent Dispatch
+(launchd on macOS; managed `--platform systemd` user units on Linux in the
+current checkout); there is no Agent Dispatch
 daemon. Start with the [public quick start](../../README.md#quick-start) for a new instance.
 
 Before changing an existing installation, record `agent-dispatch version --json`,

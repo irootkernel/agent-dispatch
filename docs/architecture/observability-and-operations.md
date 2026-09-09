@@ -158,7 +158,10 @@ agent-dispatch reconcile --route wiki-maintenance --reason scheduled --output js
 
 Scheduled invocations carry `--submit` (E9-T4/T2-F001); the two-key gate is the safety boundary. Before the production acknowledgement the reconciliation fails closed at exit 14 (`transition_invalid`, nothing persisted) until `route enable --acknowledge-production-gate` records the route; after it, a route disabled in configuration (the YAML key) persists its reconciliation decisions and recovers without submitting anything, and the same scheduled leg actually delivers the due reconciliation intents — without the submit leg, reconcile output alone never reaches Hermes when no new source events arrive.
 
-A recommended schedule and installation example is included for `launchd` on macOS (D-029 three-platform support; managed systemd schedule examples return under E19 and are not shipped yet). A scheduler failure is visible through `last_reconciled_at` and `doctor`.
+Recommended schedule and installation examples are included for `launchd` on
+macOS and managed systemd user units on Linux (D-029 three-platform support;
+E19-T8/T9). A scheduler failure is visible through `last_reconciled_at` and
+`doctor`.
 
 ## 9. Privacy-Preserving Diagnostics
 

@@ -137,6 +137,7 @@ func TestG9AC905IsolatedTwoDestinationNotificationWalkthrough(t *testing.T) {
 // history and leave no managed trigger, and the quiesced system keeps
 // every record (the rollback posture).
 func TestG9AC905FailureDiagnosisDisableRemovalRetryRollback(t *testing.T) {
+	useStubWatchman(t)
 	configPath, vault, f := g9NotificationFixture(t)
 	setPlanEnv(t, vault, false)
 	e4t3RegisterRoute(t, configPath)

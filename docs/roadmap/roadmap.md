@@ -4824,6 +4824,16 @@ injectable `systemctl --user`, shell-less `schedule run` ExecStart, durable
 green. Launchd regression suites pin `hostSchedulePlatform` to launchd.
 Absolute watch-root behavior is unchanged.
 
+Post-closeout review remediation (2026-09-09) corrects the lifecycle's
+fail-closed edges: systemd unit rendering now preserves literal `$`/`%` and
+C-style quoted bytes in ExecStart and log paths; `loaded` requires both enabled
+and active; every failed `enable --now` remains acceptance-unknown; and
+uninstall validates the complete service/timer pair before systemctl or file
+side effects. The regression suite covers hostile rendered paths through
+`systemd-analyze`, the enabled/active state table, enable failure, foreign units,
+missing pair members, and disable failure. Non-lifecycle gate tests use a
+hermetic fake Watchman while real Watchman tests keep their environment guards.
+
 ## E19-T9: systemd Examples and schedule-check
 
 **Status:** Completed
@@ -4888,18 +4898,19 @@ E19-T9 Completed.
 
 ### Evidence
 
-Completed 2026-09-09. Gate G15 recorded in `docs/VALIDATION.md` with a
-platform×leg matrix under D-029 / AC-505 / SCP-008. On this linux/amd64
-host: `make test` passed; full `make verify` including `test-race` was
-not rerun. `make schedule-check` green with `systemd-analyze verify` on
-the restored systemd examples. linux/arm64: host `dist/` holds a
-pre-existing ELF64 AArch64 `agent-dispatch-v0.1.6-dev-linux-arm64`;
-container/native `make verify` was not executed (explicit gap).
-darwin/arm64 retains historical G13/G14 evidence. Product
-`CHANGELOG.md` Unreleased and `docs/SOT-CHANGELOG.md` record the
-post-v0.1.7 support claim (next product version TBD). Plugin remains
-absent. E18 Absolute Watch-Root Binding, D-028, and G14 are unchanged.
-Epic E19 Completed; roadmap 101/101; next task none.
+Completed 2026-09-09 and refreshed after post-closeout review remediation on
+the local working tree based on `82070ce`. Gate G15 in `docs/VALIDATION.md`
+records full `make verify` passes for darwin/arm64, linux/amd64, and
+linux/arm64; both Linux containers include `systemd-analyze`, amd64 includes
+the supported Watchman Linux build, and arm64 retains only the explicitly
+permitted real-Watchman/Hermes gap. A fresh `make release` emits and checks the
+three current artifacts plus `SHA256SUMS`; because this is an uncommitted review
+remediation tree, release metadata remains based on `82070ce` and is not
+publication evidence. Product `CHANGELOG.md` Unreleased and
+`docs/SOT-CHANGELOG.md` distinguish current checkout support from the published
+v0.1.7 darwin/arm64 asset. Plugin remains absent. E18 Absolute Watch-Root
+Binding, D-028, and G14 are unchanged. Epic E19 remains Completed; roadmap
+101/101; next task none.
 
 ---
 

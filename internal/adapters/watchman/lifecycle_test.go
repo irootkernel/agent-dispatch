@@ -184,14 +184,28 @@ func TestVersionComparisonTable(t *testing.T) {
 	}{
 		{"2025.01.01.00", true},
 		{"2026.07.26.99", true},
-		{"2026.07.27.00", false}, // exact baseline
+		{"2026.07.27.00", false}, // exact baseline (Homebrew)
 		{"2026.08.01.00", false},
 		{"2027.01.01.00", false},
+		// Linux zip dialect (YYYYMMDD.HHMMSS.N), E19-T5.
+		{"20260727.012849.0", false}, // host zip form, same day as baseline
+		{"20260727.000000.0", false}, // same calendar day, midnight stamp
+		{"20260728.000000.0", false}, // day after baseline
+		{"20260801.120000.1", false},
+		{"20260726.235959.0", true},  // day before baseline
+		{"20250727.012849.0", true},  // prior year
+		{"20260727.012849.1", false}, // same day, higher patch
 		{"", true},
 		{"nonsense", true},
 		{"1.2.3", true},
-		{"2026.07.27", true},
+		{"2026.07.27", true},      // incomplete Homebrew form
+		{"20260727.012849", true}, // incomplete Linux form
 		{"2026.07.27.00-beta", true},
+		{"20260727.012849.0-beta", true},
+		{"2026072.012849.0", true},   // first component not YYYYMMDD
+		{"202607277.012849.0", true}, // first component not 8 digits
+		{"20260727.abc.0", true},
+		{"20260727..0", true},
 		{"12345678901234.1.1.1", true}, // absurd component fails closed
 	}
 	for _, c := range cases {
@@ -199,5 +213,36 @@ func TestVersionComparisonTable(t *testing.T) {
 		if (err != nil) != c.wantErr {
 			t.Fatalf("version %q: err=%v wantErr=%v", c.version, err, c.wantErr)
 		}
+	}
+}
+
+func TestParseVersionDialects(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want [4]int
+		ok   bool
+	}{
+		{"2026.07.27.00", [4]int{2026, 7, 27, 0}, true},
+		{"20260727.012849.0", [4]int{2026, 7, 27, 0}, true},
+		{"20260815.235959.3", [4]int{2026, 8, 15, 3}, true},
+		{"2026.07.27", [4]int{}, false},
+		{"20260727.012849", [4]int{}, false},
+		{"not-a-version", [4]int{}, false},
+	}
+	for _, c := range cases {
+		got, ok := parseVersion(c.raw)
+		if ok != c.ok {
+			t.Fatalf("parseVersion(%q) ok=%v want %v", c.raw, ok, c.ok)
+		}
+		if ok && got != c.want {
+			t.Fatalf("parseVersion(%q)=%v want %v", c.raw, got, c.want)
+		}
+	}
+	// Cross-dialect equality on the baseline calendar day.
+	if compareVersions("20260727.012849.0", "2026.07.27.00") != 0 {
+		t.Fatal("Linux zip same-day must compare equal to Homebrew baseline")
+	}
+	if compareVersions("20260726.012849.0", "2026.07.27.00") >= 0 {
+		t.Fatal("Linux zip day-before must compare older than baseline")
 	}
 }

@@ -14,10 +14,10 @@
 | Planned SOT baseline | 1.4.0 ([D-028](../specs/decision-log.md) delivered; [D-029](../specs/decision-log.md) three-platform support; operator docs aligned by E19-T3) |
 | Release target | post-v0.1.7 (Official Linux Support; next release TBD) |
 | Current epic | E19 Official Linux Support |
-| Current active task | None (E19-T4 Completed; awaiting E19-T5) |
-| Next task | E19-T5 (95/101 completed through E19-T4) |
-| Completed tasks | 95 / 101 |
-| Planned tasks | 6 / 101 |
+| Current active task | None (E19-T5 Completed; awaiting E19-T6) |
+| Next task | E19-T6 (96/101 completed through E19-T5) |
+| Completed tasks | 96 / 101 |
+| Planned tasks | 5 / 101 |
 | In progress tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tasks in v0.1 sequence | 0 |
@@ -154,7 +154,7 @@
 | 93 | E19-T2 | Completed | Policy decision D-029; SCP-008/AC-505/charter reactivated |
 | 94 | E19-T3 | Completed | README and installation support-matrix documentation |
 | 95 | E19-T4 | Completed | Three-arch release artifacts and checksum portability |
-| 96 | E19-T5 | Planned | Watchman version-gate normalization for Linux zip formats |
+| 96 | E19-T5 | Completed | Watchman version-gate normalization for Linux zip formats |
 | 97 | E19-T6 | Planned | Paths, secrets, and skills documentation and test-guard alignment |
 | 98 | E19-T7 | Planned | Schedule contract (cli-spec/OPS) adds systemd |
 | 99 | E19-T8 | Planned | Managed `--platform systemd` CLI lifecycle |
@@ -4686,7 +4686,7 @@ watch-root behavior is unchanged.
 
 ## E19-T5: Watchman Version-Gate Normalization
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -4713,7 +4713,11 @@ E19-T4 Completed.
 
 ### Evidence
 
-Pending.
+Completed 2026-09-09. `parseVersion` / `CheckVersionSupported` accept both
+Homebrew `YYYY.MM.DD.NN` and Linux zip `YYYYMMDD.HHMMSS.N` and compare
+calendar components against baseline `2026.07.27.00`. Below-baseline and
+malformed inputs still fail closed. Absolute watch-root binding in
+`EnsureWatch` is unchanged.
 
 ## E19-T6: Paths, Secrets, and Skills Alignment
 

@@ -243,8 +243,10 @@ func (c *Client) Version(ctx context.Context) (string, error) {
 }
 
 // CheckVersionSupported compares a version against the frozen baseline
-// numerically over the four `YYYY.MM.DD.NN` components; an unparseable
-// version fails closed.
+// numerically after normalizing both Homebrew (`YYYY.MM.DD.NN`) and
+// Linux zip (`YYYYMMDD.HHMMSS.N`, e.g. `20260727.012849.0`) forms to
+// calendar (year, month, day, patch) components; an unparseable version
+// fails closed.
 func CheckVersionSupported(version string) error {
 	if compareVersions(version, minimumSupportedVersion) < 0 {
 		return &LifecycleError{Command: "version", Message: fmt.Sprintf("watchman %s is older than the supported baseline %s", version, minimumSupportedVersion)}
@@ -269,26 +271,63 @@ func compareVersions(a, b string) int {
 	return 0
 }
 
+// parseVersion normalizes a Watchman version string to [year, month, day, patch].
+// Accepted forms (E19-T5):
+//   - YYYY.MM.DD.NN (Homebrew / macOS baseline dialect)
+//   - YYYYMMDD.HHMMSS.N (Linux zip dialect); the build timestamp is
+//     validated as numeric but not compared, so the same calendar day as
+//     the baseline with any timestamp is supported.
 func parseVersion(v string) ([4]int, bool) {
 	var out [4]int
 	parts := strings.Split(v, ".")
-	if len(parts) != 4 {
-		return out, false
-	}
-	for i, p := range parts {
-		n := 0
-		if p == "" || len(p) > 9 {
-			return out, false // absurd components are unparseable
-		}
-		for _, r := range p {
-			if r < '0' || r > '9' {
+	switch len(parts) {
+	case 4:
+		for i, p := range parts {
+			n, ok := parseVersionComponent(p)
+			if !ok {
 				return out, false
 			}
-			n = n*10 + int(r-'0')
+			out[i] = n
 		}
-		out[i] = n
+		return out, true
+	case 3:
+		// Linux zip: YYYYMMDD.HHMMSS.N
+		if len(parts[0]) != 8 {
+			return out, false
+		}
+		date, ok := parseVersionComponent(parts[0])
+		if !ok {
+			return out, false
+		}
+		if _, ok = parseVersionComponent(parts[1]); !ok {
+			return out, false
+		}
+		patch, ok := parseVersionComponent(parts[2])
+		if !ok {
+			return out, false
+		}
+		out[0] = date / 10000
+		out[1] = (date / 100) % 100
+		out[2] = date % 100
+		out[3] = patch
+		return out, true
+	default:
+		return out, false
 	}
-	return out, true
+}
+
+func parseVersionComponent(p string) (int, bool) {
+	if p == "" || len(p) > 9 {
+		return 0, false
+	}
+	n := 0
+	for _, r := range p {
+		if r < '0' || r > '9' {
+			return 0, false
+		}
+		n = n*10 + int(r-'0')
+	}
+	return n, true
 }
 
 // EnsureWatch establishes the configured absolute root itself as the

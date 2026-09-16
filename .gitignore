@@ -7,6 +7,7 @@ __pycache__/
 .claude/
 .codex/
 .zcode/
+/.sorage/
 
 /.mulgae/*
 !/.mulgae/config.yaml

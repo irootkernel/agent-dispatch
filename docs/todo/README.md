@@ -3,7 +3,7 @@
 This directory is the sole owner of future epic-sized candidates that have not
 entered the roadmap. Items here have no roadmap identity or lifecycle status.
 
-Future work is not permission to partially implement these features during v0.1 tasks. Each item requires a new roadmap, requirement changes, and where noted a new ADR/security review.
+Future work is not permission to partially implement these features during roadmap tasks. Each item requires a new roadmap, requirement changes, and where noted a new ADR/security review.
 
 ## Priority Candidates
 
@@ -11,7 +11,7 @@ Future work is not permission to partially implement these features during v0.1 
 |---|---|---|---|
 | MCP server for status and work receipts | Easier Hermes/agent tool use | v0.1 receipt CLI stable; authentication model approved | network/listener trust and confused deputy |
 | Multi-vault certification | Govern multiple knowledge bases | one-vault state and retention proven; global limits defined | cross-route concurrency and operational complexity |
-| Managed daemon | Long-lived sources, timers, API, global backoff | one-shot limits are demonstrated by real need | duplicate scheduler and lifecycle complexity |
+| General managed daemon beyond sync | Long-lived sources, timers, API, global backoff | the E22 sync service is delivered and another use case cannot reuse it | duplicate scheduler and lifecycle complexity |
 | Inbound webhook source | External events | authentication, replay protection, body retention policy | replay, payload trust, public exposure |
 | Git/CI source | Repository automation | source-event model proven generic | branch/worktree authority |
 | Timer/process/queue/RSS sources | Operational activation | daemon or external scheduler design approved | broad workflow-engine scope |
@@ -19,7 +19,12 @@ Future work is not permission to partially implement these features during v0.1 
 | Safe generic agent CLI target | Runtime portability | executable allowlist and public machine contract required | command injection and weak receipts |
 | Attachment indexing | PDFs/images/assets | content extraction, size, privacy, and semantic ownership designed | sensitive payload storage and cost |
 | Snapshot-bound mode | Historical reproducibility | immutable artifact store and retention approved | storage/privacy and replay semantics |
-| Remote or multi-host state | Distributed deployment | SQLite limitation reached and broker/workflow comparison completed | consensus, leases, duplicate side effects |
+| Shared remote operational state | Distributed deployment beyond Git-backed content and membership | local SQLite limitation reached and broker/workflow comparison completed | consensus, leases, duplicate side effects |
+| N-member Wiki sync | More than the admitted two-node group | E22 two-node evidence accepted; membership, credential, fairness, and all-member bounds redesigned | credential growth, target completeness, and verification cost |
+| Multiple sync groups or governed working copies | More resources under sync governance | E22 two-node evidence accepted; a successor to D-030 admits ownership and isolation rules | cross-group locking, configuration authority, and failure isolation |
+| Attachment, binary, LFS, submodule, or symlink sync | Extend beyond the admitted Markdown scope | E22 two-node evidence accepted; a successor to D-030 defines content and path safety | data loss, storage bounds, and unsafe repository features |
+| Automatic conflict merge or semantic resolution | Reduce operator conflict work | E22 conflict-stop evidence accepted; a successor to D-030 admits a deterministic resolution authority | silent content loss and split-brain history |
+| Plugin sync inspection and management tools | Native Hermes sync operations | E22 contracts and evidence accepted; a later Plugin admission decision assigns cross-repository ownership | version skew, lifecycle coupling, and split authority |
 | Local dashboard | Operator convenience | stable status/management API exists | unnecessary daemon/network surface |
 | Hermes management plugin | Native Hermes UI | public authenticated Agent Dispatch management API or MCP stable | lifecycle coupling and split authority |
 

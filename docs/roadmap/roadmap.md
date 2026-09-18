@@ -1,26 +1,27 @@
 # Agent Dispatch Implementation Roadmap
 
-> **Roadmap version:** 1.5
-> **Release target:** v0.1.8 (Official Linux Support; released 2026-09-10)
+> **Roadmap version:** 1.6
+> **Release target:** v0.2.0 (Two-Node Wiki Sync MVP)
 > **Execution model:** Strictly linear, one active task globally  
-> **Epics:** 20
-> **Tasks:** 101
+> **Epics:** 23
+> **Tasks:** 116
 
 ## 1. Current State
 
 | Field | Value |
 |---|---|
 | Shipped release | v0.1.8 (published 2026-09-10) |
-| Planned SOT baseline | 1.5.0 ([D-028](../specs/decision-log.md) delivered; [D-029](../specs/decision-log.md) three-platform support; G15 closed 2026-09-09) |
-| Release target | v0.1.8 (Official Linux Support; released 2026-09-10) |
-| Current epic | None (E19 Official Linux Support Completed) |
+| Planned SOT baseline | 1.6.0 ([D-030](../specs/decision-log.md); G16-G18 open) |
+| Release target | v0.2.0 (Two-Node Wiki Sync MVP) |
+| Current epic | E20 Two-Node Sync Contracts and Admission (In Progress) |
 | Current active task | None |
-| Next task | None (101/101 completed; await next roadmap admission) |
-| Completed tasks | 101 / 101 |
-| Planned tasks | 0 / 101 |
+| Next task | E20-T2 (Planned) |
+| Completed tasks | 102 / 116 |
+| Planned tasks | 14 / 116 |
 | In progress tasks | 0 |
+| In review tasks | 0 |
 | Blocked tasks | 0 |
-| Deferred tasks in v0.1 sequence | 0 |
+| Deferred tracked tasks | 0 |
 
 ### Historical evidence
 
@@ -54,6 +55,9 @@
 | E17 | Documentation, Cold Validation, and v0.1.6 Release | **Completed** | 3 | G13 |
 | E18 | Absolute Watch-Root Binding | **Completed** | 2 | G14 |
 | E19 | Official Linux Support (darwin/arm64 + linux/amd64 + linux/arm64) | **Completed** | 10 | G15 |
+| E20 | Two-Node Sync Contracts and Admission | **In Progress** | 5 | G16 |
+| E21 | Signed Publication and Guarded Import | **Planned** | 5 | G17 |
+| E22 | Peer Recovery, Verification, and Operations | **Planned** | 5 | G18 |
 
 ## 3. Task Status Index
 
@@ -160,6 +164,21 @@
 | 99 | E19-T8 | Completed | Managed `--platform systemd` CLI lifecycle |
 | 100 | E19-T9 | Completed | systemd examples and schedule-check |
 | 101 | E19-T10 | Completed | VALIDATION evidence (amd64 + arm64) and closeout notes |
+| 102 | E20-T1 | Completed | Two-node sync program admitted and decisions frozen |
+| 103 | E20-T2 | Planned | Sync records, state machines, and errors frozen |
+| 104 | E20-T3 | Planned | CLI and peer provider contract bundle frozen |
+| 105 | E20-T4 | Planned | Disabled configuration and capabilities implemented |
+| 106 | E20-T5 | Planned | Contract baseline qualified and handed to E21 |
+| 107 | E21-T1 | Planned | Durable sync jobs, journals, and migrations |
+| 108 | E21-T2 | Planned | Restricted Git, trust, and membership administration |
+| 109 | E21-T3 | Planned | Explicit signed publication workflow |
+| 110 | E21-T4 | Planned | Guarded import and exact Watchman attribution |
+| 111 | E21-T5 | Planned | Publication/import crash and conflict qualification |
+| 112 | E22-T1 | Planned | Authenticated peer service and durable nudges |
+| 113 | E22-T2 | Planned | Periodic reconciliation and offline catch-up |
+| 114 | E22-T3 | Planned | Pair status and fresh verification |
+| 115 | E22-T4 | Planned | Managed service lifecycle and diagnostics |
+| 116 | E22-T5 | Planned | Real two-node qualification and v0.2.0 handoff |
 
 ---
 
@@ -4914,23 +4933,599 @@ Binding, D-028, and G14 are unchanged. Epic E19 remains Completed; roadmap
 
 ---
 
+# E20: Two-Node Sync Contracts and Admission
+
+**Epic status:** In Progress
+
+**Purpose:** Admit the two-node v0.2.0 boundary and freeze contracts before Git,
+network, or live-tree side effects are implemented.
+
+**Gate:** G16
+
+**Canonical Outcomes:** [D-030](../specs/decision-log.md) · [SYN requirements](../specs/required-spec.md) · [ADR-0023 through ADR-0025](../architecture-decision-records/README.md) · [Gate G16](../specs/acceptance-criteria.md) · [Sync architecture](../architecture/wiki-sync.md) · [Sync contract](../contracts/sync-contract.md)
+
+## E20-T1: Admit the Program and Freeze Decisions
+
+**Status:** Completed
+
+### Objective
+
+Turn the Wiki sync intake into repository-owned requirements, decisions,
+architecture, and a strictly ordered two-node roadmap.
+
+### Deliverables
+
+- Non-authoritative source record with exact intake digest and inspected commits
+- D-030, ADR-0023 through ADR-0025, `SYN-*`, and G16-G18 acceptance scenarios
+- Two-node sync architecture and reserved CLI/peer contract
+- E20 through E22 roadmap registration and v0.2.0 SOT status updates
+
+### Requirements
+
+`SYN-*`, `BND-003`, `BND-005`, `FBK-002`, `OPS-007`, `SCP-003`, `SCP-004`,
+`SCP-008`, `AC-403`
+
+### Dependencies
+
+E19-T10 Completed. Plugin EPIC-006/TASK-022 handoff accepted at
+`d029c956df76cfeb30680e1a8482fff2187e7f94`.
+
+### Acceptance
+
+- The admitted first release is one group, one Markdown working copy, and
+  exactly two active nodes; N-member and Plugin work are not active tasks.
+- Trust, publication, import, conflict, activation, and recovery decisions have
+  one normative owner and no hidden implementation choice.
+- Existing v0.1.8 behavior remains authoritative until a later task implements
+  and truthfully advertises a sync capability.
+- Documentation manifest and traceability checks pass on the exact review tree.
+
+### Evidence
+
+Review remediation is complete on the current working tree and awaits
+confirmation review. The source intake digest is
+`2ab8692f99eb31a0002bff74d8c93b02cc480ba89a5b6f23c9cd5f2e7c93581d`;
+Dispatch admission checkout is `9f70a1200396d7abd3755184ca88242e07efae99`;
+the accepted Plugin handoff is
+`d029c956df76cfeb30680e1a8482fff2187e7f94`. Verification evidence is recorded
+in `docs/VALIDATION.md`: `make verify` passed on darwin/arm64 with Go 1.26.6;
+the host lacked `systemd-analyze`, so the existing systemd-unit lint skip was
+reported. Traceability regenerated with 116 tasks and 18 requirement groups.
+The first static completion review returned Request Changes with sixteen
+findings covering trust checkpoints, rotation/revocation, membership and
+operator command ownership, acknowledgement and dirty-tree semantics,
+publication key custody, listener security, existing-authority reconciliation,
+Plugin compatibility, traceability, lifecycle truth, and exact validation
+identity. Its confirmation review found five Medium and seven Low documentation
+consistency and ownership gaps. A later confirmation found one High, two Medium,
+and nine Low documentation defects; its valid findings were remediated. The
+next confirmation found three Medium and three Low reports: the acknowledgement
+and protected-path gaps plus two consistency findings were valid and
+remediated; the requested ADR back-references were not required by the ADR
+lifecycle or the explicitly v0.1-scoped decision. The final confirmation found
+no High or Medium issue and two Low consistency gaps. Both were settled by the
+exact local delta: the reserved-command activation prohibition was restored in
+the sync contract and E20-T1 now cites every D-030-amended requirement. The
+traceability matrix and manifest were regenerated. `make verify` passed on the
+reviewed pre-closeout candidate with real Watchman. On the final documentation
+tree the installed daemon rejected new disposable roots with the host-level
+`FSEventStreamStart` error, so the gate was rerun with Watchman intentionally
+absent from `PATH`; all remaining checks passed and the guarded real-Watchman
+legs reported their environment gap. Completed 2026-09-18; E20 remains In
+Progress and E20-T2 remains Planned.
+
+## E20-T2: Freeze Sync Records, States, and Errors
+
+**Status:** Planned
+
+### Objective
+
+Define versioned membership, publication, delivery, import, control, and pair
+verification records before storage or side-effect code lands.
+
+### Deliverables
+
+- Closed record schemas, state transitions, reason codes, and error mappings
+- Stable logical identities, incarnation rules, cooperative-import
+  acknowledgement, membership/checkpoint plans, fences, retention, and bounds
+- Positive and negative fixtures for every state family
+
+### Requirements
+
+`SYN-005`, `SYN-008` through `SYN-013`, `SYN-015`, `DAT-001`, `DAT-009`,
+`DUR-003`, `DUR-005`, `DUR-011`
+
+### Dependencies
+
+E20-T1 Completed.
+
+### Acceptance
+
+- Acceptance, remote publication, import, historical delivery, and fresh
+  convergence cannot collapse into one success state.
+- Missing proof, malformed object IDs, stale membership, obsolete incarnation,
+  and empty pair targets fail fixture validation.
+- Unresolved publication and import evidence is protected from retention.
+
+## E20-T3: Freeze CLI and Peer Contracts
+
+**Status:** Planned
+
+### Objective
+
+Produce one executable provider bundle for the reserved sync commands and the
+authenticated nudge and status protocol.
+
+### Deliverables
+
+- Command descriptors, JSON schemas, peer routes, fixtures, error enums, and checksums
+- `cli-spec.md` command-tree entries and `error-model.md` mappings for the reserved surface
+- Closed membership/checkpoint plan-apply and managed service lifecycle descriptors
+- Closed unavailable and disabled capability results
+- Pagination or snapshot-token rules for every retained-record list
+
+### Requirements
+
+`SYN-005` through `SYN-008`, `SYN-013` through `SYN-015`, `CLI-001`,
+`CLI-002`, `CLI-008`, `CLI-009`, `SEC-006`, `SEC-007`
+
+### Dependencies
+
+E20-T2 Completed.
+
+### Acceptance
+
+- Provider validation rejects unknown commands, fields, enums, schema links,
+  fixture drift, and checksum drift.
+- HTTP 202, publication confirmation, import completion, and verification have
+  distinct documented machine results.
+- No request accepts a path, executable, remote, ref, profile, credential, or
+  force option from peer data.
+
+## E20-T4: Implement Disabled Configuration and Capabilities
+
+**Status:** Planned
+
+### Objective
+
+Add validated opt-in configuration and truthful capability reporting without
+introducing sync side effects.
+
+### Deliverables
+
+- `configuration-spec.md` one-group/two-node schema, normalization, revision, and redaction
+- Cooperative-import acknowledgement over resource, remote/ref, scope, local
+  identity, administrator trust anchor, and safety-policy inputs (the SYN-010
+  guard set together with configured import bounds)
+- `sync capabilities` and disabled `sync status` through the existing CLI envelope
+
+### Requirements
+
+`SYN-001` through `SYN-006`, `SYN-009`, `SYN-014`, `SYN-015`, `SCP-006`,
+`SEC-006`, `SEC-009`
+
+### Dependencies
+
+E20-T3 Completed.
+
+### Acceptance
+
+- Existing generated configurations and routes keep their behavior.
+- Invalid roots, overlapping ownership, bad refs, wrong member count, inline
+  secrets, and unsupported enabled capabilities fail closed. A locally stale
+  cooperative-import acknowledgement defers live-tree application without
+  blocking publication, status, or fetch-and-validate reconciliation; remote
+  membership drift is checked at the protected effect and defers only that
+  gated effect.
+- Configuration validation and read-only capability commands make no network,
+  Git, listener, or live-tree change.
+
+## E20-T5: Qualify the Contract Baseline
+
+**Status:** Planned
+
+### Objective
+
+Close G16 with deterministic contract evidence and hand only E21-T1 forward.
+
+### Deliverables
+
+- Checksummed provider bundle and implemented-versus-reserved capability matrix
+- Focused configuration/schema tests, full repository verification, and cold review
+- Exact accepted revision and E21-T1 handoff
+
+### Requirements
+
+`SYN-*`, `AC-1601` through `AC-1605`, `TST-001`, `TST-002`, `TST-007`
+
+### Dependencies
+
+E20-T4 Completed.
+
+### Acceptance
+
+- G16 passes on the exact reviewed revision.
+- No runnable publication, import, peer listener, or live-tree behavior is
+  claimed by the contract-only capability matrix.
+- Review findings are fixed or explicitly dispositioned without weakening a Must.
+
+# E21: Signed Publication and Guarded Import
+
+**Epic status:** Planned
+
+**Purpose:** Implement durable manual publication and fast-forward import with
+exact provenance, crash recovery, and conflict stop.
+
+**Gate:** G17
+
+**Canonical Outcomes:** [SYN requirements](../specs/required-spec.md) · [Gate G17](../specs/acceptance-criteria.md) · [Sync architecture](../architecture/wiki-sync.md) · [Sync contract](../contracts/sync-contract.md) · [Validation evidence](../VALIDATION.md)
+
+## E21-T1: Add Durable Sync Jobs and Journals
+
+**Status:** Planned
+
+### Objective
+
+Persist sync intent, ownership, recovery evidence, and control state before any
+external effect is possible.
+
+### Deliverables
+
+- Forward-only SQLite migrations and repositories for admitted sync records
+- Idempotent request fingerprints, claims, fencing generations, and journals
+- Revision-fenced `sync pause` and `sync resume` control-state behavior
+- Backup, migration interruption, concurrency, and retention tests
+
+### Requirements
+
+`SYN-002`, `SYN-008` through `SYN-012`, `SYN-015`, `DUR-001`, `DUR-005`,
+`DUR-010` through `DUR-012`
+
+### Dependencies
+
+E20-T5 Completed.
+
+### Acceptance
+
+- Same-key/same-payload admission reuses one logical job and a changed payload conflicts.
+- Lease expiry alone cannot authorize a stale writer or delete uncertain evidence.
+- Pause reaches a safe boundary and resume revalidates current policy without
+  clearing conflict, revocation, or trust blocks.
+- Existing route and notification state survives migration and rollback restoration.
+
+## E21-T2: Implement Restricted Git, Trust, and Membership Administration
+
+**Status:** Planned
+
+### Objective
+
+Provide bounded typed Git operations and the signed membership bootstrap/update
+path without exposing a general command proxy.
+
+### Deliverables
+
+- Fixed-argument Git adapter for inspect, fetch, object, private-index snapshot,
+  expected-old ref update, fast-forward push, and SSH signature verification
+- `sync membership plan|apply` for bootstrap, endpoint/key update, replacement,
+  retirement, revocation, and incarnation re-registration
+- Linear membership verification, separate administrator/publisher roles, and
+  first-seen removed-key rejection
+- Sanitized environment, controlled Git configuration, deadlines, output bounds,
+  redirect and helper policy, and complete child cleanup
+- Disposable repository and hostile configuration tests
+
+### Requirements
+
+`SYN-002` through `SYN-005`, `SYN-011`, `SYN-015`, `SEC-001` through
+`SEC-007`, `AC-1708`
+
+### Dependencies
+
+E21-T1 Completed.
+
+### Acceptance
+
+- Clean, dirty, ahead, behind, diverged, missing-ref, invalid-signature, timeout,
+  and ambiguous-push outcomes are typed and deterministic.
+- Membership updates require an expected predecessor and administrator signature;
+  emergency revocation blocks protected effects until the pair is restored.
+- Arbitrary Git arguments, prompts, hooks, filters, recursive submodules, force,
+  merge, rebase, stash, reset, and clean are unreachable.
+
+## E21-T3: Implement Explicit Signed Publication
+
+**Status:** Planned
+
+### Objective
+
+Make `sync publish` create one recoverable signed publication from an eligible
+maintenance snapshot.
+
+### Deliverables
+
+- Eligibility barrier over maintained inputs and required receipt evidence
+- Resource-guarded frozen Markdown snapshot, append-only publication manifest,
+  CLI-only SSH signing, fast-forward push confirmation, and durable peer obligation
+- `sync checkpoint plan|apply` for initial baseline, conflict resolution, and
+  bounded-history re-anchoring
+- No-op and late-edit preservation tests
+
+### Requirements
+
+`SYN-003` through `SYN-005`, `SYN-008`, `SYN-011`, `SYN-012`, `AC-1701`
+through `AC-1704`, `AC-1709`, `AC-1711`, `FBK-002`, `FBK-004`
+
+### Dependencies
+
+E21-T2 Completed.
+
+### Acceptance
+
+- No eligible snapshot and no-content-change cases create no commit or nudge.
+- A later local edit is not captured in the frozen publication or overwritten.
+- A pre-signature crash requires explicit CLI re-entry; a crash after signature
+  or successful push recovers the same publication identity without another commit.
+
+## E21-T4: Implement Guarded Import and Attribution
+
+**Status:** Planned
+
+### Objective
+
+Validate remote publication history, apply only under the acknowledged safety
+policy, and prevent semantic echo without hiding local work.
+
+### Deliverables
+
+- Trusted-history import planning and cooperative resource guard
+- Operator `sync reconcile` with exact checkpoint-backed administrative unblock
+- Durable pre-apply journal and crash reconciliation at file, index, ref, and DB boundaries
+- Exact Watchman attribution for writes, renames, and deletions
+
+### Requirements
+
+`SYN-003`, `SYN-005`, `SYN-009` through `SYN-012`, `AC-1705` through
+`AC-1710`, `FBK-002` through `FBK-004`
+
+### Dependencies
+
+E21-T3 Completed.
+
+### Acceptance
+
+- Unacknowledged, overlapping-dirty, divergent, untrusted, or stale-fence
+  imports leave live files unchanged and produce an actionable disposition;
+  proven-disjoint edits remain dirty and byte-identical while import advances.
+- Successful import suppresses only exact controller effects; contradictory and
+  late observations remain dirty.
+- Every injected crash resolves to proven recovery or explicit uncertainty.
+
+## E21-T5: Qualify Publication and Import
+
+**Status:** Planned
+
+### Objective
+
+Close G17 before network nudges or managed service lifecycle depend on the
+publication/import substrate.
+
+### Deliverables
+
+- Full publication/import crash, conflict, path, and signature matrix
+- Cross-platform Git behavior evidence and unsupported-feature documentation
+- Updated implemented-versus-reserved capability matrix and truthful
+  `sync capabilities`/`sync status` output for the delivered commands
+- Cold review and E22-T1 handoff
+
+### Requirements
+
+`SYN-002` through `SYN-005`, `SYN-009` through `SYN-012`, `SYN-014`, `SYN-015`,
+`AC-1701` through `AC-1711`, `TST-002`, `TST-007`
+
+### Dependencies
+
+E21-T4 Completed.
+
+### Acceptance
+
+- G17 passes against disposable repositories on every supported platform.
+- The reviewed result preserves both histories in every two-writer conflict.
+- No production vault, credential, remote, tag, or release is used as evidence.
+
+# E22: Peer Recovery, Verification, and Operations
+
+**Epic status:** Planned
+
+**Purpose:** Add authenticated low-latency nudges, periodic correctness,
+fresh pair verification, service management, and real two-node qualification.
+
+**Gate:** G18
+
+**Canonical Outcomes:** [SYN requirements](../specs/required-spec.md) · [Gate G18](../specs/acceptance-criteria.md) · [Security boundaries](../architecture/security-and-trust-boundaries.md) · [Sync architecture](../architecture/wiki-sync.md) · [Sync contract](../contracts/sync-contract.md) · [Validation evidence](../VALIDATION.md)
+
+## E22-T1: Implement Authenticated Peer Service and Nudges
+
+**Status:** Planned
+
+### Objective
+
+Host bounded peer endpoints and deliver durable nudges without moving content
+through the control plane.
+
+### Deliverables
+
+- Accepted listener/authentication threat-model review before implementation
+- `sync serve` with authenticated nudge and fresh-status handlers
+- Directed credential binding, request limits, inbox idempotency, and outbox retry
+- Replay, smuggling, duplicate-field, redirect, rate, and shutdown tests
+
+### Requirements
+
+`SYN-006` through `SYN-008`, `SYN-012` through `SYN-015`, `SEC-005` through
+`SEC-009`, `AC-1801`, `AC-1802`, `AC-1806`
+
+### Dependencies
+
+E21-T5 Completed.
+
+### Acceptance
+
+- HTTP 202 follows the durable inbox commit and never claims import completion.
+- One peer failure does not block local publication or healthy local work.
+- The listener is loopback or tailnet-only, exposes no public/Funnel surface,
+  and makes no Tailscale configuration change.
+- Peer data cannot choose Git, filesystem, executable, profile, or credential inputs.
+
+## E22-T2: Implement Periodic Recovery and Offline Catch-Up
+
+**Status:** Planned
+
+### Objective
+
+Make correctness independent of nudge delivery and the original publisher's
+continued availability.
+
+### Deliverables
+
+- Startup and periodic configured-ref reconciliation extending the same
+  application path as operator `sync reconcile`
+- Fair persisted backoff, causally safe coalescing, and offline catch-up
+- Remote rewrite, deleted ref, wake, reconnect, and long-offline tests
+
+### Requirements
+
+`SYN-007`, `SYN-008`, `SYN-011`, `SYN-012`, `SYN-015`, `AC-1802`, `AC-1803`
+
+### Dependencies
+
+E22-T1 Completed.
+
+### Acceptance
+
+- Lost nudges recover through Git without an LLM call or live original publisher.
+- Coalescing retains per-publication historical coverage.
+- Remote history rewrite or a deleted configured ref creates an administrative block.
+
+## E22-T3: Implement Pair Status and Verification
+
+**Status:** Planned
+
+### Objective
+
+Report historical delivery and fresh two-node convergence without converting
+stale, dirty, or missing evidence into success.
+
+### Deliverables
+
+- `sync status` and target-pinned `sync verify`
+- Authenticated nonce-correlated local and peer observations
+- Target-change, dirty-state, stale-cache, obsolete-incarnation, and offline tests
+
+### Requirements
+
+`SYN-005`, `SYN-006`, `SYN-012` through `SYN-015`, `AC-1803`, `AC-1804`
+
+### Dependencies
+
+E22-T2 Completed.
+
+### Acceptance
+
+- Both configured nodes remain required even when one is offline or incomplete.
+- Equal commits with governed dirtiness or pending work cannot pass fresh verification.
+- Membership or content ref change during collection produces `target_changed`.
+
+## E22-T4: Add Managed Service Lifecycle and Diagnostics
+
+**Status:** Planned
+
+### Objective
+
+Operate one owned peer/reconciliation service on macOS and Linux without a
+second executor or unmanaged definition drift.
+
+### Deliverables
+
+- Managed launchd and systemd user service render/install/inspect/stop/disable/uninstall
+- Status and doctor findings for listener, auth, membership, queue, Git, import,
+  verification, and activation health
+- Upgrade, backup, restore, key rotation, credential rotation, and conflict runbooks
+
+### Requirements
+
+`SYN-001`, `SYN-005` through `SYN-009`, `SYN-012` through `SYN-015`,
+`OPS-001` through `OPS-008`, `SEC-006`, `SEC-007`, `AC-1807`
+
+### Dependencies
+
+E22-T3 Completed.
+
+### Acceptance
+
+- Lifecycle commands mutate only the exact managed definition and preserve state on uninstall.
+- Any destructive state reset or restore rotates state incarnation; ordinary
+  restart retains it.
+- Conflict, key rotation/revocation, membership bootstrap/re-registration, and
+  checkpoint runbooks use the reserved sync commands and never prescribe force.
+- Diagnostics expose bounded reasons and counts without secrets, note bodies, or raw subprocess output.
+
+## E22-T5: Qualify the Real Two-Node System
+
+**Status:** Planned
+
+### Objective
+
+Close G18 on a disposable MacBook and Oracle Cloud Linux pair and prepare the
+reviewed v0.2.0 release handoff.
+
+### Deliverables
+
+- Real publication, nudge, import, missed-nudge recovery, conflict, and verification evidence
+- Three-platform deterministic gates plus the exact two-node integration matrix
+- Documentation truth, listener and real-vault security dispositions, cold
+  review, reproducible artifacts, and release handoff
+
+### Requirements
+
+`SYN-*`, `AC-1801` through `AC-1808`, `SCP-008`, `TST-001` through `TST-009`
+
+### Dependencies
+
+E22-T4 Completed.
+
+### Acceptance
+
+- G18 and all unchanged earlier gates pass on one reviewed core revision.
+- The supported claim remains exactly two nodes, Markdown only, one group, and
+  conflict stop; N-member and Plugin functionality are not implied.
+- The release handoff discloses that the current Plugin range excludes v0.2.0,
+  remains fail-closed, and has no restart authority until a later admission.
+- Every configured bound fails visibly without dropping a publication, import,
+  peer, or verification obligation.
+- Tag creation, remote publication, and production activation require their own authorization.
+
 # 4. Deferred Future Work
 
-Official Linux Support is tracked on-roadmap as **E19** (not deferred).
-E18 remains Absolute Watch-Root Binding (Completed 2026-09-08 under D-028).
+Official Linux Support is tracked on-roadmap as **E19** and two-node Wiki sync
+as **E20-E22**. E18 remains Absolute Watch-Root Binding (Completed 2026-09-08
+under D-028).
 
-The following do not count toward the 101 tracked roadmap tasks (91
-Completed through E18 Absolute Watch-Root Binding; E19-T1 Completed
-2026-09-09) and remain Deferred until a later roadmap opens them:
+The following do not count toward the 116 tracked roadmap tasks and remain
+Deferred until a later roadmap opens them:
 
-- Agent Dispatch managed daemon;
+- N-member sync beyond the admitted two-node group;
+- more than one sync group or governed working copy;
+- attachment, binary, LFS, submodule, or symlink synchronization;
+- automatic conflict merge or semantic conflict resolution;
+- Plugin sync inspection or management tools;
+- general daemon responsibilities beyond the bounded sync service;
 - multi-vault production certification and global budgets;
 - MCP server for work receipts and status;
 - Git, timer, process, queue, RSS, and inbound webhook source adapters;
 - generic HTTP and safe generic agent targets;
 - attachment indexing;
 - snapshot-bound mode (immutable content snapshot storage);
-- remote/multi-host state;
+- shared or remote operational state beyond Git-backed content and membership;
 - local dashboard;
 - optional Hermes management plugin.
 

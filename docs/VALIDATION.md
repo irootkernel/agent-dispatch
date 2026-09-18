@@ -48,7 +48,7 @@ the [documentation index](README.md); for delivery status use the
 All package checks are reachable from the repository root through the Makefile, the single verification entrypoint (D-015):
 
 - Everything: `make verify` (build, format, vet, staticcheck, import-direction lint, unit tests, race tests, and the three package checks below).
-- Checksums: `make manifest-check` (runs `shasum -a 256 -c MANIFEST.sha256` from the package root; `sha256sum` on Linux). After editing any file in this package, regenerate the manifest from the package root: `find . -type f ! -name MANIFEST.sha256 | sed 's|^\./||' | sort | xargs shasum -a 256 > MANIFEST.sha256` (the file list must reach `shasum` as arguments through `xargs`; piping it as data hashes stdin as one `-` entry).
+- Checksums: `make manifest-check` (runs `shasum -a 256 -c MANIFEST.sha256` from the package root; `sha256sum` on Linux). After editing any file in this package, regenerate the manifest from the repository root using index-owned paths: `git ls-files docs | sed 's|^docs/||' | grep -v '^MANIFEST.sha256$' | sort | (cd docs && xargs shasum -a 256) > docs/MANIFEST.sha256` (the file list must reach `shasum` as arguments through `xargs`; ignored runtime artifacts must not enter the manifest).
 - Traceability: `make traceability` rewrites `docs/specs/traceability-matrix.md` deterministically via `scripts/generate-traceability.py`, fails on unknown requirement IDs, and compares the generated file with its pre-run content so stale output fails independently of staging or Git-index state.
 - Schema and example validation: `make schema-validation` (`go run ./internal/tools/schemavalid -root docs`). Every schema document is compiled as standard Draft 2020-12 with format assertions enabled (invalid patterns, malformed subschemas, and unknown type names fail closed at compilation regardless of instance reachability); every schema-covered `examples/*.json` must match at least one schema, and the real `integrations/hermes-capability-report.json` validates against `schemas/hermes-capability-report.schema.json` with URN-based cross-document `$ref` resolution. The retired subset validator's keyword self-test cases, including `$ref` resolution, Draft 2020-12 `$ref`-sibling application, numeric equality across int/float, and the `date-time`/`uri` formats, run as Go unit tests in `internal/schemavalid/selftest_test.go` on every `go test`. Two semantics intentionally changed with the standard validator: boolean subschemas are legal Draft 2020-12 (the subset could not enforce them and rejected them; they are now compiled and enforced), and `https:` is accepted by the `uri` format per RFC 3986 (empty path). `examples/config.yaml` is additionally parsed as YAML with duplicate-key rejection and validated against `config.schema.json` (E1-T2), and the typed loader in `internal/config` re-validates it with semantic checks in `go test`. Configuration-spec section 12 checks that require runtime probing (resource-root overlap and symlink canonicalization, hermes eligibility, activation acknowledgement) are owned by E2-T2, E4, and E3 respectively and are documented in `internal/config/semantic.go`; the retired capability-report freshness and required-capability checks were replaced by the eligibility gate at the v0.1.5 cutover (E11-T1) and return as probed shape evidence with E11-T2.
 - Hermes capability baseline: see `integrations/hermes-public-interface-report.md` §Method for the exact public CLI commands; every capability claim cites its fixture under `integrations/fixtures/hermes/`.
@@ -604,3 +604,43 @@ The G1-G5 gate suites re-ran green on this machine (real then-baseline Hermes
 and Watchman 2026.07.27.00) on 2026-08-23; `make verify` including the
 race suite passed on darwin/arm64; the two consecutive
 `make release VERSION=v0.1.1` builds are byte-identical.
+
+## E20-T1 Admission Checks - 2026-09-17
+
+The first documentation-only v0.2.0 admission run passed `make verify` on
+darwin/arm64 with Go 1.26.6, but it preceded the final evidence-only edits and
+therefore is preliminary rather than proof of the first review tree. The first
+independent review returned Request Changes.
+
+After the sixteen review findings were remediated, the complete `make verify`
+entrypoint was run again on the delivered remediation worktree. It covered
+build, format, vet, staticcheck, import direction, unit tests, race tests,
+manifest checks, schema and example validation, traceability regeneration, and
+schedule artifacts. The command changed no tracked bytes after the generated
+traceability matrix and manifest had been refreshed. The host did not provide
+`systemd-analyze`, so the existing schedule check reported its documented
+systemd-unit lint skip; no Linux runtime or two-node sync behavior was claimed.
+The generated traceability matrix contains 116 tasks and 18 requirement groups.
+The first confirmation review found five Medium and seven Low documentation
+consistency and ownership gaps. Those findings were remediated, the manifest
+and traceability outputs were regenerated, and `make verify` passed again on
+the resulting confirmation candidate over
+`9f70a1200396d7abd3755184ca88242e07efae99`. A later confirmation review found
+one High, two Medium, and nine Low documentation defects; E20-T1 remains In
+Review while the valid findings are remediated and confirmed. The following
+confirmation found three Medium and three Low reports. The acknowledgement and
+protected-path gaps plus the roadmap review-history and epic-name consistency
+findings were valid and remediated. The two requested ADR back-references were
+not actionable: ADR-0025 already explicitly supersedes ADR-0001 as required by
+the ADR lifecycle and ADR-0003's daemon decision is explicitly scoped to v0.1.
+The final confirmation found no High or Medium issue and two Low consistency
+gaps. The exact Low-only settlement added the missing activation prohibition to
+the reserved-command contract and added the D-030-amended FBK-002, OPS-007, and
+AC-403 citations to E20-T1. Traceability and the manifest were regenerated;
+`make verify` passed on the reviewed pre-closeout candidate with real Watchman.
+On the final documentation tree the installed daemon rejected new disposable
+roots with the host-level `FSEventStreamStart` error. The final gate therefore
+ran with Watchman intentionally absent from `PATH`: all remaining checks passed
+and the guarded real-Watchman legs reported their environment gap. E20-T1 is
+Completed as of 2026-09-18. Runtime sync behavior remains unimplemented and
+unverified.

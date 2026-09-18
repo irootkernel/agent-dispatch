@@ -4,7 +4,7 @@ Accepted ADRs are normative below `required-spec.md` and above general architect
 
 | ADR | Decision | Status |
 |---|---|---|
-| [0001](0001-event-ingress-activation-gateway.md) | Agent Dispatch is an event-ingress and activation gateway | Accepted |
+| [0001](0001-event-ingress-activation-gateway.md) | Agent Dispatch is an event-ingress and activation gateway; note-mutation prohibition superseded by ADR-0025 for the validated sync-import boundary | Accepted |
 | [0002](0002-hermes-authoritative-public-interface-only.md) | Hermes is authoritative; public interfaces only | Accepted |
 | [0003](0003-watchman-one-shot-first.md) | Watchman one-shot trigger first; no v0.1 daemon | Accepted |
 | [0004](0004-go-yaml-sqlite-stack.md) | Go, YAML, and SQLite stack | Accepted |
@@ -26,6 +26,9 @@ Accepted ADRs are normative below `required-spec.md` and above general architect
 | [0020](0020-disabled-baseline-reconciliation.md) | Disabled setup uses baseline-only reconciliation | Accepted |
 | [0021](0021-agent-dispatch-serialization-groups.md) | Agent Dispatch serialization groups provide the mutex downgrade | Accepted |
 | [0022](0022-post-commit-notification-draining.md) | Notification draining is bounded and post-commit | Accepted |
+| [0023](0023-two-node-git-sync-mvp.md) | v0.2.0 targets one two-node Markdown sync group | Accepted |
+| [0024](0024-signed-membership-and-peer-authentication.md) | Membership and publication use pinned SSH identities; peer requests use directed credentials | Accepted |
+| [0025](0025-cooperative-import-and-conflict-stop.md) | Automatic import requires cooperative-editing acknowledgement and stops on conflict | Accepted |
 
 ## ADR Lifecycle
 

@@ -159,9 +159,11 @@ The domain-level `SinkPort` is stable. Physical Hermes command names are isolate
 
 ## 9. Future Evolution
 
-The architecture permits, but v0.1 does not implement:
+The architecture permits the following post-v0.1 extensions. D-030 admits the
+two-node sync service and Git adapter under E20 through E22; the remaining
+items are still future work:
 
-- a managed daemon;
+- general daemon responsibilities beyond the bounded sync service;
 - additional source adapters;
 - an MCP server exposing receipt and status tools;
 - multi-vault global coordination;

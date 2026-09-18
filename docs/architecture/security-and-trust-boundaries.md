@@ -21,7 +21,9 @@
 | File name and note body | hostile data | hash/read by Hermes; never authority |
 | Hermes public structured response | authenticated target claim | acceptance/status evidence subject to validation |
 | Work receipt from agent | untrusted claim | provenance candidate subject to exact validation |
-| Git metadata | supporting evidence | optional, not sole provenance |
+| Ordinary Git metadata | supporting evidence | optional, not sole provenance |
+| Verified sync membership/publication/checkpoint signatures | scoped authority | membership and content-history trust only under D-030 and ADR-0024/0025 |
+| Peer nudge or status payload | untrusted data | wake-up and correlation evidence only; never selects paths, executables, remotes, refs, profiles, credentials, or force behavior |
 
 ## 3. Threat Model
 
@@ -40,6 +42,7 @@
 | Forged work receipt | Require active dispatch lineage, resource containment, optional task ID, unique run ID, exact digest match. |
 | Denial of service by save storm | Watchman settle, batch limits, one active route task, dirty-generation collapse, bounded retries. |
 | Cost amplification | One active task, bulk policy, frequency budget, explicit rerun, no recursive parallel tasks. |
+| Forged, replayed, malformed, ambiguous, oversized, or wrong-direction peer request | Tailnet-only endpoint and certificate verification; direction-specific credential binding to sender, receiver, and group; schema, size, and duplicate-field rejection; durable inbox and idempotency; no content or arbitrary commands. |
 
 ## 4. Configuration Placement
 
@@ -131,6 +134,12 @@ Security review is required before:
 - introducing a daemon or network listener;
 - adding MCP;
 - adding a Hermes plugin.
+
+For v0.2.0, E22-T1 must complete the listener/authentication threat-model
+review before introducing `sync serve`, and E22-T5 must carry the reviewed
+real-vault automatic-write disposition into the release handoff. The peer
+listener is loopback or tailnet-only; public interface binding, Funnel, and
+Tailscale configuration changes are outside the admitted design.
 
 ## 9. v0.1.5 Boundary Additions
 

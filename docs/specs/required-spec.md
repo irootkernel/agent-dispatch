@@ -2,9 +2,13 @@
 
 ## 1. Interpretation
 
-This document is normative. Each requirement has a stable ID used by the roadmap and acceptance matrix. v0.1.5 is the shipped baseline (gates G6 through G9 closed 2026-08-30); requirements introduced by D-027 are the approved v0.1.6 target — their E14 share, the guided setup and disabled baseline, is implemented and evidenced at gate G10 (closed 2026-08-31) — and the release stays blocked until G11 through G13 close.
+This document is normative. Each requirement has a stable ID used by the
+roadmap and acceptance matrix. v0.1.8 is the shipped baseline. D-030 admits the
+v0.2.0 two-node Wiki sync target under `SYN-*`; E20 through E22 own that planned
+work. Every unamended earlier requirement remains binding in v0.2.0 whether
+sync is enabled or disabled.
 
-- **MUST** requirements block v0.1 release.
+- **MUST** requirements block the applicable release, including v0.2.0.
 - **SHOULD** requirements require an explicit recorded exception if not met.
 - **MAY** requirements are optional.
 
@@ -16,7 +20,7 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | BND-002 | Hermes **MUST** be treated as the authoritative runtime for task execution and semantic outcomes. |
 | BND-003 | v0.1 **MUST NOT** modify Hermes core, access Hermes internal storage, or require a Hermes plugin. |
 | BND-004 | Hermes integration **MUST** use public interfaces. Machine-readable forms are required where the public command provides them; D-025 permits a bounded fail-closed Agent Dispatch parser for the public profile-scoped skill list because Hermes exposes no JSON form. A Agent Dispatch-owned adapter, CLI, or skill is permitted. |
-| BND-005 | Agent Dispatch **MUST NOT** directly edit governed vault content. |
+| BND-005 | Agent Dispatch **MUST NOT** directly edit governed vault content except through the validated, journaled sync import boundary admitted by D-030 and `SYN-*`. |
 | BND-006 | Agent Dispatch **MUST NOT** perform open-ended LLM classification inside the bridge. |
 | BND-007 | A future Hermes management plugin **MAY** be documented but **MUST NOT** be a v0.1 dependency. |
 
@@ -181,7 +185,7 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | ID | Requirement |
 |---|---|
 | FBK-001 | Agent Dispatch **MUST** persist every relevant change observed while Hermes work is active. In-memory holding alone is prohibited. |
-| FBK-002 | Agent Dispatch **MUST** suppress a self-generated result only when a validated work receipt and observed path/digest set match exactly. |
+| FBK-002 | Agent Dispatch **MUST** suppress a self-generated result only when either a validated work receipt or a separate validated sync-import record matches the observed path/digest-or-absence set exactly. An import record **MUST NOT** be represented as a Hermes work receipt. *(amended by D-030)* |
 | FBK-003 | Missing, incomplete, invalid, or mismatched provenance **MUST** be treated as unknown and **MUST NOT** cause event deletion. |
 | FBK-004 | Mixed human and agent changes **MUST** remain dirty and be re-evaluated. |
 | FBK-005 | Agent Dispatch **MUST** provide public CLI commands for a cooperating Hermes task to begin, complete, or fail a work receipt without a Hermes plugin. |
@@ -246,7 +250,7 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | OPS-004 | Retention **MUST** be configurable and pruning **MUST** preserve referential and audit integrity. |
 | OPS-005 | Startup and `doctor` **MUST** detect database migration state, invalid configuration, inaccessible roots, unsupported filesystem placement, missing Watchman, and unavailable Hermes capabilities. |
 | OPS-006 | Full reconciliation **MUST** be available on startup uncertainty, Watchman overflow/fresh instance, explicit operator request, and scheduled daily operation. |
-| OPS-007 | Daily reconciliation **SHOULD** be installed through platform scheduling recipes rather than a Agent Dispatch daemon in v0.1. |
+| OPS-007 | Daily reconciliation **SHOULD** be installed through platform scheduling recipes rather than an Agent Dispatch daemon in v0.1; this does not prohibit the bounded sync service admitted by D-030 under SYN-008 and SYN-014. *(amended by D-030)* |
 | OPS-008 | SQLite **MUST** enable foreign keys, a busy timeout, crash-safe journaling appropriate for concurrent one-shot processes, and documented synchronous durability. |
 | OPS-009 | Database migrations **MUST** be forward-only, transactional where SQLite permits, and tested against interrupted upgrades. |
 | OPS-010 | Status **MUST** expose configured and actual watch roots, relative root, effective patterns, trigger identity, and installed/missing/drifted state. |
@@ -318,3 +322,23 @@ This document is normative. Each requirement has a stable ID used by the roadmap
 | NTF-014 | Automatic drain **MUST** enforce the configured item limit and one ten-second wall-clock budget per CLI invocation, visit multiple affected routes in deterministic one-item rounds, release unstarted claims when the budget expires, cancel started delivery through context while preserving fenced recovery, and **MUST NOT** create a notification solely about successful notification draining. |
 | NTF-015 | Existing v0.1.5 notification records **MUST** migrate forward immediately due without changing notification IDs, idempotency keys, or attempt history. |
 | NTF-016 | A successful registered command **MUST** drain due work for every affected after-command route after core commit even when it created no notification; a failed core command **MUST NOT** auto-drain, and automatic delivery **MUST** preserve the command's stdout, JSON, and exit contract. |
+
+## 19. Two-Node Wiki Sync
+
+| ID | Requirement |
+|---|---|
+| SYN-001 | The v0.2.0 sync capability **MUST** be opt-in, disabled by default, and limited to one group, one governed Git working copy, one configured content ref, one configured membership ref, and exactly two active nodes. Existing ingestion and dispatch **MUST** remain usable when sync is absent or disabled. |
+| SYN-002 | Git **MUST** be the shared content-history authority for sync. SQLite databases, journals, credentials, locks, caches, local index state, and machine-specific Hermes or Obsidian configuration **MUST NOT** enter the synchronized scope or a network filesystem. |
+| SYN-003 | Synchronized content **MUST** be limited to `.md` and `.markdown` files plus minimal controller publication manifests. Route-protected and immutable paths **MUST** remain outside the synchronized content scope, and a publication or import candidate that touches one **MUST** fail closed before content mutation. Attachments, submodules, symlinks, unsupported file modes, unsafe path aliases, arbitrary filters, and unexpected LFS behavior **MUST** fail closed. |
+| SYN-004 | `sync publish` **MUST** be an explicit operator command. It **MUST** consume an eligible validated maintenance snapshot while holding the resource guard, persist intent before effects, create an SSH Ed25519-signed commit from a frozen snapshot, use a fast-forward push, reconcile ambiguous push results, and create a peer nudge obligation only after remote publication is confirmed. Publisher private-key resolution and signing **MUST** occur only in the explicit CLI process; unattended recovery may finish only already-signed push, confirmation, and nudge work. |
+| SYN-005 | Membership **MUST** be a signed, versioned history on a separate configured Git ref with an out-of-band pinned administrator trust anchor and distinct administrator and per-node publisher SSH keys. The normal operating state **MUST** bind exactly two active `instance_id` entries, while retained retired/revoked entries and an emergency blocked state with fewer than two active entries remain representable. Bootstrap and every membership mutation **MUST** use `sync membership plan` and `sync membership apply`, a reviewed expected predecessor, an administrator signature, and a non-force update. A publication **MUST** name a verified ancestor membership revision in which its publisher key is active. Previously verified evidence remains historical after rotation, but previously unseen history from a removed key **MUST** require a current administrator checkpoint without using commit timestamps as authority. Signing keys **MUST** remain local secret references and unavailable to the peer service. |
+| SYN-006 | Peer requests **MUST** use Tailscale HTTPS to a loopback or otherwise tailnet-only listener plus a separately provisioned credential for each direction, bound by the receiver to sender, receiver, and group. The implementation **MUST** verify the configured peer endpoint and certificate, **MUST NOT** bind a public interface or enable Funnel, and **MUST NOT** modify Tailscale configuration. Tailnet reachability, Tailscale headers, or a claimed sender field alone **MUST NOT** authorize a request. |
+| SYN-007 | A peer nudge **MUST** be a bounded wake-up hint and **MUST NOT** contain note bodies, arbitrary commands, repository locations, paths, executables, profiles, credentials, or request-selected refs. HTTP 202 **MUST** mean only that the durable inbox transaction committed. |
+| SYN-008 | Startup and bounded periodic reconciliation **MUST** recover missed nudges, ambiguous already-signed publication and delivery outcomes, and pending imports from configured Git refs without an LLM call. A pre-signature publication interruption **MUST** remain pending for explicit `sync publish` re-entry under the same logical identity. Duplicate and reordered nudges **MUST** reuse stable logical identities. |
+| SYN-009 | Automatic live-tree import **MUST** require a current cooperative-import acknowledgement bound to the resource, remote/refs, scope, local identity, pinned administrator trust anchor, and safety policy, meaning the SYN-010 guard set together with the configured import bounds. Without it, the system may fetch and validate but **MUST** defer application. Changes to those inputs **MUST** invalidate it; membership changes accepted under the same trust policy invalidate verification targets but not the acknowledgement. Publication and production activation are separate and **MUST NOT** depend on this acknowledgement. |
+| SYN-010 | Import **MUST** persist a pre-apply plan and journal, hold the resource writer guard, reject Git operation/index/ref instability, overlapping staged or unstaged changes, and untracked overwrite collisions, preserve proven-disjoint local changes and out-of-scope or ignored files, preserve Watchman observations, and suppress only exact import effects proven by a separate durable import record with path and digest-or-absence evidence. If path disjointness cannot be proven, application **MUST** defer. |
+| SYN-011 | Publication and import **MUST** be fast-forward-only. Import **MUST** start from an administrator-signed adoption checkpoint, and every commit to the target **MUST** be covered by a verified publication or later checkpoint. Divergence, uncovered or over-bound history, unexpected local state, remote history rewrite, trust failure, or unexplained partial effects **MUST** preserve data and produce an inspectable blocked or uncertain result. Conflict recovery **MUST** require ordinary Git resolution, `sync checkpoint plan`, `sync checkpoint apply`, and `sync reconcile`; reconciliation alone cannot adopt history. Agent Dispatch **MUST NOT** merge, rebase, stash, force-push, reset, or clean automatically. |
+| SYN-012 | Publication preparation, remote publication, nudge acceptance, local import, historical delivery, and fresh pair convergence **MUST** be separate durable outcomes. A timeout, lease expiry, or missing process **MUST NOT** by itself prove completion or safe writer takeover. |
+| SYN-013 | Fresh pair verification **MUST** pin and recheck group, membership revision, content ref, target commit, scope and contract digests, both node identities, and both incarnations. Equal commits **MUST NOT** produce success when either node has governed dirtiness, pending work, stale evidence, or unresolved uncertainty. |
+| SYN-014 | The sync CLI **MUST** expose truthful `capabilities`, `status`, `publish`, `reconcile`, `verify`, `serve`, `pause`, and `resume` commands; two-phase membership `plan` and `apply` and checkpoint `plan` and `apply` administrator commands; and service `render`, `install`, `inspect`, `stop`, `disable`, and `uninstall` lifecycle commands through versioned machine contracts. Reserved but unimplemented capabilities **MUST** fail closed without Git, network, filesystem, or activation side effects. |
+| SYN-015 | Sync queues, retries, payloads, history inspection, subprocess time and output, retained evidence, service concurrency, and shutdown **MUST** have documented tested bounds. Exhaustion **MUST** remain visible and **MUST NOT** silently discard a publication, import, peer, or verification obligation. |

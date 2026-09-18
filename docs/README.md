@@ -9,9 +9,10 @@ and everyday use, start with the [project README](../README.md).
 
 **Language:** English.
 
-**Documentation basis:** v0.1.8, including E19 / SOT 1.5.0, tracked under
-[v0.1.8 - 2026-09-10](../CHANGELOG.md#v018---2026-09-10). Versioned release notes and
-validation records describe their own snapshots, not proof for the current HEAD.
+**Documentation basis:** shipped v0.1.8 plus the planned v0.2.0 two-node Wiki
+sync contract admitted by E20-T1 / SOT 1.6.0. The shipped baseline is tracked
+under [v0.1.8 - 2026-09-10](../CHANGELOG.md#v018---2026-09-10). Planned
+contracts are not implementation or release evidence.
 
 ## Start Here
 

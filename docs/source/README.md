@@ -7,3 +7,4 @@ architecture, or roadmap lifecycle truth.
 - [`initial-discussion-draft.md`](initial-discussion-draft.md)
 - [`decision-resolution.md`](decision-resolution.md)
 - [`agent-dispatch-mvp-feature-change-request.md`](agent-dispatch-mvp-feature-change-request.md)
+- [`agent-dispatch-wiki-sync-requirements.md`](agent-dispatch-wiki-sync-requirements.md)

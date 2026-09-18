@@ -43,6 +43,7 @@ FINAL_VERIFICATION = {
     "TST": "E6-T4, E13-T4, E14-T3, E15-T4, E16-T4, E17-T2, E17-T3",
     "FAN": "E12-T4, E13-T4, E17-T3",
     "NTF": "E13-T3, E13-T4, E16-T4, E17-T3",
+    "SYN": "E20-T5, E21-T5, E22-T5",
 }
 
 EPIC_CONTRIBUTION = """\
@@ -67,7 +68,10 @@ EPIC_CONTRIBUTION = """\
 | E16 | Adds bounded post-commit and scheduled progress for the durable notification outbox. |
 | E17 | Reconciles documentation and real evidence, then releases v0.1.6 reproducibly. |
 | E18 | Binds the configured absolute resource root as the Watchman watch root. |
-| E19 | Reopens official linux/amd64 and linux/arm64 support beside darwin/arm64. |"""
+| E19 | Reopens official linux/amd64 and linux/arm64 support beside darwin/arm64. |
+| E20 | Freezes the two-node sync contracts, disabled configuration, and capability boundary. |
+| E21 | Implements signed manual publication and guarded fast-forward import. |
+| E22 | Adds authenticated nudges, periodic recovery, pair verification, service operations, and real two-node evidence. |"""
 
 
 def load_spec_groups() -> dict[str, list[int]]:

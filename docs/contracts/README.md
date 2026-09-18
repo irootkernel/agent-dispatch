@@ -12,6 +12,8 @@ than a separate lifecycle authority.
 - [`hermes-task-contract.md`](hermes-task-contract.md)
 - [`source-adapter-contract.md`](source-adapter-contract.md)
 - [`sink-adapter-contract.md`](sink-adapter-contract.md)
+- [`sync-contract.md`](sync-contract.md)
 
-Checked-in executable schemas and examples continue to represent v0.1.4 until
-the corresponding v0.1.5 roadmap tasks update and validate them.
+The sync contract reserves the v0.2.0 command and protocol identities. Its
+capability surface must report unimplemented behavior honestly until the owning
+roadmap tasks deliver it.

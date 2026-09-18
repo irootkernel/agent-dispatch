@@ -20,6 +20,11 @@ The release gate is cumulative. A later gate cannot pass while an earlier gate i
 | G11 | Hermes 0.20.5 and later probe-compatible releases are safe through mandatory local serialization groups and optional target mutex defense-in-depth. |
 | G12 | Durable notifications make bounded automatic progress without coupling delivery to source state. |
 | G13 | Documentation, cold validation, and reproducible v0.1.6 release evidence agree. |
+| G14 | The absolute Watchman root binding is implemented and proven on the operator host. |
+| G15 | Official darwin/arm64, linux/amd64, and linux/arm64 support evidence agrees with the shipped platform contract (scenario: AC-505; evidence in `VALIDATION.md` Gate G15). |
+| G16 | The v0.2.0 two-node sync contracts, disabled configuration, and truthful capability surface are accepted. |
+| G17 | Signed manual publication and guarded import preserve data through conflicts and crash recovery. |
+| G18 | Authenticated nudges, periodic recovery, pair verification, service operations, and real two-node qualification pass. |
 
 ## 2. Scenario Acceptance Matrix
 
@@ -74,7 +79,7 @@ The release gate is cumulative. A later gate cannot pass while an earlier gate i
 |---|---|
 | AC-401 | Given an unresolved active Hermes task, when additional relevant changes arrive, then no parallel maintenance task is created and the route dirty generation is durably incremented. |
 | AC-402 | Given ten bursts during one active task, when the task completes, then at most one follow-up task is created for the latest vault state. |
-| AC-403 | Given a valid work receipt whose changed path and digest set exactly matches observed changes, when attribution runs, then exact self-generated changes may be suppressed and the decision is audited. |
+| AC-403 | Given either a valid work receipt or a separate valid sync-import record whose changed path and digest-or-absence set exactly matches observed changes, when attribution runs, then exact self-generated changes may be suppressed and the decision is audited without representing an import as Hermes work. *(amended by D-030)* |
 | AC-404 | Given a receipt with missing paths, extra paths, mismatched digest, wrong resource, or wrong dispatch, when attribution runs, then changes are not suppressed. |
 | AC-405 | Given agent and human changes in the same interval, when attribution runs, then the route remains dirty and receives a bounded follow-up evaluation. |
 | AC-406 | Given no work receipt, when agent changes are observed, then Agent Dispatch may produce an extra follow-up but never silently loses potential human work. |
@@ -192,6 +197,51 @@ The release gate is cumulative. A later gate cannot pass while an earlier gate i
 | AC-1402 | Given a live trigger invocation, when `WATCHMAN_ROOT` canonicalizes to the configured resource root, then it is accepted; an ancestor root or a present `WATCHMAN_RELATIVE_ROOT` is rejected as a binding mismatch with no persisted-binding second axis (D-028). |
 | AC-1403 | Given the operator host with a production route previously bound to an ancestor watch root, when the route is reinstalled and a Markdown file changes under the configured root, then a new source observation and its destination task exist and `agent-dispatch doctor` reports no binding-mismatch or staleness fallout caused by the re-binding. |
 
+### G16: Two-Node Sync Contract and Disabled Baseline
+
+| ID | Given / When / Then |
+|---|---|
+| AC-1601 | Given an existing v0.1.8 configuration with no sync block, when it is loaded and ordinary commands run, then behavior is unchanged and no Git, network, service, or live-tree side effect occurs. |
+| AC-1602 | Given disabled sync configuration, when capabilities and status run, then they identify the reserved contract and disabled state without fetching, applying, publishing, or starting a listener. |
+| AC-1603 | Given a third active member, overlapping resource, unapproved ref, non-Markdown scope, or inline secret, when configuration is validated, then it fails before a protected side effect. Given a cooperative-import acknowledgement whose locally bound inputs changed, when a command evaluates the acknowledgement, then live-tree application defers while publication, status, and fetch-and-validate reconciliation remain available; remote membership drift is revalidated at execution and defers only the gated effect. |
+| AC-1604 | Given contract fixtures for a membership document signed by an unpinned key, a self-authorizing trust root, a stale predecessor, or an obsolete state incarnation, when the provisional provider bundle is validated, then the closed result rejects the document without claiming runtime signature verification. |
+| AC-1605 | Given the provisional provider bundle, when its descriptors, schemas, fixtures, and checksums are validated, then every reserved command and unavailable result agrees with the documented v0.2.0 contract. |
+
+### G17: Signed Publication and Guarded Import
+
+| ID | Given / When / Then |
+|---|---|
+| AC-1701 | Given no eligible validated maintenance snapshot, when `sync publish` runs, then it refuses without creating a commit, push, or nudge. |
+| AC-1702 | Given an eligible snapshot and a clean configured repository, when `sync publish` runs, then it freezes only governed Markdown, creates one SSH-signed commit and manifest, confirms a fast-forward push, and records one peer obligation. |
+| AC-1703 | Given a push that succeeds remotely before timeout or local crash, when recovery runs, then it recognizes the published commit and creates no duplicate commit or push. |
+| AC-1704 | Given two nodes publishing from one base, when the second push diverges, then both histories remain intact and the losing node blocks without merge, rebase, force push, reset, clean, or stash. |
+| AC-1705 | Given no cooperative-import acknowledgement, an overlapping staged or unstaged change, an untracked overwrite collision, an active Git operation, unstable index/ref state, or unprovable path disjointness, when an import is ready, then application is deferred and local content is unchanged. |
+| AC-1706 | Given an acknowledged resource with eligible path-disjoint local state and validated publication history, when import applies, then its journal and resource fence survive crash injection and only exact imported Watchman effects are suppressed. |
+| AC-1707 | Given an imported change and an independent local edit, including a late edit to the same path, when attribution resolves, then the local edit remains dirty and is never cleared by older import evidence. |
+| AC-1708 | Given out-of-band administrator trust, when membership is bootstrapped or updated through plan/apply, then separate administrator authority, expected predecessor, non-force publication, exactly two normal active entries, and blocked emergency revocation are enforced; runtime verification rejects self-authorizing, stale-parent, obsolete-incarnation, and unauthorized transitions. |
+| AC-1709 | Given an existing vault, resolved divergence, previously unseen history from a removed publisher key, or history beyond the inspection bound, when trust is established, then an administrator-signed checkpoint binds the exact governed snapshot and uncovered history remains blocked until `sync reconcile` validates that checkpoint. |
+| AC-1710 | Given a remote change to note Y and a local edit to disjoint note X or an out-of-scope/ignored file, when guarded import runs, then Y advances while X and the unrelated file remain byte-identical and dirty; an overlap or alias collision defers instead. |
+| AC-1711 | Given publication snapshot capture races a participating writer or the process stops before signature, when recovery runs, then no mixed snapshot is attested and unattended service recovery cannot sign; given an already-signed candidate, recovery confirms or retries its push and nudge under the same identity. |
+
+### G18: Peer Recovery, Verification, and Operations
+
+| ID | Given / When / Then |
+|---|---|
+| AC-1801 | Given a wrong peer, group, receiver, credential, membership revision, or revoked identity, when a nudge or status request arrives, then it is refused and no Git or filesystem effect occurs. |
+| AC-1802 | Given duplicate or reordered nudges, a lost 202 response, or a completely lost nudge, when delivery and periodic reconciliation run, then one logical import progresses and no semantic maintenance echo is created. |
+| AC-1803 | Given one offline node, when the online node publishes, then publication completes with pending peer evidence; after reconnection, startup or periodic reconciliation catches the peer up from Git. |
+| AC-1804 | Given equal target commits but governed local dirtiness, pending work, stale membership, or uncertain evidence on either node, when pair verification runs, then fresh convergence remains incomplete. |
+| AC-1805 | Given the final v0.2.0 candidate on a MacBook and Oracle Cloud Linux node, when service lifecycle, publication, nudge, import, missed-nudge recovery, conflict stop, and pair verification are exercised, then the recorded results match one reviewed core revision without Plugin or production-vault mutation outside the authorized fixture. |
+| AC-1806 | Given the peer service and its reviewed threat model, when it is rendered and started, then it binds only the admitted loopback or tailnet-only endpoint, verifies peer endpoint/certificate identity, leaves Tailscale configuration unchanged, and exposes neither a public listener nor Funnel. |
+| AC-1807 | Given active, paused, blocked, and safely quiesced work, when `sync pause`, `sync resume`, `sync reconcile`, and managed service lifecycle commands run, then they respect control revisions and safe boundaries, preserve state on stop/disable/uninstall, and never clear a conflict or revocation without its required signed evidence. |
+| AC-1808 | Given any configured queue, retry, payload, history, subprocess, evidence-retention, concurrency, or shutdown bound is exhausted, when work is admitted or advanced, then the exact obligation remains visible and incomplete or blocked without truncating the pair, dropping work, or reporting convergence. |
+
 ## 3. Automatic-Write Gate
 
 Automatic Hermes writes to the real vault are prohibited until all scenarios in gates G0 through G14 pass in a test vault and the operator explicitly enables the production route. Dry-run, audit-only, baseline-only, or no-write Hermes profiles may be used earlier. Historical v0.1.5 evidence remains valid for its shipped scope but does not satisfy the new G10-G13 requirements; G14's live re-binding evidence (AC-1403) runs on the operator-enabled production route under D-028's bounded waiver.
+
+Automatic sync application to a real vault is prohibited until G16 through
+G18 pass on disposable repositories, the listener and real-vault security
+reviews are accepted, and the operator acknowledges the exact group's
+cooperative-import policy. Publication, production activation, and release
+publication remain separate authorizations.

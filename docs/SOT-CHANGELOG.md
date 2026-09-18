@@ -5,6 +5,28 @@ SOT snapshots, not product releases. Product release notes and pending user-faci
 changes belong to the root [changelog](../CHANGELOG.md). Historical entries below
 retain their recorded scope; migrated document pointers use their current paths.
 
+## 1.6.0 - 2026-09-17
+
+D-030 admits the v0.2.0 two-node Wiki sync MVP as planned work. No sync runtime
+behavior is implemented by this SOT revision.
+
+- `REQ-DISPATCH-WIKI-SYNC/v1` is preserved as a non-authoritative source record
+  with its exact digest and baseline commits.
+- ADR-0023 through ADR-0025 fix the two-node topology, signed membership and
+  peer authentication, explicit signed publication, cooperative import, and
+  conflict-stop policy.
+- Review remediation closes the initial trust/checkpoint, key revocation,
+  membership administration, path-disjoint import, CLI-only signing, listener
+  exposure, security-review, and operator-command ownership decisions.
+- `SYN-001` through `SYN-015`, G16 through G18, and the sync contract and
+  architecture documents define the v0.2.0 boundary.
+- The roadmap opens E20 through E22 with fifteen strictly ordered tasks. E20-T1
+  completed its admission review; E20-T2 is the next Planned task.
+- N-member support, additional sync groups, attachments, automatic merge, and
+  Plugin sync tools remain deferred. Existing v0.1.8 behavior is unchanged
+  while sync is absent, disabled, or unimplemented. The current Plugin range
+  excludes v0.2.0 and remains fail-closed until a later admission.
+
 ## 1.5.0 - 2026-09-10
 
 E19 Official Linux Support closes gate G15 under D-029 and ships as product

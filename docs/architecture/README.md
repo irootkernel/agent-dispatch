@@ -9,3 +9,6 @@ Start with [`architecture-overview.md`](architecture-overview.md). For the multi
 [`multi-destination-operational-loop.md`](multi-destination-operational-loop.md),
 then the source, persistence, reconciliation, Hermes, observability, and
 security documents for the owning subsystem.
+
+For the planned v0.2.0 two-node Git publication and import loop, read
+[`wiki-sync.md`](wiki-sync.md).

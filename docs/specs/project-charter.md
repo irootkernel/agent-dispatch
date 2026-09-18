@@ -52,7 +52,8 @@ For the first use case, the work request asks Hermes to evaluate the **latest st
 
 ### Agent Dispatch does not own
 
-- note editing;
+- semantic note editing; the v0.2.0 sync controller may apply validated Git
+  content through the journaled import boundary;
 - semantic indexing or grouping algorithms;
 - a general workflow engine;
 - distributed orchestration;
@@ -114,6 +115,16 @@ event can fan out to independent destination lanes, bounded receipts distinguish
 completed/partial/blocked/failed work, and configured notifications are durable
 and retryable. Gates G6 through G9 are cumulative and all closed: G6-G8
 evidenced through E10-E12 and G9 evidenced with E13 on 2026-08-30.
+
+## 8.2 Success Definition for v0.2.0
+
+v0.2.0 is complete when one admitted Markdown working copy synchronizes between
+exactly two active nodes through explicit signed publication, authenticated
+nudge, periodic Git recovery, guarded import, and fresh pair verification.
+Conflicts preserve both histories and require operator resolution. Sync remains
+disabled by default, and the shipped v0.1.8 ingestion and dispatch paths keep
+their behavior when sync is absent or disabled. Gates G16 through G18 are
+cumulative.
 
 ## 9. Product Constraints
 

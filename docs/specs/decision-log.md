@@ -574,3 +574,48 @@ docs; later tasks deliver three-arch artifacts, Watchman/secrets alignment,
 managed systemd, and VALIDATION evidence. Active present-tense support claims in
 the normative specs use the three-platform set. E18 Absolute Watch-Root Binding
 and gate G14 are unchanged.
+
+## D-030 - 2026-09-17 - Two-node Wiki sync MVP admitted for v0.2.0
+
+**Decision.** The Wiki sync intake identified by
+`REQ-DISPATCH-WIKI-SYNC/v1` is accepted with a narrower first release. v0.2.0
+supports one Markdown vault synchronized between exactly two active nodes.
+Git carries content and signed membership history. SQLite and all operational
+state remain local. Publication is an explicit `sync publish` command that
+creates and pushes an SSH Ed25519-signed commit from eligible maintenance
+evidence. A Tailscale HTTPS nudge reduces latency, while startup and periodic
+Git reconciliation provide correctness when nudges are lost.
+
+Automatic live-tree import is disabled until the operator accepts the
+cooperative-editing policy for the exact group configuration. Import is then
+fast-forward-only and stops on divergence, unsafe local state, trust failure,
+or uncertain effects. Agent Dispatch does not merge, rebase, stash,
+force-push, reset, or clean automatically.
+
+E20 through E22 own the fifteen-task delivery sequence. The broader intake's
+N-member support, attachment handling, all-member qualification, and Plugin
+EPIC-007/008 work are not active roadmap work. They remain future candidates
+and require a later admission decision.
+
+**Context.** The source request defined eight Dispatch epics and three Plugin
+epics for a general multi-node system. The initial deployment need is the
+MacBook and Oracle Cloud Linux pair. The smaller sequence preserves the
+request's data-loss, provenance, authentication, crash-recovery, and conflict
+requirements without making unused generality a release blocker. Plugin
+EPIC-006 completed its Linux handoff at
+`d029c956df76cfeb30680e1a8482fff2187e7f94`; the current Plugin remains a
+ten-tool inspection product and is not modified by this decision. Its accepted
+Agent Dispatch range is `>=0.1.6,<0.2.0`, so it remains fail-closed for v0.2.0.
+The handoff's Dispatch E26 restart point is not part of the admitted E20-E22
+sequence and is replaced by a later explicit Plugin admission decision.
+
+**Consequences.** ADR-0023 through ADR-0025 own topology, trust, and import
+safety. `SYN-*` is the normative requirement family and G16 through G18 are
+the cumulative release gates. BND-005, FBK-002, OPS-007, and AC-403 are amended;
+the project charter section 4 note-editing boundary, required-spec section 1
+interpretation, and security trust classification are restated consistently.
+The receipt amendments recognize separately validated sync-import evidence
+without representing it as a Hermes work receipt. Existing v0.1.8 commands and
+routes retain their behavior when sync is absent or disabled. Product
+implementation, production activation, commit, tag, and release publication
+remain separate actions.

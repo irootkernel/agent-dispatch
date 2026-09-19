@@ -4,6 +4,10 @@ These fixtures illustrate the [specifications](../specs/README.md) and
 [contracts](../contracts/README.md); they do not establish additional behavior.
 Schema-covered records are checked by `make schema-validation`.
 
+The top-level `sync-*.json` files are positive examples for every E20 sync
+record family. `invalid/sync-*.json` files are fail-closed examples and must be
+rejected by their filename-mapped schema during the same check.
+
 - [config.yaml](config.yaml): disabled example configuration. Replace example
   paths and destination settings; the [public setup guide](../../README.md#quick-start)
   explains local prerequisites and activation.

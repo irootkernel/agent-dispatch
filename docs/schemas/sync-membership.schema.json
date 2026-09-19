@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agent-dispatch:schema:sync-membership:v1",
+  "title": "Agent Dispatch sync membership v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "group_id", "revision", "predecessor", "content_ref", "content_binding", "contract_digest", "mode", "administrator_key", "active_members", "historical_members"],
+  "properties": {
+    "schema_version": {"const": "agent-dispatch.sync-membership/v1"},
+    "group_id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"},
+    "revision": {"$ref": "#/$defs/oid"},
+    "predecessor": {"oneOf": [{"$ref": "#/$defs/oid"}, {"type": "null"}]},
+    "content_ref": {"type": "string", "pattern": "^refs/heads/[A-Za-z0-9](?:[A-Za-z0-9._/-]*[A-Za-z0-9])?$"},
+    "content_binding": {"$ref": "#/$defs/digest"},
+    "contract_digest": {"$ref": "#/$defs/digest"},
+    "mode": {"enum": ["normal", "blocked_emergency"]},
+    "block_reason": {"enum": ["emergency_revocation", "active_member_shortfall"]},
+    "administrator_key": {"type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{20,64}$"},
+    "active_members": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/active"}},
+    "historical_members": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/historical"}}
+  },
+  "allOf": [
+    {"if": {"properties": {"mode": {"const": "normal"}}, "required": ["mode"]}, "then": {"properties": {"active_members": {"minItems": 2, "maxItems": 2}}, "not": {"required": ["block_reason"]}}},
+    {"if": {"properties": {"mode": {"const": "blocked_emergency"}}, "required": ["mode"]}, "then": {"required": ["block_reason"], "properties": {"active_members": {"maxItems": 1}}}}
+  ],
+  "$defs": {
+    "oid": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
+    "identity": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"},
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "incarnation": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{7,127}$"},
+    "active": {"type": "object", "additionalProperties": false, "required": ["instance_id", "state_incarnation_id", "publisher_key", "endpoint"], "properties": {"instance_id": {"$ref": "#/$defs/identity"}, "state_incarnation_id": {"$ref": "#/$defs/incarnation"}, "publisher_key": {"type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{20,64}$"}, "endpoint": {"type": "string", "format": "uri", "pattern": "^https://"}}},
+    "historical": {"type": "object", "additionalProperties": false, "required": ["instance_id", "state_incarnation_id", "state", "publisher_key", "reason"], "properties": {"instance_id": {"$ref": "#/$defs/identity"}, "state_incarnation_id": {"$ref": "#/$defs/incarnation"}, "state": {"enum": ["retired", "revoked"]}, "publisher_key": {"type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{20,64}$"}, "reason": {"enum": ["planned_replacement", "key_rotation", "credential_compromise", "operator_revocation"]}}}
+  }
+}

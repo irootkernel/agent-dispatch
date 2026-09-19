@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agent-dispatch:schema:sync-checkpoint:v1",
+  "title": "Agent Dispatch sync checkpoint v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "checkpoint_id", "group_id", "kind", "target_commit", "snapshot_digest", "scope_digest", "contract_digest", "membership_revision", "administrator_key"],
+  "properties": {
+    "schema_version": {"const": "agent-dispatch.sync-checkpoint/v1"},
+    "checkpoint_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,127}$"},
+    "group_id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"},
+    "kind": {"enum": ["initial_baseline", "conflict_resolution", "history_bound_exhausted"]},
+    "target_commit": {"$ref": "#/$defs/oid"},
+    "snapshot_digest": {"$ref": "#/$defs/digest"},
+    "scope_digest": {"$ref": "#/$defs/digest"},
+    "contract_digest": {"$ref": "#/$defs/digest"},
+    "membership_revision": {"$ref": "#/$defs/oid"},
+    "administrator_key": {"type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{20,64}$"}
+  },
+  "$defs": {"oid": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"}, "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}}
+}

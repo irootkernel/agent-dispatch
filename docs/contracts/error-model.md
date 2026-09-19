@@ -134,6 +134,14 @@ Reserved code names — defined, never emitted in v0.1:
 | `batch_hard_limit` | `quarantined` (5) | A future policy that durably stores overflow evidence before holding it (today overflow converts to a reconciliation generation or refuses the context at exit 4). |
 | `protected_path_quarantined` | `quarantined` (5) | The same future durable-hold policy for protected paths (today a protected hold is an exit-0 disposition envelope). |
 | `unsafe_path_quarantined` | `quarantined` (5) | The same future durable-hold policy for unsafe paths (today the containment rejection fires first at exit 30). |
+| `sync_group_not_found` | `configuration` (3) | The selected sync group does not exist in the effective configuration. |
+| `sync_capability_unavailable` | `configuration` (3) | A reserved sync action has no implemented capability in this build. |
+| `sync_contract_mismatch` | `configuration` (3) | A configured or received sync contract version or digest is unsupported. |
+| `sync_payload_invalid` | `input_rejected` (4) | A sync record or peer payload fails its closed schema or bound. |
+| `sync_identity_obsolete` | `input_rejected` (4) | Evidence names an obsolete node incarnation. |
+| `sync_precondition_failed` | `conflict` (14) | A reviewed predecessor, revision, target, or fence no longer matches. |
+| `sync_effect_unknown` | `acceptance_unknown` (13) | A publication or peer effect may have occurred and requires reconciliation. |
+| `sync_trust_failed` | `security` (30) | A membership, publisher, checkpoint, credential, endpoint, or signature trust check failed. |
 
 Boundary notes:
 

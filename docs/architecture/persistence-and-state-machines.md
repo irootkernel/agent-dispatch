@@ -204,3 +204,13 @@ lane. The aggregate event has no competing lifecycle enum: its status is
 derived from child, quarantine, and reconciliation records. Per ADR-0019, a
 reportable transition and notification intent commit together, while delivery
 attempts occur outside that transaction.
+
+## Reserved sync record invariants
+
+E20 freezes the sync record shapes before E21 assigns SQLite migrations.
+Publication, peer delivery, import, and pair verification use separate stable
+logical identities and monotonic fences. No timeout or lease expiry proves an
+effect completed. Unresolved, blocked, recovering, or uncertain records remain
+retention roots, as do the membership revisions and checkpoints they name.
+Storage implementation must preserve these references atomically and may not
+collapse them into an aggregate success flag.

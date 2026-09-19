@@ -15,9 +15,9 @@
 | Release target | v0.2.0 (Two-Node Wiki Sync MVP) |
 | Current epic | E20 Two-Node Sync Contracts and Admission (In Progress) |
 | Current active task | None |
-| Next task | E20-T2 (Planned) |
-| Completed tasks | 102 / 116 |
-| Planned tasks | 14 / 116 |
+| Next task | E20-T3 (Planned) |
+| Completed tasks | 103 / 116 |
+| Planned tasks | 13 / 116 |
 | In progress tasks | 0 |
 | In review tasks | 0 |
 | Blocked tasks | 0 |
@@ -165,7 +165,7 @@
 | 100 | E19-T9 | Completed | systemd examples and schedule-check |
 | 101 | E19-T10 | Completed | VALIDATION evidence (amd64 + arm64) and closeout notes |
 | 102 | E20-T1 | Completed | Two-node sync program admitted and decisions frozen |
-| 103 | E20-T2 | Planned | Sync records, state machines, and errors frozen |
+| 103 | E20-T2 | Completed | Sync records, state machines, and errors frozen |
 | 104 | E20-T3 | Planned | CLI and peer provider contract bundle frozen |
 | 105 | E20-T4 | Planned | Disabled configuration and capabilities implemented |
 | 106 | E20-T5 | Planned | Contract baseline qualified and handed to E21 |
@@ -5018,7 +5018,7 @@ Progress and E20-T2 remains Planned.
 
 ## E20-T2: Freeze Sync Records, States, and Errors
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -5048,6 +5048,21 @@ E20-T1 Completed.
 - Missing proof, malformed object IDs, stale membership, obsolete incarnation,
   and empty pair targets fail fixture validation.
 - Unresolved publication and import evidence is protected from retention.
+
+### Evidence
+
+Ten Draft 2020-12 schemas and positive examples freeze membership and
+checkpoint plan/apply records, cooperative-import acknowledgement,
+publication, delivery, import, control, and pair verification. Required
+negative fixtures cover stale predecessors, duplicate or excess identities,
+missing proof, malformed object identity, unresolved-evidence pruning, empty
+pair/import targets, false convergence, unknown control state, and obsolete
+incarnation. State-specific schema rules plus shared semantic checks enforce
+cross-field plan bindings and two distinct node identities. The sync contract
+owns transitions, reason vocabularies, fences, bounds, and retention roots;
+the error model reserves typed mappings without advertising a runtime
+capability. `make schema-validation` and focused validator tests pass on the
+task candidate. Completed 2026-09-19; E20-T3 is next.
 
 ## E20-T3: Freeze CLI and Peer Contracts
 

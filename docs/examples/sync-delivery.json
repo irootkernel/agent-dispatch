@@ -1,0 +1,13 @@
+{
+  "schema_version": "agent-dispatch.sync-delivery/v1",
+  "delivery_id": "delivery-001",
+  "publication_id": "publication-001",
+  "sender": "node-a",
+  "receiver": "node-b",
+  "state": "accepted",
+  "reason": "http_202_inbox_committed",
+  "attempts": 1,
+  "claim_owner": null,
+  "fence": 2,
+  "retain_until_resolved": false
+}

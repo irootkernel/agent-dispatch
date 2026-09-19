@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agent-dispatch:schema:sync-import-acknowledgement:v1",
+  "title": "Agent Dispatch cooperative import acknowledgement v1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "acknowledgement_id", "group_id", "resource_id", "remote_name", "content_ref", "membership_ref", "scope_digest", "local_instance_id", "state_incarnation_id", "administrator_key", "safety_policy_digest", "import_bounds_digest", "config_revision"],
+  "properties": {
+    "schema_version": {"const": "agent-dispatch.sync-import-acknowledgement/v1"},
+    "acknowledgement_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,127}$"},
+    "group_id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"},
+    "resource_id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"},
+    "remote_name": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"},
+    "content_ref": {"type": "string", "pattern": "^refs/heads/[A-Za-z0-9](?:[A-Za-z0-9._/-]*[A-Za-z0-9])?$"},
+    "membership_ref": {"type": "string", "pattern": "^refs/agent-dispatch/membership/[A-Za-z0-9](?:[A-Za-z0-9._/-]*[A-Za-z0-9])?$"},
+    "scope_digest": {"$ref": "#/$defs/digest"},
+    "local_instance_id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"},
+    "state_incarnation_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{7,127}$"},
+    "administrator_key": {"type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{20,64}$"},
+    "safety_policy_digest": {"$ref": "#/$defs/digest"},
+    "import_bounds_digest": {"$ref": "#/$defs/digest"},
+    "config_revision": {"$ref": "#/$defs/digest"}
+  },
+  "$defs": {"digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}}
+}

@@ -1,0 +1,6 @@
+{
+  "schema_version": "agent-dispatch.sync-checkpoint-plan/v1", "plan_id": "checkpoint-plan-001", "group_id": "wiki-pair",
+  "expected_content_predecessor": "1111111111111111111111111111111111111111", "expected_membership_revision": "1111111111111111111111111111111111111111",
+  "proposed_checkpoint": {"schema_version":"agent-dispatch.sync-checkpoint/v1","checkpoint_id":"checkpoint-001","group_id":"wiki-pair","kind":"initial_baseline","target_commit":"2222222222222222222222222222222222222222","snapshot_digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","scope_digest":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","contract_digest":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","membership_revision":"1111111111111111111111111111111111111111","administrator_key":"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"},
+  "administrator_key": "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+}

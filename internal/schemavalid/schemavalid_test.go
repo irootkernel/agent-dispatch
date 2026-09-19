@@ -11,7 +11,7 @@ import (
 // schema, one matching example, and the required report target.
 func writeFixture(t *testing.T, root string) {
 	t.Helper()
-	for _, dir := range []string{"schemas", "examples", "integrations"} {
+	for _, dir := range []string{"schemas", "examples", "examples/invalid", "integrations"} {
 		if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -28,6 +28,13 @@ func writeFixture(t *testing.T, root string) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "examples", "report.json"), []byte(`{"a":1}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	negativeSchema := `{"$id":"urn:agent-dispatch:schema:sync-control:v1","type":"object","required":["state"],"properties":{"state":{"const":"active"}}}`
+	if err := os.WriteFile(filepath.Join(root, "schemas", "sync-control.schema.json"), []byte(negativeSchema), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "examples", "invalid", "sync-control-invalid-state.json"), []byte(`{"state":"broken"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "integrations", "hermes-capability-report.json"), []byte(`{"b":2}`), 0o644); err != nil {
@@ -93,10 +100,79 @@ func TestValidateHappyPath(t *testing.T) {
 		t.Fatalf("unexpected failures: %v", failures)
 	}
 	joined := strings.Join(lines, "\n")
-	for _, want := range []string{"compiled 2 schema documents", "ok   examples/report.json", "ok   integrations/hermes-capability-report.json"} {
+	for _, want := range []string{"compiled 3 schema documents", "ok   examples/report.json", "ok   examples/invalid/sync-control-invalid-state.json", "ok   integrations/hermes-capability-report.json"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("output missing %q; lines: %v", want, lines)
 		}
+	}
+}
+
+func TestValidateRejectsNegativeFixtureThatPasses(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root)
+	if err := os.WriteFile(filepath.Join(root, "examples", "invalid", "sync-control-invalid-state.json"), []byte(`{"state":"active"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, failures, err := Validate(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(failures) != 1 || !strings.Contains(failures[0].Detail, "unexpectedly validates") {
+		t.Fatalf("expected one negative-fixture failure, got: %v", failures)
+	}
+}
+
+func TestSyncSemanticValidationRejectsDuplicatePair(t *testing.T) {
+	doc := map[string]any{
+		"schema_version": "agent-dispatch.sync-verification/v1",
+		"expected_nodes": []any{
+			map[string]any{"instance_id": "node-a", "state_incarnation_id": "node-a-0001"},
+			map[string]any{"instance_id": "node-b", "state_incarnation_id": "node-b-0001"},
+		},
+		"nodes": []any{
+			map[string]any{"instance_id": "node-a", "state_incarnation_id": "node-a-0001"},
+			map[string]any{"instance_id": "node-a", "state_incarnation_id": "node-a-0001"},
+		},
+	}
+	if err := validateSyncSemantics(doc); err == nil || !strings.Contains(err.Error(), "distinct") {
+		t.Fatalf("expected duplicate-pair rejection, got %v", err)
+	}
+}
+
+func TestSyncSemanticValidationRejectsStaleMembershipPlan(t *testing.T) {
+	doc := map[string]any{
+		"schema_version":       "agent-dispatch.sync-membership-plan/v1",
+		"group_id":             "wiki-pair",
+		"expected_predecessor": "old",
+		"administrator_key":    "admin",
+		"proposed_membership": map[string]any{
+			"group_id": "wiki-pair", "predecessor": "new", "administrator_key": "admin",
+			"active_members": []any{}, "historical_members": []any{},
+		},
+	}
+	if err := validateSyncSemantics(doc); err == nil || !strings.Contains(err.Error(), "binding mismatch") {
+		t.Fatalf("expected stale-plan rejection, got %v", err)
+	}
+}
+
+func TestRequireBasenamesFailsClosed(t *testing.T) {
+	err := requireBasenames("examples", []string{"examples/sync-membership.json"}, []string{"sync-membership.json", "sync-publication.json"})
+	if err == nil || !strings.Contains(err.Error(), "sync-publication.json") {
+		t.Fatalf("expected missing-family error, got %v", err)
+	}
+}
+
+func TestSyncSemanticValidationRejectsPublicationCommitMismatch(t *testing.T) {
+	doc := map[string]any{"schema_version": "agent-dispatch.sync-publication/v1", "state": "published", "content_ref": "refs/heads/wiki", "candidate_commit": "a", "remote_commit": "b"}
+	if err := validateSyncSemantics(doc); err == nil || !strings.Contains(err.Error(), "must match") {
+		t.Fatalf("expected publication mismatch rejection, got %v", err)
+	}
+}
+
+func TestSyncSemanticValidationRejectsGitInvalidRef(t *testing.T) {
+	doc := map[string]any{"schema_version": "agent-dispatch.sync-membership/v1", "content_ref": "refs/heads/wiki..sync"}
+	if err := validateSyncSemantics(doc); err == nil || !strings.Contains(err.Error(), "valid configured Git ref") {
+		t.Fatalf("expected Git-ref rejection, got %v", err)
 	}
 }
 

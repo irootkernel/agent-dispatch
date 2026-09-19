@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agent-dispatch:schema:sync-checkpoint-plan:v1",
+  "title": "Agent Dispatch sync checkpoint plan v1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "plan_id", "group_id", "expected_content_predecessor", "expected_membership_revision", "proposed_checkpoint", "administrator_key"],
+  "properties": {
+    "schema_version": {"const": "agent-dispatch.sync-checkpoint-plan/v1"},
+    "plan_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,127}$"},
+    "group_id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"},
+    "expected_content_predecessor": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
+    "expected_membership_revision": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
+    "proposed_checkpoint": {"$ref": "urn:agent-dispatch:schema:sync-checkpoint:v1"},
+    "administrator_key": {"type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{20,64}$"}
+  }
+}

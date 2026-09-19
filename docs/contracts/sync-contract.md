@@ -109,3 +109,76 @@ startup and during periodic reconciliation. Duplicate or reordered nudges are
 normal. Retries reuse the original logical identity. Conflict, trust failure,
 pre-signature publication work, and unsafe local state require operator action
 and are not retryable transport failures.
+
+## Versioned records and closed states
+
+The canonical v1 record schemas are `sync-membership`,
+`sync-membership-plan`, `sync-checkpoint`, `sync-checkpoint-plan`,
+`sync-import-acknowledgement`, `sync-publication`, `sync-delivery`,
+`sync-import`, `sync-control`, and `sync-verification`. Unknown fields,
+versions, states, and reasons are invalid.
+Full Git object IDs are lowercase 40- or 64-hex values; abbreviated IDs and
+wall-clock time are never causal authority.
+
+| Record | State progression | Terminal or held result |
+|---|---|---|
+| publication | `eligible -> prepared -> signed -> push_pending -> published` | `blocked` or `uncertain` retains the obligation |
+| delivery | `pending -> attempted -> accepted` | `retryable`, `unknown`, or `refused`; HTTP 202 proves only `accepted` |
+| import | `requested -> fetched -> validated -> applying -> applied` | `deferred`, `blocked`, `recovering`, or `uncertain` |
+| control | `active <-> paused` | `blocked` requires explicit recovery evidence |
+| verification | `planned -> collecting -> finished` | `complete`, `incomplete`, `target_changed`, `blocked`, or `expired` |
+
+Publication `published`, delivery `accepted`, import `applied`, and verification
+`complete` are deliberately non-interchangeable. State changes persist the
+stable logical record ID, attempt count, claim owner where applicable, and a
+monotonic fence before an external effect. Retries reuse the logical ID and a
+new fence; lease expiry, process loss, or timeout alone cannot advance state.
+
+Membership history binds the group, full revision and predecessor, pinned
+administrator key, and node identity plus positive incarnation. Normal mode
+has exactly two active members. Emergency revocation may produce a blocked
+zero- or one-member roster while retired and revoked entries remain auditable.
+A membership apply with a predecessor other than the reviewed plan predecessor
+is `sync_precondition_failed`; an evidence record naming an older incarnation
+is `sync_identity_obsolete`.
+
+The membership plan binds a closed change kind, plan identity, expected
+predecessor, proposed membership, and administrator key. Apply accepts only the
+same plan whose group, predecessor, and administrator binding still match; the
+shared semantic validator rejects duplicate active/historical identities and a
+stale plan predecessor. The checkpoint plan likewise binds the group,
+administrator, membership revision, content predecessor, and exact proposed
+checkpoint.
+
+Checkpoint evidence binds the exact target commit, governed snapshot, scope,
+contract, and membership revision. It has only the reasons
+`initial_baseline`, `conflict_resolution`, and `history_bound_exhausted` and
+does not authorize a different target or uncovered history.
+
+The cooperative-import acknowledgement is a distinct versioned record over
+the group, resource, configured remote and refs, scope digest, local instance
+and state incarnation, pinned administrator key, safety-policy digest, import
+bounds digest, and normalized configuration revision. Any changed local input
+changes that revision and makes the prior acknowledgement ineligible for live
+application; membership movement under the same trust policy affects the
+verification target but does not by itself rewrite the acknowledgement.
+
+## Bounds and retention
+
+The v1 contract caps active members at two, historical membership entries at
+1,000, import paths at 1,000, publication and delivery attempts at 20, peer
+payloads at 256 KiB, retained-record pages at 100 items, Git history inspection
+at 1,000 commits, subprocess output at 1 MiB per stream, and subprocess runtime
+at 120 seconds. Sync work queues hold at most 1,000 obligations per group,
+service concurrency is one protected effect per group plus two peer reads, and
+graceful shutdown has 30 seconds to reach a safe boundary before leaving the
+obligation pending. Runtime configuration may lower but not raise these
+ceilings.
+
+Resolved publication, delivery, import, and verification records are retained
+for at least 180 days. Membership and checkpoint evidence is retained for the
+life of the group. Any `blocked`, `recovering`, `uncertain`, uncovered-history,
+or unresolved predecessor obligation is exempt from age pruning until a newer
+durable record explicitly resolves and references it. Exhaustion remains a
+visible held result; it never truncates a node pair, drops work, or reports
+convergence.

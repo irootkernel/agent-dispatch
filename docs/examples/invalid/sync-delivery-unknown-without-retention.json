@@ -1,0 +1,1 @@
+{"schema_version":"agent-dispatch.sync-delivery/v1","delivery_id":"delivery-002","publication_id":"publication-001","sender":"node-a","receiver":"node-b","state":"unknown","reason":"effect_unknown","attempts":2,"claim_owner":null,"fence":3,"retain_until_resolved":false}

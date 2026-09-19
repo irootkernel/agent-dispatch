@@ -1,0 +1,8 @@
+{
+  "schema_version": "agent-dispatch.sync-membership-plan/v1", "plan_id": "membership-plan-stale", "group_id": "wiki-pair", "change_kind": "key_rotation",
+  "expected_predecessor": "9999999999999999999999999999999999999999",
+  "proposed_membership": {
+    "schema_version":"agent-dispatch.sync-membership/v1","group_id":"wiki-pair","revision":"2222222222222222222222222222222222222222","predecessor":"1111111111111111111111111111111111111111","content_ref":"refs/heads/wiki-sync","content_binding":"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","contract_digest":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","mode":"normal","administrator_key":"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","active_members":[{"instance_id":"node-a","state_incarnation_id":"node-a-0002","publisher_key":"SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB","endpoint":"https://node-a.example.ts.net"},{"instance_id":"node-b","state_incarnation_id":"node-b-0001","publisher_key":"SHA256:CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC","endpoint":"https://node-b.example.ts.net"}],"historical_members":[]
+  },
+  "administrator_key": "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+}

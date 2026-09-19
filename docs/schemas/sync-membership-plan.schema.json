@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agent-dispatch:schema:sync-membership-plan:v1",
+  "title": "Agent Dispatch sync membership plan v1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "plan_id", "group_id", "change_kind", "expected_predecessor", "proposed_membership", "administrator_key"],
+  "properties": {
+    "schema_version": {"const": "agent-dispatch.sync-membership-plan/v1"},
+    "plan_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,127}$"},
+    "group_id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"},
+    "change_kind": {"enum": ["bootstrap", "endpoint_update", "key_rotation", "replacement", "retirement", "emergency_revocation", "incarnation_registration"]},
+    "expected_predecessor": {"oneOf": [{"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"}, {"type": "null"}]},
+    "proposed_membership": {"$ref": "urn:agent-dispatch:schema:sync-membership:v1"},
+    "administrator_key": {"type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{20,64}$"}
+  }
+}

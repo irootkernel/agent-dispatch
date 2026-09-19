@@ -1,0 +1,7 @@
+{
+  "schema_version": "agent-dispatch.sync-control/v1",
+  "group_id": "wiki-pair",
+  "revision": 1,
+  "state": "active",
+  "reason": "none"
+}

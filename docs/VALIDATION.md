@@ -6,15 +6,16 @@ certify the current HEAD. For the current documentation roles and checks, use
 the [documentation index](README.md); for delivery status use the
 [roadmap](roadmap/roadmap.md).
 
-> **Validated:** 2026-09-02 (E17 closes gate G13 — documentation truth,
-> cold validation, and the reproducible v0.1.6 release; 89 of 89 roadmap
-> tasks are complete)
-> **Package target:** Agent Dispatch SOT 1.3.0 / implementation v0.1.6 (published 2026-09-02)
+> **Current candidate:** 2026-09-19 (E20-T5 in review; gate G16 is not yet
+> closed; 105 of 116 roadmap tasks are complete, one is in review, and ten are
+> planned)
+> **Package target:** Agent Dispatch SOT 1.6.0 / shipped implementation v0.1.8
+> plus the planned v0.2.0 sync contract
 
 ## Completed Checks
 
 - All JSON files parse.
-- All eighteen JSON Schemas pass standard Draft 2020-12 validation (D-015).
+- All 31 JSON Schemas pass standard Draft 2020-12 validation (D-015).
 - The example YAML configuration is validated reproducibly by the Go loader pipeline in every `make schema-validation` and `go test` run: YAML parsing with duplicate-key rejection, JSON Schema validation, and semantic validation (E1-T2).
 - Source observation, dispatch plan, dispatch intent, dispatch receipt, work receipt, Hermes capability-report, and Hermes task-request examples validate against their schemas (structural validation of type, const, enum, required, properties and additionalProperties, items with minItems/maxItems/uniqueItems, pattern, minLength/maxLength, minimum/maximum with exclusive bounds, minProperties/maxProperties, allOf/anyOf/oneOf/not, and if/then/else conditional constraints; `$ref` resolved across schema documents).
 - The `dispatch-intent` example's `request` field validates against `hermes-task-request.schema.json` through the schema `$ref`.
@@ -25,23 +26,24 @@ the [documentation index](README.md); for delivery status use the
 - Internal Markdown links resolve within the package, excluding intentionally unresolved wiki links retained in the historical source draft.
 - Markdown code fences are balanced.
 - The documentation package has one delivery scope, exactly one owner for each of the seven semantic roles, and `docs/roadmap/roadmap.md` as its sole lifecycle authority.
-- The roadmap contains exactly 18 epics and 89 task headings, all 89 Completed.
+- The roadmap contains exactly 23 epics and 116 task headings: 105 Completed,
+  E20-T5 In Review, and ten Planned.
 - Every task uses one allowed status value.
-- Every sequence through E17 is fully Completed (89/89 delivered); no task is active.
+- Every sequence through E19 is fully Completed; E20-T5 is the sole active task.
 - Required-spec IDs are unique.
 - Acceptance-scenario IDs are unique.
 - The D-025 functional baseline remains unchanged; D-026 moves paths and adds ownership indexes without changing roadmap identity, lifecycle, or executable-evidence claims.
 
 ## Package Statistics at Validation
 
-- Markdown files: 90 on the manifest basis (including the seven role indexes, supporting collection indexes, the v0.1.5 and v0.1.6 release notes, the cold-validation evidence, and ADR-0016 through ADR-0022; the v0.1.6 follow-up dossier was retired at the E17 closeout)
-- JSON Schemas: 18
-- Example files: 24
+- Markdown files: 97 on the current package basis
+- JSON Schemas: 31
+- Example files: 57 (32 top-level JSON examples, 24 registered invalid JSON fixtures, and one YAML configuration example)
 - Integration reports: 4 (Hermes public interface E0-T4, Watchman public interface E0-T5, real-Hermes G11 evidence E15-T4, cold-validation evidence E17-T2)
 - Integration fixtures: 42 files, 9 under `integrations/fixtures/hermes/` and 33 under `integrations/fixtures/watchman/`
-- Roadmap tasks: 89, all Completed (33 v0.1 + 12 E7 + 6 E8 + 9 E9 + 15 E10-E13 + 3 E14 + 4 E15 + 4 E16 + 3 E17)
-- Normative requirements: 225
-- Acceptance scenarios: 91
+- Roadmap tasks: 116 (105 Completed, one In Review, ten Planned)
+- Normative requirements: 241
+- Acceptance scenarios: 118
 
 ## Reproduction
 
@@ -658,9 +660,9 @@ or release evidence.
 |---|---|
 | AC-1601 absent sync preserves v0.1.8 behavior | `sync` is optional in both config-schema copies; the ordinary repository unit/race suites pass, and `internal/cli/e20t4_test.go` exercises a sync-absent configuration through the side-effect-free ordinary `config show` command |
 | AC-1602 disabled truthful inspection | `internal/cli/e20t4_test.go` pins the exact provider capability vocabulary, disabled status envelope, absent/stale acknowledgement posture, group mismatch, reserved failures, and unknown-command refusal; the only true capabilities are contract/status reads |
-| AC-1603 fail-closed configuration and acknowledgement | `internal/config/e20t4_test.go` covers unsupported enablement, exact two-node membership, Git resources and refs, tailnet-only credential-free endpoints, distinct administrator/publisher/signing/directional credentials, bounds, deterministic normalization, complete SYN-010 revision inputs, canonical acknowledgement identity, and the pure currentness helper's state-incarnation invalidation; command-side acknowledgement enforcement and remote revalidation remain assigned to E21 |
+| AC-1603 fail-closed configuration and acknowledgement | `internal/config/e20t4_test.go` covers unsupported enablement, exact two-node membership, Git resources and refs, the normalized remote-repository digest, tailnet-only credential-free no-port endpoints, exact SSH fingerprints, distinct administrator/publisher/signing/directional credentials, bounds, deterministic normalization, complete SYN-010 revision inputs, canonical acknowledgement identity, and the pure currentness helper's state-incarnation invalidation; command-side acknowledgement enforcement and actual-remote digest revalidation remain assigned to E21 |
 | AC-1604 trust fixtures reject without runtime claims | `internal/synccontractcheck` derives the closed error from each fixture's pinned-key, self-authorization, predecessor, and incarnation facts and rejects a mismatched expected result; `internal/schemavalid` separately rejects the registered structural/semantic negative examples, without claiming live signature verification |
-| AC-1605 provider bundle is exact and checksummed | `make sync-contract-check` validates the exact artifact, command, flag/help, route/authentication, result, error, trust-fixture, schema/example, checksum, and pagination contracts; `make schema-validation` compiles 31 schemas and validates/rejects the registered positive/negative corpus |
+| AC-1605 provider bundle is exact and checksummed | `make sync-contract-check` validates the exact artifact, command, flag/help, route/authentication, result, error, trust-fixture, schema/example, checksum, independently pinned artifact-set golden, and pagination contracts; `make schema-validation` compiles 31 schemas and validates/rejects the registered positive/negative corpus |
 
 The configured Gaori runs for `manifest-check`, `schema-validation`, and
 `traceability` each finished with child exit 0 and artifact status `passed`.

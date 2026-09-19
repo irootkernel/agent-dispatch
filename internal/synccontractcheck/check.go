@@ -18,8 +18,14 @@ var expectedArtifacts = []string{
 	"commands.json", "peer.json", "results.json", "errors.json", "trust-fixtures.json",
 	"../../schemas/sync-membership.schema.json", "../../schemas/sync-membership-plan.schema.json", "../../schemas/sync-checkpoint.schema.json", "../../schemas/sync-checkpoint-plan.schema.json", "../../schemas/sync-import-acknowledgement.schema.json", "../../schemas/sync-publication.schema.json", "../../schemas/sync-delivery.schema.json", "../../schemas/sync-import.schema.json", "../../schemas/sync-control.schema.json", "../../schemas/sync-verification.schema.json", "../../schemas/sync-nudge.schema.json", "../../schemas/sync-status-request.schema.json", "../../schemas/sync-status-response.schema.json",
 	"../../examples/sync-checkpoint-plan.json", "../../examples/sync-checkpoint.json", "../../examples/sync-control.json", "../../examples/sync-delivery.json", "../../examples/sync-import-acknowledgement.json", "../../examples/sync-import.json", "../../examples/sync-membership-plan.json", "../../examples/sync-membership.json", "../../examples/sync-nudge.json", "../../examples/sync-publication.json", "../../examples/sync-status-request.json", "../../examples/sync-status-response.json", "../../examples/sync-verification.json",
-	"../../examples/invalid/sync-checkpoint-malformed-oid.json", "../../examples/invalid/sync-control-invalid-state.json", "../../examples/invalid/sync-delivery-unknown-without-retention.json", "../../examples/invalid/sync-import-empty-target.json", "../../examples/invalid/sync-import-unsafe-path.json", "../../examples/invalid/sync-membership-administrator-key-reused.json", "../../examples/invalid/sync-membership-duplicate-instance.json", "../../examples/invalid/sync-membership-duplicate-publisher-key.json", "../../examples/invalid/sync-membership-invalid-ref.json", "../../examples/invalid/sync-membership-plan-stale-predecessor.json", "../../examples/invalid/sync-membership-public-endpoint.json", "../../examples/invalid/sync-membership-third-active.json", "../../examples/invalid/sync-publication-commit-mismatch.json", "../../examples/invalid/sync-publication-missing-proof.json", "../../examples/invalid/sync-publication-unresolved-prunable.json", "../../examples/invalid/sync-verification-duplicate-node.json", "../../examples/invalid/sync-verification-empty-pair.json", "../../examples/invalid/sync-verification-false-complete.json", "../../examples/invalid/sync-verification-obsolete-incarnation.json",
+	"../../examples/invalid/sync-checkpoint-malformed-oid.json", "../../examples/invalid/sync-control-invalid-state.json", "../../examples/invalid/sync-delivery-unknown-without-retention.json", "../../examples/invalid/sync-delivery-contradictory-reason.json", "../../examples/invalid/sync-import-duplicate-alias.json", "../../examples/invalid/sync-import-empty-target.json", "../../examples/invalid/sync-import-unsafe-path.json", "../../examples/invalid/sync-membership-administrator-key-reused.json", "../../examples/invalid/sync-membership-duplicate-instance.json", "../../examples/invalid/sync-membership-duplicate-publisher-key.json", "../../examples/invalid/sync-membership-invalid-ref.json", "../../examples/invalid/sync-membership-plan-stale-predecessor.json", "../../examples/invalid/sync-membership-public-endpoint.json", "../../examples/invalid/sync-membership-third-active.json", "../../examples/invalid/sync-nudge-invalid-ref.json", "../../examples/invalid/sync-publication-commit-mismatch.json", "../../examples/invalid/sync-publication-contradictory-reason.json", "../../examples/invalid/sync-publication-missing-proof.json", "../../examples/invalid/sync-publication-unresolved-prunable.json", "../../examples/invalid/sync-verification-duplicate-node.json", "../../examples/invalid/sync-verification-empty-pair.json", "../../examples/invalid/sync-verification-false-complete.json", "../../examples/invalid/sync-verification-false-freshness.json", "../../examples/invalid/sync-verification-obsolete-incarnation.json",
 }
+
+// expectedArtifactSetDigest is the independently reviewed golden over each
+// allowlisted path and its bytes in bundle order. SHA256SUMS supports ordinary
+// corruption detection; this pin ensures the checksum regeneration command
+// cannot silently bless coordinated schema/fixture drift.
+const expectedArtifactSetDigest = "0acc25e89f9e7b939b1d5a6e093020f0bafb15a7fb9597bd02505f192debeba0"
 
 type bundle struct {
 	SchemaVersion string   `json:"schema_version"`
@@ -249,6 +255,24 @@ func Check(dir string) error {
 		if got := evaluateTrustFixture(fixture.DocumentKey, fixture.PinnedKey, fixture.SelfAuthorizing, fixture.PredecessorMatches, fixture.StateIncarnationCurrent); got != fixture.ExpectedCode {
 			return fmt.Errorf("trust fixture %q evaluates to %q, want %q", fixture.Name, got, fixture.ExpectedCode)
 		}
+	}
+	return verifyArtifactSetGolden(dir, b.Artifacts)
+}
+
+func verifyArtifactSetGolden(dir string, artifacts []string) error {
+	h := sha256.New()
+	for _, rel := range artifacts {
+		data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
+		if err != nil {
+			return err
+		}
+		_, _ = h.Write([]byte(rel))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write(data)
+		_, _ = h.Write([]byte{0})
+	}
+	if got := hex.EncodeToString(h.Sum(nil)); got != expectedArtifactSetDigest {
+		return fmt.Errorf("artifact-set golden drift: got %s", got)
 	}
 	return nil
 }

@@ -11,6 +11,7 @@
   "resource_observation_revision": 12,
   "expected_git_state_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "history_evidence_id": "checkpoint-001",
+  "case_mode": "insensitive",
   "state": "applied",
   "reason": "none",
   "paths": [

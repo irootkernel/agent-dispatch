@@ -148,6 +148,9 @@ func validateSyncEndpoint(raw string) error {
 	if u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 		return fmt.Errorf("must not contain userinfo, query, or fragment data")
 	}
+	if u.Port() != "" {
+		return fmt.Errorf("must not specify a port")
+	}
 	if u.Path != "" && u.Path != "/" {
 		return fmt.Errorf("must be an origin URL without a path")
 	}

@@ -39,7 +39,7 @@ func TestE20T4EmbeddedAcknowledgementMatchesCanonicalSchema(t *testing.T) {
 	embedded := syncSchema["properties"].(map[string]any)["cooperative_import_acknowledgement"].(map[string]any)
 	canonicalProperties := canonical["properties"].(map[string]any)
 	digestDefinition := canonical["$defs"].(map[string]any)["digest"]
-	for _, name := range []string{"scope_digest", "safety_policy_digest", "import_bounds_digest", "config_revision"} {
+	for _, name := range []string{"remote_repository_digest", "scope_digest", "safety_policy_digest", "import_bounds_digest", "config_revision"} {
 		canonicalProperties[name] = digestDefinition
 	}
 	want := map[string]any{
@@ -62,7 +62,7 @@ func TestE20T4SyncRevisionAndAcknowledgement(t *testing.T) {
 	}
 	cfg.Sync.ImportAcknowledgement = &SyncImportAcknowledgement{
 		SchemaVersion: "agent-dispatch.sync-import-acknowledgement/v1", AcknowledgementID: "acknowledgement-001", GroupID: cfg.Sync.GroupID,
-		ResourceID: cfg.Sync.Resource, RemoteName: cfg.Sync.RemoteName, ContentRef: cfg.Sync.ContentRef,
+		ResourceID: cfg.Sync.Resource, RemoteName: cfg.Sync.RemoteName, RemoteRepositoryDigest: cfg.Sync.RemoteRepositoryDigest, ContentRef: cfg.Sync.ContentRef,
 		MembershipRef: cfg.Sync.MembershipRef, ScopeDigest: digestJSON(syncScopeProjection(cfg, cfg.Sync.Resource)),
 		LocalInstanceID: cfg.Sync.LocalInstanceID, StateIncarnationID: "workstation-main-state-001",
 		AdministratorKey: cfg.Sync.AdministratorKey, SafetyPolicyDigest: digestJSON(syncSafetyPolicy()),
@@ -115,6 +115,8 @@ func TestE20T4InvalidSyncInputsFailClosed(t *testing.T) {
 		"wrong local node":        {"local_instance_id: workstation-main", "local_instance_id: node-b", "must equal instance.id"},
 		"public endpoint":         {"node-a.example.ts.net", "public.example.com", "Tailscale HTTPS"},
 		"userinfo endpoint":       {"https://node-a.example.ts.net", "https://user:secret@node-a.example.ts.net", "must not contain userinfo"},
+		"endpoint port":           {"https://node-a.example.ts.net", "https://node-a.example.ts.net:8443", "must not specify a port"},
+		"short fingerprint":       {"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "SHA256:AAAAAAAAAAAAAAAAAAAA", "does not match"},
 		"invalid dot ref":         {"refs/heads/wiki-sync", "refs/heads/wiki/.hidden", "safe Git ref"},
 		"disabled git":            {"mode: optional", "mode: disabled", "must configure git.mode optional"},
 		"reused credential":       {"env:SYNC_NODE_B_TO_A", "env:SYNC_NODE_A_TO_B", "separately provisioned"},
@@ -173,9 +175,12 @@ func TestE20T4SyncRevisionCoversGuardInputsAndIgnoresNodeOrder(t *testing.T) {
 			r.Git.Mode = "disabled"
 			c.Resources[c.Sync.Resource] = r
 		},
-		"global identity":           func(c *Config) { c.Instance.ID = "workstation-next" },
-		"local identity":            func(c *Config) { c.Sync.LocalInstanceID = "node-b" },
-		"content ref":               func(c *Config) { c.Sync.ContentRef = "refs/heads/wiki-next" },
+		"global identity": func(c *Config) { c.Instance.ID = "workstation-next" },
+		"local identity":  func(c *Config) { c.Sync.LocalInstanceID = "node-b" },
+		"content ref":     func(c *Config) { c.Sync.ContentRef = "refs/heads/wiki-next" },
+		"remote repository digest": func(c *Config) {
+			c.Sync.RemoteRepositoryDigest = "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+		},
 		"membership ref":            func(c *Config) { c.Sync.MembershipRef += "-next" },
 		"administrator":             func(c *Config) { c.Sync.AdministratorKey = "SHA256:DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD" },
 		"publisher":                 func(c *Config) { c.Sync.Nodes[1].PublisherKey = "SHA256:EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE" },

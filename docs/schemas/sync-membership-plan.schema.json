@@ -11,6 +11,6 @@
     "change_kind": {"enum": ["bootstrap", "endpoint_update", "key_rotation", "replacement", "retirement", "emergency_revocation", "incarnation_registration"]},
     "expected_predecessor": {"oneOf": [{"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"}, {"type": "null"}]},
     "proposed_membership": {"$ref": "urn:agent-dispatch:schema:sync-membership:v1"},
-    "administrator_key": {"type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{20,64}$"}
+    "administrator_key": {"type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{43}$"}
   }
 }

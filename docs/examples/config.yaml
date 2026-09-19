@@ -25,6 +25,7 @@ sync:
   group_id: wiki-pair
   resource: vault-main
   remote_name: origin
+  remote_repository_digest: sha256:7777777777777777777777777777777777777777777777777777777777777777
   content_ref: refs/heads/wiki-sync
   membership_ref: refs/agent-dispatch/membership/wiki-pair
   local_instance_id: workstation-main

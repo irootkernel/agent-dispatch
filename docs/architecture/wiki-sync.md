@@ -41,6 +41,9 @@ auditable and an emergency revocation can place the group in a blocked
 fewer-than-two state. Administrator and publisher keys are distinct roles.
 Membership and content-checkpoint changes use reviewed two-phase plan/apply
 commands with expected predecessors and no force update.
+The document carries its predecessor but never its own object ID. The full Git
+object ID of the signed commit containing it is the `membership_revision` used
+by publication, checkpoint, status, and verification records.
 
 ## Publication
 
@@ -75,6 +78,10 @@ and validate but defers live-tree application. Publication and import are
 fast-forward-only: Agent Dispatch never merges, rebases, stashes, force-pushes,
 resets, or cleans automatically, and conflict recovery proceeds through the
 checkpoint plan/apply and reconcile workflow.
+The acknowledgement binds a normalized credential-free remote repository
+identity digest as well as the remote name. The Git adapter must resolve and
+recheck that identity immediately before a protected effect so a remote
+retarget cannot preserve currentness accidentally.
 
 Watchman continues recording observations. Import completion updates path facts
 and suppression evidence under the observation fence. A crash between file,
@@ -101,3 +108,6 @@ Verification rechecks membership and content refs before completion. A changed
 target produces `target_changed` rather than a false success. Equal commit IDs
 are insufficient when either node has governed local dirtiness, pending work,
 or uncertain evidence.
+Each status observation retains its measured age. Evidence is fresh only at
+300 seconds or less; verification persists that age and derives the boolean
+freshness flag from the same bound.

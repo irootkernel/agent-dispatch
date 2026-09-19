@@ -6,16 +6,18 @@
   "required": ["schema_version", "delivery_id", "publication_id", "sender", "receiver", "state", "reason", "attempts", "claim_owner", "fence", "retain_until_resolved"],
   "properties": {
     "schema_version": {"const": "agent-dispatch.sync-delivery/v1"},
-    "delivery_id": {"$ref": "#/$defs/id"}, "publication_id": {"$ref": "#/$defs/id"}, "sender": {"$ref": "#/$defs/id"}, "receiver": {"$ref": "#/$defs/id"},
+    "delivery_id": {"$ref": "#/$defs/record"}, "publication_id": {"$ref": "#/$defs/record"}, "sender": {"$ref": "#/$defs/identity"}, "receiver": {"$ref": "#/$defs/identity"},
     "state": {"enum": ["pending", "attempted", "accepted", "retryable", "unknown", "refused"]},
     "reason": {"enum": ["none", "http_202_inbox_committed", "pre_accept_transport", "effect_unknown", "peer_refused", "credential_rejected", "membership_stale", "bound_exhausted"]},
-    "attempts": {"type": "integer", "minimum": 0, "maximum": 20}, "claim_owner": {"oneOf": [{"$ref": "#/$defs/id"}, {"type": "null"}]}, "fence": {"type": "integer", "minimum": 1}, "retain_until_resolved": {"type": "boolean"}
+    "attempts": {"type": "integer", "minimum": 0, "maximum": 20}, "claim_owner": {"oneOf": [{"$ref": "#/$defs/record"}, {"type": "null"}]}, "fence": {"type": "integer", "minimum": 1}, "retain_until_resolved": {"type": "boolean"}
   },
   "allOf": [
     {"if": {"properties": {"state": {"const": "accepted"}}, "required": ["state"]}, "then": {"properties": {"reason": {"const": "http_202_inbox_committed"}, "retain_until_resolved": {"const": false}}}},
     {"if": {"properties": {"state": {"const": "unknown"}}, "required": ["state"]}, "then": {"properties": {"reason": {"const": "effect_unknown"}, "retain_until_resolved": {"const": true}}}},
-    {"if": {"properties": {"state": {"enum": ["pending", "attempted", "retryable"]}}, "required": ["state"]}, "then": {"properties": {"retain_until_resolved": {"const": true}}}},
+    {"if": {"properties": {"state": {"const": "pending"}}, "required": ["state"]}, "then": {"properties": {"reason": {"const": "none"}, "retain_until_resolved": {"const": true}}}},
+    {"if": {"properties": {"state": {"const": "attempted"}}, "required": ["state"]}, "then": {"properties": {"reason": {"const": "none"}, "retain_until_resolved": {"const": true}}}},
+    {"if": {"properties": {"state": {"const": "retryable"}}, "required": ["state"]}, "then": {"properties": {"reason": {"enum": ["pre_accept_transport", "bound_exhausted"]}, "retain_until_resolved": {"const": true}}}},
     {"if": {"properties": {"state": {"const": "refused"}}, "required": ["state"]}, "then": {"properties": {"reason": {"enum": ["peer_refused", "credential_rejected", "membership_stale"]}, "retain_until_resolved": {"const": false}}}}
   ],
-  "$defs": {"id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,127}$"}}
+  "$defs": {"record": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,127}$"}, "identity": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"}}
 }

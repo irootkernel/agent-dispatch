@@ -13,7 +13,7 @@ LDFLAGS := -X $(PKG)/internal/version.Version=$(VERSION) \
 
 .PHONY: all build test test-race vet fmt-check staticcheck check-imports \
         go-version-check manifest-check schema-validation traceability \
-        schedule-check sync-contract-check verify release clean
+        schedule-check sync-contract-check sync-contract-update verify release clean
 
 all: build
 

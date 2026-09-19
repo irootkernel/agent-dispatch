@@ -3,11 +3,12 @@
   "$id": "urn:agent-dispatch:schema:sync-import:v1",
   "title": "Agent Dispatch sync import v1",
   "type": "object", "additionalProperties": false,
-  "required": ["schema_version", "import_id", "plan_id", "journal_id", "group_id", "from_commit", "target_commit", "membership_revision", "acknowledgement_id", "resource_observation_revision", "expected_git_state_digest", "history_evidence_id", "state", "reason", "paths", "attempts", "claim_owner", "fence", "retain_until_resolved"],
+  "required": ["schema_version", "import_id", "plan_id", "journal_id", "group_id", "from_commit", "target_commit", "membership_revision", "acknowledgement_id", "resource_observation_revision", "expected_git_state_digest", "history_evidence_id", "case_mode", "state", "reason", "paths", "attempts", "claim_owner", "fence", "retain_until_resolved"],
   "properties": {
     "schema_version": {"const": "agent-dispatch.sync-import/v1"}, "import_id": {"$ref": "#/$defs/id"}, "plan_id": {"$ref": "#/$defs/id"}, "journal_id": {"$ref": "#/$defs/id"}, "group_id": {"$ref": "#/$defs/group"},
     "from_commit": {"$ref": "#/$defs/oid"}, "target_commit": {"$ref": "#/$defs/oid"}, "membership_revision": {"$ref": "#/$defs/oid"},
     "acknowledgement_id": {"$ref": "#/$defs/id"}, "resource_observation_revision": {"type": "integer", "minimum": 1}, "expected_git_state_digest": {"$ref": "#/$defs/digest"}, "history_evidence_id": {"$ref": "#/$defs/id"},
+    "case_mode": {"enum": ["sensitive", "insensitive"]},
     "state": {"enum": ["requested", "fetched", "validated", "deferred", "applying", "applied", "blocked", "recovering", "uncertain"]},
     "reason": {"enum": ["none", "acknowledgement_stale", "membership_stale", "local_overlap", "untracked_collision", "git_unstable", "history_uncovered", "history_diverged", "trust_failed", "partial_effect", "bound_exhausted"]},
     "paths": {"type": "array", "minItems": 1, "maxItems": 1000, "items": {"type": "object", "additionalProperties": false, "required": ["path", "before", "after"], "properties": {"path": {"type": "string", "pattern": "^[^/\\\\\\x00-\\x1f\\x7f]+(?:/[^/\\\\\\x00-\\x1f\\x7f]+)*\\.(?:[mM][dD]|[mM][aA][rR][kK][dD][oO][wW][nN])$"}, "before": {"$ref": "#/$defs/digestOrAbsent"}, "after": {"$ref": "#/$defs/digestOrAbsent"}}}},

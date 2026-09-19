@@ -36,6 +36,8 @@
     "../../examples/invalid/sync-checkpoint-malformed-oid.json",
     "../../examples/invalid/sync-control-invalid-state.json",
     "../../examples/invalid/sync-delivery-unknown-without-retention.json",
+    "../../examples/invalid/sync-delivery-contradictory-reason.json",
+    "../../examples/invalid/sync-import-duplicate-alias.json",
     "../../examples/invalid/sync-import-empty-target.json",
     "../../examples/invalid/sync-import-unsafe-path.json",
     "../../examples/invalid/sync-membership-administrator-key-reused.json",
@@ -45,12 +47,15 @@
     "../../examples/invalid/sync-membership-plan-stale-predecessor.json",
     "../../examples/invalid/sync-membership-public-endpoint.json",
     "../../examples/invalid/sync-membership-third-active.json",
+    "../../examples/invalid/sync-nudge-invalid-ref.json",
     "../../examples/invalid/sync-publication-commit-mismatch.json",
+    "../../examples/invalid/sync-publication-contradictory-reason.json",
     "../../examples/invalid/sync-publication-missing-proof.json",
     "../../examples/invalid/sync-publication-unresolved-prunable.json",
     "../../examples/invalid/sync-verification-duplicate-node.json",
     "../../examples/invalid/sync-verification-empty-pair.json",
     "../../examples/invalid/sync-verification-false-complete.json",
+    "../../examples/invalid/sync-verification-false-freshness.json",
     "../../examples/invalid/sync-verification-obsolete-incarnation.json"
   ]
 }

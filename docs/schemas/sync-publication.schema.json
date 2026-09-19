@@ -20,9 +20,11 @@
   },
   "allOf": [
     {"if": {"properties": {"state": {"const": "published"}}, "required": ["state"]}, "then": {"required": ["candidate_commit", "remote_commit"], "properties": {"reason": {"const": "none"}, "retain_until_resolved": {"const": false}}}},
-    {"if": {"properties": {"state": {"enum": ["signed", "push_pending"]}}, "required": ["state"]}, "then": {"required": ["candidate_commit"]}},
-    {"if": {"properties": {"state": {"enum": ["eligible", "prepared", "signed", "push_pending", "blocked", "uncertain"]}}, "required": ["state"]}, "then": {"properties": {"retain_until_resolved": {"const": true}}}},
-    {"if": {"properties": {"state": {"enum": ["blocked", "uncertain"]}}, "required": ["state"]}, "then": {"not": {"properties": {"reason": {"const": "none"}}, "required": ["reason"]}}}
+    {"if": {"properties": {"state": {"const": "eligible"}}, "required": ["state"]}, "then": {"properties": {"reason": {"const": "none"}, "retain_until_resolved": {"const": true}}}},
+    {"if": {"properties": {"state": {"const": "prepared"}}, "required": ["state"]}, "then": {"properties": {"reason": {"enum": ["none", "pre_signature_interruption"]}, "retain_until_resolved": {"const": true}}}},
+    {"if": {"properties": {"state": {"enum": ["signed", "push_pending"]}}, "required": ["state"]}, "then": {"required": ["candidate_commit"], "properties": {"reason": {"const": "none"}, "retain_until_resolved": {"const": true}}}},
+    {"if": {"properties": {"state": {"const": "blocked"}}, "required": ["state"]}, "then": {"properties": {"reason": {"enum": ["remote_rejected", "membership_stale", "trust_failed", "history_rewritten", "protected_path", "bound_exhausted"]}, "retain_until_resolved": {"const": true}}}},
+    {"if": {"properties": {"state": {"const": "uncertain"}}, "required": ["state"]}, "then": {"properties": {"reason": {"const": "effect_unknown"}, "retain_until_resolved": {"const": true}}}}
   ],
   "$defs": {"id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,127}$"}, "group": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"}, "oid": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"}, "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "ref": {"type": "string", "pattern": "^refs/heads/[A-Za-z0-9](?:[A-Za-z0-9._/-]*[A-Za-z0-9])?$"}}
 }

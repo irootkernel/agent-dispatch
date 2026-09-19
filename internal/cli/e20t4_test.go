@@ -140,7 +140,7 @@ func TestE20T4StatusHandlesAbsentStaleAndWrongGroup(t *testing.T) {
 	digest := "sha256:" + strings.Repeat("0", 64)
 	cfg.Sync.ImportAcknowledgement = &configpkg.SyncImportAcknowledgement{
 		SchemaVersion: "agent-dispatch.sync-import-acknowledgement/v1", AcknowledgementID: "ack-stale",
-		GroupID: cfg.Sync.GroupID, ResourceID: cfg.Sync.Resource, RemoteName: cfg.Sync.RemoteName,
+		GroupID: cfg.Sync.GroupID, ResourceID: cfg.Sync.Resource, RemoteName: cfg.Sync.RemoteName, RemoteRepositoryDigest: cfg.Sync.RemoteRepositoryDigest,
 		ContentRef: cfg.Sync.ContentRef, MembershipRef: cfg.Sync.MembershipRef, ScopeDigest: digest,
 		LocalInstanceID: cfg.Sync.LocalInstanceID, StateIncarnationID: "stale-state-001",
 		AdministratorKey: cfg.Sync.AdministratorKey, SafetyPolicyDigest: digest,

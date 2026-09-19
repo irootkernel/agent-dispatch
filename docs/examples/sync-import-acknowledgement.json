@@ -1,6 +1,6 @@
 {
   "schema_version": "agent-dispatch.sync-import-acknowledgement/v1", "acknowledgement_id": "import-ack-001", "group_id": "wiki-pair", "resource_id": "wiki",
-  "remote_name": "origin", "content_ref": "refs/heads/wiki-sync", "membership_ref": "refs/agent-dispatch/membership/wiki-pair",
+  "remote_name": "origin", "remote_repository_digest": "sha256:7777777777777777777777777777777777777777777777777777777777777777", "content_ref": "refs/heads/wiki-sync", "membership_ref": "refs/agent-dispatch/membership/wiki-pair",
   "scope_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "local_instance_id": "node-b", "state_incarnation_id": "node-b-0001",
   "administrator_key": "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "safety_policy_digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "import_bounds_digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "config_revision": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
 }

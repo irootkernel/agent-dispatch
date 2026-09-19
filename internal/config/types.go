@@ -31,6 +31,7 @@ type Sync struct {
 	GroupID                    string                     `yaml:"group_id" json:"group_id"`
 	Resource                   string                     `yaml:"resource" json:"resource"`
 	RemoteName                 string                     `yaml:"remote_name" json:"remote_name"`
+	RemoteRepositoryDigest     string                     `yaml:"remote_repository_digest" json:"remote_repository_digest"`
 	ContentRef                 string                     `yaml:"content_ref" json:"content_ref"`
 	MembershipRef              string                     `yaml:"membership_ref" json:"membership_ref"`
 	LocalInstanceID            string                     `yaml:"local_instance_id" json:"local_instance_id"`
@@ -46,20 +47,21 @@ type Sync struct {
 // E21 will persist with local state. Keeping the complete binding here makes
 // configuration parsing fail closed without treating a bare digest as proof.
 type SyncImportAcknowledgement struct {
-	SchemaVersion      string `yaml:"schema_version" json:"schema_version"`
-	AcknowledgementID  string `yaml:"acknowledgement_id" json:"acknowledgement_id"`
-	GroupID            string `yaml:"group_id" json:"group_id"`
-	ResourceID         string `yaml:"resource_id" json:"resource_id"`
-	RemoteName         string `yaml:"remote_name" json:"remote_name"`
-	ContentRef         string `yaml:"content_ref" json:"content_ref"`
-	MembershipRef      string `yaml:"membership_ref" json:"membership_ref"`
-	ScopeDigest        string `yaml:"scope_digest" json:"scope_digest"`
-	LocalInstanceID    string `yaml:"local_instance_id" json:"local_instance_id"`
-	StateIncarnationID string `yaml:"state_incarnation_id" json:"state_incarnation_id"`
-	AdministratorKey   string `yaml:"administrator_key" json:"administrator_key"`
-	SafetyPolicyDigest string `yaml:"safety_policy_digest" json:"safety_policy_digest"`
-	ImportBoundsDigest string `yaml:"import_bounds_digest" json:"import_bounds_digest"`
-	ConfigRevision     string `yaml:"config_revision" json:"config_revision"`
+	SchemaVersion          string `yaml:"schema_version" json:"schema_version"`
+	AcknowledgementID      string `yaml:"acknowledgement_id" json:"acknowledgement_id"`
+	GroupID                string `yaml:"group_id" json:"group_id"`
+	ResourceID             string `yaml:"resource_id" json:"resource_id"`
+	RemoteName             string `yaml:"remote_name" json:"remote_name"`
+	RemoteRepositoryDigest string `yaml:"remote_repository_digest" json:"remote_repository_digest"`
+	ContentRef             string `yaml:"content_ref" json:"content_ref"`
+	MembershipRef          string `yaml:"membership_ref" json:"membership_ref"`
+	ScopeDigest            string `yaml:"scope_digest" json:"scope_digest"`
+	LocalInstanceID        string `yaml:"local_instance_id" json:"local_instance_id"`
+	StateIncarnationID     string `yaml:"state_incarnation_id" json:"state_incarnation_id"`
+	AdministratorKey       string `yaml:"administrator_key" json:"administrator_key"`
+	SafetyPolicyDigest     string `yaml:"safety_policy_digest" json:"safety_policy_digest"`
+	ImportBoundsDigest     string `yaml:"import_bounds_digest" json:"import_bounds_digest"`
+	ConfigRevision         string `yaml:"config_revision" json:"config_revision"`
 }
 
 type SyncNode struct {

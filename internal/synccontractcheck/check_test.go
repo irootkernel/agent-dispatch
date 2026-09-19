@@ -163,6 +163,24 @@ func TestCheckRejectsPeerSchemaShapeDriftWithUpdatedChecksum(t *testing.T) {
 	}
 }
 
+func TestCheckRejectsSemanticallyValidFixtureDriftWithUpdatedChecksum(t *testing.T) {
+	dir := copyRepositoryBundle(t)
+	rel := "../../examples/sync-status-response.json"
+	path := filepath.Join(dir, rel)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw = []byte(strings.Replace(string(raw), `"evidence_generation":8`, `"evidence_generation":9`, 1))
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rewriteChecksum(t, dir, rel)
+	if err := Check(dir); err == nil || !strings.Contains(err.Error(), "artifact-set golden drift") {
+		t.Fatalf("expected independent golden failure, got %v", err)
+	}
+}
+
 func copyRepositoryBundle(t *testing.T) string {
 	t.Helper()
 	source := "../../docs/contracts/sync-provider-v1"

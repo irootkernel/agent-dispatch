@@ -51,14 +51,18 @@ var negativeTargets = []struct {
 	{"sync-import-", "urn:agent-dispatch:schema:sync-import:v1"},
 	{"sync-control-", "urn:agent-dispatch:schema:sync-control:v1"},
 	{"sync-verification-", "urn:agent-dispatch:schema:sync-verification:v1"},
+	{"sync-nudge-", "urn:agent-dispatch:schema:sync-nudge:v1"},
 }
 
-var requiredSyncExamples = []string{
-	"sync-membership.json", "sync-membership-plan.json", "sync-checkpoint.json",
-	"sync-checkpoint-plan.json", "sync-import-acknowledgement.json",
-	"sync-publication.json", "sync-delivery.json", "sync-import.json",
-	"sync-control.json", "sync-verification.json", "sync-nudge.json",
-	"sync-status-request.json", "sync-status-response.json",
+var expectedSemanticRejections = map[string]string{
+	"sync-import-duplicate-alias.json":            "unique under the resolved case mode",
+	"sync-verification-duplicate-node.json":       "pair instance identities must be distinct",
+	"sync-verification-obsolete-incarnation.json": "incarnation is obsolete or unexpected",
+	"sync-verification-false-freshness.json":      "freshness must be derived",
+}
+
+var expectedSchemaRejections = map[string]bool{
+	"sync-verification-false-complete.json": true,
 }
 
 var syncPositiveTargets = map[string]string{
@@ -85,9 +89,10 @@ var requiredSyncNegativeExamples = []string{
 	"sync-checkpoint-malformed-oid.json", "sync-publication-missing-proof.json",
 	"sync-publication-commit-mismatch.json", "sync-publication-unresolved-prunable.json",
 	"sync-delivery-unknown-without-retention.json", "sync-membership-invalid-ref.json",
-	"sync-import-empty-target.json", "sync-import-unsafe-path.json", "sync-control-invalid-state.json",
+	"sync-import-empty-target.json", "sync-import-unsafe-path.json", "sync-import-duplicate-alias.json", "sync-control-invalid-state.json",
+	"sync-nudge-invalid-ref.json", "sync-delivery-contradictory-reason.json", "sync-publication-contradictory-reason.json",
 	"sync-verification-obsolete-incarnation.json", "sync-verification-empty-pair.json",
-	"sync-verification-false-complete.json", "sync-verification-duplicate-node.json",
+	"sync-verification-false-complete.json", "sync-verification-duplicate-node.json", "sync-verification-false-freshness.json",
 }
 
 // Failure describes one invalid document or schema.
@@ -189,7 +194,7 @@ func Validate(root string) ([]string, []Failure, error) {
 	}
 	sort.Strings(examples)
 	if compiled["urn:agent-dispatch:schema:sync-membership:v1"] != nil {
-		if err := requireBasenames(filepath.Join(root, "examples"), examples, requiredSyncExamples); err != nil {
+		if err := requireBasenames(filepath.Join(root, "examples"), examples, sortedKeys(syncPositiveTargets)); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -211,7 +216,8 @@ func Validate(root string) ([]string, []Failure, error) {
 			continue
 		}
 		matched := 0
-		if target := syncPositiveTargets[filepath.Base(path)]; target != "" {
+		base := filepath.Base(path)
+		if target := syncPositiveTargets[base]; target != "" {
 			sch := compiled[target]
 			if sch == nil {
 				return nil, nil, fmt.Errorf("positive fixture schema %s not found", target)
@@ -219,6 +225,8 @@ func Validate(root string) ([]string, []Failure, error) {
 			if err := sch.Validate(doc); err == nil {
 				matched = 1
 			}
+		} else if strings.HasPrefix(base, "sync-") {
+			return nil, nil, fmt.Errorf("%s: sync positive fixture has no exact schema mapping", rel)
 		} else {
 			for _, id := range ids {
 				if err := compiled[id].Validate(doc); err == nil {
@@ -309,6 +317,16 @@ func Validate(root string) ([]string, []Failure, error) {
 		}
 		schemaErr := sch.Validate(doc)
 		semanticErr := validateSyncSemantics(doc)
+		if want := expectedSemanticRejections[base]; want != "" {
+			if schemaErr != nil || semanticErr == nil || !strings.Contains(semanticErr.Error(), want) {
+				failures = append(failures, Failure{rel, fmt.Sprintf("expected semantic rejection %q; schema=%v semantic=%v", want, schemaErr, semanticErr)})
+				continue
+			}
+		}
+		if expectedSchemaRejections[base] && schemaErr == nil {
+			failures = append(failures, Failure{rel, "expected schema rejection"})
+			continue
+		}
 		if schemaErr == nil && semanticErr == nil {
 			failures = append(failures, Failure{rel, "negative fixture unexpectedly validates"})
 			continue
@@ -397,15 +415,32 @@ func validateSyncSemantics(doc any) error {
 					return fmt.Errorf("verification node %s does not bind the verified target", field)
 				}
 			}
+			if ageRaw, present := node["evidence_age_seconds"]; present {
+				age, _ := ageRaw.(float64)
+				fresh, _ := node["evidence_fresh"].(bool)
+				if fresh != (age <= 300) {
+					return fmt.Errorf("verification evidence freshness must be derived from the 300-second age bound")
+				}
+			}
 			seen[key] = true
 		}
 	case "agent-dispatch.sync-import/v1":
 		paths, _ := m["paths"].([]any)
+		seenPaths := map[string]bool{}
 		for _, raw := range paths {
 			entry, _ := raw.(map[string]any)
-			if !safeSyncMarkdownPath(fmt.Sprint(entry["path"])) {
+			path := fmt.Sprint(entry["path"])
+			if !safeSyncMarkdownPath(path) {
 				return fmt.Errorf("import path is not a safe relative Markdown path")
 			}
+			canonical := path
+			if mode, _ := m["case_mode"].(string); mode == "insensitive" {
+				canonical = strings.ToLower(canonical)
+			}
+			if seenPaths[canonical] {
+				return fmt.Errorf("import paths must be unique under the resolved case mode")
+			}
+			seenPaths[canonical] = true
 		}
 	case "agent-dispatch.sync-publication/v1":
 		if err := validateSyncRefs(m); err != nil {
@@ -415,6 +450,8 @@ func validateSyncSemantics(doc any) error {
 			return fmt.Errorf("published candidate and remote commits must match")
 		}
 	case "agent-dispatch.sync-import-acknowledgement/v1":
+		return validateSyncRefs(m)
+	case "agent-dispatch.sync-nudge/v1", "agent-dispatch.sync-status-request/v1", "agent-dispatch.sync-status-response/v1":
 		return validateSyncRefs(m)
 	}
 	return nil
@@ -447,7 +484,7 @@ func validateSyncMembership(m map[string]any) error {
 
 func validateSyncMemberEndpoint(raw string) error {
 	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "https" || u.Host == "" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") || !strings.HasSuffix(strings.ToLower(u.Hostname()), ".ts.net") {
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.Hostname() == "" || u.Port() != "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") || !strings.HasSuffix(strings.ToLower(u.Hostname()), ".ts.net") {
 		return fmt.Errorf("membership endpoint must be a credential-free Tailscale HTTPS origin")
 	}
 	return nil
@@ -511,7 +548,21 @@ func validGitRef(ref string) bool {
 			return false
 		}
 	}
+	for _, component := range strings.Split(ref, "/") {
+		if component == "" || strings.HasPrefix(component, ".") || strings.HasSuffix(component, ".lock") {
+			return false
+		}
+	}
 	return true
+}
+
+func sortedKeys(values map[string]string) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func requireBasenames(dir string, paths, required []string) error {

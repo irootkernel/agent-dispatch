@@ -11,6 +11,6 @@
     "expected_content_predecessor": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
     "expected_membership_revision": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
     "proposed_checkpoint": {"$ref": "urn:agent-dispatch:schema:sync-checkpoint:v1"},
-    "administrator_key": {"type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{20,64}$"}
+    "administrator_key": {"type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{43}$"}
   }
 }

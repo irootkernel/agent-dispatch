@@ -1,7 +1,6 @@
 {
   "schema_version": "agent-dispatch.sync-membership/v1",
   "group_id": "wiki-pair",
-  "revision": "1111111111111111111111111111111111111111",
   "predecessor": null,
   "content_ref": "refs/heads/wiki-sync",
   "content_binding": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",

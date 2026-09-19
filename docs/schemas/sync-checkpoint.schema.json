@@ -15,7 +15,7 @@
     "scope_digest": {"$ref": "#/$defs/digest"},
     "contract_digest": {"$ref": "#/$defs/digest"},
     "membership_revision": {"$ref": "#/$defs/oid"},
-    "administrator_key": {"type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{20,64}$"}
+    "administrator_key": {"type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{43}$"}
   },
   "$defs": {"oid": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"}, "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}}
 }

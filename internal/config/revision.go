@@ -94,7 +94,7 @@ func SyncAcknowledgementCurrent(cfg *Config, currentStateIncarnation string) boo
 	return ack.SchemaVersion == "agent-dispatch.sync-import-acknowledgement/v1" &&
 		ack.AcknowledgementID != "" &&
 		ack.GroupID == cfg.Sync.GroupID && ack.ResourceID == cfg.Sync.Resource &&
-		ack.RemoteName == cfg.Sync.RemoteName && ack.ContentRef == cfg.Sync.ContentRef &&
+		ack.RemoteName == cfg.Sync.RemoteName && ack.RemoteRepositoryDigest == cfg.Sync.RemoteRepositoryDigest && ack.ContentRef == cfg.Sync.ContentRef &&
 		ack.MembershipRef == cfg.Sync.MembershipRef && ack.ScopeDigest == digestJSON(syncScopeProjection(cfg, cfg.Sync.Resource)) &&
 		ack.LocalInstanceID == cfg.Sync.LocalInstanceID && ack.StateIncarnationID == currentStateIncarnation &&
 		ack.AdministratorKey == cfg.Sync.AdministratorKey && ack.SafetyPolicyDigest == digestJSON(syncSafetyPolicy()) &&

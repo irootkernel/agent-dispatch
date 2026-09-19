@@ -91,7 +91,9 @@ content ref, target commit, scope digest, and contract digest requested by the
 verifier. The response identifies the responder and state incarnation and
 reports governed dirtiness, pending work, membership currentness, and
 uncertainty. Cached evidence retains its original age and generation; echoing a
-new nonce does not make cached evidence fresh.
+new nonce does not make cached evidence fresh. Verification carries each
+response's `evidence_age_seconds`; `evidence_fresh` is true exactly when that
+age is at most 300 seconds, and `complete` requires the bound for both nodes.
 
 Requests reject unknown fields, duplicate-field ambiguity, oversized input,
 wrong group or receiver, revoked identities, unsupported schemas, invalid
@@ -137,13 +139,16 @@ stable logical record ID, attempt count, claim owner where applicable, and a
 monotonic fence before an external effect. Retries reuse the logical ID and a
 new fence; lease expiry, process loss, or timeout alone cannot advance state.
 
-Membership history binds the group, full revision and predecessor, pinned
+Membership history binds the group, predecessor, pinned
 administrator key, and node identity plus positive incarnation. Normal mode
 has exactly two active members. Emergency revocation may produce a blocked
 zero- or one-member roster while retired and revoked entries remain auditable.
 A membership apply with a predecessor other than the reviewed plan predecessor
 is `sync_precondition_failed`; an evidence record naming an older incarnation
-is `sync_identity_obsolete`.
+is `sync_identity_obsolete`. The document does not embed its own Git object ID:
+`membership_revision` always means the full object ID of the signed Git commit
+containing the validated document. This avoids a self-referential payload while
+retaining an explicit predecessor chain.
 
 The membership plan binds a closed change kind, plan identity, expected
 predecessor, proposed membership, and administrator key. Apply accepts only the
@@ -159,12 +164,15 @@ contract, and membership revision. It has only the reasons
 does not authorize a different target or uncovered history.
 
 The cooperative-import acknowledgement is a distinct versioned record over
-the group, resource, configured remote and refs, scope digest, local instance
+the group, resource, configured remote name, normalized credential-free remote
+repository digest, refs, scope digest, local instance
 and state incarnation, pinned administrator key, safety-policy digest, import
 bounds digest, and normalized configuration revision. Any changed local input
 changes that revision and makes the prior acknowledgement ineligible for live
 application; membership movement under the same trust policy affects the
-verification target but does not by itself rewrite the acknowledgement.
+verification target but does not by itself rewrite the acknowledgement. E21
+must recompute the repository digest from the actual Git remote immediately
+before each protected effect; retargeting the same remote name invalidates it.
 
 ## Bounds and retention
 

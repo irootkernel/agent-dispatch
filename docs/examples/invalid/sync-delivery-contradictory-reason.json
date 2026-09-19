@@ -1,0 +1,1 @@
+{"schema_version":"agent-dispatch.sync-delivery/v1","delivery_id":"delivery-contradiction","publication_id":"publication-001","sender":"node-a","receiver":"node-b","state":"pending","reason":"http_202_inbox_committed","attempts":0,"claim_owner":null,"fence":2,"retain_until_resolved":true}

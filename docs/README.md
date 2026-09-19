@@ -9,10 +9,10 @@ and everyday use, start with the [project README](../README.md).
 
 **Language:** English.
 
-**Documentation basis:** shipped v0.1.8 plus the in-review v0.2.0 two-node Wiki
-sync contract candidate / SOT 1.7.0 Unreleased. The shipped baseline is tracked
-under [v0.1.8 - 2026-09-10](../CHANGELOG.md#v018---2026-09-10). Planned
-contracts are not implementation or release evidence.
+**Documentation basis:** shipped v0.1.8 plus the qualified v0.2.0 two-node Wiki
+sync contract / SOT 1.7.0. The shipped baseline is tracked
+under [v0.1.8 - 2026-09-10](../CHANGELOG.md#v018---2026-09-10). The qualified
+contract is not runtime implementation or release evidence.
 
 ## Start Here
 

@@ -11,15 +11,15 @@
 | Field | Value |
 |---|---|
 | Shipped release | v0.1.8 (published 2026-09-10) |
-| Planned SOT baseline | 1.7.0 Unreleased ([D-030](../specs/decision-log.md); G16-G18 open) |
+| Planned SOT baseline | 1.7.0 ([D-030](../specs/decision-log.md); G17-G18 open) |
 | Release target | v0.2.0 (Two-Node Wiki Sync MVP) |
-| Current epic | E20 Two-Node Sync Contracts and Admission (In Progress) |
-| Current active task | E20-T5 (In Review) |
-| Next task | E20-T5 cold review and E20 closeout |
-| Completed tasks | 105 / 116 |
+| Current epic | E21 Signed Publication and Guarded Import (Planned) |
+| Current active task | None |
+| Next task | E21-T1 Durable sync jobs, journals, and migrations |
+| Completed tasks | 106 / 116 |
 | Planned tasks | 10 / 116 |
 | In progress tasks | 0 |
-| In review tasks | 1 |
+| In review tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tracked tasks | 0 |
 
@@ -56,7 +56,7 @@
 | E17 | Documentation, Cold Validation, and v0.1.6 Release | **Completed** | 3 | G13 |
 | E18 | Absolute Watch-Root Binding | **Completed** | 2 | G14 |
 | E19 | Official Linux Support (darwin/arm64 + linux/amd64 + linux/arm64) | **Completed** | 10 | G15 |
-| E20 | Two-Node Sync Contracts and Admission | **In Progress** | 5 | G16 |
+| E20 | Two-Node Sync Contracts and Admission | **Completed** | 5 | G16 |
 | E21 | Signed Publication and Guarded Import | **Planned** | 5 | G17 |
 | E22 | Peer Recovery, Verification, and Operations | **Planned** | 5 | G18 |
 
@@ -169,7 +169,7 @@
 | 103 | E20-T2 | Completed | Sync records, state machines, and errors frozen |
 | 104 | E20-T3 | Completed | CLI and peer provider contract bundle frozen |
 | 105 | E20-T4 | Completed | Disabled configuration and capabilities implemented |
-| 106 | E20-T5 | In Review | Contract baseline qualification candidate under review |
+| 106 | E20-T5 | Completed | G16 exact-revision contract baseline qualified |
 | 107 | E21-T1 | Planned | Durable sync jobs, journals, and migrations |
 | 108 | E21-T2 | Planned | Restricted Git, trust, and membership administration |
 | 109 | E21-T3 | Planned | Explicit signed publication workflow |
@@ -4936,14 +4936,12 @@ Binding, D-028, and G14 are unchanged. Epic E19 remains Completed; roadmap
 
 # E20: Two-Node Sync Contracts and Admission
 
-**Epic status:** In Progress
+**Epic status:** Completed
 
 **Purpose:** Admit the two-node v0.2.0 boundary and freeze contracts before Git,
 network, or live-tree side effects are implemented.
 
 **Gate:** G16
-
-**Execution integration map:** [E20 Two-Node Sync Contracts and Admission](../todo/TODO-E20-TWO-NODE-SYNC-CONTRACTS.md)
 
 **Canonical Outcomes:** [D-030](../specs/decision-log.md) · [SYN requirements](../specs/required-spec.md) · [ADR-0023 through ADR-0025](../architecture-decision-records/README.md) · [Gate G16](../specs/acceptance-criteria.md) · [Sync architecture](../architecture/wiki-sync.md) · [Sync contract](../contracts/sync-contract.md)
 
@@ -5171,7 +5169,7 @@ Completed 2026-09-19; E20-T5 is next.
 
 ## E20-T5: Qualify the Contract Baseline
 
-**Status:** In Review
+**Status:** Completed
 
 ### Objective
 
@@ -5211,8 +5209,11 @@ keeps its unrelated fixture intent outside the test's retention population.
 With Watchman intentionally absent from `PATH`, the full build, format, vet,
 staticcheck, import, unit, race, manifest, schema, traceability, schedule, and
 sync-contract gate passed; real-Watchman behavior remains an explicit
-environment gap rather than runtime sync evidence. Cold review and exact
-revision binding remain before completion.
+environment gap rather than runtime sync evidence. Fresh Codex Sol medium
+confirmation review approved the exact accepted revision
+`eb3dfe359f8a47edc0cb77cd424a322189e40ee9` with no High or Medium findings.
+The documented `systemd-analyze` skip remained in effect. G16 closed and E20
+completed on 2026-09-19; only E21-T1 is handed forward.
 
 # E21: Signed Publication and Guarded Import
 

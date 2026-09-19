@@ -6,11 +6,10 @@ certify the current HEAD. For the current documentation roles and checks, use
 the [documentation index](README.md); for delivery status use the
 [roadmap](roadmap/roadmap.md).
 
-> **Current candidate:** 2026-09-19 (E20-T5 in review; gate G16 is not yet
-> closed; 105 of 116 roadmap tasks are complete, one is in review, and ten are
-> planned)
-> **Package target:** Agent Dispatch SOT 1.7.0 Unreleased / shipped implementation v0.1.8
-> plus the planned v0.2.0 sync contract
+> **Current validation snapshot:** 2026-09-19 (E20-T5 and gate G16 completed;
+> 106 of 116 roadmap tasks are complete and ten are planned)
+> **Package target:** Agent Dispatch SOT 1.7.0 / shipped implementation v0.1.8
+> plus the qualified v0.2.0 sync contract and planned runtime
 
 ## Completed Checks
 
@@ -26,10 +25,10 @@ the [documentation index](README.md); for delivery status use the
 - Internal Markdown links resolve within the package, excluding intentionally unresolved wiki links retained in the historical source draft.
 - Markdown code fences are balanced.
 - The documentation package has one delivery scope, exactly one owner for each of the seven semantic roles, and `docs/roadmap/roadmap.md` as its sole lifecycle authority.
-- The roadmap contains exactly 23 epics and 116 task headings: 105 Completed,
-  E20-T5 In Review, and ten Planned.
+- The roadmap contains exactly 23 epics and 116 task headings: 106 Completed
+  and ten Planned.
 - Every task uses one allowed status value.
-- Every sequence through E19 is fully Completed; E20-T5 is the sole active task.
+- Every sequence through E20 is fully Completed; there is no active task.
 - Required-spec IDs are unique.
 - Acceptance-scenario IDs are unique.
 - The D-025 functional baseline remains unchanged; D-026 moves paths and adds ownership indexes without changing roadmap identity, lifecycle, or executable-evidence claims.
@@ -41,7 +40,7 @@ the [documentation index](README.md); for delivery status use the
 - Example files: 64 (33 top-level JSON examples, 30 registered invalid JSON fixtures, and one YAML configuration example)
 - Integration reports: 4 (Hermes public interface E0-T4, Watchman public interface E0-T5, real-Hermes G11 evidence E15-T4, cold-validation evidence E17-T2)
 - Integration fixtures: 42 files, 9 under `integrations/fixtures/hermes/` and 33 under `integrations/fixtures/watchman/`
-- Roadmap tasks: 116 (105 Completed, one In Review, ten Planned)
+- Roadmap tasks: 116 (106 Completed, ten Planned)
 - Normative requirements: 241
 - Acceptance scenarios: 118
 
@@ -647,14 +646,15 @@ and the guarded real-Watchman legs reported their environment gap. E20-T1 is
 Completed as of 2026-09-18. Runtime sync behavior remains unimplemented and
 unverified.
 
-## Gate G16 Candidate: Two-Node Sync Contract and Disabled Baseline (E20)
+## Gate G16: Two-Node Sync Contract and Disabled Baseline (E20)
 
-Candidate evidence recorded 2026-09-19 on darwin/arm64 with Go 1.26.6. This
-section does not close G16; exact-revision cold review and closeout remain. The
-candidate is limited to the contract baseline and disabled inspection surface
-and does not claim Git publication/import, Tailscale transport, peer listener,
-managed sync service, live-tree mutation, production activation, installation,
-or release evidence.
+Gate G16 closed 2026-09-19 on darwin/arm64 with Go 1.26.6. Fresh Codex Sol
+medium subagents approved the exact accepted revision
+`eb3dfe359f8a47edc0cb77cd424a322189e40ee9` with no High or Medium findings.
+The qualified scope is limited to the contract baseline and disabled inspection
+surface and does not claim Git publication/import, Tailscale transport, peer
+listener, managed sync service, live-tree mutation, production activation,
+installation, or release evidence.
 
 | Criterion | Evidence |
 |---|---|
@@ -675,5 +675,5 @@ focused regression passes. A complete rerun with Watchman intentionally absent
 from `PATH` passed build, formatting, vet, staticcheck, import direction, unit
 tests, race tests, manifest, schema, traceability, schedule, and sync-provider
 validation. `systemd-analyze` was absent and the existing schedule check
-reported its documented lint skip. Exact accepted revision and cold-review
-settlement are recorded by the E20 closeout after the reviewed T5 commit exists.
+reported its documented lint skip. The exact accepted revision above closes
+G16 and E20-T5; runtime sync implementation and evidence begin with E21-T1.

@@ -18,7 +18,7 @@ var expectedArtifacts = []string{
 	"commands.json", "peer.json", "results.json", "errors.json", "trust-fixtures.json",
 	"../../schemas/sync-membership.schema.json", "../../schemas/sync-membership-plan.schema.json", "../../schemas/sync-checkpoint.schema.json", "../../schemas/sync-checkpoint-plan.schema.json", "../../schemas/sync-import-acknowledgement.schema.json", "../../schemas/sync-publication.schema.json", "../../schemas/sync-delivery.schema.json", "../../schemas/sync-import.schema.json", "../../schemas/sync-control.schema.json", "../../schemas/sync-verification.schema.json", "../../schemas/sync-nudge.schema.json", "../../schemas/sync-status-request.schema.json", "../../schemas/sync-status-response.schema.json",
 	"../../examples/sync-checkpoint-plan.json", "../../examples/sync-checkpoint.json", "../../examples/sync-control.json", "../../examples/sync-delivery.json", "../../examples/sync-import-acknowledgement.json", "../../examples/sync-import.json", "../../examples/sync-membership-plan.json", "../../examples/sync-membership.json", "../../examples/sync-nudge.json", "../../examples/sync-publication.json", "../../examples/sync-status-request.json", "../../examples/sync-status-response.json", "../../examples/sync-verification.json",
-	"../../examples/invalid/sync-checkpoint-malformed-oid.json", "../../examples/invalid/sync-control-invalid-state.json", "../../examples/invalid/sync-delivery-unknown-without-retention.json", "../../examples/invalid/sync-import-empty-target.json", "../../examples/invalid/sync-membership-duplicate-instance.json", "../../examples/invalid/sync-membership-invalid-ref.json", "../../examples/invalid/sync-membership-plan-stale-predecessor.json", "../../examples/invalid/sync-membership-third-active.json", "../../examples/invalid/sync-publication-commit-mismatch.json", "../../examples/invalid/sync-publication-missing-proof.json", "../../examples/invalid/sync-publication-unresolved-prunable.json", "../../examples/invalid/sync-verification-duplicate-node.json", "../../examples/invalid/sync-verification-empty-pair.json", "../../examples/invalid/sync-verification-false-complete.json", "../../examples/invalid/sync-verification-obsolete-incarnation.json",
+	"../../examples/invalid/sync-checkpoint-malformed-oid.json", "../../examples/invalid/sync-control-invalid-state.json", "../../examples/invalid/sync-delivery-unknown-without-retention.json", "../../examples/invalid/sync-import-empty-target.json", "../../examples/invalid/sync-import-unsafe-path.json", "../../examples/invalid/sync-membership-administrator-key-reused.json", "../../examples/invalid/sync-membership-duplicate-instance.json", "../../examples/invalid/sync-membership-duplicate-publisher-key.json", "../../examples/invalid/sync-membership-invalid-ref.json", "../../examples/invalid/sync-membership-plan-stale-predecessor.json", "../../examples/invalid/sync-membership-public-endpoint.json", "../../examples/invalid/sync-membership-third-active.json", "../../examples/invalid/sync-publication-commit-mismatch.json", "../../examples/invalid/sync-publication-missing-proof.json", "../../examples/invalid/sync-publication-unresolved-prunable.json", "../../examples/invalid/sync-verification-duplicate-node.json", "../../examples/invalid/sync-verification-empty-pair.json", "../../examples/invalid/sync-verification-false-complete.json", "../../examples/invalid/sync-verification-obsolete-incarnation.json",
 }
 
 type bundle struct {
@@ -74,6 +74,7 @@ type peer struct {
 		HTTPStatus            int      `json:"http_status"`
 		MaxBodyBytes          int      `json:"max_body_bytes"`
 		RequestSchema         string   `json:"request_schema"`
+		ResponseSchema        string   `json:"response_schema,omitempty"`
 		RequestSelectedFields []string `json:"request_selected_fields"`
 	} `json:"routes"`
 	Authentication struct {
@@ -162,7 +163,7 @@ func Check(dir string) error {
 	if !reflect.DeepEqual(got, expectedCommandTuples) {
 		return fmt.Errorf("command tree mismatch")
 	}
-	if !reflect.DeepEqual(c.HelpContract.RequiredSections, []string{"summary", "usage", "key_flags", "defaults", "approval_requirements", "exit_codes", "side_effects", "examples", "next_safe_command"}) || !reflect.DeepEqual(c.HelpContract.OutputModes, []string{"human", "json"}) || len(c.FlagContracts) != len(expectedCommandTuples) {
+	if !reflect.DeepEqual(c.HelpContract.RequiredSections, []string{"summary", "usage", "key_flags", "defaults", "approval_requirements", "exit_codes", "side_effects", "examples", "next_safe_command"}) || !reflect.DeepEqual(c.HelpContract.OutputModes, []string{"json"}) || len(c.FlagContracts) != len(expectedCommandTuples) {
 		return fmt.Errorf("command help contract mismatch")
 	}
 	for i, flags := range c.FlagContracts {
@@ -187,13 +188,13 @@ func Check(dir string) error {
 		return fmt.Errorf("peer contract mismatch")
 	}
 	wantRoutes := []struct {
-		path, success string
-		status, max   int
-		schema        string
-	}{{"/v1/sync/nudges", "inbox_committed", 202, 262144, "agent-dispatch.sync-nudge/v1"}, {"/v1/sync/status", "fresh_status", 200, 16384, "agent-dispatch.sync-status-request/v1"}}
+		path, success     string
+		status, max       int
+		request, response string
+	}{{"/v1/sync/nudges", "inbox_committed", 202, 262144, "agent-dispatch.sync-nudge/v1", ""}, {"/v1/sync/status", "fresh_status", 200, 16384, "agent-dispatch.sync-status-request/v1", "agent-dispatch.sync-status-response/v1"}}
 	for i, route := range p.Routes {
 		want := wantRoutes[i]
-		if len(route.RequestSelectedFields) != 0 || route.Method != "POST" || route.Path != want.path || route.Success != want.success || route.HTTPStatus != want.status || route.MaxBodyBytes != want.max || route.RequestSchema != want.schema {
+		if len(route.RequestSelectedFields) != 0 || route.Method != "POST" || route.Path != want.path || route.Success != want.success || route.HTTPStatus != want.status || route.MaxBodyBytes != want.max || route.RequestSchema != want.request || route.ResponseSchema != want.response {
 			return fmt.Errorf("peer route %s is not the frozen descriptor", route.Path)
 		}
 	}
@@ -277,17 +278,24 @@ func exactResults(r results) bool {
 }
 
 func verifyPeerSchemaLinks(dir string, p peer) error {
-	targets := map[string]struct{ path, id string }{"agent-dispatch.sync-nudge/v1": {"../../schemas/sync-nudge.schema.json", "urn:agent-dispatch:schema:sync-nudge:v1"}, "agent-dispatch.sync-status-request/v1": {"../../schemas/sync-status-request.schema.json", "urn:agent-dispatch:schema:sync-status-request:v1"}}
-	for _, route := range p.Routes {
-		target, ok := targets[route.RequestSchema]
-		var schema struct {
-			ID         string `json:"$id"`
-			Properties map[string]struct {
-				Const string `json:"const"`
-			} `json:"properties"`
-		}
+	targets := map[string]struct {
+		path, id   string
+		properties []string
+	}{
+		"agent-dispatch.sync-nudge/v1":           {"../../schemas/sync-nudge.schema.json", "urn:agent-dispatch:schema:sync-nudge:v1", []string{"content_ref", "group_id", "membership_revision", "publication_id", "receiver", "schema_version", "sender", "target_commit"}},
+		"agent-dispatch.sync-status-request/v1":  {"../../schemas/sync-status-request.schema.json", "urn:agent-dispatch:schema:sync-status-request:v1", []string{"content_ref", "contract_digest", "group_id", "membership_revision", "nonce", "receiver", "schema_version", "scope_digest", "sender", "target_commit"}},
+		"agent-dispatch.sync-status-response/v1": {"../../schemas/sync-status-response.schema.json", "urn:agent-dispatch:schema:sync-status-response:v1", []string{"content_ref", "contract_digest", "evidence_age_seconds", "evidence_generation", "governed_dirty", "group_id", "membership_current", "membership_revision", "nonce", "pending_work", "responder", "schema_version", "scope_digest", "state", "state_incarnation_id", "target_commit", "uncertain"}},
+	}
+	verify := func(schemaVersion string) error {
+		target, ok := targets[schemaVersion]
 		if !ok {
-			return fmt.Errorf("peer schema link is not bundled: %s", route.RequestSchema)
+			return fmt.Errorf("peer schema link is not bundled: %s", schemaVersion)
+		}
+		var schema struct {
+			ID                   string                     `json:"$id"`
+			AdditionalProperties bool                       `json:"additionalProperties"`
+			Required             []string                   `json:"required"`
+			Properties           map[string]json.RawMessage `json:"properties"`
 		}
 		raw, err := os.ReadFile(filepath.Join(dir, target.path))
 		if err != nil {
@@ -296,8 +304,40 @@ func verifyPeerSchemaLinks(dir string, p peer) error {
 		if err := json.Unmarshal(raw, &schema); err != nil {
 			return err
 		}
-		if schema.ID != target.id || schema.Properties["schema_version"].Const != route.RequestSchema {
-			return fmt.Errorf("peer schema link identity mismatch: %s", route.RequestSchema)
+		keys := make([]string, 0, len(schema.Properties))
+		for key := range schema.Properties {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		required := append([]string(nil), schema.Required...)
+		sort.Strings(required)
+		if schema.ID != target.id {
+			return fmt.Errorf("peer schema link identity mismatch: %s", schemaVersion)
+		}
+		var version struct {
+			Const string `json:"const"`
+		}
+		if err := json.Unmarshal(schema.Properties["schema_version"], &version); err != nil || version.Const != schemaVersion {
+			return fmt.Errorf("peer schema link identity mismatch: %s", schemaVersion)
+		}
+		if schema.AdditionalProperties || !reflect.DeepEqual(keys, target.properties) || !reflect.DeepEqual(required, target.properties) {
+			return fmt.Errorf("peer schema shape mismatch: %s", schemaVersion)
+		}
+		for _, forbidden := range p.ForbiddenRequestFields {
+			if _, present := schema.Properties[forbidden]; present {
+				return fmt.Errorf("peer schema %s admits forbidden field %s", schemaVersion, forbidden)
+			}
+		}
+		return nil
+	}
+	for _, route := range p.Routes {
+		if err := verify(route.RequestSchema); err != nil {
+			return err
+		}
+		if route.ResponseSchema != "" {
+			if err := verify(route.ResponseSchema); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -376,6 +416,59 @@ func verifySums(dir string, artifacts []string) error {
 		if sums[rel] != hex.EncodeToString(actual[:]) {
 			return fmt.Errorf("checksum drift for %s", rel)
 		}
+	}
+	return nil
+}
+
+// UpdateChecksums deterministically rewrites SHA256SUMS in bundle order after
+// validating that every artifact is a regular file contained by docs/.
+func UpdateChecksums(dir string) error {
+	var b bundle
+	if err := decodeClosed(filepath.Join(dir, "bundle.json"), &b); err != nil {
+		return err
+	}
+	if !reflect.DeepEqual(b.Artifacts, expectedArtifacts) {
+		return fmt.Errorf("bundle artifact allowlist mismatch")
+	}
+	docsRoot, err := filepath.Abs(filepath.Join(dir, "../.."))
+	if err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	var output strings.Builder
+	for _, rel := range b.Artifacts {
+		if filepath.IsAbs(rel) || strings.Contains(rel, "\\") || seen[rel] {
+			return fmt.Errorf("unsafe artifact path %q", rel)
+		}
+		seen[rel] = true
+		path, err := filepath.Abs(filepath.Join(dir, filepath.FromSlash(rel)))
+		if err != nil {
+			return err
+		}
+		if path != docsRoot && !strings.HasPrefix(path, docsRoot+string(os.PathSeparator)) {
+			return fmt.Errorf("artifact path escapes docs root: %s", rel)
+		}
+		info, err := os.Lstat(path)
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("artifact is not a regular file: %s", rel)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		sum := sha256.Sum256(data)
+		fmt.Fprintf(&output, "%s  %s\n", hex.EncodeToString(sum[:]), rel)
+	}
+	temporary := filepath.Join(dir, ".SHA256SUMS.tmp")
+	if err := os.WriteFile(temporary, []byte(output.String()), 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(temporary, filepath.Join(dir, "SHA256SUMS")); err != nil {
+		_ = os.Remove(temporary)
+		return err
 	}
 	return nil
 }

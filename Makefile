@@ -101,6 +101,9 @@ schema-validation:
 sync-contract-check:
 	$(GO) run ./internal/tools/synccontractcheck -dir docs/contracts/sync-provider-v1
 
+sync-contract-update:
+	$(GO) run ./internal/tools/synccontractcheck -dir docs/contracts/sync-provider-v1 -update-checksums
+
 # Regenerate the traceability matrix and fail if it drifted from the
 # roadmap and required-spec.
 traceability:

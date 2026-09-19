@@ -20,7 +20,7 @@
     {"path":"sync service disable","capability":"service_disable","availability":"reserved","side_effect":"service_write"},
     {"path":"sync service uninstall","capability":"service_uninstall","availability":"reserved","side_effect":"service_write"}
   ],
-  "help_contract": {"required_sections":["summary","usage","key_flags","defaults","approval_requirements","exit_codes","side_effects","examples","next_safe_command"],"output_modes":["human","json"]},
+  "help_contract": {"required_sections":["summary","usage","key_flags","defaults","approval_requirements","exit_codes","side_effects","examples","next_safe_command"],"output_modes":["json"]},
   "flag_contracts": [
     {"path":"sync capabilities","flags":["--output"]},
     {"path":"sync status","flags":["--config","--group","--output"]},

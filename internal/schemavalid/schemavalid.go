@@ -9,6 +9,7 @@ package schemavalid
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -56,16 +57,35 @@ var requiredSyncExamples = []string{
 	"sync-membership.json", "sync-membership-plan.json", "sync-checkpoint.json",
 	"sync-checkpoint-plan.json", "sync-import-acknowledgement.json",
 	"sync-publication.json", "sync-delivery.json", "sync-import.json",
-	"sync-control.json", "sync-verification.json",
+	"sync-control.json", "sync-verification.json", "sync-nudge.json",
+	"sync-status-request.json", "sync-status-response.json",
+}
+
+var syncPositiveTargets = map[string]string{
+	"sync-membership.json":             "urn:agent-dispatch:schema:sync-membership:v1",
+	"sync-membership-plan.json":        "urn:agent-dispatch:schema:sync-membership-plan:v1",
+	"sync-checkpoint.json":             "urn:agent-dispatch:schema:sync-checkpoint:v1",
+	"sync-checkpoint-plan.json":        "urn:agent-dispatch:schema:sync-checkpoint-plan:v1",
+	"sync-import-acknowledgement.json": "urn:agent-dispatch:schema:sync-import-acknowledgement:v1",
+	"sync-publication.json":            "urn:agent-dispatch:schema:sync-publication:v1",
+	"sync-delivery.json":               "urn:agent-dispatch:schema:sync-delivery:v1",
+	"sync-import.json":                 "urn:agent-dispatch:schema:sync-import:v1",
+	"sync-control.json":                "urn:agent-dispatch:schema:sync-control:v1",
+	"sync-verification.json":           "urn:agent-dispatch:schema:sync-verification:v1",
+	"sync-nudge.json":                  "urn:agent-dispatch:schema:sync-nudge:v1",
+	"sync-status-request.json":         "urn:agent-dispatch:schema:sync-status-request:v1",
+	"sync-status-response.json":        "urn:agent-dispatch:schema:sync-status-response:v1",
 }
 
 var requiredSyncNegativeExamples = []string{
 	"sync-membership-third-active.json", "sync-membership-duplicate-instance.json",
+	"sync-membership-administrator-key-reused.json", "sync-membership-duplicate-publisher-key.json",
+	"sync-membership-public-endpoint.json",
 	"sync-membership-plan-stale-predecessor.json",
 	"sync-checkpoint-malformed-oid.json", "sync-publication-missing-proof.json",
 	"sync-publication-commit-mismatch.json", "sync-publication-unresolved-prunable.json",
 	"sync-delivery-unknown-without-retention.json", "sync-membership-invalid-ref.json",
-	"sync-import-empty-target.json", "sync-control-invalid-state.json",
+	"sync-import-empty-target.json", "sync-import-unsafe-path.json", "sync-control-invalid-state.json",
 	"sync-verification-obsolete-incarnation.json", "sync-verification-empty-pair.json",
 	"sync-verification-false-complete.json", "sync-verification-duplicate-node.json",
 }
@@ -191,9 +211,19 @@ func Validate(root string) ([]string, []Failure, error) {
 			continue
 		}
 		matched := 0
-		for _, id := range ids {
-			if err := compiled[id].Validate(doc); err == nil {
-				matched++
+		if target := syncPositiveTargets[filepath.Base(path)]; target != "" {
+			sch := compiled[target]
+			if sch == nil {
+				return nil, nil, fmt.Errorf("positive fixture schema %s not found", target)
+			}
+			if err := sch.Validate(doc); err == nil {
+				matched = 1
+			}
+		} else {
+			for _, id := range ids {
+				if err := compiled[id].Validate(doc); err == nil {
+					matched++
+				}
 			}
 		}
 		switch {
@@ -323,7 +353,7 @@ func validateSyncSemantics(doc any) error {
 		if err := validateSyncRefs(m); err != nil {
 			return err
 		}
-		return uniqueSyncIdentities(m, "active_members", "historical_members")
+		return validateSyncMembership(m)
 	case "agent-dispatch.sync-membership-plan/v1":
 		proposed, _ := m["proposed_membership"].(map[string]any)
 		if proposed == nil || !sameJSONScalar(m["group_id"], proposed["group_id"]) || !sameJSONScalar(m["expected_predecessor"], proposed["predecessor"]) || !sameJSONScalar(m["administrator_key"], proposed["administrator_key"]) {
@@ -362,7 +392,20 @@ func validateSyncSemantics(doc any) error {
 			if expectedBindings[key] == "" || expectedBindings[key] != incarnation {
 				return fmt.Errorf("verification node incarnation is obsolete or unexpected")
 			}
+			for _, field := range []string{"membership_revision", "content_ref", "target_commit", "scope_digest", "contract_digest"} {
+				if !sameJSONScalar(node[field], m[field]) {
+					return fmt.Errorf("verification node %s does not bind the verified target", field)
+				}
+			}
 			seen[key] = true
+		}
+	case "agent-dispatch.sync-import/v1":
+		paths, _ := m["paths"].([]any)
+		for _, raw := range paths {
+			entry, _ := raw.(map[string]any)
+			if !safeSyncMarkdownPath(fmt.Sprint(entry["path"])) {
+				return fmt.Errorf("import path is not a safe relative Markdown path")
+			}
 		}
 	case "agent-dispatch.sync-publication/v1":
 		if err := validateSyncRefs(m); err != nil {
@@ -375,6 +418,58 @@ func validateSyncSemantics(doc any) error {
 		return validateSyncRefs(m)
 	}
 	return nil
+}
+
+func validateSyncMembership(m map[string]any) error {
+	if err := uniqueSyncIdentities(m, "active_members", "historical_members"); err != nil {
+		return err
+	}
+	administrator, _ := m["administrator_key"].(string)
+	keys := map[string]bool{administrator: true}
+	for _, field := range []string{"active_members", "historical_members"} {
+		entries, _ := m[field].([]any)
+		for _, raw := range entries {
+			entry, _ := raw.(map[string]any)
+			key, _ := entry["publisher_key"].(string)
+			if key == "" || keys[key] {
+				return fmt.Errorf("membership administrator and publisher keys must be distinct")
+			}
+			keys[key] = true
+			if field == "active_members" {
+				if err := validateSyncMemberEndpoint(fmt.Sprint(entry["endpoint"])); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func validateSyncMemberEndpoint(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") || !strings.HasSuffix(strings.ToLower(u.Hostname()), ".ts.net") {
+		return fmt.Errorf("membership endpoint must be a credential-free Tailscale HTTPS origin")
+	}
+	return nil
+}
+
+func safeSyncMarkdownPath(raw string) bool {
+	if raw == "" || strings.HasPrefix(raw, "/") || strings.Contains(raw, "\\") || strings.Contains(raw, "//") {
+		return false
+	}
+	parts := strings.Split(raw, "/")
+	for _, part := range parts {
+		if part == "" || part == "." || part == ".." {
+			return false
+		}
+		for _, r := range part {
+			if r < 0x20 || r == 0x7f {
+				return false
+			}
+		}
+	}
+	lower := strings.ToLower(raw)
+	return strings.HasSuffix(lower, ".md") || strings.HasSuffix(lower, ".markdown")
 }
 
 func uniqueSyncIdentities(m map[string]any, fields ...string) error {

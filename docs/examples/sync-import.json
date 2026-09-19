@@ -13,7 +13,10 @@
   "history_evidence_id": "checkpoint-001",
   "state": "applied",
   "reason": "none",
-  "paths": [{"path": "Wiki/Index.md", "before": "absent", "after": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}],
+  "paths": [
+    {"path": "Wiki/Index.md", "before": "absent", "after": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"},
+    {"path": "문서/안내.markdown", "before": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "after": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"}
+  ],
   "attempts": 1,
   "claim_owner": null,
   "fence": 5,

@@ -115,7 +115,8 @@
           "type": "boolean"
         },
         "group_id": {
-          "$ref": "#/$defs/destinationId"
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,62}$"
         },
         "resource": {
           "$ref": "#/$defs/id"
@@ -133,7 +134,8 @@
           "pattern": "^refs/agent-dispatch/membership/[A-Za-z0-9](?:[A-Za-z0-9._/-]*[A-Za-z0-9])?$"
         },
         "local_instance_id": {
-          "$ref": "#/$defs/destinationId"
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,62}$"
         },
         "administrator_key": {
           "type": "string",
@@ -178,7 +180,7 @@
             },
             "resource_id": {
               "type": "string",
-              "pattern": "^[a-z][a-z0-9-]{0,62}$"
+              "pattern": "^[a-z][a-z0-9._-]{0,63}$"
             },
             "remote_name": {
               "type": "string",
@@ -237,7 +239,8 @@
             ],
             "properties": {
               "instance_id": {
-                "$ref": "#/$defs/destinationId"
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{0,62}$"
               },
               "endpoint": {
                 "type": "string",

@@ -3,6 +3,8 @@
 The [sync provider v1 bundle](sync-provider-v1/bundle.json) pins the reserved
 v0.2.0 command tree, peer routes, machine results, canonical schemas, and their
 checksums. Run `make sync-contract-check` after changing any included artifact.
+Regenerate the ordered checksum file from `bundle.json` with
+`make sync-contract-update`; do not edit it by hand.
 
 This collection contains normative interfaces, records, configuration, CLI,
 adapter boundaries, and the closed error model. It is subordinate to

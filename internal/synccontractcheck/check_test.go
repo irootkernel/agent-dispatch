@@ -105,6 +105,28 @@ func TestCheckDerivesTrustFixtureOutcome(t *testing.T) {
 	}
 }
 
+func TestEvaluateTrustFixtureRejectsEachIndependentAxis(t *testing.T) {
+	pinned := "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	tests := []struct {
+		name                                      string
+		document, pin                             string
+		selfAuthorizing, predecessor, incarnation bool
+		want                                      string
+	}{
+		{"unpinned", "SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", pinned, false, true, true, "sync_trust_failed"},
+		{"self-authorizing", pinned, pinned, true, true, true, "sync_trust_failed"},
+		{"stale predecessor", pinned, pinned, false, false, true, "sync_precondition_failed"},
+		{"obsolete incarnation", pinned, pinned, false, true, false, "sync_identity_obsolete"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := evaluateTrustFixture(tc.document, tc.pin, tc.selfAuthorizing, tc.predecessor, tc.incarnation); got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestCheckRejectsSchemaIdentityDriftWithUpdatedChecksum(t *testing.T) {
 	dir := copyRepositoryBundle(t)
 	rel := "../../schemas/sync-nudge.schema.json"
@@ -120,6 +142,24 @@ func TestCheckRejectsSchemaIdentityDriftWithUpdatedChecksum(t *testing.T) {
 	rewriteChecksum(t, dir, rel)
 	if err := Check(dir); err == nil || !strings.Contains(err.Error(), "schema link identity mismatch") {
 		t.Fatalf("expected schema-link failure, got %v", err)
+	}
+}
+
+func TestCheckRejectsPeerSchemaShapeDriftWithUpdatedChecksum(t *testing.T) {
+	dir := copyRepositoryBundle(t)
+	rel := "../../schemas/sync-nudge.schema.json"
+	path := filepath.Join(dir, rel)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw = []byte(strings.Replace(string(raw), `"properties":{"schema_version"`, `"properties":{"credential":{"type":"string"},"schema_version"`, 1))
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rewriteChecksum(t, dir, rel)
+	if err := Check(dir); err == nil || !strings.Contains(err.Error(), "schema shape mismatch") {
+		t.Fatalf("expected peer schema shape failure, got %v", err)
 	}
 }
 

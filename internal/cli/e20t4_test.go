@@ -182,6 +182,9 @@ func TestE20T4CapabilitiesMatchProviderCommandVocabulary(t *testing.T) {
 			Capability   string `json:"capability"`
 			Availability string `json:"availability"`
 		} `json:"commands"`
+		HelpContract struct {
+			OutputModes []string `json:"output_modes"`
+		} `json:"help_contract"`
 	}
 	if err := json.Unmarshal(raw, &provider); err != nil {
 		t.Fatal(err)
@@ -196,6 +199,13 @@ func TestE20T4CapabilitiesMatchProviderCommandVocabulary(t *testing.T) {
 	}
 	if !reflect.DeepEqual(syncCapabilities(), want) {
 		t.Fatalf("CLI/provider capability drift: got=%v want=%v", syncCapabilities(), want)
+	}
+	if !reflect.DeepEqual(provider.HelpContract.OutputModes, []string{"json"}) {
+		t.Fatalf("sync output modes drifted: %v", provider.HelpContract.OutputModes)
+	}
+	var out, errOut bytes.Buffer
+	if code := Run([]string{"sync", "capabilities", "--output", "human"}, &out, &errOut); code != 2 || out.Len() != 0 {
+		t.Fatalf("unsupported human output: code=%d out=%q err=%q", code, out.String(), errOut.String())
 	}
 }
 

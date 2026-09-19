@@ -8,7 +8,7 @@
     "schema_version": {"const": "agent-dispatch.sync-import-acknowledgement/v1"},
     "acknowledgement_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,127}$"},
     "group_id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"},
-    "resource_id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"},
+    "resource_id": {"type": "string", "pattern": "^[a-z][a-z0-9._-]{0,63}$"},
     "remote_name": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"},
     "content_ref": {"type": "string", "pattern": "^refs/heads/[A-Za-z0-9](?:[A-Za-z0-9._/-]*[A-Za-z0-9])?$"},
     "membership_ref": {"type": "string", "pattern": "^refs/agent-dispatch/membership/[A-Za-z0-9](?:[A-Za-z0-9._/-]*[A-Za-z0-9])?$"},

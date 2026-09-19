@@ -21,7 +21,7 @@ func cloneE20T4Config(t *testing.T, cfg *Config) *Config {
 	return &clone
 }
 
-func TestE20T4EmbeddedAcknowledgementRequiredFieldsMatchCanonicalSchema(t *testing.T) {
+func TestE20T4EmbeddedAcknowledgementMatchesCanonicalSchema(t *testing.T) {
 	read := func(path string) map[string]any {
 		raw, err := os.ReadFile(path)
 		if err != nil {
@@ -37,8 +37,17 @@ func TestE20T4EmbeddedAcknowledgementRequiredFieldsMatchCanonicalSchema(t *testi
 	configSchema := read("../../docs/schemas/config.schema.json")
 	syncSchema := configSchema["properties"].(map[string]any)["sync"].(map[string]any)
 	embedded := syncSchema["properties"].(map[string]any)["cooperative_import_acknowledgement"].(map[string]any)
-	if !reflect.DeepEqual(embedded["required"], canonical["required"]) {
-		t.Fatalf("embedded acknowledgement required fields drifted: got=%v want=%v", embedded["required"], canonical["required"])
+	canonicalProperties := canonical["properties"].(map[string]any)
+	digestDefinition := canonical["$defs"].(map[string]any)["digest"]
+	for _, name := range []string{"scope_digest", "safety_policy_digest", "import_bounds_digest", "config_revision"} {
+		canonicalProperties[name] = digestDefinition
+	}
+	want := map[string]any{
+		"type": canonical["type"], "additionalProperties": canonical["additionalProperties"],
+		"required": canonical["required"], "properties": canonicalProperties,
+	}
+	if !reflect.DeepEqual(embedded, want) {
+		t.Fatalf("embedded acknowledgement schema drifted: got=%v want=%v", embedded, want)
 	}
 }
 

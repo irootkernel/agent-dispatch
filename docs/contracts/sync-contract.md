@@ -86,9 +86,12 @@ receiver, membership revision, content ref, and full target object ID. HTTP
 202 means the inbox transaction committed. It does not mean that Git fetch or
 content application completed.
 
-Fresh status uses a request-correlated nonce and identifies the responder and
-state incarnation. Cached evidence retains its original age and generation;
-echoing a new nonce does not make cached evidence fresh.
+Fresh status uses a request-correlated nonce and binds the membership revision,
+content ref, target commit, scope digest, and contract digest requested by the
+verifier. The response identifies the responder and state incarnation and
+reports governed dirtiness, pending work, membership currentness, and
+uncertainty. Cached evidence retains its original age and generation; echoing a
+new nonce does not make cached evidence fresh.
 
 Requests reject unknown fields, duplicate-field ambiguity, oversized input,
 wrong group or receiver, revoked identities, unsupported schemas, invalid

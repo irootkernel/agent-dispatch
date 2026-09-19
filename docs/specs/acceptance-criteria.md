@@ -201,7 +201,7 @@ The release gate is cumulative. A later gate cannot pass while an earlier gate i
 
 | ID | Given / When / Then |
 |---|---|
-| AC-1601 | Given an existing v0.1.8 configuration with no sync block, when it is loaded and ordinary commands run, then behavior is unchanged and no Git, network, service, or live-tree side effect occurs. |
+| AC-1601 | Given an existing v0.1.8 configuration with no sync block, when it is loaded and a side-effect-free ordinary inspection command runs, then its behavior is unchanged and no new sync-attributable Git, network, service, or live-tree side effect occurs. |
 | AC-1602 | Given disabled sync configuration, when capabilities and status run, then they identify the reserved contract and disabled state without fetching, applying, publishing, or starting a listener. |
 | AC-1603 | Given a third active member, overlapping resource, unapproved ref, non-Markdown scope, or inline secret, when configuration is validated, then it fails before a protected side effect. Given a cooperative-import acknowledgement whose locally bound inputs changed, when the contract-only currentness helper evaluates it, then the result is stale without claiming command-side enforcement or a live-tree effect. |
 | AC-1604 | Given contract fixtures for a membership document signed by an unpinned key, a self-authorizing trust root, a stale predecessor, or an obsolete state incarnation, when the provisional provider bundle is validated, then the closed result rejects the document without claiming runtime signature verification. |

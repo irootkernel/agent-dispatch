@@ -444,7 +444,8 @@ existing Markdown resource, one configured remote name, one content ref, one
 membership ref, one local instance, one pinned administrator key, one
 `remote_repository_digest` computed from the normalized credential-free remote
 repository identity, exactly two
-distinct nodes, command-only publisher and optional administrator signing-key
+distinct nodes with explicit positive `state_incarnation_id` declarations,
+command-only publisher and optional administrator signing-key
 references, direction-specific peer secret references, and bounded queue,
 history, subprocess time, and subprocess output values. Inline credentials,
 unknown fields, a third member, a non-Git resource, a public or credential-bearing
@@ -464,6 +465,9 @@ durable import-evidence suppression. It excludes only the acknowledgement itself
 Nodes are sorted by instance ID, routes by route ID, and scope/policy pattern
 lists lexically before canonical JSON serialization, so presentation order does
 not change the SHA-256 revision.
+The remote digest uses the canonicalization, domain separator, byte framing,
+and golden vectors in `sync-contract.md`; configuration producers and the E21
+Git adapter must implement that single algorithm.
 
 `cooperative_import_acknowledgement` is the complete versioned record, not a
 bare digest. It is current only when every record binding equals the normalized

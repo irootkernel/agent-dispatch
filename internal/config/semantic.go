@@ -74,6 +74,7 @@ func validateSync(cfg *Config) []error {
 		errs = append(errs, fmt.Errorf("sync.nodes must contain exactly two members"))
 	}
 	seen := map[string]bool{}
+	seenIncarnations := map[string]bool{}
 	seenPublisherKeys := map[string]bool{s.AdministratorKey: true}
 	seenCredentialRefs := map[string]bool{}
 	for name, ref := range map[string]string{"publisher_signing_key_ref": s.PublisherSigningKeyRef, "administrator_signing_key_ref": s.AdministratorSigningKeyRef} {
@@ -94,6 +95,10 @@ func validateSync(cfg *Config) []error {
 			errs = append(errs, fmt.Errorf("sync.nodes[%d].instance_id %q is duplicated", i, n.InstanceID))
 		}
 		seen[n.InstanceID] = true
+		if seenIncarnations[n.StateIncarnationID] {
+			errs = append(errs, fmt.Errorf("sync.nodes[%d].state_incarnation_id %q is duplicated", i, n.StateIncarnationID))
+		}
+		seenIncarnations[n.StateIncarnationID] = true
 		if n.InstanceID == s.LocalInstanceID {
 			local = true
 		}

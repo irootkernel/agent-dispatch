@@ -5,6 +5,23 @@ SOT snapshots, not product releases. Product release notes and pending user-faci
 changes belong to the root [changelog](../CHANGELOG.md). Historical entries below
 retain their recorded scope; migrated document pointers use their current paths.
 
+## 1.7.0 - Unreleased
+
+E20 freezes and qualifies the contract-only two-node sync baseline while G16
+and E20-T5 remain in review. This snapshot implements only disabled inspection;
+runtime publication, import, peer service, activation, installation, and
+release remain unimplemented.
+
+- Canonical membership, checkpoint, publication, delivery, import, control,
+  status, nudge, and verification records have closed schemas and fixtures.
+- The provider bundle pins reserved commands, authenticated peer routes,
+  semantic outcomes, errors, checksums, and an independent artifact-set golden.
+- Optional disabled configuration binds two declared node incarnations,
+  canonical SSH fingerprints, refs, endpoints, local secret references, the
+  normalized remote-repository identity digest, and cooperative-import safety.
+- `sync capabilities` and disabled `sync status` are the only implemented sync
+  surfaces. E21-T1 remains blocked on E20 closeout and exact reviewed revision.
+
 ## 1.6.0 - 2026-09-17
 
 D-030 admits the v0.2.0 two-node Wiki sync MVP as planned work. No sync runtime

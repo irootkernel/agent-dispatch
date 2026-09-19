@@ -25,7 +25,7 @@ sync:
   group_id: wiki-pair
   resource: vault-main
   remote_name: origin
-  remote_repository_digest: sha256:7777777777777777777777777777777777777777777777777777777777777777
+  remote_repository_digest: sha256:9436b709b57944f5c3a29127c41a1a24149159cb81a4e48bf5d0cebc49ed06be
   content_ref: refs/heads/wiki-sync
   membership_ref: refs/agent-dispatch/membership/wiki-pair
   local_instance_id: workstation-main
@@ -34,12 +34,14 @@ sync:
   administrator_signing_key_ref: env:SYNC_ADMINISTRATOR_SIGNING_KEY
   nodes:
     - instance_id: workstation-main
+      state_incarnation_id: workstation-main-state-001
       endpoint: https://node-a.example.ts.net
-      publisher_key: SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+      publisher_key: SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA
       credential_ref: env:SYNC_NODE_A_TO_B
     - instance_id: node-b
+      state_incarnation_id: node-b-0001
       endpoint: https://node-b.example.ts.net
-      publisher_key: SHA256:CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+      publisher_key: SHA256:CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCA
       credential_ref: env:SYNC_NODE_B_TO_A
   bounds:
     queue: 1000

@@ -109,20 +109,22 @@ func TestE20T4InvalidSyncInputsFailClosed(t *testing.T) {
 	tests := map[string]struct {
 		old, new, want string
 	}{
-		"unsafe ref":              {"refs/heads/wiki-sync", "refs/heads/wiki..sync", "safe Git ref"},
-		"inline secret":           {"env:SYNC_NODE_A_TO_B", "not-a-secret-reference", "does not match"},
-		"unknown resource":        {"resource: vault-main", "resource: missing-vault", "is not defined"},
-		"wrong local node":        {"local_instance_id: workstation-main", "local_instance_id: node-b", "must equal instance.id"},
-		"public endpoint":         {"node-a.example.ts.net", "public.example.com", "Tailscale HTTPS"},
-		"userinfo endpoint":       {"https://node-a.example.ts.net", "https://user:secret@node-a.example.ts.net", "must not contain userinfo"},
-		"endpoint port":           {"https://node-a.example.ts.net", "https://node-a.example.ts.net:8443", "must not specify a port"},
-		"short fingerprint":       {"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "SHA256:AAAAAAAAAAAAAAAAAAAA", "does not match"},
-		"invalid dot ref":         {"refs/heads/wiki-sync", "refs/heads/wiki/.hidden", "safe Git ref"},
-		"disabled git":            {"mode: optional", "mode: disabled", "must configure git.mode optional"},
-		"reused credential":       {"env:SYNC_NODE_B_TO_A", "env:SYNC_NODE_A_TO_B", "separately provisioned"},
-		"reused publisher":        {"SHA256:CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", "SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "must be distinct"},
-		"administrator publisher": {"SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "must be distinct"},
-		"duplicate node":          {"instance_id: node-b", "instance_id: workstation-main", "is duplicated"},
+		"unsafe ref":               {"refs/heads/wiki-sync", "refs/heads/wiki..sync", "safe Git ref"},
+		"inline secret":            {"env:SYNC_NODE_A_TO_B", "not-a-secret-reference", "does not match"},
+		"unknown resource":         {"resource: vault-main", "resource: missing-vault", "is not defined"},
+		"wrong local node":         {"local_instance_id: workstation-main", "local_instance_id: node-b", "must equal instance.id"},
+		"public endpoint":          {"node-a.example.ts.net", "public.example.com", "Tailscale HTTPS"},
+		"userinfo endpoint":        {"https://node-a.example.ts.net", "https://user:secret@node-a.example.ts.net", "must not contain userinfo"},
+		"endpoint port":            {"https://node-a.example.ts.net", "https://node-a.example.ts.net:8443", "must not specify a port"},
+		"short fingerprint":        {"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "SHA256:AAAAAAAAAAAAAAAAAAAA", "does not match"},
+		"noncanonical fingerprint": {"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "does not match"},
+		"invalid dot ref":          {"refs/heads/wiki-sync", "refs/heads/wiki/.hidden", "safe Git ref"},
+		"disabled git":             {"mode: optional", "mode: disabled", "must configure git.mode optional"},
+		"reused credential":        {"env:SYNC_NODE_B_TO_A", "env:SYNC_NODE_A_TO_B", "separately provisioned"},
+		"reused publisher":         {"SHA256:CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCA", "SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA", "must be distinct"},
+		"administrator publisher":  {"SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA", "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "must be distinct"},
+		"duplicate node":           {"instance_id: node-b", "instance_id: workstation-main", "is duplicated"},
+		"duplicate incarnation":    {"state_incarnation_id: node-b-0001", "state_incarnation_id: workstation-main-state-001", "is duplicated"},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -182,9 +184,10 @@ func TestE20T4SyncRevisionCoversGuardInputsAndIgnoresNodeOrder(t *testing.T) {
 			c.Sync.RemoteRepositoryDigest = "sha256:8888888888888888888888888888888888888888888888888888888888888888"
 		},
 		"membership ref":            func(c *Config) { c.Sync.MembershipRef += "-next" },
-		"administrator":             func(c *Config) { c.Sync.AdministratorKey = "SHA256:DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD" },
+		"administrator":             func(c *Config) { c.Sync.AdministratorKey = "SHA256:DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDA" },
 		"publisher":                 func(c *Config) { c.Sync.Nodes[1].PublisherKey = "SHA256:EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE" },
 		"node identity":             func(c *Config) { c.Sync.Nodes[1].InstanceID = "node-c" },
+		"state incarnation":         func(c *Config) { c.Sync.Nodes[1].StateIncarnationID = "node-c-0001" },
 		"endpoint":                  func(c *Config) { c.Sync.Nodes[1].Endpoint = "https://node-c.example.ts.net" },
 		"credential":                func(c *Config) { c.Sync.Nodes[1].CredentialRef = "env:SYNC_NODE_B_ROTATED" },
 		"publisher signing ref":     func(c *Config) { c.Sync.PublisherSigningKeyRef = "env:SYNC_PUBLISHER_ROTATED" },

@@ -134,7 +134,7 @@ Reserved code names — defined, never emitted in v0.1:
 | `batch_hard_limit` | `quarantined` (5) | A future policy that durably stores overflow evidence before holding it (today overflow converts to a reconciliation generation or refuses the context at exit 4). |
 | `protected_path_quarantined` | `quarantined` (5) | The same future durable-hold policy for protected paths (today a protected hold is an exit-0 disposition envelope). |
 | `unsafe_path_quarantined` | `quarantined` (5) | The same future durable-hold policy for unsafe paths (today the containment rejection fires first at exit 30). |
-| `sync_group_not_found` | `configuration` (3) | The selected sync group does not exist in the effective configuration. |
+| `sync_group_not_found` | `configuration` (3) | A sync block exists, but the selected group is not its configured group. With no sync block, read-only `sync status` returns the truthful `not_configured_or_disabled` result for the requested syntactically valid group and creates no trust domain. |
 | `sync_capability_unavailable` | `configuration` (3) | A reserved sync action has no implemented capability in this build. |
 | `sync_contract_mismatch` | `configuration` (3) | A configured or received sync contract version or digest is unsupported. |
 | `sync_payload_invalid` | `input_rejected` (4) | A sync record or peer payload fails its closed schema or bound. |

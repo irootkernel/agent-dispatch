@@ -16,6 +16,8 @@ import (
 	"strings"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/unicode/norm"
 	"gopkg.in/yaml.v3"
 )
 
@@ -55,14 +57,36 @@ var negativeTargets = []struct {
 }
 
 var expectedSemanticRejections = map[string]string{
-	"sync-import-duplicate-alias.json":            "unique under the resolved case mode",
-	"sync-verification-duplicate-node.json":       "pair instance identities must be distinct",
-	"sync-verification-obsolete-incarnation.json": "incarnation is obsolete or unexpected",
-	"sync-verification-false-freshness.json":      "freshness must be derived",
+	"sync-membership-administrator-key-reused.json": "key roles must be distinct",
+	"sync-membership-duplicate-instance.json":       "active membership instance identities must be distinct",
+	"sync-membership-duplicate-publisher-key.json":  "active membership publisher keys must be distinct",
+	"sync-membership-invalid-ref.json":              "valid configured Git ref",
+	"sync-membership-plan-stale-predecessor.json":   "membership plan binding mismatch",
+	"sync-nudge-invalid-ref.json":                   "valid configured Git ref",
+	"sync-import-duplicate-alias.json":              "unique under the resolved case mode",
+	"sync-import-unicode-alias.json":                "unique under the resolved case mode",
+	"sync-import-unsafe-path.json":                  "safe relative Markdown path",
+	"sync-publication-commit-mismatch.json":         "candidate and remote commits must match",
+	"sync-verification-duplicate-node.json":         "pair instance identities must be distinct",
+	"sync-verification-obsolete-incarnation.json":   "incarnation is obsolete or unexpected",
+	"sync-verification-false-freshness.json":        "freshness must be derived",
 }
 
-var expectedSchemaRejections = map[string]bool{
-	"sync-verification-false-complete.json": true,
+var expectedSchemaRejections = map[string]string{
+	"sync-checkpoint-malformed-oid.json":            "target_commit",
+	"sync-control-invalid-state.json":               "state",
+	"sync-delivery-contradictory-reason.json":       "reason",
+	"sync-delivery-unknown-without-retention.json":  "retain_until_resolved",
+	"sync-import-contradictory-reason.json":         "reason",
+	"sync-import-empty-target.json":                 "paths",
+	"sync-membership-plan-missing-predecessor.json": "expected_predecessor",
+	"sync-membership-public-endpoint.json":          "endpoint",
+	"sync-membership-third-active.json":             "active_members",
+	"sync-publication-contradictory-reason.json":    "reason",
+	"sync-publication-missing-proof.json":           "candidate_commit",
+	"sync-publication-unresolved-prunable.json":     "retain_until_resolved",
+	"sync-verification-empty-pair.json":             "nodes",
+	"sync-verification-false-complete.json":         "nodes",
 }
 
 var syncPositiveTargets = map[string]string{
@@ -85,11 +109,11 @@ var requiredSyncNegativeExamples = []string{
 	"sync-membership-third-active.json", "sync-membership-duplicate-instance.json",
 	"sync-membership-administrator-key-reused.json", "sync-membership-duplicate-publisher-key.json",
 	"sync-membership-public-endpoint.json",
-	"sync-membership-plan-stale-predecessor.json",
+	"sync-membership-plan-stale-predecessor.json", "sync-membership-plan-missing-predecessor.json",
 	"sync-checkpoint-malformed-oid.json", "sync-publication-missing-proof.json",
 	"sync-publication-commit-mismatch.json", "sync-publication-unresolved-prunable.json",
 	"sync-delivery-unknown-without-retention.json", "sync-membership-invalid-ref.json",
-	"sync-import-empty-target.json", "sync-import-unsafe-path.json", "sync-import-duplicate-alias.json", "sync-control-invalid-state.json",
+	"sync-import-empty-target.json", "sync-import-unsafe-path.json", "sync-import-duplicate-alias.json", "sync-import-unicode-alias.json", "sync-import-contradictory-reason.json", "sync-control-invalid-state.json",
 	"sync-nudge-invalid-ref.json", "sync-delivery-contradictory-reason.json", "sync-publication-contradictory-reason.json",
 	"sync-verification-obsolete-incarnation.json", "sync-verification-empty-pair.json",
 	"sync-verification-false-complete.json", "sync-verification-duplicate-node.json", "sync-verification-false-freshness.json",
@@ -323,9 +347,12 @@ func Validate(root string) ([]string, []Failure, error) {
 				continue
 			}
 		}
-		if expectedSchemaRejections[base] && schemaErr == nil {
-			failures = append(failures, Failure{rel, "expected schema rejection"})
-			continue
+		if want := expectedSchemaRejections[base]; want != "" {
+			semanticMatches := semanticErr == nil || strings.Contains(semanticErr.Error(), want)
+			if schemaErr == nil || !strings.Contains(schemaErr.Error(), want) || !semanticMatches {
+				failures = append(failures, Failure{rel, fmt.Sprintf("expected schema rejection at %q; schema=%v semantic=%v", want, schemaErr, semanticErr)})
+				continue
+			}
 		}
 		if schemaErr == nil && semanticErr == nil {
 			failures = append(failures, Failure{rel, "negative fixture unexpectedly validates"})
@@ -433,9 +460,9 @@ func validateSyncSemantics(doc any) error {
 			if !safeSyncMarkdownPath(path) {
 				return fmt.Errorf("import path is not a safe relative Markdown path")
 			}
-			canonical := path
+			canonical := norm.NFC.String(path)
 			if mode, _ := m["case_mode"].(string); mode == "insensitive" {
-				canonical = strings.ToLower(canonical)
+				canonical = cases.Fold().String(canonical)
 			}
 			if seenPaths[canonical] {
 				return fmt.Errorf("import paths must be unique under the resolved case mode")
@@ -458,21 +485,33 @@ func validateSyncSemantics(doc any) error {
 }
 
 func validateSyncMembership(m map[string]any) error {
-	if err := uniqueSyncIdentities(m, "active_members", "historical_members"); err != nil {
-		return err
-	}
 	administrator, _ := m["administrator_key"].(string)
-	keys := map[string]bool{administrator: true}
+	activeInstances := map[string]bool{}
+	activeKeys := map[string]bool{}
+	incarnations := map[string]bool{}
 	for _, field := range []string{"active_members", "historical_members"} {
 		entries, _ := m[field].([]any)
 		for _, raw := range entries {
 			entry, _ := raw.(map[string]any)
-			key, _ := entry["publisher_key"].(string)
-			if key == "" || keys[key] {
-				return fmt.Errorf("membership administrator and publisher keys must be distinct")
+			instance, _ := entry["instance_id"].(string)
+			incarnation, _ := entry["state_incarnation_id"].(string)
+			if incarnation == "" || incarnations[incarnation] {
+				return fmt.Errorf("membership incarnation identities must be unique")
 			}
-			keys[key] = true
+			incarnations[incarnation] = true
+			key, _ := entry["publisher_key"].(string)
+			if key == "" || key == administrator {
+				return fmt.Errorf("membership administrator and publisher key roles must be distinct")
+			}
 			if field == "active_members" {
+				if instance == "" || activeInstances[instance] {
+					return fmt.Errorf("active membership instance identities must be distinct")
+				}
+				if activeKeys[key] {
+					return fmt.Errorf("active membership publisher keys must be distinct")
+				}
+				activeInstances[instance] = true
+				activeKeys[key] = true
 				if err := validateSyncMemberEndpoint(fmt.Sprint(entry["endpoint"])); err != nil {
 					return err
 				}
@@ -507,25 +546,6 @@ func safeSyncMarkdownPath(raw string) bool {
 	}
 	lower := strings.ToLower(raw)
 	return strings.HasSuffix(lower, ".md") || strings.HasSuffix(lower, ".markdown")
-}
-
-func uniqueSyncIdentities(m map[string]any, fields ...string) error {
-	seenInstances := map[string]bool{}
-	seenIncarnations := map[string]bool{}
-	for _, field := range fields {
-		entries, _ := m[field].([]any)
-		for _, raw := range entries {
-			entry, _ := raw.(map[string]any)
-			instance, _ := entry["instance_id"].(string)
-			incarnation, _ := entry["state_incarnation_id"].(string)
-			if instance == "" || seenInstances[instance] || incarnation == "" || seenIncarnations[incarnation] {
-				return fmt.Errorf("membership instance and incarnation identities must be unique")
-			}
-			seenInstances[instance] = true
-			seenIncarnations[incarnation] = true
-		}
-	}
-	return nil
 }
 
 func sameJSONScalar(a, b any) bool { return fmt.Sprint(a) == fmt.Sprint(b) }

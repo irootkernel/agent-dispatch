@@ -1,8 +1,8 @@
 {
   "schema_version":"agent-dispatch.sync-provider.trust-fixtures/v1",
   "fixtures":[
-    {"name":"membership-unpinned-administrator","document_key":"SHA256:ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ","pinned_key":"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","self_authorizing":false,"predecessor_matches":true,"state_incarnation_current":true,"expected_code":"sync_trust_failed"},
-    {"name":"membership-self-authorizing-root","document_key":"SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB","pinned_key":"SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB","self_authorizing":true,"predecessor_matches":true,"state_incarnation_current":true,"expected_code":"sync_trust_failed"},
+    {"name":"membership-unpinned-administrator","document_key":"SHA256:ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZA","pinned_key":"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","self_authorizing":false,"predecessor_matches":true,"state_incarnation_current":true,"expected_code":"sync_trust_failed"},
+    {"name":"membership-self-authorizing-root","document_key":"SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA","pinned_key":"SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA","self_authorizing":true,"predecessor_matches":true,"state_incarnation_current":true,"expected_code":"sync_trust_failed"},
     {"name":"membership-stale-predecessor","document_key":"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","pinned_key":"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","self_authorizing":false,"predecessor_matches":false,"state_incarnation_current":true,"expected_code":"sync_precondition_failed"},
     {"name":"verification-obsolete-incarnation","document_key":"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","pinned_key":"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","self_authorizing":false,"predecessor_matches":true,"state_incarnation_current":false,"expected_code":"sync_identity_obsolete"}
   ],

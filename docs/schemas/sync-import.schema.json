@@ -15,9 +15,12 @@
     "attempts": {"type": "integer", "minimum": 0, "maximum": 20}, "claim_owner": {"oneOf": [{"$ref": "#/$defs/id"}, {"type": "null"}]}, "fence": {"type": "integer", "minimum": 1}, "retain_until_resolved": {"type": "boolean"}
   },
   "allOf": [
+    {"if": {"properties": {"state": {"enum": ["requested", "fetched", "validated", "applying"]}}, "required": ["state"]}, "then": {"properties": {"reason": {"const": "none"}, "retain_until_resolved": {"const": true}}}},
     {"if": {"properties": {"state": {"const": "applied"}}, "required": ["state"]}, "then": {"properties": {"reason": {"const": "none"}, "retain_until_resolved": {"const": false}}}},
-    {"if": {"properties": {"state": {"enum": ["requested", "fetched", "validated", "deferred", "applying", "blocked", "recovering", "uncertain"]}}, "required": ["state"]}, "then": {"properties": {"retain_until_resolved": {"const": true}}}},
-    {"if": {"properties": {"state": {"enum": ["deferred", "blocked", "recovering", "uncertain"]}}, "required": ["state"]}, "then": {"not": {"properties": {"reason": {"const": "none"}}, "required": ["reason"]}}}
+    {"if": {"properties": {"state": {"const": "deferred"}}, "required": ["state"]}, "then": {"properties": {"reason": {"enum": ["acknowledgement_stale", "local_overlap", "untracked_collision", "git_unstable"]}, "retain_until_resolved": {"const": true}}}},
+    {"if": {"properties": {"state": {"const": "blocked"}}, "required": ["state"]}, "then": {"properties": {"reason": {"enum": ["membership_stale", "history_uncovered", "history_diverged", "trust_failed", "bound_exhausted"]}, "retain_until_resolved": {"const": true}}}},
+    {"if": {"properties": {"state": {"const": "recovering"}}, "required": ["state"]}, "then": {"properties": {"reason": {"const": "partial_effect"}, "retain_until_resolved": {"const": true}}}},
+    {"if": {"properties": {"state": {"const": "uncertain"}}, "required": ["state"]}, "then": {"properties": {"reason": {"const": "partial_effect"}, "retain_until_resolved": {"const": true}}}}
   ],
   "$defs": {"id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,127}$"}, "group": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"}, "oid": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"}, "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "digestOrAbsent": {"oneOf": [{"$ref": "#/$defs/digest"}, {"const": "absent"}]}}
 }

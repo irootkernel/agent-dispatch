@@ -11,7 +11,7 @@
 | Field | Value |
 |---|---|
 | Shipped release | v0.1.8 (published 2026-09-10) |
-| Planned SOT baseline | 1.6.0 ([D-030](../specs/decision-log.md); G16-G18 open) |
+| Planned SOT baseline | 1.7.0 Unreleased ([D-030](../specs/decision-log.md); G16-G18 open) |
 | Release target | v0.2.0 (Two-Node Wiki Sync MVP) |
 | Current epic | E20 Two-Node Sync Contracts and Admission (In Progress) |
 | Current active task | E20-T5 (In Review) |
@@ -28,8 +28,9 @@
 - [SOT changelog](../SOT-CHANGELOG.md) records specification changes and historical corrections.
 - [Product changelog](../../CHANGELOG.md) records product releases.
 - [Validation](../VALIDATION.md) records executable gates and release evidence.
-- [Traceability matrix](../specs/traceability-matrix.md) maps requirements and
-  acceptance criteria to roadmap tasks.
+- [Traceability matrix](../specs/traceability-matrix.md) maps normative
+  requirement IDs to roadmap tasks; gate sections own acceptance-criterion
+  evidence.
 
 ## 2. Epic Summary
 

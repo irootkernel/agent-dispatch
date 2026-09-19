@@ -14,7 +14,7 @@
     "contract_digest": {"$ref": "#/$defs/digest"},
     "mode": {"enum": ["normal", "blocked_emergency"]},
     "block_reason": {"enum": ["emergency_revocation", "active_member_shortfall"]},
-    "administrator_key": {"type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{43}$"},
+    "administrator_key": {"type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]$"},
     "active_members": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/active"}},
     "historical_members": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/historical"}}
   },
@@ -27,7 +27,7 @@
     "identity": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"},
     "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "incarnation": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{7,127}$"},
-    "active": {"type": "object", "additionalProperties": false, "required": ["instance_id", "state_incarnation_id", "publisher_key", "endpoint"], "properties": {"instance_id": {"$ref": "#/$defs/identity"}, "state_incarnation_id": {"$ref": "#/$defs/incarnation"}, "publisher_key": {"type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{43}$"}, "endpoint": {"type": "string", "format": "uri", "pattern": "^https://[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\\.ts\\.net/?$"}}},
-    "historical": {"type": "object", "additionalProperties": false, "required": ["instance_id", "state_incarnation_id", "state", "publisher_key", "reason"], "properties": {"instance_id": {"$ref": "#/$defs/identity"}, "state_incarnation_id": {"$ref": "#/$defs/incarnation"}, "state": {"enum": ["retired", "revoked"]}, "publisher_key": {"type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{43}$"}, "reason": {"enum": ["planned_replacement", "key_rotation", "credential_compromise", "operator_revocation"]}}}
+    "active": {"type": "object", "additionalProperties": false, "required": ["instance_id", "state_incarnation_id", "publisher_key", "endpoint"], "properties": {"instance_id": {"$ref": "#/$defs/identity"}, "state_incarnation_id": {"$ref": "#/$defs/incarnation"}, "publisher_key": {"type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]$"}, "endpoint": {"type": "string", "format": "uri", "pattern": "^https://[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\\.ts\\.net/?$"}}},
+    "historical": {"type": "object", "additionalProperties": false, "required": ["instance_id", "state_incarnation_id", "state", "publisher_key", "reason"], "properties": {"instance_id": {"$ref": "#/$defs/identity"}, "state_incarnation_id": {"$ref": "#/$defs/incarnation"}, "state": {"enum": ["retired", "revoked"]}, "publisher_key": {"type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]$"}, "reason": {"enum": ["planned_replacement", "key_rotation", "credential_compromise", "operator_revocation"]}}}
   }
 }

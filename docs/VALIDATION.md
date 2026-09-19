@@ -9,7 +9,7 @@ the [documentation index](README.md); for delivery status use the
 > **Current candidate:** 2026-09-19 (E20-T5 in review; gate G16 is not yet
 > closed; 105 of 116 roadmap tasks are complete, one is in review, and ten are
 > planned)
-> **Package target:** Agent Dispatch SOT 1.6.0 / shipped implementation v0.1.8
+> **Package target:** Agent Dispatch SOT 1.7.0 Unreleased / shipped implementation v0.1.8
 > plus the planned v0.2.0 sync contract
 
 ## Completed Checks
@@ -38,7 +38,7 @@ the [documentation index](README.md); for delivery status use the
 
 - Markdown files: 97 on the current package basis
 - JSON Schemas: 31
-- Example files: 57 (32 top-level JSON examples, 24 registered invalid JSON fixtures, and one YAML configuration example)
+- Example files: 60 (32 top-level JSON examples, 27 registered invalid JSON fixtures, and one YAML configuration example)
 - Integration reports: 4 (Hermes public interface E0-T4, Watchman public interface E0-T5, real-Hermes G11 evidence E15-T4, cold-validation evidence E17-T2)
 - Integration fixtures: 42 files, 9 under `integrations/fixtures/hermes/` and 33 under `integrations/fixtures/watchman/`
 - Roadmap tasks: 116 (105 Completed, one In Review, ten Planned)

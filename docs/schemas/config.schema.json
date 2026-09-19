@@ -144,7 +144,7 @@
         },
         "administrator_key": {
           "type": "string",
-          "pattern": "^SHA256:[A-Za-z0-9+/]{43}$"
+          "pattern": "^SHA256:[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]$"
         },
         "publisher_signing_key_ref": {
           "$ref": "#/$defs/secretRef"
@@ -218,7 +218,7 @@
             },
             "administrator_key": {
               "type": "string",
-              "pattern": "^SHA256:[A-Za-z0-9+/]{43}$"
+              "pattern": "^SHA256:[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]$"
             },
             "safety_policy_digest": {
               "type": "string",
@@ -243,6 +243,7 @@
             "additionalProperties": false,
             "required": [
               "instance_id",
+              "state_incarnation_id",
               "endpoint",
               "publisher_key",
               "credential_ref"
@@ -252,6 +253,10 @@
                 "type": "string",
                 "pattern": "^[a-z][a-z0-9-]{0,62}$"
               },
+              "state_incarnation_id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]{7,127}$"
+              },
               "endpoint": {
                 "type": "string",
                 "format": "uri",
@@ -259,7 +264,7 @@
               },
               "publisher_key": {
                 "type": "string",
-                "pattern": "^SHA256:[A-Za-z0-9+/]{43}$"
+                "pattern": "^SHA256:[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]$"
               },
               "credential_ref": {
                 "$ref": "#/$defs/secretRef"

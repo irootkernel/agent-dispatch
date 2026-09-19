@@ -8,8 +8,8 @@
   "mode": "normal",
   "administrator_key": "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
   "active_members": [
-    {"instance_id": "node-a", "state_incarnation_id": "node-a-0001", "publisher_key": "SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "endpoint": "https://node-a.example.ts.net"},
-    {"instance_id": "node-b", "state_incarnation_id": "node-b-0001", "publisher_key": "SHA256:CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", "endpoint": "https://node-b.example.ts.net"}
+    {"instance_id": "node-a", "state_incarnation_id": "node-a-0001", "publisher_key": "SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA", "endpoint": "https://node-a.example.ts.net"},
+    {"instance_id": "node-b", "state_incarnation_id": "node-b-0001", "publisher_key": "SHA256:CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCA", "endpoint": "https://node-b.example.ts.net"}
   ],
   "historical_members": []
 }

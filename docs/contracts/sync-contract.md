@@ -67,6 +67,11 @@ bootstrap, endpoint/key update, replacement, retirement, revocation, and
 incarnation re-registration. The plan uses a closed change-kind enum. Apply
 requires the same plan identity, expected membership predecessor, separate
 administrator key role, and non-force ref update.
+The plan takes node endpoint, publisher key, and positive
+`state_incarnation_id` values from the validated local sync block. This makes
+bootstrap constructible without peer discovery; the operator must update the
+declared incarnation before an `incarnation_registration` plan. Non-bootstrap
+plans require a non-null full predecessor object ID.
 
 `sync checkpoint plan|apply` creates the administrator-signed content adoption
 evidence used for an initial baseline, reviewed conflict resolution, or visible
@@ -138,6 +143,12 @@ Publication `published`, delivery `accepted`, import `applied`, and verification
 stable logical record ID, attempt count, claim owner where applicable, and a
 monotonic fence before an external effect. Retries reuse the logical ID and a
 new fence; lease expiry, process loss, or timeout alone cannot advance state.
+The provider `results.json` file freezes semantic outcome fragments, not the
+literal CLI wire envelope. CLI responses wrap those fragments in
+`agent-dispatch.cli/v1` and may add target identity fields; the error registry
+owns error code, category, and exit status. Verification completion explicitly
+does not prove historical delivery, which remains a separate delivery-record
+query and report section.
 
 Membership history binds the group, predecessor, pinned
 administrator key, and node identity plus positive incarnation. Normal mode
@@ -174,10 +185,24 @@ verification target but does not by itself rewrite the acknowledgement. E21
 must recompute the repository digest from the actual Git remote immediately
 before each protected effect; retargeting the same remote name invalidates it.
 
+The repository identity digest is `sha256(domain || NUL || canonical || LF)`,
+where `domain` is the ASCII string `agent-dispatch.remote-repository/v1`.
+`canonical` is an absolute `https` or `ssh` URI only: lowercase scheme and
+host, no password, query, fragment, percent encoding, dot segment, or
+non-default port; default ports are removed; an SSH username is preserved;
+the path is NFC-normalized, begins with exactly one slash, removes one trailing
+slash and a terminal `.git`, and otherwise preserves case. SCP-like syntax is
+rejected rather than guessed. For example:
+
+| Input | Canonical | Digest |
+|---|---|---|
+| `https://GitHub.com/RootKernel/wiki.git` | `https://github.com/RootKernel/wiki` | `sha256:9436b709b57944f5c3a29127c41a1a24149159cb81a4e48bf5d0cebc49ed06be` |
+| `ssh://git@GitHub.com:22/RootKernel/wiki/` | `ssh://git@github.com/RootKernel/wiki` | `sha256:aa989e912c28bec592cc816f21cdafe4efaac13cd23570c2a505028c5c4f7a4f` |
+
 ## Bounds and retention
 
 The v1 contract caps active members at two, historical membership entries at
-1,000, import paths at 1,000, publication and delivery attempts at 20, peer
+1,000, import paths at 1,000, publication, delivery, and import attempts at 20, peer
 payloads at 256 KiB, retained-record pages at 100 items, Git history inspection
 at 1,000 commits, subprocess output at 1 MiB per stream, and subprocess runtime
 at 120 seconds. Sync work queues hold at most 1,000 obligations per group,

@@ -94,7 +94,7 @@ func TestCheckDerivesTrustFixtureOutcome(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw = []byte(strings.Replace(string(raw),
-		`"document_key":"SHA256:ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"`,
+		`"document_key":"SHA256:ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZA"`,
 		`"document_key":"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"`, 1))
 	if err := os.WriteFile(path, raw, 0o644); err != nil {
 		t.Fatal(err)
@@ -113,7 +113,7 @@ func TestEvaluateTrustFixtureRejectsEachIndependentAxis(t *testing.T) {
 		selfAuthorizing, predecessor, incarnation bool
 		want                                      string
 	}{
-		{"unpinned", "SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", pinned, false, true, true, "sync_trust_failed"},
+		{"unpinned", "SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA", pinned, false, true, true, "sync_trust_failed"},
 		{"self-authorizing", pinned, pinned, true, true, true, "sync_trust_failed"},
 		{"stale predecessor", pinned, pinned, false, false, true, "sync_precondition_failed"},
 		{"obsolete incarnation", pinned, pinned, false, true, false, "sync_identity_obsolete"},

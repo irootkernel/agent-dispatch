@@ -65,10 +65,11 @@ type SyncImportAcknowledgement struct {
 }
 
 type SyncNode struct {
-	InstanceID    string `yaml:"instance_id" json:"instance_id"`
-	Endpoint      string `yaml:"endpoint" json:"endpoint"`
-	PublisherKey  string `yaml:"publisher_key" json:"publisher_key"`
-	CredentialRef string `yaml:"credential_ref" json:"credential_ref"`
+	InstanceID         string `yaml:"instance_id" json:"instance_id"`
+	StateIncarnationID string `yaml:"state_incarnation_id" json:"state_incarnation_id"`
+	Endpoint           string `yaml:"endpoint" json:"endpoint"`
+	PublisherKey       string `yaml:"publisher_key" json:"publisher_key"`
+	CredentialRef      string `yaml:"credential_ref" json:"credential_ref"`
 }
 
 type SyncBounds struct {

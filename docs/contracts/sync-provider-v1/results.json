@@ -1,9 +1,10 @@
 {
   "schema_version": "agent-dispatch.sync-provider.results/v1",
+  "projection": "semantic_outcome_fragment",
   "unavailable": {"ok":false,"error_code":"sync_capability_unavailable","category":"configuration","exit_code":3,"side_effects":[]},
   "disabled_status": {"ok":true,"state":"disabled","reason":"not_configured_or_disabled","side_effects":[]},
   "nudge_accepted": {"ok":true,"state":"accepted","proof":"inbox_committed","does_not_prove":["fetch","import","verification"]},
   "publication_confirmed": {"ok":true,"state":"published","proof":"remote_ref_matches_candidate","does_not_prove":["nudge_acceptance","import","verification"]},
   "import_completed": {"ok":true,"state":"applied","proof":"journal_and_path_evidence_committed","does_not_prove":["historical_delivery","verification"]},
-  "verification_completed": {"ok":true,"state":"complete","proof":"fresh_two_node_evidence","does_not_prove":[]}
+  "verification_completed": {"ok":true,"state":"complete","proof":"fresh_two_node_evidence","does_not_prove":["historical_delivery"]}
 }

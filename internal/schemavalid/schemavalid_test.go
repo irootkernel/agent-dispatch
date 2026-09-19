@@ -117,7 +117,7 @@ func TestValidateRejectsNegativeFixtureThatPasses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(failures) != 1 || !strings.Contains(failures[0].Detail, "unexpectedly validates") {
+	if len(failures) != 1 || (!strings.Contains(failures[0].Detail, "unexpectedly validates") && !strings.Contains(failures[0].Detail, "expected schema rejection")) {
 		t.Fatalf("expected one negative-fixture failure, got: %v", failures)
 	}
 }
@@ -152,6 +152,23 @@ func TestSyncSemanticValidationRejectsStaleMembershipPlan(t *testing.T) {
 	}
 	if err := validateSyncSemantics(doc); err == nil || !strings.Contains(err.Error(), "binding mismatch") {
 		t.Fatalf("expected stale-plan rejection, got %v", err)
+	}
+}
+
+func TestSyncMembershipAllowsRetainedIncarnationHistory(t *testing.T) {
+	doc := map[string]any{
+		"schema_version":    "agent-dispatch.sync-membership/v1",
+		"administrator_key": "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"active_members": []any{
+			map[string]any{"instance_id": "node-a", "state_incarnation_id": "node-a-0002", "publisher_key": "SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA", "endpoint": "https://node-a.example.ts.net"},
+			map[string]any{"instance_id": "node-b", "state_incarnation_id": "node-b-0001", "publisher_key": "SHA256:CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCA", "endpoint": "https://node-b.example.ts.net"},
+		},
+		"historical_members": []any{
+			map[string]any{"instance_id": "node-a", "state_incarnation_id": "node-a-0001", "publisher_key": "SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA"},
+		},
+	}
+	if err := validateSyncSemantics(doc); err != nil {
+		t.Fatalf("retained prior incarnation must remain representable: %v", err)
 	}
 }
 

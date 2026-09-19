@@ -64,7 +64,8 @@ var expectedSemanticRejections = map[string]string{
 	"sync-membership-plan-stale-predecessor.json":   "membership plan binding mismatch",
 	"sync-nudge-invalid-ref.json":                   "valid configured Git ref",
 	"sync-import-duplicate-alias.json":              "unique under the resolved case mode",
-	"sync-import-unicode-alias.json":                "unique under the resolved case mode",
+	"sync-import-sensitive-alias.json":              "unique under the conservative path identity",
+	"sync-import-unicode-alias.json":                "unique under the conservative path identity",
 	"sync-import-unsafe-path.json":                  "safe relative Markdown path",
 	"sync-publication-commit-mismatch.json":         "candidate and remote commits must match",
 	"sync-verification-duplicate-node.json":         "pair instance identities must be distinct",
@@ -113,7 +114,7 @@ var requiredSyncNegativeExamples = []string{
 	"sync-checkpoint-malformed-oid.json", "sync-publication-missing-proof.json",
 	"sync-publication-commit-mismatch.json", "sync-publication-unresolved-prunable.json",
 	"sync-delivery-unknown-without-retention.json", "sync-membership-invalid-ref.json",
-	"sync-import-empty-target.json", "sync-import-unsafe-path.json", "sync-import-duplicate-alias.json", "sync-import-unicode-alias.json", "sync-import-contradictory-reason.json", "sync-control-invalid-state.json",
+	"sync-import-empty-target.json", "sync-import-unsafe-path.json", "sync-import-duplicate-alias.json", "sync-import-sensitive-alias.json", "sync-import-unicode-alias.json", "sync-import-contradictory-reason.json", "sync-control-invalid-state.json",
 	"sync-nudge-invalid-ref.json", "sync-delivery-contradictory-reason.json", "sync-publication-contradictory-reason.json",
 	"sync-verification-obsolete-incarnation.json", "sync-verification-empty-pair.json",
 	"sync-verification-false-complete.json", "sync-verification-duplicate-node.json", "sync-verification-false-freshness.json",
@@ -460,11 +461,15 @@ func validateSyncSemantics(doc any) error {
 			if !safeSyncMarkdownPath(path) {
 				return fmt.Errorf("import path is not a safe relative Markdown path")
 			}
-			canonical := norm.NFC.String(path)
-			if mode, _ := m["case_mode"].(string); mode == "insensitive" {
-				canonical = cases.Fold().String(canonical)
-			}
+			// Alias admission is deliberately stricter than the record's
+			// resolved application mode. NFC plus Unicode case folding on every
+			// host prevents a caller-authored case_mode from weakening the
+			// cross-node path identity boundary.
+			canonical := cases.Fold().String(norm.NFC.String(path))
 			if seenPaths[canonical] {
+				if mode, _ := m["case_mode"].(string); mode == "sensitive" {
+					return fmt.Errorf("import paths must be unique under the conservative path identity")
+				}
 				return fmt.Errorf("import paths must be unique under the resolved case mode")
 			}
 			seenPaths[canonical] = true

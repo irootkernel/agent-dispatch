@@ -62,7 +62,10 @@ JSON-only, side-effect-free `sync capabilities` and disabled-only `sync status`;
 other identity returns `sync_capability_unavailable` at exit 3 until its owning
 E21 or E22 task implements and truthfully advertises it. The executable
 descriptor and peer contract bundle is
-[`sync-provider-v1`](sync-provider-v1/bundle.json).
+[`sync-provider-v1`](sync-provider-v1/bundle.json). Capabilities reports both
+`contract_version` and the normative `contract_digest` defined by the sync
+contract so independent consumers can bind their records to this exact v1
+semantic contract.
 
 ### Sync retained-record lists
 

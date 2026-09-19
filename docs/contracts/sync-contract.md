@@ -154,6 +154,9 @@ Membership history binds the group, predecessor, pinned
 administrator key, and node identity plus positive incarnation. Normal mode
 has exactly two active members. Emergency revocation may produce a blocked
 zero- or one-member roster while retired and revoked entries remain auditable.
+A prior incarnation retained after a destructive reset uses the closed
+`incarnation_rotation` historical reason; it may retain the same stable
+instance and publisher key while its incarnation remains globally unique.
 A membership apply with a predecessor other than the reviewed plan predecessor
 is `sync_precondition_failed`; an evidence record naming an older incarnation
 is `sync_identity_obsolete`. The document does not embed its own Git object ID:
@@ -178,18 +181,64 @@ The cooperative-import acknowledgement is a distinct versioned record over
 the group, resource, configured remote name, normalized credential-free remote
 repository digest, refs, scope digest, local instance
 and state incarnation, pinned administrator key, safety-policy digest, import
-bounds digest, and normalized configuration revision. Any changed local input
-changes that revision and makes the prior acknowledgement ineligible for live
-application; membership movement under the same trust policy affects the
-verification target but does not by itself rewrite the acknowledgement. E21
+bounds digest, and normalized acknowledgement-configuration revision. Any
+changed SYN-009 local input changes that revision and makes the prior
+acknowledgement ineligible for live application. The peer roster, publisher
+keys, endpoints, peer credentials, and signing-key references are membership
+or publication inputs, not acknowledgement inputs: movement under the same
+administrator trust policy affects the verification target but does not by
+itself rewrite the acknowledgement. E21
 must recompute the repository digest from the actual Git remote immediately
 before each protected effect; retargeting the same remote name invalidates it.
+
+Every sync digest other than the repository identity uses the same byte
+framing: `sha256(domain || NUL || canonical_json || LF)`. `canonical_json` is
+UTF-8, compact JSON over the contract's closed projection: object keys are
+lexically sorted by Unicode code point; strings use JSON escaping; integers
+use unsigned base-10 without leading zeros; booleans are lowercase; arrays
+retain only the explicitly defined order below; floats and nulls are absent.
+This restricted form is the complete canonicalization rule, not a reference
+to producer-specific map iteration or pretty printing.
+
+| Digest | Domain and canonical projection |
+|---|---|
+| `contract_digest` | Domain `agent-dispatch.sync-contract/v1`; object `{"schema_version":"agent-dispatch.sync-contract/v1"}`. A semantic contract change requires a new version. |
+| `scope_digest` | Domain `agent-dispatch.sync-scope/v1`; array of route objects with `route_id`, sorted `include`, `exclude`, `protected`, and `immutable` arrays. Routes are ordered by `route_id`. |
+| `safety_policy_digest` | Domain `agent-dispatch.sync-safety-policy/v1`; the closed boolean SYN-010 policy object implemented by `syncSafetyPolicy`. |
+| `import_bounds_digest` | Domain `agent-dispatch.sync-import-bounds/v1`; object with `history_commits`, `queue`, `subprocess_bytes`, and `subprocess_seconds`. |
+| `config_revision` | Domain `agent-dispatch.sync-acknowledgement-config/v1`; object with that `schema_version`, group/resource IDs, complete resource shape, remote name and repository digest, content/membership refs, local/global instance IDs, administrator key, and the three digests above. It excludes enabled state, acknowledgement bytes, peer roster, endpoints, publisher keys, peer credentials, and signing-key references. |
+
+The safety-policy projection is exactly the following closed object; every
+value is `true`:
+
+```json
+{"defer_unproven_disjointness":true,"durable_preapply_journal":true,"exact_import_suppression":true,"fast_forward_only":true,"participating_writer_idle":true,"preserve_disjoint_changes":true,"preserve_ignored_files":true,"preserve_out_of_scope":true,"preserve_watchman_evidence":true,"reject_git_instability":true,"reject_overlapping_changes":true,"reject_untracked_overwrite":true,"resource_writer_guard":true}
+```
+
+The complete resource subobject in `config_revision` has exactly `type`,
+`root`, `file_scope`, and optional `git`; when present, `git` has exactly
+`mode`. The remaining projection keys are exactly `schema_version`, `group_id`,
+`resource_id`, `resource`, `remote_name`, `remote_repository_digest`,
+`content_ref`, `membership_ref`, `local_instance_id`, `global_instance_id`,
+`administrator_key`, `scope_digest`, `safety_policy_digest`, and
+`import_bounds_digest`. No unspecified configuration field participates.
+
+For `docs/examples/config.yaml`, the frozen digest vectors are:
+
+| Value | Digest |
+|---|---|
+| contract | `sha256:30cf47b1bd854a0271aa9df3e7b37f0cc14cdd86d3f06a65a2cb787c6741131b` |
+| scope | `sha256:1e134a9296b8652b4fd887c8be2c2596caee32ac0523f058d516af8fd4958320` |
+| safety policy | `sha256:f93ce592981e9d78d7041f8de390c79339746fb16504390e44f85292ce7a6ea7` |
+| import bounds | `sha256:d13cc49b2ff321137a8f46a8829c42d0db7591f0a8732a4c5ba2916ab4142f56` |
+| acknowledgement configuration | `sha256:4c51fc2e6f16977d433729dbe1718ed04ecbaee95901ef1d065c9076ea9f186b` |
 
 The repository identity digest is `sha256(domain || NUL || canonical || LF)`,
 where `domain` is the ASCII string `agent-dispatch.remote-repository/v1`.
 `canonical` is an absolute `https` or `ssh` URI only: lowercase scheme and
-host, no password, query, fragment, percent encoding, dot segment, or
-non-default port; default ports are removed; an SSH username is preserved;
+host, no query, fragment, percent encoding, dot segment, or non-default port.
+HTTPS forbids all userinfo. SSH requires one non-empty username, preserves it,
+and forbids a password. Default ports are removed;
 the path is NFC-normalized, begins with exactly one slash, removes one trailing
 slash and a terminal `.git`, and otherwise preserves case. SCP-like syntax is
 rejected rather than guessed. For example:
@@ -198,6 +247,17 @@ rejected rather than guessed. For example:
 |---|---|---|
 | `https://GitHub.com/RootKernel/wiki.git` | `https://github.com/RootKernel/wiki` | `sha256:9436b709b57944f5c3a29127c41a1a24149159cb81a4e48bf5d0cebc49ed06be` |
 | `ssh://git@GitHub.com:22/RootKernel/wiki/` | `ssh://git@github.com/RootKernel/wiki` | `sha256:aa989e912c28bec592cc816f21cdafe4efaac13cd23570c2a505028c5c4f7a4f` |
+
+`https://alice@github.com/RootKernel/wiki`, `ssh://github.com/RootKernel/wiki`,
+and every URI with a password are rejected rather than canonicalized.
+
+An import record's `case_mode` is derived from the current resource path
+policy and is rechecked with the acknowledgement and resource revision before
+application. It is never an alias-safety selector: every import path set is
+conservatively unique under NFC normalization plus Unicode case folding on
+all hosts. A record that declares `sensitive` therefore still rejects paths
+such as `Wiki/Index.md` and `wiki/index.md`; a caller cannot weaken cross-node
+path identity by choosing the field.
 
 ## Bounds and retention
 

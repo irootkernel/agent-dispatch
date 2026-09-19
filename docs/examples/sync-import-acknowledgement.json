@@ -1,6 +1,6 @@
 {
   "schema_version": "agent-dispatch.sync-import-acknowledgement/v1", "acknowledgement_id": "import-ack-001", "group_id": "wiki-pair", "resource_id": "wiki",
   "remote_name": "origin", "remote_repository_digest": "sha256:9436b709b57944f5c3a29127c41a1a24149159cb81a4e48bf5d0cebc49ed06be", "content_ref": "refs/heads/wiki-sync", "membership_ref": "refs/agent-dispatch/membership/wiki-pair",
-  "scope_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "local_instance_id": "node-b", "state_incarnation_id": "node-b-0001",
-  "administrator_key": "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "safety_policy_digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "import_bounds_digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "config_revision": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+  "scope_digest": "sha256:1e134a9296b8652b4fd887c8be2c2596caee32ac0523f058d516af8fd4958320", "local_instance_id": "node-b", "state_incarnation_id": "node-b-0001",
+  "administrator_key": "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "safety_policy_digest": "sha256:f93ce592981e9d78d7041f8de390c79339746fb16504390e44f85292ce7a6ea7", "import_bounds_digest": "sha256:d13cc49b2ff321137a8f46a8829c42d0db7591f0a8732a4c5ba2916ab4142f56", "config_revision": "sha256:4c51fc2e6f16977d433729dbe1718ed04ecbaee95901ef1d065c9076ea9f186b"
 }

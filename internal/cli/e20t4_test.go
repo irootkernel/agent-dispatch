@@ -23,6 +23,9 @@ func TestE20T4SyncCapabilitiesAndDisabledStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := envelope["result"].(map[string]any)
+	if result["contract_digest"] != configpkg.SyncContractDigest() {
+		t.Fatalf("contract digest = %v", result["contract_digest"])
+	}
 	caps := result["capabilities"].(map[string]any)
 	if !reflect.DeepEqual(caps, syncCapabilities()) {
 		t.Fatalf("capability truth = %v", caps)

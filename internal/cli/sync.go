@@ -19,8 +19,9 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		}
 		return writeEnvelope(stdout, "sync capabilities", map[string]any{
 			"schema_version": "agent-dispatch.sync-capabilities/v1", "contract_version": "v1",
-			"capabilities": syncCapabilities(),
-			"side_effects": []string{},
+			"contract_digest": config.SyncContractDigest(),
+			"capabilities":    syncCapabilities(),
+			"side_effects":    []string{},
 		})
 	case "status":
 		group, configPath, ok := syncStatusFlags(args[1:])

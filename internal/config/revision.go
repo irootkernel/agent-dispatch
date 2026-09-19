@@ -4,10 +4,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"net/url"
 	"runtime"
 	"sort"
+	"strings"
 
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"golang.org/x/text/unicode/norm"
 )
 
 // CaseMode resolves the v0.1 default `filesystem` case policy for this
@@ -21,39 +25,121 @@ func CaseMode() string {
 	return "sensitive"
 }
 
-// SyncRevision is the normalized acknowledgement input over the complete
-// local safety guard set. The acknowledgement value itself is excluded so it
-// can equal this digest; any other sync input change invalidates it.
+const syncContractVersion = "agent-dispatch.sync-contract/v1"
+
+// SyncContractDigest is the interoperable identity of the v1 sync contract.
+// Semantic contract changes require a new version instead of depending on a
+// repository-local artifact layout.
+func SyncContractDigest() string {
+	return digestJSON(syncContractVersion, map[string]string{"schema_version": syncContractVersion})
+}
+
+// RemoteRepositoryDigest canonicalizes one credential-free Git remote URI and
+// returns the sync-contract repository identity plus its canonical form.
+func RemoteRepositoryDigest(raw string) (string, string, error) {
+	if strings.Contains(raw, "%") {
+		return "", "", fmt.Errorf("remote repository URI must not use percent encoding")
+	}
+	u, err := url.Parse(raw)
+	if err != nil || !u.IsAbs() || u.Host == "" {
+		return "", "", fmt.Errorf("remote repository URI must be absolute")
+	}
+	scheme := strings.ToLower(u.Scheme)
+	if scheme != "https" && scheme != "ssh" {
+		return "", "", fmt.Errorf("remote repository URI scheme must be https or ssh")
+	}
+	if u.RawQuery != "" || u.Fragment != "" {
+		return "", "", fmt.Errorf("remote repository URI must not contain a query or fragment")
+	}
+	username := ""
+	if scheme == "https" {
+		if u.User != nil {
+			return "", "", fmt.Errorf("https remote repository URI must not contain userinfo")
+		}
+	} else {
+		if u.User == nil || u.User.Username() == "" {
+			return "", "", fmt.Errorf("ssh remote repository URI requires a username")
+		}
+		if _, present := u.User.Password(); present {
+			return "", "", fmt.Errorf("ssh remote repository URI must not contain a password")
+		}
+		username = u.User.Username() + "@"
+	}
+	host := strings.ToLower(u.Hostname())
+	if host == "" {
+		return "", "", fmt.Errorf("remote repository URI requires a host")
+	}
+	port := u.Port()
+	if (scheme == "https" && port == "443") || (scheme == "ssh" && port == "22") {
+		port = ""
+	}
+	if port != "" {
+		return "", "", fmt.Errorf("remote repository URI must not use a non-default port")
+	}
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	path := norm.NFC.String(u.Path)
+	if path == "" || path == "/" || !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") {
+		return "", "", fmt.Errorf("remote repository URI requires exactly one leading slash and a repository path")
+	}
+	path = strings.TrimSuffix(path, "/")
+	for _, segment := range strings.Split(strings.TrimPrefix(path, "/"), "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			return "", "", fmt.Errorf("remote repository URI path must not contain empty or dot segments")
+		}
+	}
+	path = strings.TrimSuffix(path, ".git")
+	if path == "" || path == "/" {
+		return "", "", fmt.Errorf("remote repository URI requires a repository path")
+	}
+	canonical := scheme + "://" + username + host + path
+	return digestBytes("agent-dispatch.remote-repository/v1", []byte(canonical)), canonical, nil
+}
+
+// SyncRevision is the normalized cooperative-import acknowledgement input.
+// Membership roster, endpoint, publisher-key, and peer-credential movement is
+// deliberately excluded: SYN-009 makes those changes invalidate verification
+// targets, not an acknowledgement accepted under the same administrator trust
+// policy. Protected effects revalidate current membership independently.
 func SyncRevision(cfg *Config) (string, bool) {
 	if cfg.Sync == nil {
 		return "", false
 	}
-	s := *cfg.Sync
-	s.ImportAcknowledgement = nil
-	nodes := append([]SyncNode(nil), s.Nodes...)
-	sort.Slice(nodes, func(i, j int) bool { return nodes[i].InstanceID < nodes[j].InstanceID })
-	s.Nodes = nodes
+	s := cfg.Sync
 	resource := cfg.Resources[s.Resource]
-	scope := syncScopeProjection(cfg, s.Resource)
 	projection := struct {
-		Sync         Sync             `json:"sync"`
-		Resource     Resource         `json:"resource"`
-		InstanceID   string           `json:"instance_id"`
-		Scope        []map[string]any `json:"scope"`
-		SafetyPolicy map[string]bool  `json:"safety_policy"`
+		SchemaVersion          string   `json:"schema_version"`
+		GroupID                string   `json:"group_id"`
+		ResourceID             string   `json:"resource_id"`
+		Resource               Resource `json:"resource"`
+		RemoteName             string   `json:"remote_name"`
+		RemoteRepositoryDigest string   `json:"remote_repository_digest"`
+		ContentRef             string   `json:"content_ref"`
+		MembershipRef          string   `json:"membership_ref"`
+		LocalInstanceID        string   `json:"local_instance_id"`
+		GlobalInstanceID       string   `json:"global_instance_id"`
+		AdministratorKey       string   `json:"administrator_key"`
+		ScopeDigest            string   `json:"scope_digest"`
+		SafetyPolicyDigest     string   `json:"safety_policy_digest"`
+		ImportBoundsDigest     string   `json:"import_bounds_digest"`
 	}{
-		Sync:         s,
-		Resource:     resource,
-		InstanceID:   cfg.Instance.ID,
-		Scope:        scope,
-		SafetyPolicy: syncSafetyPolicy(),
+		SchemaVersion:          "agent-dispatch.sync-acknowledgement-config/v1",
+		GroupID:                s.GroupID,
+		ResourceID:             s.Resource,
+		Resource:               resource,
+		RemoteName:             s.RemoteName,
+		RemoteRepositoryDigest: s.RemoteRepositoryDigest,
+		ContentRef:             s.ContentRef,
+		MembershipRef:          s.MembershipRef,
+		LocalInstanceID:        s.LocalInstanceID,
+		GlobalInstanceID:       cfg.Instance.ID,
+		AdministratorKey:       s.AdministratorKey,
+		ScopeDigest:            SyncScopeDigest(cfg, s.Resource),
+		SafetyPolicyDigest:     SyncSafetyPolicyDigest(),
+		ImportBoundsDigest:     SyncImportBoundsDigest(s.Bounds),
 	}
-	enc, err := json.Marshal(projection)
-	if err != nil {
-		return "", false
-	}
-	sum := sha256.Sum256(enc)
-	return "sha256:" + hex.EncodeToString(sum[:]), true
+	return digestJSON("agent-dispatch.sync-acknowledgement-config/v1", projection), true
 }
 
 // syncScopeProjection binds the acknowledgement to every route-owned scope and
@@ -91,19 +177,50 @@ func SyncAcknowledgementCurrent(cfg *Config, currentStateIncarnation string) boo
 		return false
 	}
 	ack := cfg.Sync.ImportAcknowledgement
+	declaredIncarnation := ""
+	for _, node := range cfg.Sync.Nodes {
+		if node.InstanceID == cfg.Sync.LocalInstanceID {
+			declaredIncarnation = node.StateIncarnationID
+			break
+		}
+	}
 	return ack.SchemaVersion == "agent-dispatch.sync-import-acknowledgement/v1" &&
 		ack.AcknowledgementID != "" &&
 		ack.GroupID == cfg.Sync.GroupID && ack.ResourceID == cfg.Sync.Resource &&
 		ack.RemoteName == cfg.Sync.RemoteName && ack.RemoteRepositoryDigest == cfg.Sync.RemoteRepositoryDigest && ack.ContentRef == cfg.Sync.ContentRef &&
-		ack.MembershipRef == cfg.Sync.MembershipRef && ack.ScopeDigest == digestJSON(syncScopeProjection(cfg, cfg.Sync.Resource)) &&
-		ack.LocalInstanceID == cfg.Sync.LocalInstanceID && ack.StateIncarnationID == currentStateIncarnation &&
-		ack.AdministratorKey == cfg.Sync.AdministratorKey && ack.SafetyPolicyDigest == digestJSON(syncSafetyPolicy()) &&
-		ack.ImportBoundsDigest == digestJSON(cfg.Sync.Bounds) && ack.ConfigRevision == revision
+		ack.MembershipRef == cfg.Sync.MembershipRef && ack.ScopeDigest == SyncScopeDigest(cfg, cfg.Sync.Resource) &&
+		ack.LocalInstanceID == cfg.Sync.LocalInstanceID && ack.StateIncarnationID == currentStateIncarnation && declaredIncarnation == currentStateIncarnation &&
+		ack.AdministratorKey == cfg.Sync.AdministratorKey && ack.SafetyPolicyDigest == SyncSafetyPolicyDigest() &&
+		ack.ImportBoundsDigest == SyncImportBoundsDigest(cfg.Sync.Bounds) && ack.ConfigRevision == revision
 }
 
-func digestJSON(v any) string {
-	enc, _ := json.Marshal(v)
-	sum := sha256.Sum256(enc)
+func SyncScopeDigest(cfg *Config, resourceID string) string {
+	return digestJSON("agent-dispatch.sync-scope/v1", syncScopeProjection(cfg, resourceID))
+}
+
+func SyncSafetyPolicyDigest() string {
+	return digestJSON("agent-dispatch.sync-safety-policy/v1", syncSafetyPolicy())
+}
+
+func SyncImportBoundsDigest(bounds SyncBounds) string {
+	return digestJSON("agent-dispatch.sync-import-bounds/v1", bounds)
+}
+
+func digestJSON(domain string, v any) string {
+	raw, _ := json.Marshal(v)
+	var canonical any
+	_ = json.Unmarshal(raw, &canonical)
+	enc, _ := json.Marshal(canonical)
+	return digestBytes(domain, enc)
+}
+
+func digestBytes(domain string, value []byte) string {
+	framed := make([]byte, 0, len(domain)+len(value)+2)
+	framed = append(framed, domain...)
+	framed = append(framed, 0)
+	framed = append(framed, value...)
+	framed = append(framed, '\n')
+	sum := sha256.Sum256(framed)
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 

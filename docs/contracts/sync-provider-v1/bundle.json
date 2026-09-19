@@ -1,6 +1,7 @@
 {
   "schema_version": "agent-dispatch.sync-provider-bundle/v1",
   "bundle_id": "agent-dispatch-sync-provider-v1",
+  "contract_digest": "sha256:30cf47b1bd854a0271aa9df3e7b37f0cc14cdd86d3f06a65a2cb787c6741131b",
   "artifacts": [
     "commands.json",
     "peer.json",
@@ -40,6 +41,7 @@
     "../../examples/invalid/sync-import-duplicate-alias.json",
     "../../examples/invalid/sync-import-contradictory-reason.json",
     "../../examples/invalid/sync-import-empty-target.json",
+    "../../examples/invalid/sync-import-sensitive-alias.json",
     "../../examples/invalid/sync-import-unsafe-path.json",
     "../../examples/invalid/sync-import-unicode-alias.json",
     "../../examples/invalid/sync-membership-administrator-key-reused.json",

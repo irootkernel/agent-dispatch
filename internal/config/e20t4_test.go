@@ -63,16 +63,28 @@ func TestE20T4SyncRevisionAndAcknowledgement(t *testing.T) {
 	cfg.Sync.ImportAcknowledgement = &SyncImportAcknowledgement{
 		SchemaVersion: "agent-dispatch.sync-import-acknowledgement/v1", AcknowledgementID: "acknowledgement-001", GroupID: cfg.Sync.GroupID,
 		ResourceID: cfg.Sync.Resource, RemoteName: cfg.Sync.RemoteName, RemoteRepositoryDigest: cfg.Sync.RemoteRepositoryDigest, ContentRef: cfg.Sync.ContentRef,
-		MembershipRef: cfg.Sync.MembershipRef, ScopeDigest: digestJSON(syncScopeProjection(cfg, cfg.Sync.Resource)),
+		MembershipRef: cfg.Sync.MembershipRef, ScopeDigest: SyncScopeDigest(cfg, cfg.Sync.Resource),
 		LocalInstanceID: cfg.Sync.LocalInstanceID, StateIncarnationID: "workstation-main-state-001",
-		AdministratorKey: cfg.Sync.AdministratorKey, SafetyPolicyDigest: digestJSON(syncSafetyPolicy()),
-		ImportBoundsDigest: digestJSON(cfg.Sync.Bounds), ConfigRevision: revision,
+		AdministratorKey: cfg.Sync.AdministratorKey, SafetyPolicyDigest: SyncSafetyPolicyDigest(),
+		ImportBoundsDigest: SyncImportBoundsDigest(cfg.Sync.Bounds), ConfigRevision: revision,
 	}
 	if !SyncAcknowledgementCurrent(cfg, "workstation-main-state-001") {
 		t.Fatal("exact acknowledgement must be current")
 	}
+	peerRotation := cloneE20T4Config(t, cfg)
+	peerRotation.Sync.Nodes[1].StateIncarnationID = "node-b-state-002"
+	peerRotation.Sync.Nodes[1].PublisherKey = "SHA256:EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"
+	peerRotation.Sync.Nodes[1].Endpoint = "https://node-b-next.example.ts.net"
+	if !SyncAcknowledgementCurrent(peerRotation, "workstation-main-state-001") {
+		t.Fatal("peer membership movement under the same trust anchor must not stale acknowledgement")
+	}
 	if SyncAcknowledgementCurrent(cfg, "workstation-main-state-002") {
 		t.Fatal("a changed local state incarnation must invalidate acknowledgement")
+	}
+	localRotation := cloneE20T4Config(t, cfg)
+	localRotation.Sync.Nodes[0].StateIncarnationID = "workstation-main-state-002"
+	if SyncAcknowledgementCurrent(localRotation, "workstation-main-state-002") {
+		t.Fatal("a changed local state incarnation must require a new acknowledgement")
 	}
 	cfg.Sync.RemoteName = "backup"
 	if SyncAcknowledgementCurrent(cfg, "workstation-main-state-001") {
@@ -87,6 +99,50 @@ func TestE20T4SyncRevisionAndAcknowledgement(t *testing.T) {
 	cfg.Routes["wiki-maintenance"] = route
 	if SyncAcknowledgementCurrent(cfg, "workstation-main-state-001") {
 		t.Fatal("scope safety-policy change must invalidate acknowledgement")
+	}
+}
+
+func TestE20T4SyncDigestGoldens(t *testing.T) {
+	cfg, err := Load("../../docs/examples/config.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision, _ := SyncRevision(cfg)
+	want := map[string]string{
+		"contract": "sha256:30cf47b1bd854a0271aa9df3e7b37f0cc14cdd86d3f06a65a2cb787c6741131b",
+		"scope":    "sha256:1e134a9296b8652b4fd887c8be2c2596caee32ac0523f058d516af8fd4958320",
+		"safety":   "sha256:f93ce592981e9d78d7041f8de390c79339746fb16504390e44f85292ce7a6ea7",
+		"bounds":   "sha256:d13cc49b2ff321137a8f46a8829c42d0db7591f0a8732a4c5ba2916ab4142f56",
+		"config":   "sha256:4c51fc2e6f16977d433729dbe1718ed04ecbaee95901ef1d065c9076ea9f186b",
+	}
+	got := map[string]string{
+		"contract": SyncContractDigest(), "scope": SyncScopeDigest(cfg, cfg.Sync.Resource),
+		"safety": SyncSafetyPolicyDigest(), "bounds": SyncImportBoundsDigest(cfg.Sync.Bounds), "config": revision,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("sync digest goldens drifted: got=%v want=%v", got, want)
+	}
+}
+
+func TestE20T4RemoteRepositoryDigestContract(t *testing.T) {
+	valid := []struct{ raw, canonical, digest string }{
+		{"https://GitHub.com/RootKernel/wiki.git", "https://github.com/RootKernel/wiki", "sha256:9436b709b57944f5c3a29127c41a1a24149159cb81a4e48bf5d0cebc49ed06be"},
+		{"ssh://git@GitHub.com:22/RootKernel/wiki/", "ssh://git@github.com/RootKernel/wiki", "sha256:aa989e912c28bec592cc816f21cdafe4efaac13cd23570c2a505028c5c4f7a4f"},
+	}
+	for _, tc := range valid {
+		digest, canonical, err := RemoteRepositoryDigest(tc.raw)
+		if err != nil || digest != tc.digest || canonical != tc.canonical {
+			t.Errorf("canonicalize %q: digest=%q canonical=%q err=%v", tc.raw, digest, canonical, err)
+		}
+	}
+	for _, raw := range []string{
+		"https://alice@github.com/RootKernel/wiki", "ssh://github.com/RootKernel/wiki",
+		"ssh://git:secret@github.com/RootKernel/wiki", "git@github.com:RootKernel/wiki.git",
+		"https://github.com/RootKernel/../wiki", "https://github.com:8443/RootKernel/wiki",
+	} {
+		if _, _, err := RemoteRepositoryDigest(raw); err == nil {
+			t.Errorf("unsafe remote repository URI accepted: %q", raw)
+		}
 	}
 }
 
@@ -148,16 +204,30 @@ func TestE20T4WrongSyncMemberCountFailsClosed(t *testing.T) {
 	}
 }
 
-func TestE20T4SyncRevisionCoversGuardInputsAndIgnoresNodeOrder(t *testing.T) {
+func TestE20T4SyncRevisionCoversAcknowledgementInputsAndIgnoresMembershipMovement(t *testing.T) {
 	cfg, err := Load("../../docs/examples/config.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
 	baseline, _ := SyncRevision(cfg)
-	reordered := cloneE20T4Config(t, cfg)
-	reordered.Sync.Nodes[0], reordered.Sync.Nodes[1] = reordered.Sync.Nodes[1], reordered.Sync.Nodes[0]
-	if got, _ := SyncRevision(reordered); got != baseline {
-		t.Fatalf("node presentation order changed revision: %s != %s", got, baseline)
+	membershipOnly := map[string]func(*Config){
+		"node order":                func(c *Config) { c.Sync.Nodes[0], c.Sync.Nodes[1] = c.Sync.Nodes[1], c.Sync.Nodes[0] },
+		"publisher":                 func(c *Config) { c.Sync.Nodes[1].PublisherKey = "SHA256:EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE" },
+		"node identity":             func(c *Config) { c.Sync.Nodes[1].InstanceID = "node-c" },
+		"state incarnation":         func(c *Config) { c.Sync.Nodes[1].StateIncarnationID = "node-c-0001" },
+		"endpoint":                  func(c *Config) { c.Sync.Nodes[1].Endpoint = "https://node-c.example.ts.net" },
+		"credential":                func(c *Config) { c.Sync.Nodes[1].CredentialRef = "env:SYNC_NODE_B_ROTATED" },
+		"publisher signing ref":     func(c *Config) { c.Sync.PublisherSigningKeyRef = "env:SYNC_PUBLISHER_ROTATED" },
+		"administrator signing ref": func(c *Config) { c.Sync.AdministratorSigningKeyRef = "env:SYNC_ADMIN_ROTATED" },
+	}
+	for name, mutate := range membershipOnly {
+		t.Run(name, func(t *testing.T) {
+			candidate := cloneE20T4Config(t, cfg)
+			mutate(candidate)
+			if got, _ := SyncRevision(candidate); got != baseline {
+				t.Fatalf("membership-only mutation changed acknowledgement revision: %s != %s", got, baseline)
+			}
+		})
 	}
 	mutations := map[string]func(*Config){
 		"group":       func(c *Config) { c.Sync.GroupID = "wiki-pair-next" },
@@ -183,19 +253,12 @@ func TestE20T4SyncRevisionCoversGuardInputsAndIgnoresNodeOrder(t *testing.T) {
 		"remote repository digest": func(c *Config) {
 			c.Sync.RemoteRepositoryDigest = "sha256:8888888888888888888888888888888888888888888888888888888888888888"
 		},
-		"membership ref":            func(c *Config) { c.Sync.MembershipRef += "-next" },
-		"administrator":             func(c *Config) { c.Sync.AdministratorKey = "SHA256:DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDA" },
-		"publisher":                 func(c *Config) { c.Sync.Nodes[1].PublisherKey = "SHA256:EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE" },
-		"node identity":             func(c *Config) { c.Sync.Nodes[1].InstanceID = "node-c" },
-		"state incarnation":         func(c *Config) { c.Sync.Nodes[1].StateIncarnationID = "node-c-0001" },
-		"endpoint":                  func(c *Config) { c.Sync.Nodes[1].Endpoint = "https://node-c.example.ts.net" },
-		"credential":                func(c *Config) { c.Sync.Nodes[1].CredentialRef = "env:SYNC_NODE_B_ROTATED" },
-		"publisher signing ref":     func(c *Config) { c.Sync.PublisherSigningKeyRef = "env:SYNC_PUBLISHER_ROTATED" },
-		"administrator signing ref": func(c *Config) { c.Sync.AdministratorSigningKeyRef = "env:SYNC_ADMIN_ROTATED" },
-		"queue bound":               func(c *Config) { c.Sync.Bounds.Queue-- },
-		"history bound":             func(c *Config) { c.Sync.Bounds.HistoryCommits-- },
-		"subprocess time bound":     func(c *Config) { c.Sync.Bounds.SubprocessSeconds-- },
-		"subprocess byte bound":     func(c *Config) { c.Sync.Bounds.SubprocessBytes-- },
+		"membership ref":        func(c *Config) { c.Sync.MembershipRef += "-next" },
+		"administrator":         func(c *Config) { c.Sync.AdministratorKey = "SHA256:DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDA" },
+		"queue bound":           func(c *Config) { c.Sync.Bounds.Queue-- },
+		"history bound":         func(c *Config) { c.Sync.Bounds.HistoryCommits-- },
+		"subprocess time bound": func(c *Config) { c.Sync.Bounds.SubprocessSeconds-- },
+		"subprocess byte bound": func(c *Config) { c.Sync.Bounds.SubprocessBytes-- },
 		"include": func(c *Config) {
 			r := c.Routes["wiki-maintenance"]
 			r.Source.Include = append(r.Source.Include, "notes/**")

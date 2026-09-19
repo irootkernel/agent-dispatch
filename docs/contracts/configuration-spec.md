@@ -454,31 +454,39 @@ configuration validation. E20 implements contract reads and
 disabled status only; it performs no Git, network, listener, SQLite, service,
 or live-tree effect.
 
-The computed sync revision digests every normalized field above plus the
-global instance identity, governed resource shape, every route-owned include,
-exclude, protected, and immutable pattern for that resource, and the fixed
-fail-closed SYN-010 safety rules: writer guard and idle-participant checks,
+The computed acknowledgement configuration revision digests the SYN-009 local
+binding: group and resource IDs, global and local instance identities,
+governed resource shape, remote name and normalized repository identity,
+content and membership refs, the administrator trust anchor, every
+route-owned include, exclude, protected, and immutable pattern for that
+resource, the import bounds, and the fixed fail-closed SYN-010 safety rules:
+writer guard and idle-participant checks,
 durable pre-apply planning/journaling, Git/index/ref stability, overlap and
 untracked-overwrite refusal, preservation of disjoint/out-of-scope/ignored
 work and Watchman evidence, deferral when disjointness is unproven, and exact
-durable import-evidence suppression. It excludes only the acknowledgement itself.
-Nodes are sorted by instance ID, routes by route ID, and scope/policy pattern
-lists lexically before canonical JSON serialization, so presentation order does
-not change the SHA-256 revision.
-The remote digest uses the canonicalization, domain separator, byte framing,
-and golden vectors in `sync-contract.md`; configuration producers and the E21
-Git adapter must implement that single algorithm.
+durable import-evidence suppression. It excludes the acknowledgement itself,
+enabled state, peer roster, endpoints, publisher keys, peer credential
+references, and signing-key references. Those membership/publication changes
+are independently revalidated and do not stale a SYN-009 acknowledgement
+under the same administrator trust policy. Routes and pattern lists are sorted
+as defined by `sync-contract.md`, which owns canonical JSON, domain separators,
+byte framing, complete projections, and golden vectors for every sync digest.
+Configuration producers and E21/E22 consumers must implement those single
+algorithms.
 
 `cooperative_import_acknowledgement` is the complete versioned record, not a
 bare digest. It is current only when every record binding equals the normalized
 configuration and its state incarnation equals the current durable local
 incarnation. E20 status does not read SQLite and therefore reports it non-current;
-E21 owns that durable-state eligibility check. A local resource,
-remote/ref, scope, identity, administrator anchor, node, credential reference,
-policy, or bound change therefore invalidates live-tree application without
+E21 owns that durable-state eligibility check. A local resource, remote/ref,
+scope, local identity, administrator anchor, safety policy, or bound change
+therefore invalidates live-tree application without
 blocking publication, status, or later fetch-and-validate reconciliation.
-Remote membership movement is rechecked at its protected effect and is not a
-local acknowledgement input. E21 also recomputes the configured repository
+Local or remote membership movement, endpoint/credential rotation, and signing
+key-reference changes are rechecked at their protected effects and are not
+local acknowledgement inputs. A local state-incarnation change still
+invalidates through the record's separately compared incarnation binding. E21
+also recomputes the configured repository
 identity digest from the actual Git remote immediately before each protected
 effect; changing a remote URL under the same name invalidates currentness.
 

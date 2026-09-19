@@ -18,19 +18,20 @@ var expectedArtifacts = []string{
 	"commands.json", "peer.json", "results.json", "errors.json", "trust-fixtures.json",
 	"../../schemas/sync-membership.schema.json", "../../schemas/sync-membership-plan.schema.json", "../../schemas/sync-checkpoint.schema.json", "../../schemas/sync-checkpoint-plan.schema.json", "../../schemas/sync-import-acknowledgement.schema.json", "../../schemas/sync-publication.schema.json", "../../schemas/sync-delivery.schema.json", "../../schemas/sync-import.schema.json", "../../schemas/sync-control.schema.json", "../../schemas/sync-verification.schema.json", "../../schemas/sync-nudge.schema.json", "../../schemas/sync-status-request.schema.json", "../../schemas/sync-status-response.schema.json",
 	"../../examples/sync-checkpoint-plan.json", "../../examples/sync-checkpoint.json", "../../examples/sync-control.json", "../../examples/sync-delivery.json", "../../examples/sync-import-acknowledgement.json", "../../examples/sync-import.json", "../../examples/sync-membership-plan.json", "../../examples/sync-membership.json", "../../examples/sync-nudge.json", "../../examples/sync-publication.json", "../../examples/sync-status-request.json", "../../examples/sync-status-response.json", "../../examples/sync-verification.json",
-	"../../examples/invalid/sync-checkpoint-malformed-oid.json", "../../examples/invalid/sync-control-invalid-state.json", "../../examples/invalid/sync-delivery-unknown-without-retention.json", "../../examples/invalid/sync-delivery-contradictory-reason.json", "../../examples/invalid/sync-import-duplicate-alias.json", "../../examples/invalid/sync-import-contradictory-reason.json", "../../examples/invalid/sync-import-empty-target.json", "../../examples/invalid/sync-import-unsafe-path.json", "../../examples/invalid/sync-import-unicode-alias.json", "../../examples/invalid/sync-membership-administrator-key-reused.json", "../../examples/invalid/sync-membership-duplicate-instance.json", "../../examples/invalid/sync-membership-duplicate-publisher-key.json", "../../examples/invalid/sync-membership-invalid-ref.json", "../../examples/invalid/sync-membership-plan-stale-predecessor.json", "../../examples/invalid/sync-membership-plan-missing-predecessor.json", "../../examples/invalid/sync-membership-public-endpoint.json", "../../examples/invalid/sync-membership-third-active.json", "../../examples/invalid/sync-nudge-invalid-ref.json", "../../examples/invalid/sync-publication-commit-mismatch.json", "../../examples/invalid/sync-publication-contradictory-reason.json", "../../examples/invalid/sync-publication-missing-proof.json", "../../examples/invalid/sync-publication-unresolved-prunable.json", "../../examples/invalid/sync-verification-duplicate-node.json", "../../examples/invalid/sync-verification-empty-pair.json", "../../examples/invalid/sync-verification-false-complete.json", "../../examples/invalid/sync-verification-false-freshness.json", "../../examples/invalid/sync-verification-obsolete-incarnation.json",
+	"../../examples/invalid/sync-checkpoint-malformed-oid.json", "../../examples/invalid/sync-control-invalid-state.json", "../../examples/invalid/sync-delivery-unknown-without-retention.json", "../../examples/invalid/sync-delivery-contradictory-reason.json", "../../examples/invalid/sync-import-duplicate-alias.json", "../../examples/invalid/sync-import-contradictory-reason.json", "../../examples/invalid/sync-import-empty-target.json", "../../examples/invalid/sync-import-sensitive-alias.json", "../../examples/invalid/sync-import-unsafe-path.json", "../../examples/invalid/sync-import-unicode-alias.json", "../../examples/invalid/sync-membership-administrator-key-reused.json", "../../examples/invalid/sync-membership-duplicate-instance.json", "../../examples/invalid/sync-membership-duplicate-publisher-key.json", "../../examples/invalid/sync-membership-invalid-ref.json", "../../examples/invalid/sync-membership-plan-stale-predecessor.json", "../../examples/invalid/sync-membership-plan-missing-predecessor.json", "../../examples/invalid/sync-membership-public-endpoint.json", "../../examples/invalid/sync-membership-third-active.json", "../../examples/invalid/sync-nudge-invalid-ref.json", "../../examples/invalid/sync-publication-commit-mismatch.json", "../../examples/invalid/sync-publication-contradictory-reason.json", "../../examples/invalid/sync-publication-missing-proof.json", "../../examples/invalid/sync-publication-unresolved-prunable.json", "../../examples/invalid/sync-verification-duplicate-node.json", "../../examples/invalid/sync-verification-empty-pair.json", "../../examples/invalid/sync-verification-false-complete.json", "../../examples/invalid/sync-verification-false-freshness.json", "../../examples/invalid/sync-verification-obsolete-incarnation.json",
 }
 
 // expectedArtifactSetDigest is the independently reviewed golden over each
 // allowlisted path and its bytes in bundle order. SHA256SUMS supports ordinary
 // corruption detection; this pin ensures the checksum regeneration command
 // cannot silently bless coordinated schema/fixture drift.
-const expectedArtifactSetDigest = "7313388aa6856cab4ea189876d23703dcb3b463af1bea316008dd725126c1139"
+const expectedArtifactSetDigest = "1467cc5b3ff594382e71eea6c0758549a1f74411feb7c3008250c684493740c6"
 
 type bundle struct {
-	SchemaVersion string   `json:"schema_version"`
-	BundleID      string   `json:"bundle_id"`
-	Artifacts     []string `json:"artifacts"`
+	SchemaVersion  string   `json:"schema_version"`
+	BundleID       string   `json:"bundle_id"`
+	ContractDigest string   `json:"contract_digest"`
+	Artifacts      []string `json:"artifacts"`
 }
 
 type commands struct {
@@ -147,7 +148,7 @@ func Check(dir string) error {
 	if err := decodeClosed(filepath.Join(dir, "bundle.json"), &b); err != nil {
 		return err
 	}
-	if b.SchemaVersion != "agent-dispatch.sync-provider-bundle/v1" || b.BundleID != "agent-dispatch-sync-provider-v1" {
+	if b.SchemaVersion != "agent-dispatch.sync-provider-bundle/v1" || b.BundleID != "agent-dispatch-sync-provider-v1" || b.ContractDigest != "sha256:30cf47b1bd854a0271aa9df3e7b37f0cc14cdd86d3f06a65a2cb787c6741131b" {
 		return fmt.Errorf("bundle identity mismatch")
 	}
 	if !reflect.DeepEqual(b.Artifacts, expectedArtifacts) {

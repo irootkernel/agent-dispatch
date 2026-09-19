@@ -5103,7 +5103,8 @@ E20-T2 Completed.
 ### Evidence
 
 `docs/contracts/sync-provider-v1/` owns the checksummed provider bundle for the
-18 reserved command identities, two authenticated peer routes, closed machine
+18 command identities (two implemented inspection commands and 16 reserved
+runtime commands), two authenticated peer routes, closed machine
 results, eight typed errors, and canonical schema links. Retained publication,
 delivery, import, and verification lists use 100-record pages pinned by an
 opaque snapshot token. `make sync-contract-check` rejects unknown descriptor

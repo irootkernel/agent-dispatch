@@ -4942,6 +4942,8 @@ network, or live-tree side effects are implemented.
 
 **Gate:** G16
 
+**Execution integration map:** [E20 Two-Node Sync Contracts and Admission](../todo/TODO-E20-TWO-NODE-SYNC-CONTRACTS.md)
+
 **Canonical Outcomes:** [D-030](../specs/decision-log.md) · [SYN requirements](../specs/required-spec.md) · [ADR-0023 through ADR-0025](../architecture-decision-records/README.md) · [Gate G16](../specs/acceptance-criteria.md) · [Sync architecture](../architecture/wiki-sync.md) · [Sync contract](../contracts/sync-contract.md)
 
 ## E20-T1: Admit the Program and Freeze Decisions

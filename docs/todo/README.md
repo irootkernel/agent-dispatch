@@ -1,9 +1,19 @@
 # TODO and Future Work
 
-This directory is the sole owner of future epic-sized candidates that have not
-entered the roadmap. Items here have no roadmap identity or lifecycle status.
+This directory owns future epic-sized candidates that have not entered the
+roadmap. Those candidate items have no roadmap identity or lifecycle status.
+It may also contain an explicitly adopted, temporary execution dossier whose
+lifecycle authority remains in the roadmap.
 
-Future work is not permission to partially implement these features during roadmap tasks. Each item requires a new roadmap, requirement changes, and where noted a new ADR/security review.
+## Active execution dossiers
+
+- [E20 Two-Node Sync Contracts and Admission](TODO-E20-TWO-NODE-SYNC-CONTRACTS.md)
+  integrates the accepted authorities and ordered handoff for roadmap epic E20.
+  The roadmap remains the lifecycle authority.
+
+Future work is not permission to partially implement these features during
+roadmap tasks. Each priority candidate requires a new roadmap, requirement
+changes, and where noted a new ADR/security review.
 
 ## Priority Candidates
 

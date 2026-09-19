@@ -8,6 +8,7 @@
     "results.json",
     "errors.json",
     "trust-fixtures.json",
+    "digest-vectors.json",
     "../../schemas/sync-membership.schema.json",
     "../../schemas/sync-membership-plan.schema.json",
     "../../schemas/sync-checkpoint.schema.json",
@@ -34,6 +35,7 @@
     "../../examples/sync-status-request.json",
     "../../examples/sync-status-response.json",
     "../../examples/sync-verification.json",
+    "../../examples/sync-verification-collecting.json",
     "../../examples/invalid/sync-checkpoint-malformed-oid.json",
     "../../examples/invalid/sync-control-invalid-state.json",
     "../../examples/invalid/sync-delivery-unknown-without-retention.json",
@@ -59,6 +61,7 @@
     "../../examples/invalid/sync-publication-unresolved-prunable.json",
     "../../examples/invalid/sync-verification-duplicate-node.json",
     "../../examples/invalid/sync-verification-empty-pair.json",
+    "../../examples/invalid/sync-verification-incomplete-pair.json",
     "../../examples/invalid/sync-verification-false-complete.json",
     "../../examples/invalid/sync-verification-false-freshness.json",
     "../../examples/invalid/sync-verification-obsolete-incarnation.json"

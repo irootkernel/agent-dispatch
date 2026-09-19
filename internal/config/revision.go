@@ -57,7 +57,7 @@ func RemoteRepositoryDigest(raw string) (string, string, error) {
 			return "", "", fmt.Errorf("https remote repository URI must not contain userinfo")
 		}
 	} else {
-		if u.User == nil || u.User.Username() == "" {
+		if u.User == nil || !validRemoteSSHUsername(u.User.Username()) {
 			return "", "", fmt.Errorf("ssh remote repository URI requires a username")
 		}
 		if _, present := u.User.Password(); present {
@@ -95,6 +95,18 @@ func RemoteRepositoryDigest(raw string) (string, string, error) {
 	}
 	canonical := scheme + "://" + username + host + path
 	return digestBytes("agent-dispatch.remote-repository/v1", []byte(canonical)), canonical, nil
+}
+
+func validRemoteSSHUsername(value string) bool {
+	if value == "" || len(value) > 64 {
+		return false
+	}
+	for _, r := range value {
+		if (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '.' && r != '_' && r != '-' {
+			return false
+		}
+	}
+	return true
 }
 
 // SyncRevision is the normalized cooperative-import acknowledgement input.

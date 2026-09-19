@@ -1,0 +1,11 @@
+{
+  "schema_version": "agent-dispatch.sync-provider.digest-vectors/v1",
+  "vectors": [
+    {
+      "name": "canonical-json-escaping-and-order",
+      "domain": "agent-dispatch.sync-canonical-json-test/v1",
+      "canonical_json": "{\"patterns\":[\"\\u003c.md\",\"Café.md\",\"line\\u2028break.md\"]}",
+      "expected_digest": "sha256:ec1a4ea072711193087502c83172dea0b1e83828c343a050ec25772ee8516065"
+    }
+  ]
+}

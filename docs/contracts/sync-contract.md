@@ -138,6 +138,11 @@ wall-clock time are never causal authority.
 | control | `active <-> paused` | `blocked` requires explicit recovery evidence |
 | verification | `planned -> collecting -> finished` | `complete`, `incomplete`, `target_changed`, `blocked`, or `expired` |
 
+`expected_nodes` always fixes the exact two-node target. Verification `nodes`
+contains collected evidence only: it may contain zero, one, or two distinct
+expected nodes while `planned` or `collecting`, and `complete` requires exactly
+two. Unobserved nodes are never represented by fabricated evidence.
+
 Publication `published`, delivery `accepted`, import `applied`, and verification
 `complete` are deliberately non-interchangeable. State changes persist the
 stable logical record ID, attempt count, claim owner where applicable, and a
@@ -200,6 +205,18 @@ retain only the explicitly defined order below; floats and nulls are absent.
 This restricted form is the complete canonicalization rule, not a reference
 to producer-specific map iteration or pretty printing.
 
+All input strings must be valid UTF-8 and retain their exact Unicode scalar
+sequence; this digest layer performs no Unicode normalization. Object keys and
+the scope projection's pattern arrays use ascending unsigned UTF-8 byte order
+(equivalent to code-point order for valid UTF-8). JSON strings escape quote and
+backslash, use `\b`, `\f`, `\n`, `\r`, and `\t` for those controls, use
+lowercase `\u00xx` for other U+0000 through U+001F controls, and must escape
+`<`, `>`, `&`, U+2028, and U+2029 as lowercase `\u003c`, `\u003e`, `\u0026`,
+`\u2028`, and `\u2029`. Every other non-ASCII scalar is emitted directly as
+UTF-8. Alternative but JSON-equivalent escaping is not canonical.
+`sync-provider-v1/digest-vectors.json` freezes an independently checked vector
+covering `<`, direct non-ASCII UTF-8, U+2028 escaping, and array order.
+
 | Digest | Domain and canonical projection |
 |---|---|
 | `contract_digest` | Domain `agent-dispatch.sync-contract/v1`; object `{"schema_version":"agent-dispatch.sync-contract/v1"}`. A semantic contract change requires a new version. |
@@ -233,12 +250,17 @@ For `docs/examples/config.yaml`, the frozen digest vectors are:
 | import bounds | `sha256:d13cc49b2ff321137a8f46a8829c42d0db7591f0a8732a4c5ba2916ab4142f56` |
 | acknowledgement configuration | `sha256:4c51fc2e6f16977d433729dbe1718ed04ecbaee95901ef1d065c9076ea9f186b` |
 
+`docs/examples/sync-import-acknowledgement.json` is the paired record for that
+configuration and therefore uses `vault-main`, `workstation-main`, and
+`workstation-main-state-001` with the exact digests above.
+
 The repository identity digest is `sha256(domain || NUL || canonical || LF)`,
 where `domain` is the ASCII string `agent-dispatch.remote-repository/v1`.
 `canonical` is an absolute `https` or `ssh` URI only: lowercase scheme and
 host, no query, fragment, percent encoding, dot segment, or non-default port.
 HTTPS forbids all userinfo. SSH requires one non-empty username, preserves it,
-and forbids a password. Default ports are removed;
+requires the ASCII grammar `[A-Za-z0-9._-]{1,64}`, and forbids a password or
+additional `@`. Default ports are removed;
 the path is NFC-normalized, begins with exactly one slash, removes one trailing
 slash and a terminal `.git`, and otherwise preserves case. SCP-like syntax is
 rejected rather than guessed. For example:
@@ -249,7 +271,8 @@ rejected rather than guessed. For example:
 | `ssh://git@GitHub.com:22/RootKernel/wiki/` | `ssh://git@github.com/RootKernel/wiki` | `sha256:aa989e912c28bec592cc816f21cdafe4efaac13cd23570c2a505028c5c4f7a4f` |
 
 `https://alice@github.com/RootKernel/wiki`, `ssh://github.com/RootKernel/wiki`,
-and every URI with a password are rejected rather than canonicalized.
+`ssh://git@@github.com/RootKernel/wiki`, and every URI with a password are
+rejected rather than canonicalized.
 
 An import record's `case_mode` is derived from the current resource path
 policy and is rechecked with the acknowledgement and resource revision before

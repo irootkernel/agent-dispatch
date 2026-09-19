@@ -38,7 +38,7 @@ the [documentation index](README.md); for delivery status use the
 
 - Markdown files: 97 on the current package basis
 - JSON Schemas: 31
-- Example files: 61 (32 top-level JSON examples, 28 registered invalid JSON fixtures, and one YAML configuration example)
+- Example files: 63 (33 top-level JSON examples, 29 registered invalid JSON fixtures, and one YAML configuration example)
 - Integration reports: 4 (Hermes public interface E0-T4, Watchman public interface E0-T5, real-Hermes G11 evidence E15-T4, cold-validation evidence E17-T2)
 - Integration fixtures: 42 files, 9 under `integrations/fixtures/hermes/` and 33 under `integrations/fixtures/watchman/`
 - Roadmap tasks: 116 (105 Completed, one In Review, ten Planned)

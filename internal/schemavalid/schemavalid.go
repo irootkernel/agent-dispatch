@@ -86,24 +86,26 @@ var expectedSchemaRejections = map[string]string{
 	"sync-publication-contradictory-reason.json":    "reason",
 	"sync-publication-missing-proof.json":           "candidate_commit",
 	"sync-publication-unresolved-prunable.json":     "retain_until_resolved",
-	"sync-verification-empty-pair.json":             "nodes",
+	"sync-verification-empty-pair.json":             "expected_nodes",
+	"sync-verification-incomplete-pair.json":        "nodes",
 	"sync-verification-false-complete.json":         "nodes",
 }
 
 var syncPositiveTargets = map[string]string{
-	"sync-membership.json":             "urn:agent-dispatch:schema:sync-membership:v1",
-	"sync-membership-plan.json":        "urn:agent-dispatch:schema:sync-membership-plan:v1",
-	"sync-checkpoint.json":             "urn:agent-dispatch:schema:sync-checkpoint:v1",
-	"sync-checkpoint-plan.json":        "urn:agent-dispatch:schema:sync-checkpoint-plan:v1",
-	"sync-import-acknowledgement.json": "urn:agent-dispatch:schema:sync-import-acknowledgement:v1",
-	"sync-publication.json":            "urn:agent-dispatch:schema:sync-publication:v1",
-	"sync-delivery.json":               "urn:agent-dispatch:schema:sync-delivery:v1",
-	"sync-import.json":                 "urn:agent-dispatch:schema:sync-import:v1",
-	"sync-control.json":                "urn:agent-dispatch:schema:sync-control:v1",
-	"sync-verification.json":           "urn:agent-dispatch:schema:sync-verification:v1",
-	"sync-nudge.json":                  "urn:agent-dispatch:schema:sync-nudge:v1",
-	"sync-status-request.json":         "urn:agent-dispatch:schema:sync-status-request:v1",
-	"sync-status-response.json":        "urn:agent-dispatch:schema:sync-status-response:v1",
+	"sync-membership.json":              "urn:agent-dispatch:schema:sync-membership:v1",
+	"sync-membership-plan.json":         "urn:agent-dispatch:schema:sync-membership-plan:v1",
+	"sync-checkpoint.json":              "urn:agent-dispatch:schema:sync-checkpoint:v1",
+	"sync-checkpoint-plan.json":         "urn:agent-dispatch:schema:sync-checkpoint-plan:v1",
+	"sync-import-acknowledgement.json":  "urn:agent-dispatch:schema:sync-import-acknowledgement:v1",
+	"sync-publication.json":             "urn:agent-dispatch:schema:sync-publication:v1",
+	"sync-delivery.json":                "urn:agent-dispatch:schema:sync-delivery:v1",
+	"sync-import.json":                  "urn:agent-dispatch:schema:sync-import:v1",
+	"sync-control.json":                 "urn:agent-dispatch:schema:sync-control:v1",
+	"sync-verification.json":            "urn:agent-dispatch:schema:sync-verification:v1",
+	"sync-verification-collecting.json": "urn:agent-dispatch:schema:sync-verification:v1",
+	"sync-nudge.json":                   "urn:agent-dispatch:schema:sync-nudge:v1",
+	"sync-status-request.json":          "urn:agent-dispatch:schema:sync-status-request:v1",
+	"sync-status-response.json":         "urn:agent-dispatch:schema:sync-status-response:v1",
 }
 
 var requiredSyncNegativeExamples = []string{
@@ -117,7 +119,7 @@ var requiredSyncNegativeExamples = []string{
 	"sync-import-empty-target.json", "sync-import-unsafe-path.json", "sync-import-duplicate-alias.json", "sync-import-sensitive-alias.json", "sync-import-unicode-alias.json", "sync-import-contradictory-reason.json", "sync-control-invalid-state.json",
 	"sync-nudge-invalid-ref.json", "sync-delivery-contradictory-reason.json", "sync-publication-contradictory-reason.json",
 	"sync-verification-obsolete-incarnation.json", "sync-verification-empty-pair.json",
-	"sync-verification-false-complete.json", "sync-verification-duplicate-node.json", "sync-verification-false-freshness.json",
+	"sync-verification-incomplete-pair.json", "sync-verification-false-complete.json", "sync-verification-duplicate-node.json", "sync-verification-false-freshness.json",
 }
 
 // Failure describes one invalid document or schema.

@@ -3,6 +3,7 @@
 56252ff7ba1afd09003910aaa85bf1a158a434f82589220f3623fb1018243a61  results.json
 53c258fa346e8562b1e078a91fa9f2928e27132be39f522db550598f6d5fb6b2  errors.json
 c1df5323d37e3208a0d443d3e8dcccc8f7cd815e66d5cbbcdcbccad701fb1431  trust-fixtures.json
+228e9cbfa3db58dd5e6aff5da3d509724833fb70d151c5cf0ec9633873058951  digest-vectors.json
 7e8ec41170c2c4193ace7ed0935f1a46c972c57e3e8e7ddb68b49ba4734479c6  ../../schemas/sync-membership.schema.json
 777e5fbe8ba5fffa024d21ca26361f67d5988ef87544611f556bd708117f786e  ../../schemas/sync-membership-plan.schema.json
 a31484eec9b0bf4f7cd3d25b4f995ba2c3c9627fc6cb0e153e6aa6df9f9c3a2a  ../../schemas/sync-checkpoint.schema.json
@@ -12,7 +13,7 @@ a31484eec9b0bf4f7cd3d25b4f995ba2c3c9627fc6cb0e153e6aa6df9f9c3a2a  ../../schemas/
 1c5ca82c26fb8fea21a04005bf68d70bb83cc854e3a01e6f4764f6e11755f82a  ../../schemas/sync-delivery.schema.json
 a0e2943266696ff9bdb1fcbde9619ae1aadd4e3db4f7491ea4c52d4726f0485c  ../../schemas/sync-import.schema.json
 02f20492dbb95844f83640d4ba47eff69a09d37d1b15c37376625df63a5b347e  ../../schemas/sync-control.schema.json
-036692cb4685a89d8fe05fd62c7da0abd0c7437df61bfe4227ebcce81a046bfd  ../../schemas/sync-verification.schema.json
+6932993de0dd650456da5d169559e1ccf479944b77f6328c342062ef667d675a  ../../schemas/sync-verification.schema.json
 750c4dd614d511432c9d5e0872d2bdbb307597ed46672b16f92c6d6112198af2  ../../schemas/sync-nudge.schema.json
 9d1dbcf7dc40559e8b3d91774b4e3ccb6cd0af5fc24e37fb4ee667d5453a3951  ../../schemas/sync-status-request.schema.json
 c9f2d529adb4383b55ad3124dd3f742e3a56d2db39bc6296d5d36954ce0a9c71  ../../schemas/sync-status-response.schema.json
@@ -20,7 +21,7 @@ c9f2d529adb4383b55ad3124dd3f742e3a56d2db39bc6296d5d36954ce0a9c71  ../../schemas/
 e2751a57f667d259c5d45ee950f8a958cc99306b3879db96a2cb57f9f79b91e6  ../../examples/sync-checkpoint.json
 d206801e32d90b79c64d345a7f6b4ed534437c793ce2f7c9185290987774e8f5  ../../examples/sync-control.json
 9e0bad6b61c7d96461f2806c862e87181dce78309b6d7fecade16c1a5c90cc7b  ../../examples/sync-delivery.json
-c8fa0bf80dcdb8235bb8467b5e7816b1212de4cb1e98100d172a51415c91a826  ../../examples/sync-import-acknowledgement.json
+677941d5c853303bb5ffcf1ecf46da3f35161a685c96258981d2ab6f4173f3bd  ../../examples/sync-import-acknowledgement.json
 e6d289a1b1f6b49f7caf6511537b4c2e71e800e04728bc9652a66d48f9c8e30e  ../../examples/sync-import.json
 c748c9d223f7bc310047b77215f140adf0a31af8c018cc0969a44e2316612fc0  ../../examples/sync-membership-plan.json
 d16c3b56cf3d8f50a27976abde326a19a366e3aff63d1edd18d6d32b053726a8  ../../examples/sync-membership.json
@@ -29,6 +30,7 @@ ca310409d8e10eb86a322309debcde886649972fb4924008e418cb89745cb9bb  ../../examples
 8d29dbf6f06184ce445d0198c58527759105d7ff3631ce5310a139c20084383d  ../../examples/sync-status-request.json
 ef3318319b8950e7c8f5fa19f6efc1070bbebd43e7901be06d2b204ca18f0998  ../../examples/sync-status-response.json
 8af6e44e53259dd9915c24a1ea9b603560f8c65c4e973103f2b577d122827c9c  ../../examples/sync-verification.json
+f78e7b1fe572bf1e7e76ec00b9ae4e76f75bc99e73956876d60cb9373fb5a580  ../../examples/sync-verification-collecting.json
 8b9e726050937628c1b835e378194ac83df9f705026bdaa959004011b492f77d  ../../examples/invalid/sync-checkpoint-malformed-oid.json
 198c58d36843af1e1c7eb8f939ee9331bd37ac79f14da6e81f241382eac1c81b  ../../examples/invalid/sync-control-invalid-state.json
 f7202bf1e397e7ab7204165426df5a335481032dfea5626475ddcda3ea757a64  ../../examples/invalid/sync-delivery-unknown-without-retention.json
@@ -53,7 +55,8 @@ f905410d7b7c9f9947a9af01a0ab444f66488831591865e941d8df97b85ec536  ../../examples
 18fd4b4405162911cef1af6f1c275b02d63dd49adf32bed6d5b34eb93e3d1a4b  ../../examples/invalid/sync-publication-missing-proof.json
 b7a135a7bfe1c3e7baa5749a7072cda28b2aee7e766cb169e9486062c89774b5  ../../examples/invalid/sync-publication-unresolved-prunable.json
 a06d657683f6b208bf0729e8c0df04306ab35d0206999eb3ec19c5d8657f40d3  ../../examples/invalid/sync-verification-duplicate-node.json
-3c695cb9918c432827d76ee776af2c5827414085d3fe0ae960003da712e21827  ../../examples/invalid/sync-verification-empty-pair.json
+4db32c992b1275a824555ff7d5c0396994e770c0975f501f5597c20b4473f7df  ../../examples/invalid/sync-verification-empty-pair.json
+842dc0bff832d8aa6ae543aa260c908c1c5159697252bd4cb5116dc5ec923bb2  ../../examples/invalid/sync-verification-incomplete-pair.json
 f221aae66a417e2dbd82b0ae00dd6f9e16373a949d6fbaefcdefe4abb9fabc00  ../../examples/invalid/sync-verification-false-complete.json
 8e618bea7b409c68cf989450f1cc63af271053c31a0a563ec38207d93b41f156  ../../examples/invalid/sync-verification-false-freshness.json
 6afedbb6e9fc40e555500863acef9e7ea2cf2176713729b1357519aa47bdf1e9  ../../examples/invalid/sync-verification-obsolete-incarnation.json

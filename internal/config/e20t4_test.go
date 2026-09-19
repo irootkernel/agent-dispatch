@@ -137,6 +137,7 @@ func TestE20T4RemoteRepositoryDigestContract(t *testing.T) {
 	}
 	for _, raw := range []string{
 		"https://alice@github.com/RootKernel/wiki", "ssh://github.com/RootKernel/wiki",
+		"ssh://git@@github.com/RootKernel/wiki",
 		"ssh://git:secret@github.com/RootKernel/wiki", "git@github.com:RootKernel/wiki.git",
 		"https://github.com/RootKernel/../wiki", "https://github.com:8443/RootKernel/wiki",
 	} {

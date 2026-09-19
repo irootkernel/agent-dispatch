@@ -141,7 +141,9 @@ wall-clock time are never causal authority.
 `expected_nodes` always fixes the exact two-node target. Verification `nodes`
 contains collected evidence only: it may contain zero, one, or two distinct
 expected nodes while `planned` or `collecting`, and `complete` requires exactly
-two. Unobserved nodes are never represented by fabricated evidence.
+two. Both expected and observed node identities and state-incarnation IDs are
+pairwise distinct. Unobserved nodes are never represented by fabricated
+evidence.
 
 Publication `published`, delivery `accepted`, import `applied`, and verification
 `complete` are deliberately non-interchangeable. State changes persist the

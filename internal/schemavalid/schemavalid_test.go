@@ -139,6 +139,20 @@ func TestSyncSemanticValidationRejectsDuplicatePair(t *testing.T) {
 	}
 }
 
+func TestSyncSemanticValidationRejectsDuplicateVerificationIncarnation(t *testing.T) {
+	doc := map[string]any{
+		"schema_version": "agent-dispatch.sync-verification/v1",
+		"expected_nodes": []any{
+			map[string]any{"instance_id": "node-a", "state_incarnation_id": "shared-0001"},
+			map[string]any{"instance_id": "node-b", "state_incarnation_id": "shared-0001"},
+		},
+		"nodes": []any{},
+	}
+	if err := validateSyncSemantics(doc); err == nil || !strings.Contains(err.Error(), "incarnation identities must be distinct") {
+		t.Fatalf("expected duplicate-incarnation rejection, got %v", err)
+	}
+}
+
 func TestSyncSemanticValidationRejectsStaleMembershipPlan(t *testing.T) {
 	doc := map[string]any{
 		"schema_version":       "agent-dispatch.sync-membership-plan/v1",

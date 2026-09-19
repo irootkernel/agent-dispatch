@@ -60,6 +60,7 @@
     "../../examples/invalid/sync-publication-missing-proof.json",
     "../../examples/invalid/sync-publication-unresolved-prunable.json",
     "../../examples/invalid/sync-verification-duplicate-node.json",
+    "../../examples/invalid/sync-verification-duplicate-incarnation.json",
     "../../examples/invalid/sync-verification-empty-pair.json",
     "../../examples/invalid/sync-verification-incomplete-pair.json",
     "../../examples/invalid/sync-verification-false-complete.json",

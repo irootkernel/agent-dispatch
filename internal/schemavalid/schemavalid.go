@@ -69,6 +69,7 @@ var expectedSemanticRejections = map[string]string{
 	"sync-import-unsafe-path.json":                  "safe relative Markdown path",
 	"sync-publication-commit-mismatch.json":         "candidate and remote commits must match",
 	"sync-verification-duplicate-node.json":         "pair instance identities must be distinct",
+	"sync-verification-duplicate-incarnation.json":  "pair incarnation identities must be distinct",
 	"sync-verification-obsolete-incarnation.json":   "incarnation is obsolete or unexpected",
 	"sync-verification-false-freshness.json":        "freshness must be derived",
 }
@@ -118,7 +119,7 @@ var requiredSyncNegativeExamples = []string{
 	"sync-delivery-unknown-without-retention.json", "sync-membership-invalid-ref.json",
 	"sync-import-empty-target.json", "sync-import-unsafe-path.json", "sync-import-duplicate-alias.json", "sync-import-sensitive-alias.json", "sync-import-unicode-alias.json", "sync-import-contradictory-reason.json", "sync-control-invalid-state.json",
 	"sync-nudge-invalid-ref.json", "sync-delivery-contradictory-reason.json", "sync-publication-contradictory-reason.json",
-	"sync-verification-obsolete-incarnation.json", "sync-verification-empty-pair.json",
+	"sync-verification-obsolete-incarnation.json", "sync-verification-duplicate-incarnation.json", "sync-verification-empty-pair.json",
 	"sync-verification-incomplete-pair.json", "sync-verification-false-complete.json", "sync-verification-duplicate-node.json", "sync-verification-false-freshness.json",
 }
 
@@ -420,6 +421,7 @@ func validateSyncSemantics(doc any) error {
 		nodes, _ := m["nodes"].([]any)
 		expected, _ := m["expected_nodes"].([]any)
 		expectedBindings := map[string]string{}
+		expectedIncarnations := map[string]bool{}
 		for _, raw := range expected {
 			node, _ := raw.(map[string]any)
 			instance, _ := node["instance_id"].(string)
@@ -427,9 +429,14 @@ func validateSyncSemantics(doc any) error {
 			if instance == "" || expectedBindings[instance] != "" {
 				return fmt.Errorf("verification expected pair identities must be distinct")
 			}
+			if incarnation == "" || expectedIncarnations[incarnation] {
+				return fmt.Errorf("verification pair incarnation identities must be distinct")
+			}
 			expectedBindings[instance] = incarnation
+			expectedIncarnations[incarnation] = true
 		}
 		seen := map[string]bool{}
+		seenIncarnations := map[string]bool{}
 		for _, raw := range nodes {
 			node, _ := raw.(map[string]any)
 			key, _ := node["instance_id"].(string)
@@ -437,6 +444,9 @@ func validateSyncSemantics(doc any) error {
 				return fmt.Errorf("verification pair instance identities must be distinct")
 			}
 			incarnation, _ := node["state_incarnation_id"].(string)
+			if seenIncarnations[incarnation] {
+				return fmt.Errorf("verification pair incarnation identities must be distinct")
+			}
 			if expectedBindings[key] == "" || expectedBindings[key] != incarnation {
 				return fmt.Errorf("verification node incarnation is obsolete or unexpected")
 			}
@@ -453,6 +463,7 @@ func validateSyncSemantics(doc any) error {
 				}
 			}
 			seen[key] = true
+			seenIncarnations[incarnation] = true
 		}
 	case "agent-dispatch.sync-import/v1":
 		paths, _ := m["paths"].([]any)

@@ -1,0 +1,50 @@
+{
+  "schema_version": "agent-dispatch.sync-provider.commands/v1",
+  "commands": [
+    {"path":"sync capabilities","capability":"contract_read","availability":"reserved","side_effect":"none"},
+    {"path":"sync status","capability":"status_read","availability":"reserved","side_effect":"none"},
+    {"path":"sync publish","capability":"publication","availability":"reserved","side_effect":"git_write"},
+    {"path":"sync reconcile","capability":"reconciliation","availability":"reserved","side_effect":"git_read_write"},
+    {"path":"sync verify","capability":"pair_verification","availability":"reserved","side_effect":"network_read"},
+    {"path":"sync serve","capability":"peer_service","availability":"reserved","side_effect":"listener"},
+    {"path":"sync pause","capability":"control","availability":"reserved","side_effect":"state_write"},
+    {"path":"sync resume","capability":"control","availability":"reserved","side_effect":"state_write"},
+    {"path":"sync membership plan","capability":"membership_plan","availability":"reserved","side_effect":"none"},
+    {"path":"sync membership apply","capability":"membership_apply","availability":"reserved","side_effect":"git_write"},
+    {"path":"sync checkpoint plan","capability":"checkpoint_plan","availability":"reserved","side_effect":"none"},
+    {"path":"sync checkpoint apply","capability":"checkpoint_apply","availability":"reserved","side_effect":"git_write"},
+    {"path":"sync service render","capability":"service_render","availability":"reserved","side_effect":"none"},
+    {"path":"sync service install","capability":"service_install","availability":"reserved","side_effect":"service_write"},
+    {"path":"sync service inspect","capability":"service_inspect","availability":"reserved","side_effect":"none"},
+    {"path":"sync service stop","capability":"service_stop","availability":"reserved","side_effect":"service_write"},
+    {"path":"sync service disable","capability":"service_disable","availability":"reserved","side_effect":"service_write"},
+    {"path":"sync service uninstall","capability":"service_uninstall","availability":"reserved","side_effect":"service_write"}
+  ],
+  "help_contract": {"required_sections":["summary","usage","key_flags","defaults","approval_requirements","exit_codes","side_effects","examples","next_safe_command"],"output_modes":["human","json"]},
+  "flag_contracts": [
+    {"path":"sync capabilities","flags":["--output"]},
+    {"path":"sync status","flags":["--group","--output"]},
+    {"path":"sync publish","flags":["--group","--expected-config-revision","--output"]},
+    {"path":"sync reconcile","flags":["--group","--output"]},
+    {"path":"sync verify","flags":["--group","--output"]},
+    {"path":"sync serve","flags":["--group"]},
+    {"path":"sync pause","flags":["--group","--expected-control-revision","--output"]},
+    {"path":"sync resume","flags":["--group","--expected-control-revision","--output"]},
+    {"path":"sync membership plan","flags":["--group","--change","--output"]},
+    {"path":"sync membership apply","flags":["--group","--plan","--expected-membership-predecessor","--output"]},
+    {"path":"sync checkpoint plan","flags":["--group","--target-commit","--kind","--output"]},
+    {"path":"sync checkpoint apply","flags":["--group","--plan","--output"]},
+    {"path":"sync service render","flags":["--group","--output"]},
+    {"path":"sync service install","flags":["--group","--yes","--output"]},
+    {"path":"sync service inspect","flags":["--group","--output"]},
+    {"path":"sync service stop","flags":["--group","--yes","--output"]},
+    {"path":"sync service disable","flags":["--group","--yes","--output"]},
+    {"path":"sync service uninstall","flags":["--group","--yes","--output"]}
+  ],
+  "list_contracts": [
+    {"record":"publication","max_page_size":100,"snapshot_token":"required_after_first_page"},
+    {"record":"delivery","max_page_size":100,"snapshot_token":"required_after_first_page"},
+    {"record":"import","max_page_size":100,"snapshot_token":"required_after_first_page"},
+    {"record":"verification","max_page_size":100,"snapshot_token":"required_after_first_page"}
+  ]
+}

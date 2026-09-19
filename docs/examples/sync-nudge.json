@@ -1,0 +1,1 @@
+{"schema_version":"agent-dispatch.sync-nudge/v1","group_id":"wiki-pair","publication_id":"publication-001","sender":"node-a","receiver":"node-b","membership_revision":"1111111111111111111111111111111111111111","content_ref":"refs/heads/wiki-sync","target_commit":"2222222222222222222222222222222222222222"}

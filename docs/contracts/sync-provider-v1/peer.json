@@ -1,0 +1,9 @@
+{
+  "schema_version": "agent-dispatch.sync-provider.peer/v1",
+  "routes": [
+    {"method":"POST","path":"/v1/sync/nudges","success":"inbox_committed","http_status":202,"max_body_bytes":262144,"request_schema":"agent-dispatch.sync-nudge/v1","request_selected_fields":[]},
+    {"method":"POST","path":"/v1/sync/status","success":"fresh_status","http_status":200,"max_body_bytes":16384,"request_schema":"agent-dispatch.sync-status-request/v1","request_selected_fields":[]}
+  ],
+  "authentication": {"transport":"tailscale_https","credential":"direction_specific_secret_reference","binds":["group_id","sender","receiver"],"verify_endpoint_and_certificate":true,"tailscale_headers_authorize":false,"public_binding":false,"failure_code":"sync_trust_failed","failure_http_status":401},
+  "forbidden_request_fields": ["path","executable","remote","ref","profile","credential","force"]
+}

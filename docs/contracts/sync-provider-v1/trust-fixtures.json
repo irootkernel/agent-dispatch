@@ -1,0 +1,10 @@
+{
+  "schema_version":"agent-dispatch.sync-provider.trust-fixtures/v1",
+  "fixtures":[
+    {"name":"membership-unpinned-administrator","document_key":"SHA256:ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ","pinned_key":"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","self_authorizing":false,"expected_code":"sync_trust_failed"},
+    {"name":"membership-self-authorizing-root","document_key":"SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB","pinned_key":"","self_authorizing":true,"expected_code":"sync_trust_failed"},
+    {"name":"membership-stale-predecessor","document_key":"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","pinned_key":"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","self_authorizing":false,"expected_code":"sync_precondition_failed"},
+    {"name":"verification-obsolete-incarnation","document_key":"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","pinned_key":"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","self_authorizing":false,"expected_code":"sync_identity_obsolete"}
+  ],
+  "claim":"contract fixture only; runtime signature verification is not implemented in E20"
+}

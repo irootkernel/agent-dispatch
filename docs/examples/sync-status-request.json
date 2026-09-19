@@ -1,0 +1,1 @@
+{"schema_version":"agent-dispatch.sync-status-request/v1","group_id":"wiki-pair","sender":"node-a","receiver":"node-b","membership_revision":"1111111111111111111111111111111111111111","nonce":"0123456789abcdef"}

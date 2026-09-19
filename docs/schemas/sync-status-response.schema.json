@@ -1,0 +1,6 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"urn:agent-dispatch:schema:sync-status-response:v1","title":"Agent Dispatch fresh status response v1","type":"object","additionalProperties":false,
+  "required":["schema_version","group_id","responder","state_incarnation_id","membership_revision","nonce","evidence_generation","evidence_age_seconds","state"],
+  "properties":{"schema_version":{"const":"agent-dispatch.sync-status-response/v1"},"group_id":{"$ref":"#/$defs/id"},"responder":{"$ref":"#/$defs/id"},"state_incarnation_id":{"type":"string","pattern":"^[a-z0-9][a-z0-9-]{7,127}$"},"membership_revision":{"$ref":"#/$defs/oid"},"nonce":{"type":"string","minLength":16,"maxLength":128},"evidence_generation":{"type":"integer","minimum":1},"evidence_age_seconds":{"type":"integer","minimum":0,"maximum":86400},"state":{"enum":["applied","behind","ahead","local_dirty","joining","paused","blocked","unknown"]}},
+  "$defs":{"id":{"type":"string","pattern":"^[a-z][a-z0-9-]{0,62}$"},"oid":{"type":"string","pattern":"^(?:[0-9a-f]{40}|[0-9a-f]{64})$"}}
+}

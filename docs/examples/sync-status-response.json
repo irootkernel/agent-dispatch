@@ -1,0 +1,1 @@
+{"schema_version":"agent-dispatch.sync-status-response/v1","group_id":"wiki-pair","responder":"node-b","state_incarnation_id":"node-b-0001","membership_revision":"1111111111111111111111111111111111111111","nonce":"0123456789abcdef","evidence_generation":8,"evidence_age_seconds":0,"state":"applied"}

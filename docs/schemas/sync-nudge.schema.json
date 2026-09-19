@@ -1,0 +1,6 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"urn:agent-dispatch:schema:sync-nudge:v1","title":"Agent Dispatch sync nudge v1","type":"object","additionalProperties":false,
+  "required":["schema_version","group_id","publication_id","sender","receiver","membership_revision","content_ref","target_commit"],
+  "properties":{"schema_version":{"const":"agent-dispatch.sync-nudge/v1"},"group_id":{"$ref":"#/$defs/id"},"publication_id":{"$ref":"#/$defs/id"},"sender":{"$ref":"#/$defs/id"},"receiver":{"$ref":"#/$defs/id"},"membership_revision":{"$ref":"#/$defs/oid"},"content_ref":{"type":"string","minLength":1,"maxLength":255},"target_commit":{"$ref":"#/$defs/oid"}},
+  "$defs":{"id":{"type":"string","pattern":"^[a-z][a-z0-9-]{0,62}$"},"oid":{"type":"string","pattern":"^(?:[0-9a-f]{40}|[0-9a-f]{64})$"}}
+}

@@ -41,6 +41,10 @@ agent-dispatch dispatches list|show|retry|reprocess|rerun|discard|refresh|drain
 agent-dispatch events show
 agent-dispatch notifications test|list|retry|drain
 agent-dispatch schedule render|install|inspect|disable|uninstall|run
+agent-dispatch sync capabilities|status|publish|reconcile|verify|serve|pause|resume
+agent-dispatch sync membership plan|apply
+agent-dispatch sync checkpoint plan|apply
+agent-dispatch sync service render|install|inspect|stop|disable|uninstall
 agent-dispatch receipts list|show
 agent-dispatch work begin|complete|fail
 agent-dispatch quarantine list|show|release|discard
@@ -52,6 +56,20 @@ agent-dispatch completion
 ```
 
 There is no `replay` command.
+
+The sync identities are contract-reserved in v0.2.0. E20 implements only
+side-effect-free `sync capabilities` and disabled-only `sync status`; every
+other identity returns `sync_capability_unavailable` at exit 3 until its owning
+E21 or E22 task implements and truthfully advertises it. The executable
+descriptor and peer contract bundle is
+[`sync-provider-v1`](sync-provider-v1/bundle.json).
+
+### Sync retained-record lists
+
+Publication, peer-delivery, import, and verification history use a maximum page
+size of 100. The first page returns an opaque snapshot token; every later page
+must present that token and cannot silently move to a newer snapshot. Tokens do
+not select a path, remote, ref, executable, profile, credential, or force mode.
 
 ## 3. Core Commands
 

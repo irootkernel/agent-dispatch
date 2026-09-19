@@ -13,7 +13,7 @@ LDFLAGS := -X $(PKG)/internal/version.Version=$(VERSION) \
 
 .PHONY: all build test test-race vet fmt-check staticcheck check-imports \
         go-version-check manifest-check schema-validation traceability \
-        schedule-check verify release clean
+        schedule-check sync-contract-check verify release clean
 
 all: build
 
@@ -22,7 +22,7 @@ all: build
 # that is not the pin (order is enforced by the prerequisite edge, not
 # by listing position).
 build test test-race vet fmt-check staticcheck check-imports \
-manifest-check schema-validation traceability schedule-check: go-version-check
+manifest-check schema-validation traceability schedule-check sync-contract-check: go-version-check
 
 build:
 	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/agent-dispatch
@@ -98,6 +98,9 @@ manifest-check:
 schema-validation:
 	$(GO) run ./internal/tools/schemavalid -root docs
 
+sync-contract-check:
+	$(GO) run ./internal/tools/synccontractcheck -dir docs/contracts/sync-provider-v1
+
 # Regenerate the traceability matrix and fail if it drifted from the
 # roadmap and required-spec.
 traceability:
@@ -108,7 +111,7 @@ traceability:
 	 cmp -s "$$trace_before" docs/specs/traceability-matrix.md || \
 	   { echo "traceability-matrix.md was stale; keep the regenerated file"; exit 1; }
 
-verify: go-version-check build fmt-check vet staticcheck check-imports test test-race manifest-check schema-validation traceability schedule-check
+verify: go-version-check build fmt-check vet staticcheck check-imports test test-race manifest-check schema-validation traceability schedule-check sync-contract-check
 	@echo "verify: all checks passed"
 
 # E6-T3 release process under the D-029 three-platform support policy:

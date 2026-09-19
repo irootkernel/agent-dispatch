@@ -15,9 +15,9 @@
 | Release target | v0.2.0 (Two-Node Wiki Sync MVP) |
 | Current epic | E20 Two-Node Sync Contracts and Admission (In Progress) |
 | Current active task | None |
-| Next task | E20-T3 (Planned) |
-| Completed tasks | 103 / 116 |
-| Planned tasks | 13 / 116 |
+| Next task | E20-T4 (Planned) |
+| Completed tasks | 104 / 116 |
+| Planned tasks | 12 / 116 |
 | In progress tasks | 0 |
 | In review tasks | 0 |
 | Blocked tasks | 0 |
@@ -166,7 +166,7 @@
 | 101 | E19-T10 | Completed | VALIDATION evidence (amd64 + arm64) and closeout notes |
 | 102 | E20-T1 | Completed | Two-node sync program admitted and decisions frozen |
 | 103 | E20-T2 | Completed | Sync records, state machines, and errors frozen |
-| 104 | E20-T3 | Planned | CLI and peer provider contract bundle frozen |
+| 104 | E20-T3 | Completed | CLI and peer provider contract bundle frozen |
 | 105 | E20-T4 | Planned | Disabled configuration and capabilities implemented |
 | 106 | E20-T5 | Planned | Contract baseline qualified and handed to E21 |
 | 107 | E21-T1 | Planned | Durable sync jobs, journals, and migrations |
@@ -5066,7 +5066,7 @@ task candidate. Completed 2026-09-19; E20-T3 is next.
 
 ## E20-T3: Freeze CLI and Peer Contracts
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -5098,6 +5098,17 @@ E20-T2 Completed.
   distinct documented machine results.
 - No request accepts a path, executable, remote, ref, profile, credential, or
   force option from peer data.
+
+### Evidence
+
+`docs/contracts/sync-provider-v1/` owns the checksummed provider bundle for the
+18 reserved command identities, two authenticated peer routes, closed machine
+results, eight typed errors, and canonical schema links. Retained publication,
+delivery, import, and verification lists use 100-record pages pinned by an
+opaque snapshot token. `make sync-contract-check` rejects unknown descriptor
+fields, command or route drift, unbounded/request-selected peer input,
+pagination drift, missing artifacts, and checksum mismatch. Focused provider
+tests and full schema validation pass. Completed 2026-09-19; E20-T4 is next.
 
 ## E20-T4: Implement Disabled Configuration and Capabilities
 

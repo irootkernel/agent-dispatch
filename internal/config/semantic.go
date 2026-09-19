@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -36,6 +37,7 @@ func SemanticValidate(cfg *Config) (errs []error, warnings []string) {
 	errs = append(errs, validateAbsolutePaths(cfg)...)
 	errs = append(errs, validateMapKeys(cfg)...)
 	errs = append(errs, validateMaxHashFloor(cfg)...)
+	errs = append(errs, validateSync(cfg)...)
 	// Serialization-group fields (E15-T1, CON-011): grammar and alias
 	// agreement fail loading; the deprecated-alias notices join the
 	// load-time warnings.
@@ -43,6 +45,116 @@ func SemanticValidate(cfg *Config) (errs []error, warnings []string) {
 	errs = append(errs, serializationErrs...)
 	warnings = append(warnings, serializationWarnings...)
 	return errs, warnings
+}
+
+func validateSync(cfg *Config) []error {
+	if cfg.Sync == nil {
+		return nil
+	}
+	s := cfg.Sync
+	var errs []error
+	if s.Enabled {
+		errs = append(errs, fmt.Errorf("sync.enabled cannot be true until runtime capabilities are implemented; E20 supports disabled contract inspection only"))
+	}
+	resource, ok := cfg.Resources[s.Resource]
+	if !ok {
+		errs = append(errs, fmt.Errorf("sync.resource %q is not defined", s.Resource))
+	} else if resource.Git == nil || resource.Git.Mode != "optional" {
+		errs = append(errs, fmt.Errorf("sync.resource %q must configure git.mode optional for the governed Git working copy", s.Resource))
+	}
+	if s.LocalInstanceID != cfg.Instance.ID {
+		errs = append(errs, fmt.Errorf("sync.local_instance_id %q must equal instance.id %q", s.LocalInstanceID, cfg.Instance.ID))
+	}
+	for name, ref := range map[string]string{"content_ref": s.ContentRef, "membership_ref": s.MembershipRef} {
+		if !validConfiguredGitRef(ref) {
+			errs = append(errs, fmt.Errorf("sync.%s %q is not a safe Git ref", name, ref))
+		}
+	}
+	if len(s.Nodes) != 2 {
+		errs = append(errs, fmt.Errorf("sync.nodes must contain exactly two members"))
+	}
+	seen := map[string]bool{}
+	seenPublisherKeys := map[string]bool{s.AdministratorKey: true}
+	seenCredentialRefs := map[string]bool{}
+	for name, ref := range map[string]string{"publisher_signing_key_ref": s.PublisherSigningKeyRef, "administrator_signing_key_ref": s.AdministratorSigningKeyRef} {
+		if ref == "" && name == "administrator_signing_key_ref" {
+			continue
+		}
+		if _, err := ParseSecretRef(ref); err != nil {
+			errs = append(errs, fmt.Errorf("sync.%s: %v", name, err))
+		}
+		if seenCredentialRefs[ref] {
+			errs = append(errs, fmt.Errorf("sync.%s must use a distinct command-only secret reference", name))
+		}
+		seenCredentialRefs[ref] = true
+	}
+	local := false
+	for i, n := range s.Nodes {
+		if seen[n.InstanceID] {
+			errs = append(errs, fmt.Errorf("sync.nodes[%d].instance_id %q is duplicated", i, n.InstanceID))
+		}
+		seen[n.InstanceID] = true
+		if n.InstanceID == s.LocalInstanceID {
+			local = true
+		}
+		if _, err := ParseSecretRef(n.CredentialRef); err != nil {
+			errs = append(errs, fmt.Errorf("sync.nodes[%d].credential_ref: %v", i, err))
+		}
+		if seenPublisherKeys[n.PublisherKey] {
+			errs = append(errs, fmt.Errorf("sync.nodes[%d].publisher_key must be distinct from the administrator and other node keys", i))
+		}
+		seenPublisherKeys[n.PublisherKey] = true
+		if seenCredentialRefs[n.CredentialRef] {
+			errs = append(errs, fmt.Errorf("sync.nodes[%d].credential_ref must be separately provisioned per direction", i))
+		}
+		seenCredentialRefs[n.CredentialRef] = true
+		if err := validateSyncEndpoint(n.Endpoint); err != nil {
+			errs = append(errs, fmt.Errorf("sync.nodes[%d].endpoint: %v", i, err))
+		}
+	}
+	if !local {
+		errs = append(errs, fmt.Errorf("sync.local_instance_id must name one configured node"))
+	}
+	if s.Bounds.Queue < 1 || s.Bounds.Queue > 1000 || s.Bounds.HistoryCommits < 1 || s.Bounds.HistoryCommits > 1000 || s.Bounds.SubprocessSeconds < 1 || s.Bounds.SubprocessSeconds > 120 || s.Bounds.SubprocessBytes < 1024 || s.Bounds.SubprocessBytes > 1048576 {
+		errs = append(errs, fmt.Errorf("sync.bounds exceed the E20 contract ceilings"))
+	}
+	return errs
+}
+
+func validConfiguredGitRef(ref string) bool {
+	if ref == "" || ref == "@" || strings.HasPrefix(ref, "/") || strings.HasSuffix(ref, "/") ||
+		strings.HasSuffix(ref, ".") || strings.Contains(ref, "..") || strings.Contains(ref, "@{") ||
+		strings.Contains(ref, "//") || strings.ContainsAny(ref, " ~^:?*[\\") {
+		return false
+	}
+	for _, r := range ref {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	for _, component := range strings.Split(ref, "/") {
+		if component == "" || strings.HasPrefix(component, ".") || strings.HasSuffix(component, ".lock") {
+			return false
+		}
+	}
+	return true
+}
+
+func validateSyncEndpoint(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.Hostname() == "" {
+		return fmt.Errorf("must be a valid https URL")
+	}
+	if u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return fmt.Errorf("must not contain userinfo, query, or fragment data")
+	}
+	if u.Path != "" && u.Path != "/" {
+		return fmt.Errorf("must be an origin URL without a path")
+	}
+	if !strings.HasSuffix(strings.ToLower(u.Hostname()), ".ts.net") {
+		return fmt.Errorf("must use a configured Tailscale HTTPS .ts.net endpoint")
+	}
+	return nil
 }
 
 // MinimumEligibleHermesVersion is the product support floor (E15-T2,

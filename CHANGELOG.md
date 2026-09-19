@@ -4,6 +4,11 @@ This file records concise shipped outcomes and pending changes.
 
 ## Unreleased
 
+### Added
+
+- Add the disabled-by-default two-node sync configuration contract plus
+  side-effect-free `sync capabilities` and disabled `sync status` inspection.
+
 ## v0.1.8 - 2026-09-10
 
 ### Added

@@ -436,3 +436,45 @@ there is no load-time conversion or migration preview. `setup wiki` and the
 configuration mutation commands write a validated temporary file, preserve
 mode, fsync, and atomically replace the requested config while leaving it
 disabled or revision-paused.
+
+## 15. Optional two-node sync block
+
+`sync` is optional and disabled by default. One block owns one group, one
+existing Markdown resource, one configured remote name, one content ref, one
+membership ref, one local instance, one pinned administrator key, exactly two
+distinct nodes, command-only publisher and optional administrator signing-key
+references, direction-specific peer secret references, and bounded queue,
+history, subprocess time, and subprocess output values. Inline credentials,
+unknown fields, a third member, a non-Git resource, a public or credential-bearing
+endpoint, reused trust or directional credentials, or an enabled block fail
+configuration validation. E20 implements contract reads and
+disabled status only; it performs no Git, network, listener, SQLite, service,
+or live-tree effect.
+
+The computed sync revision digests every normalized field above plus the
+global instance identity, governed resource shape, every route-owned include,
+exclude, protected, and immutable pattern for that resource, and the fixed
+fail-closed SYN-010 safety rules: writer guard and idle-participant checks,
+durable pre-apply planning/journaling, Git/index/ref stability, overlap and
+untracked-overwrite refusal, preservation of disjoint/out-of-scope/ignored
+work and Watchman evidence, deferral when disjointness is unproven, and exact
+durable import-evidence suppression. It excludes only the acknowledgement itself.
+Nodes are sorted by instance ID, routes by route ID, and scope/policy pattern
+lists lexically before canonical JSON serialization, so presentation order does
+not change the SHA-256 revision.
+
+`cooperative_import_acknowledgement` is the complete versioned record, not a
+bare digest. It is current only when every record binding equals the normalized
+configuration and its state incarnation equals the current durable local
+incarnation. E20 status does not read SQLite and therefore reports it non-current;
+E21 owns that durable-state eligibility check. A local resource,
+remote/ref, scope, identity, administrator anchor, node, credential reference,
+policy, or bound change therefore invalidates live-tree application without
+blocking publication, status, or later fetch-and-validate reconciliation.
+Remote membership movement is rechecked at its protected effect and is not a
+local acknowledgement input.
+
+Only the explicit `sync publish` process may resolve the local publisher
+signing-key reference. Only membership/checkpoint apply may resolve the optional
+administrator signing-key reference. The peer service receives neither resolved
+key nor signing capability; normalized output contains reference names only.

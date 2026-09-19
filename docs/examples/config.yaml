@@ -20,6 +20,32 @@ resources:
     git:
       mode: optional
 
+sync:
+  enabled: false
+  group_id: wiki-pair
+  resource: vault-main
+  remote_name: origin
+  content_ref: refs/heads/wiki-sync
+  membership_ref: refs/agent-dispatch/membership/wiki-pair
+  local_instance_id: workstation-main
+  administrator_key: SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  publisher_signing_key_ref: env:SYNC_PUBLISHER_SIGNING_KEY
+  administrator_signing_key_ref: env:SYNC_ADMINISTRATOR_SIGNING_KEY
+  nodes:
+    - instance_id: workstation-main
+      endpoint: https://node-a.example.ts.net
+      publisher_key: SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+      credential_ref: env:SYNC_NODE_A_TO_B
+    - instance_id: node-b
+      endpoint: https://node-b.example.ts.net
+      publisher_key: SHA256:CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+      credential_ref: env:SYNC_NODE_B_TO_A
+  bounds:
+    queue: 1000
+    history_commits: 1000
+    subprocess_seconds: 120
+    subprocess_bytes: 1048576
+
 hermes_targets:
   hermes-main:
     board: agent-dispatch

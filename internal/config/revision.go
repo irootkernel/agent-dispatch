@@ -21,6 +21,110 @@ func CaseMode() string {
 	return "sensitive"
 }
 
+// SyncRevision is the normalized acknowledgement input over the complete
+// local safety guard set. The acknowledgement value itself is excluded so it
+// can equal this digest; any other sync input change invalidates it.
+func SyncRevision(cfg *Config) (string, bool) {
+	if cfg.Sync == nil {
+		return "", false
+	}
+	s := *cfg.Sync
+	s.ImportAcknowledgement = nil
+	nodes := append([]SyncNode(nil), s.Nodes...)
+	sort.Slice(nodes, func(i, j int) bool { return nodes[i].InstanceID < nodes[j].InstanceID })
+	s.Nodes = nodes
+	resource := cfg.Resources[s.Resource]
+	scope := syncScopeProjection(cfg, s.Resource)
+	projection := struct {
+		Sync         Sync             `json:"sync"`
+		Resource     Resource         `json:"resource"`
+		InstanceID   string           `json:"instance_id"`
+		Scope        []map[string]any `json:"scope"`
+		SafetyPolicy map[string]bool  `json:"safety_policy"`
+	}{
+		Sync:         s,
+		Resource:     resource,
+		InstanceID:   cfg.Instance.ID,
+		Scope:        scope,
+		SafetyPolicy: syncSafetyPolicy(),
+	}
+	enc, err := json.Marshal(projection)
+	if err != nil {
+		return "", false
+	}
+	sum := sha256.Sum256(enc)
+	return "sha256:" + hex.EncodeToString(sum[:]), true
+}
+
+// syncScopeProjection binds the acknowledgement to every route-owned scope and
+// protected/immutable pattern governing the synchronized resource. The fixed
+// safety flags above bind the rest of the SYN-010 guard set; neither peer input
+// nor runtime membership can weaken those fail-closed rules.
+func syncScopeProjection(cfg *Config, resourceID string) []map[string]any {
+	ids := make([]string, 0)
+	for id, route := range cfg.Routes {
+		if route.Source.Resource == resourceID {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	out := make([]map[string]any, 0, len(ids))
+	for _, id := range ids {
+		route := cfg.Routes[id]
+		out = append(out, map[string]any{
+			"route_id":  id,
+			"include":   sortedCopy(route.Source.Include),
+			"exclude":   sortedCopy(route.Source.Exclude),
+			"protected": sortedCopy(route.Policy.Protected),
+			"immutable": sortedCopy(route.Policy.Immutable),
+		})
+	}
+	return out
+}
+
+func SyncAcknowledgementCurrent(cfg *Config, currentStateIncarnation string) bool {
+	if cfg.Sync == nil || cfg.Sync.ImportAcknowledgement == nil || currentStateIncarnation == "" {
+		return false
+	}
+	revision, ok := SyncRevision(cfg)
+	if !ok {
+		return false
+	}
+	ack := cfg.Sync.ImportAcknowledgement
+	return ack.SchemaVersion == "agent-dispatch.sync-import-acknowledgement/v1" &&
+		ack.AcknowledgementID != "" &&
+		ack.GroupID == cfg.Sync.GroupID && ack.ResourceID == cfg.Sync.Resource &&
+		ack.RemoteName == cfg.Sync.RemoteName && ack.ContentRef == cfg.Sync.ContentRef &&
+		ack.MembershipRef == cfg.Sync.MembershipRef && ack.ScopeDigest == digestJSON(syncScopeProjection(cfg, cfg.Sync.Resource)) &&
+		ack.LocalInstanceID == cfg.Sync.LocalInstanceID && ack.StateIncarnationID == currentStateIncarnation &&
+		ack.AdministratorKey == cfg.Sync.AdministratorKey && ack.SafetyPolicyDigest == digestJSON(syncSafetyPolicy()) &&
+		ack.ImportBoundsDigest == digestJSON(cfg.Sync.Bounds) && ack.ConfigRevision == revision
+}
+
+func digestJSON(v any) string {
+	enc, _ := json.Marshal(v)
+	sum := sha256.Sum256(enc)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func syncSafetyPolicy() map[string]bool {
+	return map[string]bool{
+		"fast_forward_only":           true,
+		"resource_writer_guard":       true,
+		"participating_writer_idle":   true,
+		"durable_preapply_journal":    true,
+		"reject_git_instability":      true,
+		"reject_overlapping_changes":  true,
+		"reject_untracked_overwrite":  true,
+		"preserve_disjoint_changes":   true,
+		"preserve_out_of_scope":       true,
+		"preserve_ignored_files":      true,
+		"defer_unproven_disjointness": true,
+		"preserve_watchman_evidence":  true,
+		"exact_import_suppression":    true,
+	}
+}
+
 // RouteRevision computes the deterministic behavior-affecting revision of
 // one route (configuration-spec §13, POL-007, FAN-012). Since the v0.1.5
 // cutover the canonical projection covers the source binding, resource

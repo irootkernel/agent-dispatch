@@ -33,6 +33,7 @@ Commands:
   events         show — aggregate-event inspection with per-child evidence.
   notifications  test, list, retry, drain — the notification delivery surface.
   schedule       render, install, inspect, disable, uninstall, run — the managed launchd drain schedule.
+  sync           capabilities, disabled status, and reserved v0.2.0 identities.
   work           begin, complete, fail — the Hermes companion receipt surface.
   quarantine     list, release, discard — held-path operator exits.
   reconcile      Run a full-scope reconciliation generation.
@@ -71,6 +72,27 @@ Next safe command: agent-dispatch setup wiki`
 // entry states the subcommands, key flags, side effects, and the next
 // safe command (CLI-009).
 var commandHelp = map[string]string{
+	"sync": `sync — inspect the v0.2.0 contract-only capability surface
+
+Usage: agent-dispatch sync capabilities --output json
+       agent-dispatch sync status --group <id> [--config <path>] --output json
+
+Flags: --group selects the configured sync group; --config selects an explicit
+configuration file; --output json selects the versioned machine envelope.
+
+Defaults: the platform configuration path; sync is disabled by default.
+Approval requirements: none for capabilities/status. Reserved mutating commands
+remain unavailable and their future approval requirements are not activated.
+
+Exit codes: 0 success; 2 usage; 3 configuration or unavailable capability.
+
+Side effects: capabilities and status read no Git, network, listener, service,
+SQLite, or live-tree state. Reserved commands fail before side effects.
+
+Example:
+  agent-dispatch sync capabilities --output json
+
+Next safe command: agent-dispatch config show`,
 	"version": `version — print the product version
 
 Usage: agent-dispatch version [--json]

@@ -15,9 +15,9 @@
 | Release target | v0.2.0 (Two-Node Wiki Sync MVP) |
 | Current epic | E20 Two-Node Sync Contracts and Admission (In Progress) |
 | Current active task | None |
-| Next task | E20-T4 (Planned) |
-| Completed tasks | 104 / 116 |
-| Planned tasks | 12 / 116 |
+| Next task | E20-T5 (Planned) |
+| Completed tasks | 105 / 116 |
+| Planned tasks | 11 / 116 |
 | In progress tasks | 0 |
 | In review tasks | 0 |
 | Blocked tasks | 0 |
@@ -167,7 +167,7 @@
 | 102 | E20-T1 | Completed | Two-node sync program admitted and decisions frozen |
 | 103 | E20-T2 | Completed | Sync records, state machines, and errors frozen |
 | 104 | E20-T3 | Completed | CLI and peer provider contract bundle frozen |
-| 105 | E20-T4 | Planned | Disabled configuration and capabilities implemented |
+| 105 | E20-T4 | Completed | Disabled configuration and capabilities implemented |
 | 106 | E20-T5 | Planned | Contract baseline qualified and handed to E21 |
 | 107 | E21-T1 | Planned | Durable sync jobs, journals, and migrations |
 | 108 | E21-T2 | Planned | Restricted Git, trust, and membership administration |
@@ -5112,7 +5112,7 @@ tests and full schema validation pass. Completed 2026-09-19; E20-T4 is next.
 
 ## E20-T4: Implement Disabled Configuration and Capabilities
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -5147,6 +5147,25 @@ E20-T3 Completed.
   gated effect.
 - Configuration validation and read-only capability commands make no network,
   Git, listener, or live-tree change.
+
+### Evidence
+
+The optional closed `sync` block admits exactly one resource, one group, two
+nodes, configured refs and trust references, and bounded execution inputs while
+rejecting runtime enablement. Its deterministic acknowledgement revision binds
+the normalized block, local installation identity, governed resource, route
+scope and protected/immutable policy, and the fixed fail-closed SYN-010 guard
+set. `sync capabilities` and `sync status` expose only contract inspection;
+all reserved runtime commands fail before side effects. Focused configuration,
+CLI, provider-bundle, and schema checks pass. Two independent six-role Codex
+Sol medium static review cohorts replaced unavailable Mulgae review for this
+task. Their valid findings were remediated in-tree: durable incarnation and
+canonical acknowledgement identity now gate currentness; the complete SYN-010
+guard set joins the safety digest; Git refs, tailnet endpoints, signing keys,
+publisher keys, and directional credentials fail closed; provider capability,
+flag, result, help, and reserved-command identities stay in lockstep with the
+CLI; and exact revision/status regression tests cover the admitted boundary.
+Completed 2026-09-19; E20-T5 is next.
 
 ## E20-T5: Qualify the Contract Baseline
 

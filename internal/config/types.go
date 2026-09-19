@@ -19,10 +19,61 @@ type Config struct {
 	HermesTargets map[string]HermesTarget `yaml:"hermes_targets" json:"hermes_targets"`
 	Routes        map[string]Route        `yaml:"routes"         json:"routes"`
 	Retention     *Retention              `yaml:"retention"      json:"retention,omitempty"`
+	Sync          *Sync                   `yaml:"sync"           json:"sync,omitempty"`
 
 	// Warnings carries non-fatal semantic validation warnings; it is
 	// produced by the loader and never part of the configuration document.
 	Warnings []string `yaml:"-" json:"-"`
+}
+
+type Sync struct {
+	Enabled                    bool                       `yaml:"enabled" json:"enabled"`
+	GroupID                    string                     `yaml:"group_id" json:"group_id"`
+	Resource                   string                     `yaml:"resource" json:"resource"`
+	RemoteName                 string                     `yaml:"remote_name" json:"remote_name"`
+	ContentRef                 string                     `yaml:"content_ref" json:"content_ref"`
+	MembershipRef              string                     `yaml:"membership_ref" json:"membership_ref"`
+	LocalInstanceID            string                     `yaml:"local_instance_id" json:"local_instance_id"`
+	AdministratorKey           string                     `yaml:"administrator_key" json:"administrator_key"`
+	PublisherSigningKeyRef     string                     `yaml:"publisher_signing_key_ref" json:"publisher_signing_key_ref"`
+	AdministratorSigningKeyRef string                     `yaml:"administrator_signing_key_ref,omitempty" json:"administrator_signing_key_ref,omitempty"`
+	Nodes                      []SyncNode                 `yaml:"nodes" json:"nodes"`
+	Bounds                     SyncBounds                 `yaml:"bounds" json:"bounds"`
+	ImportAcknowledgement      *SyncImportAcknowledgement `yaml:"cooperative_import_acknowledgement,omitempty" json:"cooperative_import_acknowledgement,omitempty"`
+}
+
+// SyncImportAcknowledgement is the versioned operator-reviewed record that
+// E21 will persist with local state. Keeping the complete binding here makes
+// configuration parsing fail closed without treating a bare digest as proof.
+type SyncImportAcknowledgement struct {
+	SchemaVersion      string `yaml:"schema_version" json:"schema_version"`
+	AcknowledgementID  string `yaml:"acknowledgement_id" json:"acknowledgement_id"`
+	GroupID            string `yaml:"group_id" json:"group_id"`
+	ResourceID         string `yaml:"resource_id" json:"resource_id"`
+	RemoteName         string `yaml:"remote_name" json:"remote_name"`
+	ContentRef         string `yaml:"content_ref" json:"content_ref"`
+	MembershipRef      string `yaml:"membership_ref" json:"membership_ref"`
+	ScopeDigest        string `yaml:"scope_digest" json:"scope_digest"`
+	LocalInstanceID    string `yaml:"local_instance_id" json:"local_instance_id"`
+	StateIncarnationID string `yaml:"state_incarnation_id" json:"state_incarnation_id"`
+	AdministratorKey   string `yaml:"administrator_key" json:"administrator_key"`
+	SafetyPolicyDigest string `yaml:"safety_policy_digest" json:"safety_policy_digest"`
+	ImportBoundsDigest string `yaml:"import_bounds_digest" json:"import_bounds_digest"`
+	ConfigRevision     string `yaml:"config_revision" json:"config_revision"`
+}
+
+type SyncNode struct {
+	InstanceID    string `yaml:"instance_id" json:"instance_id"`
+	Endpoint      string `yaml:"endpoint" json:"endpoint"`
+	PublisherKey  string `yaml:"publisher_key" json:"publisher_key"`
+	CredentialRef string `yaml:"credential_ref" json:"credential_ref"`
+}
+
+type SyncBounds struct {
+	Queue             int `yaml:"queue" json:"queue"`
+	HistoryCommits    int `yaml:"history_commits" json:"history_commits"`
+	SubprocessSeconds int `yaml:"subprocess_seconds" json:"subprocess_seconds"`
+	SubprocessBytes   int `yaml:"subprocess_bytes" json:"subprocess_bytes"`
 }
 
 // Instance identifies this agent-dispatch installation (§3).

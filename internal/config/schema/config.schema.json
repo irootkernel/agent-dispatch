@@ -94,6 +94,200 @@
         "$ref": "#/$defs/route"
       }
     },
+    "sync": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "group_id",
+        "resource",
+        "remote_name",
+        "content_ref",
+        "membership_ref",
+        "local_instance_id",
+        "administrator_key",
+        "publisher_signing_key_ref",
+        "nodes",
+        "bounds"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "group_id": {
+          "$ref": "#/$defs/destinationId"
+        },
+        "resource": {
+          "$ref": "#/$defs/id"
+        },
+        "remote_name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+        },
+        "content_ref": {
+          "type": "string",
+          "pattern": "^refs/heads/[A-Za-z0-9](?:[A-Za-z0-9._/-]*[A-Za-z0-9])?$"
+        },
+        "membership_ref": {
+          "type": "string",
+          "pattern": "^refs/agent-dispatch/membership/[A-Za-z0-9](?:[A-Za-z0-9._/-]*[A-Za-z0-9])?$"
+        },
+        "local_instance_id": {
+          "$ref": "#/$defs/destinationId"
+        },
+        "administrator_key": {
+          "type": "string",
+          "pattern": "^SHA256:[A-Za-z0-9+/]{20,64}$"
+        },
+        "publisher_signing_key_ref": {
+          "$ref": "#/$defs/secretRef"
+        },
+        "administrator_signing_key_ref": {
+          "$ref": "#/$defs/secretRef"
+        },
+        "cooperative_import_acknowledgement": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema_version",
+            "acknowledgement_id",
+            "group_id",
+            "resource_id",
+            "remote_name",
+            "content_ref",
+            "membership_ref",
+            "scope_digest",
+            "local_instance_id",
+            "state_incarnation_id",
+            "administrator_key",
+            "safety_policy_digest",
+            "import_bounds_digest",
+            "config_revision"
+          ],
+          "properties": {
+            "schema_version": {
+              "const": "agent-dispatch.sync-import-acknowledgement/v1"
+            },
+            "acknowledgement_id": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,127}$"
+            },
+            "group_id": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,62}$"
+            },
+            "resource_id": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,62}$"
+            },
+            "remote_name": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+            },
+            "content_ref": {
+              "type": "string",
+              "pattern": "^refs/heads/[A-Za-z0-9](?:[A-Za-z0-9._/-]*[A-Za-z0-9])?$"
+            },
+            "membership_ref": {
+              "type": "string",
+              "pattern": "^refs/agent-dispatch/membership/[A-Za-z0-9](?:[A-Za-z0-9._/-]*[A-Za-z0-9])?$"
+            },
+            "scope_digest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "local_instance_id": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,62}$"
+            },
+            "state_incarnation_id": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{7,127}$"
+            },
+            "administrator_key": {
+              "type": "string",
+              "pattern": "^SHA256:[A-Za-z0-9+/]{20,64}$"
+            },
+            "safety_policy_digest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "import_bounds_digest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "config_revision": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          }
+        },
+        "nodes": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "instance_id",
+              "endpoint",
+              "publisher_key",
+              "credential_ref"
+            ],
+            "properties": {
+              "instance_id": {
+                "$ref": "#/$defs/destinationId"
+              },
+              "endpoint": {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https://"
+              },
+              "publisher_key": {
+                "type": "string",
+                "pattern": "^SHA256:[A-Za-z0-9+/]{20,64}$"
+              },
+              "credential_ref": {
+                "$ref": "#/$defs/secretRef"
+              }
+            }
+          }
+        },
+        "bounds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "queue",
+            "history_commits",
+            "subprocess_seconds",
+            "subprocess_bytes"
+          ],
+          "properties": {
+            "queue": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "history_commits": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "subprocess_seconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 120
+            },
+            "subprocess_bytes": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 1048576
+            }
+          }
+        }
+      }
+    },
     "retention": {
       "$ref": "#/$defs/retention"
     }

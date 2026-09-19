@@ -23,6 +23,7 @@ func (c *Config) Normalized() ([]byte, error) {
 		HermesTargets: normalizedHermesTargets(c.HermesTargets),
 		Routes:        normalizedRoutes(c.Routes),
 		Retention:     c.Retention,
+		Sync:          normalizedSync(c.Sync),
 	}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -42,6 +43,17 @@ type normalizedConfig struct {
 	HermesTargets map[string]normalizedHermesTarget `json:"hermes_targets"`
 	Routes        map[string]normalizedRoute        `json:"routes"`
 	Retention     *Retention                        `json:"retention,omitempty"`
+	Sync          *Sync                             `json:"sync,omitempty"`
+}
+
+func normalizedSync(syncConfig *Sync) *Sync {
+	if syncConfig == nil {
+		return nil
+	}
+	out := *syncConfig
+	out.Nodes = append([]SyncNode(nil), syncConfig.Nodes...)
+	sort.Slice(out.Nodes, func(i, j int) bool { return out.Nodes[i].InstanceID < out.Nodes[j].InstanceID })
+	return &out
 }
 
 type normalizedTarget struct {

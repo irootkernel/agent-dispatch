@@ -53,14 +53,14 @@ type commands struct {
 type commandTuple struct{ Path, Capability, Availability, SideEffect string }
 
 var expectedCommandTuples = []commandTuple{
-	{"sync capabilities", "contract_read", "reserved", "none"}, {"sync status", "status_read", "reserved", "none"},
+	{"sync capabilities", "contract_read", "implemented", "none"}, {"sync status", "status_read", "implemented_disabled_only", "none"},
 	{"sync publish", "publication", "reserved", "git_write"}, {"sync reconcile", "reconciliation", "reserved", "git_read_write"}, {"sync verify", "pair_verification", "reserved", "network_read"}, {"sync serve", "peer_service", "reserved", "listener"}, {"sync pause", "control", "reserved", "state_write"}, {"sync resume", "control", "reserved", "state_write"},
 	{"sync membership plan", "membership_plan", "reserved", "none"}, {"sync membership apply", "membership_apply", "reserved", "git_write"}, {"sync checkpoint plan", "checkpoint_plan", "reserved", "none"}, {"sync checkpoint apply", "checkpoint_apply", "reserved", "git_write"},
 	{"sync service render", "service_render", "reserved", "none"}, {"sync service install", "service_install", "reserved", "service_write"}, {"sync service inspect", "service_inspect", "reserved", "none"}, {"sync service stop", "service_stop", "reserved", "service_write"}, {"sync service disable", "service_disable", "reserved", "service_write"}, {"sync service uninstall", "service_uninstall", "reserved", "service_write"},
 }
 
 var expectedCommandFlags = [][]string{
-	{"--output"}, {"--group", "--output"}, {"--group", "--expected-config-revision", "--output"}, {"--group", "--output"}, {"--group", "--output"}, {"--group"}, {"--group", "--expected-control-revision", "--output"}, {"--group", "--expected-control-revision", "--output"},
+	{"--output"}, {"--config", "--group", "--output"}, {"--group", "--expected-config-revision", "--output"}, {"--group", "--output"}, {"--group", "--output"}, {"--group"}, {"--group", "--expected-control-revision", "--output"}, {"--group", "--expected-control-revision", "--output"},
 	{"--group", "--change", "--output"}, {"--group", "--plan", "--expected-membership-predecessor", "--output"}, {"--group", "--target-commit", "--kind", "--output"}, {"--group", "--plan", "--output"},
 	{"--group", "--output"}, {"--group", "--yes", "--output"}, {"--group", "--output"}, {"--group", "--yes", "--output"}, {"--group", "--yes", "--output"}, {"--group", "--yes", "--output"},
 }

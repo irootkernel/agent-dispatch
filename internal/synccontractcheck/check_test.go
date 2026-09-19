@@ -86,6 +86,25 @@ func TestCheckRejectsHybridResultWithUpdatedChecksum(t *testing.T) {
 	}
 }
 
+func TestCheckDerivesTrustFixtureOutcome(t *testing.T) {
+	dir := copyRepositoryBundle(t)
+	path := filepath.Join(dir, "trust-fixtures.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw = []byte(strings.Replace(string(raw),
+		`"document_key":"SHA256:ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"`,
+		`"document_key":"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"`, 1))
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rewriteChecksum(t, dir, "trust-fixtures.json")
+	if err := Check(dir); err == nil || !strings.Contains(err.Error(), "evaluates to") {
+		t.Fatalf("expected derived trust outcome failure, got %v", err)
+	}
+}
+
 func TestCheckRejectsSchemaIdentityDriftWithUpdatedChecksum(t *testing.T) {
 	dir := copyRepositoryBundle(t)
 	rel := "../../schemas/sync-nudge.schema.json"

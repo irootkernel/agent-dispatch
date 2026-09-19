@@ -644,3 +644,34 @@ ran with Watchman intentionally absent from `PATH`: all remaining checks passed
 and the guarded real-Watchman legs reported their environment gap. E20-T1 is
 Completed as of 2026-09-18. Runtime sync behavior remains unimplemented and
 unverified.
+
+## Gate G16 Candidate: Two-Node Sync Contract and Disabled Baseline (E20)
+
+Candidate evidence recorded 2026-09-19 on darwin/arm64 with Go 1.26.6. This
+section does not close G16; exact-revision cold review and closeout remain. The
+candidate is limited to the contract baseline and disabled inspection surface
+and does not claim Git publication/import, Tailscale transport, peer listener,
+managed sync service, live-tree mutation, production activation, installation,
+or release evidence.
+
+| Criterion | Evidence |
+|---|---|
+| AC-1601 absent sync preserves v0.1.8 behavior | `sync` is optional in both config-schema copies; the ordinary repository unit/race suites pass, and `internal/cli/e20t4_test.go` exercises a sync-absent configuration through the side-effect-free ordinary `config show` command |
+| AC-1602 disabled truthful inspection | `internal/cli/e20t4_test.go` pins the exact provider capability vocabulary, disabled status envelope, absent/stale acknowledgement posture, group mismatch, reserved failures, and unknown-command refusal; the only true capabilities are contract/status reads |
+| AC-1603 fail-closed configuration and acknowledgement | `internal/config/e20t4_test.go` covers unsupported enablement, exact two-node membership, Git resources and refs, tailnet-only credential-free endpoints, distinct administrator/publisher/signing/directional credentials, bounds, deterministic normalization, complete SYN-010 revision inputs, canonical acknowledgement identity, and the pure currentness helper's state-incarnation invalidation; command-side acknowledgement enforcement and remote revalidation remain assigned to E21 |
+| AC-1604 trust fixtures reject without runtime claims | `internal/synccontractcheck` derives the closed error from each fixture's pinned-key, self-authorization, predecessor, and incarnation facts and rejects a mismatched expected result; `internal/schemavalid` separately rejects the registered structural/semantic negative examples, without claiming live signature verification |
+| AC-1605 provider bundle is exact and checksummed | `make sync-contract-check` validates the exact artifact, command, flag/help, route/authentication, result, error, trust-fixture, schema/example, checksum, and pagination contracts; `make schema-validation` compiles 31 schemas and validates/rejects the registered positive/negative corpus |
+
+The configured Gaori runs for `manifest-check`, `schema-validation`, and
+`traceability` each finished with child exit 0 and artifact status `passed`.
+The generic extractor returned `no_match`; no raw log was opened. The first
+native `make verify` reproduced the host Watchman daemon's known
+`FSEventStreamStart` refusal on disposable roots. It also found a historical
+fixture timestamp that had crossed the 30-day retention horizon; the test now
+places that unrelated fixture intent outside its retention population and the
+focused regression passes. A complete rerun with Watchman intentionally absent
+from `PATH` passed build, formatting, vet, staticcheck, import direction, unit
+tests, race tests, manifest, schema, traceability, schedule, and sync-provider
+validation. `systemd-analyze` was absent and the existing schedule check
+reported its documented lint skip. Exact accepted revision and cold-review
+settlement are recorded by the E20 closeout after the reviewed T5 commit exists.

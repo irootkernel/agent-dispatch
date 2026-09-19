@@ -2,7 +2,7 @@
 f4b90b313e80b5be6db70467a899d562714a2829070754736b8f9d3679dfbd0c  peer.json
 65bb43d1a3af48c2e88ae59b0da15aa69e667dcdbac9addfa01b4c6d67846999  results.json
 53c258fa346e8562b1e078a91fa9f2928e27132be39f522db550598f6d5fb6b2  errors.json
-8fc5f388afc3385f8b6650397eeb85255822e81a3ad8d77337fd2f6a572994b5  trust-fixtures.json
+fdb6f2711d86f498d99133800fa601a18f65d7c7a87370bb29336a8015b50195  trust-fixtures.json
 ac03aab915b506add12bc2bb2e77809df6cc9ab2651ae443fb4c510e1e89bf87  ../../schemas/sync-membership.schema.json
 be6efa8020a186d33da5c18ef7fe3f1dc2e2209abfdf8ebd5dfe47953b3a7bef  ../../schemas/sync-membership-plan.schema.json
 a29b516454322f4266d4c976a9799d7594ad4aa0e42300b55d8d4f31325e1245  ../../schemas/sync-checkpoint.schema.json

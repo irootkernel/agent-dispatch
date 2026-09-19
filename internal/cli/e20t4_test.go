@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -43,6 +44,78 @@ func TestE20T4SyncCapabilitiesAndDisabledStatus(t *testing.T) {
 	wantStatus := map[string]any{"schema_version": "agent-dispatch.sync-status/v1", "group_id": "wiki-pair", "state": "disabled", "reason": "not_configured_or_disabled", "config_revision": revision, "import_acknowledgement_current": false, "side_effects": []any{}}
 	if !reflect.DeepEqual(result, wantStatus) {
 		t.Fatalf("disabled status = %v", result)
+	}
+}
+
+func TestE20T4AbsentSyncPreservesOrdinaryConfigShow(t *testing.T) {
+	cfg, err := configpkg.Load("../../docs/examples/config.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Sync = nil
+	dir := t.TempDir()
+	vault := filepath.Join(dir, "vault")
+	if err := os.Mkdir(vault, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(vault, "unchanged.md")
+	if err := os.WriteFile(marker, []byte("unchanged\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	resource := cfg.Resources["vault-main"]
+	resource.Root = vault
+	cfg.Resources["vault-main"] = resource
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(configPath, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := func() map[string]string {
+		t.Helper()
+		got := map[string]string{}
+		if err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			rel, err := filepath.Rel(dir, path)
+			if err != nil {
+				return err
+			}
+			if entry.IsDir() {
+				got[rel] = "directory"
+				return nil
+			}
+			body, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			got[rel] = string(body)
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	before := snapshot()
+	t.Setenv("PATH", t.TempDir())
+
+	var out, errOut bytes.Buffer
+	if code := Run([]string{"config", "show", "--config", configPath, "--output", "json"}, &out, &errOut); code != 0 {
+		t.Fatalf("ordinary config show: %d %s", code, errOut.String())
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	shown := envelope["result"].(map[string]any)
+	if _, present := shown["sync"]; present {
+		t.Fatalf("sync-absent configuration gained a sync block: %v", shown["sync"])
+	}
+	if after := snapshot(); !reflect.DeepEqual(after, before) {
+		t.Fatalf("ordinary config show changed fixture files: before=%v after=%v", before, after)
 	}
 }
 

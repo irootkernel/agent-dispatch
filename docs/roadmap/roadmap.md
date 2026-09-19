@@ -14,12 +14,12 @@
 | Planned SOT baseline | 1.6.0 ([D-030](../specs/decision-log.md); G16-G18 open) |
 | Release target | v0.2.0 (Two-Node Wiki Sync MVP) |
 | Current epic | E20 Two-Node Sync Contracts and Admission (In Progress) |
-| Current active task | None |
-| Next task | E20-T5 (Planned) |
+| Current active task | E20-T5 (In Review) |
+| Next task | E20-T5 cold review and E20 closeout |
 | Completed tasks | 105 / 116 |
-| Planned tasks | 11 / 116 |
+| Planned tasks | 10 / 116 |
 | In progress tasks | 0 |
-| In review tasks | 0 |
+| In review tasks | 1 |
 | Blocked tasks | 0 |
 | Deferred tracked tasks | 0 |
 
@@ -168,7 +168,7 @@
 | 103 | E20-T2 | Completed | Sync records, state machines, and errors frozen |
 | 104 | E20-T3 | Completed | CLI and peer provider contract bundle frozen |
 | 105 | E20-T4 | Completed | Disabled configuration and capabilities implemented |
-| 106 | E20-T5 | Planned | Contract baseline qualified and handed to E21 |
+| 106 | E20-T5 | In Review | Contract baseline qualification candidate under review |
 | 107 | E21-T1 | Planned | Durable sync jobs, journals, and migrations |
 | 108 | E21-T2 | Planned | Restricted Git, trust, and membership administration |
 | 109 | E21-T3 | Planned | Explicit signed publication workflow |
@@ -5169,7 +5169,7 @@ Completed 2026-09-19; E20-T5 is next.
 
 ## E20-T5: Qualify the Contract Baseline
 
-**Status:** Planned
+**Status:** In Review
 
 ### Objective
 
@@ -5195,6 +5195,22 @@ E20-T4 Completed.
 - No runnable publication, import, peer listener, or live-tree behavior is
   claimed by the contract-only capability matrix.
 - Review findings are fixed or explicitly dispositioned without weakening a Must.
+
+### Evidence
+
+The checksummed provider bundle and implemented-versus-reserved capability map
+pass their focused validators. The configured Gaori commands `manifest-check`,
+`schema-validation`, and `traceability` each completed with child exit 0 and
+artifact status `passed`; their generic extractors reported `no_match`, which
+does not alter command success. Native `make verify` first reproduced the
+operator host's recorded Watchman `FSEventStreamStart` refusal on disposable
+roots and exposed one time-dependent retention assertion. The assertion now
+keeps its unrelated fixture intent outside the test's retention population.
+With Watchman intentionally absent from `PATH`, the full build, format, vet,
+staticcheck, import, unit, race, manifest, schema, traceability, schedule, and
+sync-contract gate passed; real-Watchman behavior remains an explicit
+environment gap rather than runtime sync evidence. Cold review and exact
+revision binding remain before completion.
 
 # E21: Signed Publication and Guarded Import
 

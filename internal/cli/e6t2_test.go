@@ -239,7 +239,7 @@ func TestDoctorConfigErrorStillProducesFindings(t *testing.T) {
 // lineages older than the policy are deleted children-first, and an
 // unresolved lineage survives intact.
 func TestMaintenancePruneDryRunThenExecute(t *testing.T) {
-	configPath, _ := cliStoreFixture(t)
+	configPath, fixtureDispatchID := cliStoreFixture(t)
 	store := e6t2Open(t, configPath)
 	// One resolved terminal lineage far past every horizon. An accepted
 	// dispatch is unresolved live work since E8-T4/H-3, so the resolved
@@ -249,6 +249,18 @@ func TestMaintenancePruneDryRunThenExecute(t *testing.T) {
 	// One unresolved lineage past every horizon: it must survive.
 	e6t2SeedLineage(t, store, "unk", "2025-01-01T00:00:00Z")
 	e6t2SetIntentState(t, store, "dispatch-unk", "dead_lettered", "2025-01-02T00:00:00Z", "")
+	// The shared fixture lineage is unrelated to this test. Refresh it only
+	// after the lineage helpers have made their final state transition, so it
+	// cannot enter the age-bounded retention population as the calendar moves.
+	result, err := store.ExecContext(context.Background(),
+		`UPDATE dispatch_intents SET updated_at = ? WHERE dispatch_id = ?`,
+		time.Now().UTC().Add(24*time.Hour).Format(time.RFC3339), fixtureDispatchID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows, err := result.RowsAffected(); err != nil || rows != 1 {
+		t.Fatalf("refresh fixture intent: rows=%d err=%v", rows, err)
+	}
 
 	var out, errb bytes.Buffer
 	code := Run([]string{"maintenance", "prune", "--config", configPath}, &out, &errb)

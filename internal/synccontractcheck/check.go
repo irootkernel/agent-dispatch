@@ -123,11 +123,13 @@ type errorsContract struct {
 type trustFixtures struct {
 	SchemaVersion string `json:"schema_version"`
 	Fixtures      []struct {
-		Name            string `json:"name"`
-		DocumentKey     string `json:"document_key"`
-		PinnedKey       string `json:"pinned_key"`
-		SelfAuthorizing bool   `json:"self_authorizing"`
-		ExpectedCode    string `json:"expected_code"`
+		Name                    string `json:"name"`
+		DocumentKey             string `json:"document_key"`
+		PinnedKey               string `json:"pinned_key"`
+		SelfAuthorizing         bool   `json:"self_authorizing"`
+		PredecessorMatches      bool   `json:"predecessor_matches"`
+		StateIncarnationCurrent bool   `json:"state_incarnation_current"`
+		ExpectedCode            string `json:"expected_code"`
 	} `json:"fixtures"`
 	Claim string `json:"claim"`
 }
@@ -243,11 +245,24 @@ func Check(dir string) error {
 		if fixture.Name != wantTrust[i].name || fixture.ExpectedCode != wantTrust[i].code {
 			return fmt.Errorf("trust fixture drift at %d", i)
 		}
-	}
-	if tf.Fixtures[0].DocumentKey == tf.Fixtures[0].PinnedKey || tf.Fixtures[0].PinnedKey == "" || tf.Fixtures[0].SelfAuthorizing || tf.Fixtures[1].PinnedKey != "" || !tf.Fixtures[1].SelfAuthorizing || tf.Fixtures[2].DocumentKey != tf.Fixtures[2].PinnedKey || tf.Fixtures[3].DocumentKey != tf.Fixtures[3].PinnedKey {
-		return fmt.Errorf("trust fixture semantics drift")
+		if got := evaluateTrustFixture(fixture.DocumentKey, fixture.PinnedKey, fixture.SelfAuthorizing, fixture.PredecessorMatches, fixture.StateIncarnationCurrent); got != fixture.ExpectedCode {
+			return fmt.Errorf("trust fixture %q evaluates to %q, want %q", fixture.Name, got, fixture.ExpectedCode)
+		}
 	}
 	return nil
+}
+
+func evaluateTrustFixture(documentKey, pinnedKey string, selfAuthorizing, predecessorMatches, stateIncarnationCurrent bool) string {
+	switch {
+	case pinnedKey == "", documentKey != pinnedKey, selfAuthorizing:
+		return "sync_trust_failed"
+	case !predecessorMatches:
+		return "sync_precondition_failed"
+	case !stateIncarnationCurrent:
+		return "sync_identity_obsolete"
+	default:
+		return ""
+	}
 }
 
 func exactResults(r results) bool {

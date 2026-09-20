@@ -3,9 +3,18 @@
 This directory owns future epic-sized candidates that have not entered the
 roadmap. Those candidate items have no roadmap identity or lifecycle status.
 
+This directory may also hold temporary execution dossiers for roadmap epics whose
+cross-task integration needs one bounded map. The roadmap remains the only
+lifecycle authority for those epics.
+
 Future work is not permission to partially implement these features during
 roadmap tasks. Each priority candidate requires a new roadmap, requirement
 changes, and where noted a new ADR/security review.
+
+## Active Execution Dossiers
+
+- [E21 Signed Publication and Guarded Import](TODO-E21-SIGNED-PUBLICATION-AND-GUARDED-IMPORT.md) — temporary integration map for the
+  ordered E21 task sequence; lifecycle remains in the roadmap.
 
 ## Priority Candidates
 

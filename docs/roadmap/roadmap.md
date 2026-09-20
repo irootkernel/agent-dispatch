@@ -5224,6 +5224,8 @@ exact provenance, crash recovery, and conflict stop.
 
 **Gate:** G17
 
+**Execution integration map:** [E21 Signed Publication and Guarded Import](../todo/TODO-E21-SIGNED-PUBLICATION-AND-GUARDED-IMPORT.md)
+
 **Canonical Outcomes:** [SYN requirements](../specs/required-spec.md) · [Gate G17](../specs/acceptance-criteria.md) · [Sync architecture](../architecture/wiki-sync.md) · [Sync contract](../contracts/sync-contract.md) · [Validation evidence](../VALIDATION.md)
 
 ## E21-T1: Add Durable Sync Jobs and Journals

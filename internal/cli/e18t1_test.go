@@ -5,13 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
 	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/testenv"
 )
 
 // watchmanFixture writes one enabled watchman route whose configured vault
@@ -123,9 +123,7 @@ func bindingOf(t *testing.T, res map[string]any) effectiveBinding {
 // trigger carries no relative_root, status resolves the same binding,
 // and remove proves the managed trigger absent.
 func TestE18T1ExactRootBindingLifecycle(t *testing.T) {
-	if _, err := exec.LookPath("watchman"); err != nil {
-		t.Skip("watchman binary not available")
-	}
+	testenv.RequireRealWatchman(t)
 	configPath, ancestor, vault := watchmanFixture(t)
 	client := watchman.NewClient("")
 	ctx := context.Background()
@@ -254,9 +252,7 @@ func runWatchmanArgs(t *testing.T, configPath, sub string, extra ...string) (map
 // pre-E18 ancestor binding is exactly this shape) surfaces as drifted,
 // independent of the trigger definition comparison.
 func TestE18T1DriftDetection(t *testing.T) {
-	if _, err := exec.LookPath("watchman"); err != nil {
-		t.Skip("watchman binary not available")
-	}
+	testenv.RequireRealWatchman(t)
 	configPath, _, vault := watchmanFixture(t)
 	if _, _, errb, code := runWatchmanArgs(t, configPath, "install"); code != 0 {
 		t.Fatalf("install failed: %s", errb.String())

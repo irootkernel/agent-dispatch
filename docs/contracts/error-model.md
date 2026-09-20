@@ -44,6 +44,12 @@ Exit code 1 is intentionally unassigned and must never be emitted; unclassified 
 
 A Watchman trigger invocation may receive nonzero status, but durable state and logs remain the source of truth. Exit 13 must never cause the caller to submit through another sink.
 
+A Watchman `watch` refusal that explicitly reports watcher startup failure,
+including macOS `FSEventStreamStart failed`, occurs before the requested watch
+is established. It therefore emits `watchman_unavailable` / exit 11 with
+state-preserving daemon-restart guidance. Other server-reported protocol
+failures remain `target_response_invalid` / exit 13.
+
 ## 3. Error Categories
 
 `category` enumerates exactly one value per nonzero exit-code class. Category and exit code determine each other; implementations derive one from the other rather than assigning them independently.

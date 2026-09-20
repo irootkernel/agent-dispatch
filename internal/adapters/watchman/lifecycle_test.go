@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/irootkernel/agent-dispatch/internal/testenv"
 )
 
 // hasWatchman reports whether a real Watchman is usable; lifecycle
@@ -15,14 +16,12 @@ import (
 // evidence gap is recorded in the roadmap).
 func hasWatchman(t *testing.T) *Client {
 	t.Helper()
-	if _, err := exec.LookPath("watchman"); err != nil {
-		t.Skip("watchman binary not available")
-	}
+	testenv.RequireRealWatchman(t)
 	client := NewClient("")
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	if _, err := client.Version(ctx); err != nil {
-		t.Skipf("watchman server not usable: %v", err)
+	if _, err := client.WatchList(ctx); err != nil {
+		t.Fatalf("isolated Watchman server not usable: %v", err)
 	}
 	return client
 }

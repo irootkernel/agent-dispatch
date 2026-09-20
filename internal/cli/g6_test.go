@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -15,6 +14,7 @@ import (
 	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/testenv"
 )
 
 // Gate G6 (E10-T3): the source and reconciliation integrity gate. Every
@@ -38,9 +38,7 @@ import (
 // trigger identity on an unconstrained trigger — the same binding
 // watchman test reports without server contact.
 func TestG6AC601EffectiveBindingReported(t *testing.T) {
-	if _, err := exec.LookPath("watchman"); err != nil {
-		t.Skip("watchman binary not available")
-	}
+	testenv.RequireRealWatchman(t)
 	configPath, _, vault := watchmanFixture(t)
 	client := watchman.NewClient("")
 	ctx := context.Background()
@@ -164,9 +162,7 @@ func g6RegisterEnabled(t *testing.T, configPath string) {
 // second watched root, and a successful remove proves absence on every
 // applicable root by re-listing.
 func TestG6AC603RemoveProvesAbsenceEverywhere(t *testing.T) {
-	if _, err := exec.LookPath("watchman"); err != nil {
-		t.Skip("watchman binary not available")
-	}
+	testenv.RequireRealWatchman(t)
 	configPath, _, vault := watchmanFixture(t)
 	client := watchman.NewClient("")
 	ctx := context.Background()

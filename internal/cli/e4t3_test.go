@@ -4,17 +4,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/platformpaths"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/testenv"
 	"github.com/irootkernel/agent-dispatch/internal/testsupport/stubhermes"
 )
 
@@ -542,7 +542,7 @@ func TestFirstUseRegistrationFlow(t *testing.T) {
 
 	// watchman install (guarded on the real Watchman) also registers
 	// idempotently.
-	if _, err := exec.LookPath("watchman"); err == nil {
+	if testenv.RealWatchmanEnabled() {
 		out.Reset()
 		errb.Reset()
 		if code := Run([]string{"watchman", "install", "--route", "wiki", "--config", configPath}, &out, &errb); code != 0 {

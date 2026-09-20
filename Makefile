@@ -27,23 +27,89 @@ manifest-check schema-validation traceability schedule-check sync-contract-check
 build:
 	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/agent-dispatch
 
-# Defense in depth for tests that execute an installed Hermes. Each target
+# Defense in depth for tests that execute installed integrations. Each target
 # gets an outer disposable HOME so a newly added test cannot reach the
-# operator's sticky profile or shared Kanban root before opting into the
-# per-test hermesenv sandbox. Preserve Go's machine-local cache/config paths
-# so changing HOME does not turn verification into an uncached network setup.
+# operator's sticky Hermes profile or shared Kanban root before opting into the
+# per-test hermesenv sandbox. Real Watchman legs use a disposable daemon and
+# private socket. Preserve Go's machine-local cache/config paths so changing
+# HOME does not turn verification into an uncached network setup.
 define run_isolated_tests
 	@test_root=$$(mktemp -d) || exit 1; \
-	 trap 'rm -rf "$$test_root"' EXIT HUP INT TERM; \
+	 test_watchman_pid=; \
+	 cleanup_test_env() { \
+	   cleanup_watchman_pid=$$test_watchman_pid; \
+	   test_watchman_pid=; \
+	   if [ -n "$$cleanup_watchman_pid" ]; then \
+	     "$$real_watchman" --no-pretty --no-spawn --no-local \
+	       --unix-listener-path "$$test_watchman_sock" shutdown-server >/dev/null 2>&1 & \
+	     test_watchman_shutdown_pid=$$!; \
+	     ( sleep 2; kill -TERM "$$test_watchman_shutdown_pid" 2>/dev/null || exit 0; \
+	       sleep 1; kill -KILL "$$test_watchman_shutdown_pid" 2>/dev/null || true ) & \
+	     test_watchman_shutdown_guard=$$!; \
+	     wait "$$test_watchman_shutdown_pid" 2>/dev/null || true; \
+	     kill "$$test_watchman_shutdown_guard" 2>/dev/null || true; \
+	     wait "$$test_watchman_shutdown_guard" 2>/dev/null || true; \
+	     kill -TERM "$$cleanup_watchman_pid" 2>/dev/null || true; \
+	     sleep 0.1; \
+	     kill -KILL "$$cleanup_watchman_pid" 2>/dev/null || true; \
+	     wait "$$cleanup_watchman_pid" 2>/dev/null || true; \
+	   fi; \
+	   rm -rf "$$test_root"; \
+	 }; \
+	 trap cleanup_test_env EXIT; \
+	 trap 'exit 129' HUP; \
+	 trap 'exit 130' INT; \
+	 trap 'exit 143' TERM; \
 	 mkdir -p "$$test_root/home" "$$test_root/hermes" || exit 1; \
 	 go_cache=$$($(GO) env GOCACHE) || exit 1; \
 	 go_mod_cache=$$($(GO) env GOMODCACHE) || exit 1; \
 	 go_path=$$($(GO) env GOPATH) || exit 1; \
 	 go_env=$$($(GO) env GOENV) || exit 1; \
 	 unset HERMES_KANBAN_DB HERMES_KANBAN_BOARD HERMES_KANBAN_WORKSPACES_ROOT; \
-	 HOME="$$test_root/home" HERMES_HOME="$$test_root/hermes" \
-	 HERMES_KANBAN_HOME="$$test_root/hermes" GOCACHE="$$go_cache" \
-	 GOMODCACHE="$$go_mod_cache" GOPATH="$$go_path" GOENV="$$go_env" $(1)
+	 if real_watchman=$$(command -v watchman 2>/dev/null); then \
+	   test_watchman_sock="$$test_root/watchman.sock"; \
+	   test_watchman_log="$$test_root/watchman.log"; \
+	   test_watchman_config="$$test_root/watchman.json"; \
+	   test_watchman_bin="$$test_root/watchman-bin"; \
+	   mkdir -p "$$test_watchman_bin" || exit 1; \
+	   printf '%s\n' '{"min_acceptable_nice_value":20}' > "$$test_watchman_config"; \
+	   WATCHMAN_CONFIG_FILE="$$test_watchman_config" "$$real_watchman" \
+	     --foreground --no-site-spawner --no-save-state \
+	     --unix-listener-path "$$test_watchman_sock" \
+	     --logfile "$$test_watchman_log" \
+	     --pidfile "$$test_root/watchman.pid" \
+	     --statefile "$$test_root/watchman.state" & \
+	   test_watchman_pid=$$!; \
+	   test_watchman_ready=0; \
+	   for test_watchman_attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do \
+	     if "$$real_watchman" --no-pretty --no-spawn --no-local \
+	       --unix-listener-path "$$test_watchman_sock" watch-list >/dev/null 2>&1; then \
+	       test_watchman_ready=1; \
+	       break; \
+	     fi; \
+	     sleep 0.1; \
+	   done; \
+	   if [ "$$test_watchman_ready" -ne 1 ]; then \
+	     echo "isolated Watchman failed to become ready" >&2; \
+	     if [ -f "$$test_watchman_log" ]; then tail -n 80 "$$test_watchman_log" >&2; fi; \
+	     exit 1; \
+	   fi; \
+	   ln -s "$$real_watchman" "$$test_watchman_bin/watchman.real" || exit 1; \
+	   printf '#!/bin/sh\nexec "%s" --unix-listener-path "%s" --no-spawn --no-local "$$@"\n' \
+	     "$$test_watchman_bin/watchman.real" "$$test_watchman_sock" \
+	     > "$$test_watchman_bin/watchman"; \
+	   chmod 700 "$$test_watchman_bin/watchman"; \
+	   HOME="$$test_root/home" HERMES_HOME="$$test_root/hermes" \
+	   HERMES_KANBAN_HOME="$$test_root/hermes" GOCACHE="$$go_cache" \
+	   GOMODCACHE="$$go_mod_cache" GOPATH="$$go_path" GOENV="$$go_env" \
+	   AGENT_DISPATCH_REAL_WATCHMAN_TESTS="$$test_watchman_bin/watchman" \
+	   PATH="$$test_watchman_bin:$$PATH" $(1); \
+	 else \
+	   unset WATCHMAN_SOCK AGENT_DISPATCH_REAL_WATCHMAN_TESTS; \
+	   HOME="$$test_root/home" HERMES_HOME="$$test_root/hermes" \
+	   HERMES_KANBAN_HOME="$$test_root/hermes" GOCACHE="$$go_cache" \
+	   GOMODCACHE="$$go_mod_cache" GOPATH="$$go_path" GOENV="$$go_env" $(1); \
+	 fi
 endef
 
 test:

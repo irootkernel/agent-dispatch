@@ -182,6 +182,16 @@ prevents package or race-suite runs from sharing profiles and boards. The
 operator's sticky `active_profile` file and shared Kanban tree are never test
 fixtures.
 
+When a Watchman binary is present, each Make test target starts one foreground,
+no-save-state daemon with disposable socket, state, pid, log, and configuration
+paths. A PATH-local wrapper forces every test Watchman command onto that socket
+with `--no-spawn --no-local`; `WATCHMAN_SOCK` alone is not treated as routing
+authority. The target fails if the daemon cannot answer `watch-list`, and shuts
+it down with a bounded fallback before removing the sandbox. Real-Watchman
+tests require the harness to name the exact PATH-resolved wrapper, so ordinary
+direct `go test` cannot create watches or triggers on the operator's long-lived
+daemon.
+
 Environment-dependent evidence must state whether it is frozen-contract,
 current live read-only, or disposable runtime evidence. A skipped real leg
 cannot be promoted to current runtime proof. `make verify` remains the single

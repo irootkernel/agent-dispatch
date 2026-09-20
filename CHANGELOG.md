@@ -9,6 +9,13 @@ This file records concise shipped outcomes and pending changes.
 - Add the disabled-by-default two-node sync configuration contract plus
   side-effect-free `sync capabilities` and disabled `sync status` inspection.
 
+### Fixed
+
+- Isolate real-Watchman test legs on a disposable daemon so repeated test runs
+  cannot exhaust or modify the operator's long-lived Watchman process.
+- Classify Watchman watcher-startup failures as target unavailable with
+  state-preserving restart guidance instead of unrelated parent-watch advice.
+
 ## v0.1.8 - 2026-09-10
 
 ### Added

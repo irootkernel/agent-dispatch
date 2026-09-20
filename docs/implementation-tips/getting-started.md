@@ -42,9 +42,13 @@ fake ports and disposable integration helpers to introducing a new harness.
 The [testing strategy](testing-strategy.md) explains the gate coverage.
 
 `make test` and `make test-race` wrap tests in disposable HOME/Hermes roots while
-preserving Go caches. Run these targets when testing integrations instead of
-invoking a live operator instance. Test results must distinguish unavailable
-external dependencies and skipped scenarios from completed real integration proof.
+preserving Go caches. When Watchman is installed, each target also starts a
+disposable no-state daemon on a private Unix socket and routes every real
+Watchman leg through an exact-path wrapper. Ordinary direct `go test` runs,
+without that Make-owned wrapper identity, skip those external legs rather than
+contacting the operator's daemon. Run the Make targets when testing integrations.
+Test results must distinguish unavailable external dependencies and skipped
+scenarios from completed real integration proof.
 
 Run `make verify` for the complete check before handoff. Individual checks such as
 `make check-imports` and `make schema-validation` are useful during iteration.

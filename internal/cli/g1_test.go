@@ -4,14 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
+	"github.com/irootkernel/agent-dispatch/internal/testenv"
 )
 
 // g1Harness drives `route plan` (the E2 dry-run pipeline) over a real
@@ -308,9 +308,7 @@ func TestG1NoSettleSleep(t *testing.T) {
 // trigger. Runs against the real installed Watchman when available
 // (disposable temporary watch root, removed afterwards).
 func TestWatchmanCLILifecycle(t *testing.T) {
-	if _, err := exec.LookPath("watchman"); err != nil {
-		t.Skip("watchman binary not available")
-	}
+	testenv.RequireRealWatchman(t)
 	configPath, vault := planFixture(t)
 	t.Setenv("AGENT_DISPATCH_STATE_DIR", t.TempDir())
 	argv := []string{"--route", "wiki", "--config", configPath}
@@ -512,6 +510,40 @@ func TestWatchmanAbsenceActionable(t *testing.T) {
 	}
 	if !strings.Contains(errb.String(), "install Watchman") {
 		t.Fatalf("absence must carry actionable remediation: %s", errb.String())
+	}
+}
+
+func TestWatchmanWatcherStartupFailureIsUnavailable(t *testing.T) {
+	configPath, _ := planFixture(t)
+	t.Setenv("AGENT_DISPATCH_STATE_DIR", t.TempDir())
+	binDir := t.TempDir()
+	bin := filepath.Join(binDir, "watchman")
+	script := `#!/bin/sh
+read request
+case "$request" in
+  *'"version"'*) echo '{"version":"2026.07.27.00"}' ;;
+  *'"watch"'*) echo '{"version":"2026.07.27.00","error":"Watch is shutting down because Failed to start watcher: FSEventStreamStart failed"}' ;;
+  *) echo '{"version":"2026.07.27.00","error":"unexpected request"}' ;;
+esac
+`
+	if err := os.WriteFile(bin, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir)
+	var out, errb bytes.Buffer
+	code := Run([]string{"watchman", "install", "--route", "wiki", "--config", configPath}, &out, &errb)
+	if code != 11 || out.Len() != 0 {
+		t.Fatalf("watcher startup failure must exit 11 with empty stdout, got %d: %s", code, out.String())
+	}
+	var env ErrorEnvelope
+	if err := json.Unmarshal(errb.Bytes(), &env); err != nil {
+		t.Fatalf("decode error envelope: %v: %s", err, errb.String())
+	}
+	if env.Error.Code != "watchman_unavailable" || env.Error.Category != "target_unavailable" {
+		t.Fatalf("watcher startup envelope wrong: %+v", env.Error)
+	}
+	if !strings.Contains(env.Error.Message, "shutdown-server") || strings.Contains(env.Error.Message, "watch-del <parent>") {
+		t.Fatalf("watcher startup remediation wrong: %s", env.Error.Message)
 	}
 }
 

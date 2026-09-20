@@ -18,6 +18,7 @@ import (
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/platformpaths"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/testenv"
 	"github.com/irootkernel/agent-dispatch/internal/testsupport/hermesenv"
 )
 
@@ -132,9 +133,7 @@ type g3 struct {
 // builds the isolated vault, config, and disposable board.
 func g3Setup(t *testing.T) *g3 {
 	t.Helper()
-	if _, err := exec.LookPath("watchman"); err != nil {
-		t.Skip("watchman binary not available (environment-dependent evidence gap)")
-	}
+	testenv.RequireRealWatchman(t)
 	sandbox := hermesenv.NewSandbox(t, func(firstLine string) bool {
 		return strings.Contains(firstLine, "v0.20.5")
 	})

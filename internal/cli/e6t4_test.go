@@ -20,6 +20,7 @@ import (
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/platformpaths"
+	"github.com/irootkernel/agent-dispatch/internal/testenv"
 	"github.com/irootkernel/agent-dispatch/internal/testsupport/hermesenv"
 	buildversion "github.com/irootkernel/agent-dispatch/internal/version"
 )
@@ -332,7 +333,7 @@ func TestG5AC504CleanHostInstallDispatchScheduleUninstall(t *testing.T) {
 	if code := Run([]string{"route", "disable", "--route", "wiki-maintenance", "--config", cfgPath}, &out, &errb); code != 0 {
 		t.Fatalf("AC-504 route disable failed: %s", errb.String())
 	}
-	if _, err := exec.LookPath("watchman"); err == nil {
+	if testenv.RealWatchmanEnabled() {
 		out.Reset()
 		errb.Reset()
 		if code := Run([]string{"watchman", "remove", "--route", "wiki-maintenance", "--config", cfgPath, "--yes"}, &out, &errb); code != 0 {

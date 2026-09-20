@@ -37,7 +37,8 @@ func (e *LifecycleError) Error() string {
 // UnavailableError reports that the watchman binary or server cannot be
 // used at all, with an actionable remediation for doctor/config validate.
 type UnavailableError struct {
-	Detail string
+	Detail          string
+	remediationText string
 }
 
 func (e *UnavailableError) Error() string {
@@ -47,6 +48,9 @@ func (e *UnavailableError) Error() string {
 // Remediation returns the actionable operator guidance required by the
 // acceptance criteria (E2-T5: absence produces actionable output).
 func (e *UnavailableError) Remediation() string {
+	if e.remediationText != "" {
+		return e.remediationText
+	}
 	return "install Watchman (for example `brew install watchman`), ensure `watchman --version` succeeds, and rerun; see docs/integrations/watchman-public-interface-report.md for the supported version range"
 }
 
@@ -343,6 +347,12 @@ func (c *Client) EnsureWatch(ctx context.Context, root string) (string, error) {
 	if err != nil {
 		var protocol *LifecycleError
 		if errors.As(err, &protocol) {
+			if watcherStartupFailed(protocol.Message) {
+				return "", &UnavailableError{
+					Detail:          protocol.Error(),
+					remediationText: "record the daemon's current watch roots and triggers, run `watchman shutdown-server`, and retry; do not use `watch-del-all` unless removing every operator watch is intended",
+				}
+			}
 			return "", &LifecycleError{Command: "watch", Message: fmt.Sprintf("%s; %q must be established as its own watch root — if a parent directory is already a Watchman watch root, unwatch it with `watchman watch-del <parent>` or choose a root that can be a watch root", protocol.Message, root)}
 		}
 		return "", err
@@ -357,6 +367,13 @@ func (c *Client) EnsureWatch(ctx context.Context, root string) (string, error) {
 		return "", &LifecycleError{Command: "watch", Message: fmt.Sprintf("watchman reported %q (relative path %q) instead of %q as the watch root; unwatch the covering root with `watchman watch-del %q` or choose a root that can be a Watchman watch root", resp.Watch, resp.RelativePath, root, resp.Watch)}
 	}
 	return resp.Watch, nil
+}
+
+func watcherStartupFailed(message string) bool {
+	lower := strings.ToLower(message)
+	return strings.Contains(lower, "fseventstreamstart failed") ||
+		strings.Contains(lower, "failed to start watcher") ||
+		strings.Contains(lower, "failed to start fsevents thread")
 }
 
 // IsWatched reports whether the given root is itself currently watched,

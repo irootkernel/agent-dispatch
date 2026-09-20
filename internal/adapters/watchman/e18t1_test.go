@@ -142,3 +142,18 @@ func TestE18T1EnsureWatchFailsClosedOnAncestorReuse(t *testing.T) {
 		t.Fatalf("a case-divergent canonical spelling must fail closed with the spelling guidance: %+v", err)
 	}
 }
+
+func TestEnsureWatchClassifiesWatcherStartupFailureAsUnavailable(t *testing.T) {
+	bin := fakeWatchmanBinary(t, `{"version":"2026.07.27.00","error":"Watch is shutting down because ... Failed to start watcher: FSEventStreamStart failed"}`)
+	_, err := NewClient(bin).EnsureWatch(context.Background(), "/srv/workspace/vault")
+	var unavailable *UnavailableError
+	if err == nil || !errors.As(err, &unavailable) {
+		t.Fatalf("watcher startup failure must be unavailable: %v", err)
+	}
+	if strings.Contains(err.Error(), "watch-del <parent>") {
+		t.Fatalf("watcher startup failure must not carry ancestor-watch guidance: %v", err)
+	}
+	if remediation := unavailable.Remediation(); !strings.Contains(remediation, "shutdown-server") || !strings.Contains(remediation, "do not use `watch-del-all`") {
+		t.Fatalf("watcher startup remediation must preserve operator watches: %q", remediation)
+	}
+}

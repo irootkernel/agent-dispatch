@@ -25,6 +25,9 @@ the [documentation index](README.md); for delivery status use the
 - Internal Markdown links resolve within the package, excluding intentionally unresolved wiki links retained in the historical source draft.
 - Markdown code fences are balanced.
 - The documentation package has one delivery scope, exactly one owner for each of the seven semantic roles, and `docs/roadmap/roadmap.md` as its sole lifecycle authority.
+- Real-Watchman test legs run only when PATH resolves the exact Make-owned
+  wrapper for the disposable daemon; ordinary direct `go test` skips them and
+  cannot consume the operator daemon's watcher resources.
 - The roadmap contains exactly 23 epics and 116 task headings: 106 Completed
   and ten Planned.
 - Every task uses one allowed status value.

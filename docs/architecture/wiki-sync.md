@@ -1,7 +1,8 @@
 # Two-Node Wiki Sync Architecture
 
-> **Status:** Planned for v0.2.0 under D-030; no sync runtime is implemented in
-> the shipped v0.1.8 baseline.
+> **Status:** Partially implemented for v0.2.0 under D-030. E21-T1 provides
+> durable local jobs, journals, fencing, and control; Git publication, import,
+> peer service, and pair verification remain unavailable.
 
 Agent Dispatch extends the existing maintenance loop with an explicit Git
 publication step and a peer import loop. Hermes still owns Wiki semantics.

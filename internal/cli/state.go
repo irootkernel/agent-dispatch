@@ -167,6 +167,9 @@ type storeOp interface {
 	CompleteActive(ctx context.Context, req ports.ActiveCompletion) (ports.FollowupCreated, error)
 	ActivateDispatch(ctx context.Context, dispatchID, actor, now string) error
 	ActivateFollowup(ctx context.Context, dispatchID, actor, now string) error
+	EnsureSyncControl(ctx context.Context, groupID, configRevision, now string) (sqlite.SyncControlRow, error)
+	LoadSyncControl(ctx context.Context, groupID string) (sqlite.SyncControlRow, error)
+	SetSyncControl(ctx context.Context, groupID string, expectedRevision int64, targetState, configRevision, now string) (sqlite.SyncControlRow, error)
 }
 
 // openOperatorStore opens the store and narrows it to the operator

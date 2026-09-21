@@ -5,6 +5,21 @@ SOT snapshots, not product releases. Product release notes and pending user-faci
 changes belong to the root [changelog](../CHANGELOG.md). Historical entries below
 retain their recorded scope; migrated document pointers use their current paths.
 
+## 1.8.0 - Unreleased
+
+E21-T1 implements the durable local substrate for the still-manual two-node
+sync workflow without enabling publication, import, peer service, or release.
+
+- SQLite schema v21 stores group controls, idempotent logical jobs, fenced
+  claims, bounded attempts, and append-only recovery journals before effects.
+- Expired claims require explicit recovery evidence before a new fence can be
+  claimed; stale owners cannot append or finish work.
+- `sync pause` and `sync resume` use exact control revisions. Resume rebinds
+  current configuration policy and never clears conflict, revocation, trust,
+  or recovery blocks.
+- Resolved sync job evidence is eligible for children-first pruning after the
+  180-day policy; unresolved and uncertain obligations remain retention roots.
+
 ## 1.7.0 - 2026-09-19
 
 E20 freezes and qualifies the contract-only two-node sync baseline. G16 and

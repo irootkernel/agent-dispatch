@@ -93,9 +93,12 @@ func TestE9ValidationMigrationV7BackfillsAndPropagates(t *testing.T) {
 		`DROP TABLE serialization_groups`,
 		`DROP TABLE drain_runs`,
 		`DROP TABLE schedule_at_overrides`,
+		`DROP TABLE sync_journal_entries`,
+		`DROP TABLE sync_jobs`,
+		`DROP TABLE sync_controls`,
 		`ALTER TABLE route_runtime_state DROP COLUMN capability_fingerprint`,
 		`ALTER TABLE change_batches DROP COLUMN selected_destinations_json`,
-		`DELETE FROM schema_migrations WHERE version IN (7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20)`,
+		`DELETE FROM schema_migrations WHERE version IN (7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21)`,
 	} {
 		if _, err := s.Exec(stmt); err != nil {
 			t.Fatalf("rewind %q: %v", stmt, err)

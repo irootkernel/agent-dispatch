@@ -57,10 +57,13 @@ agent-dispatch completion
 
 There is no `replay` command.
 
-The sync identities are contract-reserved in v0.2.0. E20 implements only
-JSON-only, side-effect-free `sync capabilities` and disabled-only `sync status`; every
-other identity returns `sync_capability_unavailable` at exit 3 until its owning
-E21 or E22 task implements and truthfully advertises it. The executable
+The sync identities are contract-reserved in v0.2.0. E21-T1 implements
+JSON-only `sync capabilities`, durable-control-aware `sync status`, and
+revision-fenced `sync pause` and `sync resume`. Pause blocks new protected
+claims while preserving in-flight evidence; resume validates and binds the
+current configuration revision and never clears a conflict, revocation, trust,
+or recovery block. Every other identity returns `sync_capability_unavailable`
+at exit 3 until its owning E21 or E22 task implements and truthfully advertises it. The executable
 descriptor and peer contract bundle is
 [`sync-provider-v1`](sync-provider-v1/bundle.json). Capabilities reports both
 `contract_version` and the normative `contract_digest` defined by the sync

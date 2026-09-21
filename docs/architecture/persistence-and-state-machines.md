@@ -42,6 +42,9 @@ The implementation must verify the resulting journal mode and fail `doctor` if t
 | `notification_events` | Durable notification intents of the transactional outbox (E13-T1, ADR-0019): one channel-neutral record per five-component dedup identity (event, optional destination, transition occurrence, sink, notification-policy revision) | unique notification ID (the deterministic dedup derivation); unique idempotency key; indexed route and state |
 | `notification_attempts` | Independent sink delivery attempts whose outcomes never rewrite the intent's source state (E13-T1) | unique attempt ID; unique notification ID + attempt number |
 | `state_transitions` | Append-only audit transitions | unique transition ID |
+| `sync_controls` | Group-scoped protected-effect control and validated configuration binding (schema v21) | primary key group ID; monotonic revision |
+| `sync_jobs` | Stable logical sync obligations, request fingerprints, bounded attempts, ownership, and fencing generations (schema v21) | unique job ID; unique group + kind + logical key |
+| `sync_journal_entries` | Immutable per-fence recovery and effect evidence (schema v21) | unique journal ID; indexed job + time |
 
 Since E12-T2 the single-active slot, the dirty generation, and the follow-up
 chain are keyed on the dispatch's destination lane (`destination_lane_state`,
@@ -205,12 +208,21 @@ derived from child, quarantine, and reconciliation records. Per ADR-0019, a
 reportable transition and notification intent commit together, while delivery
 attempts occur outside that transaction.
 
-## Reserved sync record invariants
+## Durable sync job invariants
 
-E20 freezes the sync record shapes before E21 assigns SQLite migrations.
-Publication, peer delivery, import, and pair verification use separate stable
-logical identities and monotonic fences. No timeout or lease expiry proves an
-effect completed. Unresolved, blocked, recovering, or uncertain records remain
-retention roots, as do the membership revisions and checkpoints they name.
-Storage implementation must preserve these references atomically and may not
-collapse them into an aggregate success flag.
+Migration v21 supplies the common job and control substrate while the canonical
+publication, delivery, import, and verification records remain separate typed
+outcomes. Admission is unique by group, kind, and logical key: the same request
+fingerprint reuses the existing job and a different fingerprint conflicts.
+
+Claims increment a monotonic fence. Lease expiry does not authorize takeover;
+recovery first records a typed journal result, and only proven absence of an
+effect releases the job for a new fence. An ambiguous effect becomes held and
+retained. Head-state changes and their terminal journal evidence commit in one
+transaction, and stale owners cannot append evidence or finish work.
+
+Control changes use an expected revision. Pausing prevents new claims while an
+existing owner may reach a recorded safe boundary. Resume rebinds the currently
+validated configuration revision and cannot clear a blocked safety reason.
+Resolved rows and their journal children may be pruned after the retention
+cutoff; unresolved, blocked, recovering, or uncertain rows remain roots.

@@ -52,11 +52,73 @@ var Migrations = []Migration{
 	{Version: 18, Name: "serialization-group-state", SQL: schemaV18SerializationGroupState},
 	{Version: 19, Name: "notification-drain-leases", SQL: schemaV19NotificationDrainLeases},
 	{Version: 20, Name: "schedule-at-overrides", SQL: schemaV20ScheduleAtOverrides},
+	{Version: 21, Name: "sync-jobs-controls-journals", SQL: schemaV21SyncJobsControlsJournals},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
 // database at a newer version is refused rather than silently modified.
 var MaxSchemaVersion = Migrations[len(Migrations)-1].Version
+
+// schemaV21SyncJobsControlsJournals is the durable E21-T1 substrate. One
+// logical-key row owns admission and fencing, while append-only journal rows
+// retain evidence independently from a lease or process lifetime. Control is
+// group-scoped and revision-fenced so operator pause/resume cannot overwrite a
+// concurrent conflict or trust hold.
+const schemaV21SyncJobsControlsJournals = `
+CREATE TABLE sync_controls (
+	group_id       TEXT PRIMARY KEY,
+	revision       INTEGER NOT NULL CHECK (revision >= 1),
+	state          TEXT NOT NULL CHECK (state IN ('active','paused','blocked')),
+	reason         TEXT NOT NULL CHECK (reason IN ('none','operator_pause','membership_emergency','conflict','trust_failure','recovery_required')),
+	config_revision TEXT NOT NULL,
+	updated_at     TEXT NOT NULL,
+	CHECK ((state = 'active' AND reason = 'none') OR
+	       (state = 'paused' AND reason = 'operator_pause') OR
+	       (state = 'blocked' AND reason IN ('membership_emergency','conflict','trust_failure','recovery_required')))
+);
+
+CREATE TABLE sync_jobs (
+	job_id              TEXT PRIMARY KEY,
+	group_id            TEXT NOT NULL REFERENCES sync_controls(group_id),
+	kind                TEXT NOT NULL CHECK (kind IN ('publication','delivery','import','verification','membership','checkpoint')),
+	logical_key         TEXT NOT NULL,
+	request_fingerprint TEXT NOT NULL,
+	state               TEXT NOT NULL,
+	payload_json        TEXT NOT NULL,
+	attempts            INTEGER NOT NULL DEFAULT 0 CHECK (attempts BETWEEN 0 AND 20),
+	claim_owner         TEXT,
+	claim_expires_at    TEXT,
+	fence               INTEGER NOT NULL DEFAULT 0 CHECK (fence >= 0),
+	retain_until_resolved INTEGER NOT NULL DEFAULT 1 CHECK (retain_until_resolved IN (0,1)),
+	created_at          TEXT NOT NULL,
+	updated_at          TEXT NOT NULL,
+	resolved_at         TEXT,
+	UNIQUE (group_id, kind, logical_key),
+	CHECK ((claim_owner IS NULL) = (claim_expires_at IS NULL)),
+	CHECK ((kind = 'publication' AND state IN ('eligible','prepared','signed','push_pending','published','blocked','uncertain')) OR
+	       (kind = 'delivery' AND state IN ('pending','attempted','accepted','retryable','unknown','refused')) OR
+	       (kind = 'import' AND state IN ('requested','fetched','validated','applying','applied','deferred','blocked','recovering','uncertain')) OR
+	       (kind = 'verification' AND state IN ('planned','collecting','finished','complete','incomplete','target_changed','blocked','expired')) OR
+	       (kind IN ('membership','checkpoint') AND state IN ('planned','applying','applied','blocked','uncertain')))
+);
+CREATE INDEX idx_sync_jobs_group_state ON sync_jobs(group_id, state, created_at);
+
+CREATE TABLE sync_journal_entries (
+	journal_id   TEXT PRIMARY KEY,
+	job_id       TEXT NOT NULL REFERENCES sync_jobs(job_id),
+	fence        INTEGER NOT NULL CHECK (fence >= 1),
+	phase        TEXT NOT NULL CHECK (phase IN ('claim_recovery','publication','delivery','import','verification','membership','checkpoint')),
+	outcome      TEXT NOT NULL CHECK (outcome IN ('started','prepared','signed','push_pending','published','accepted','applied','finished','effect_not_started','effect_unknown','blocked','deferred','retryable','refused','failed','ok')),
+	evidence_json TEXT NOT NULL,
+	recorded_at  TEXT NOT NULL,
+	UNIQUE (job_id, fence, phase, journal_id)
+);
+CREATE INDEX idx_sync_journal_job ON sync_journal_entries(job_id, recorded_at, journal_id);
+CREATE TRIGGER sync_journal_entries_no_update BEFORE UPDATE ON sync_journal_entries
+BEGIN
+	SELECT RAISE(ABORT, 'sync journal is append-only');
+END;
+`
 
 // migrationVersion resolves one registered migration's version by
 // name. It panics at init for an unregistered name: callers bind

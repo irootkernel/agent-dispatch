@@ -196,7 +196,7 @@ func TestE20T4CapabilitiesMatchProviderCommandVocabulary(t *testing.T) {
 	for _, command := range provider.Commands {
 		want[command.Capability] = command.Availability == "implemented" || command.Availability == "implemented_disabled_only"
 		parts := strings.Fields(command.Path)
-		if len(parts) > 1 && command.Path != "sync capabilities" && command.Path != "sync status" && !reservedSyncCommand(parts[1:]) {
+		if len(parts) > 1 && command.Availability == "reserved" && !reservedSyncCommand(parts[1:]) {
 			t.Fatalf("provider command is not registered as reserved: %s", command.Path)
 		}
 	}

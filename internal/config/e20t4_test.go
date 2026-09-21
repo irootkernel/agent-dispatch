@@ -147,14 +147,14 @@ func TestE20T4RemoteRepositoryDigestContract(t *testing.T) {
 	}
 }
 
-func TestE20T4EnabledSyncFailsClosed(t *testing.T) {
+func TestE21T1EnabledSyncKeepsUnavailableEffectsClosed(t *testing.T) {
 	raw, err := os.ReadFile("../../docs/examples/config.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
 	raw = []byte(strings.Replace(string(raw), "sync:\n  enabled: false", "sync:\n  enabled: true", 1))
-	if _, err := Parse(raw); err == nil || !strings.Contains(err.Error(), "cannot be true") {
-		t.Fatalf("expected unsupported capability error, got %v", err)
+	if _, err := Parse(raw); err != nil {
+		t.Fatalf("enabled sync configuration must be valid once durable control exists: %v", err)
 	}
 }
 

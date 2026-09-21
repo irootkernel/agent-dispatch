@@ -72,27 +72,30 @@ Next safe command: agent-dispatch setup wiki`
 // entry states the subcommands, key flags, side effects, and the next
 // safe command (CLI-009).
 var commandHelp = map[string]string{
-	"sync": `sync — inspect the v0.2.0 contract-only capability surface
+	"sync": `sync — inspect capabilities and control durable sync work
 
 Usage: agent-dispatch sync capabilities --output json
        agent-dispatch sync status --group <id> [--config <path>] --output json
+       agent-dispatch sync pause|resume --group <id> --expected-control-revision <n> [--config <path>] --output json
 
 Flags: --group selects the configured sync group; --config selects an explicit
-configuration file; --output json selects the versioned machine envelope.
+configuration file; --expected-control-revision fences control writes;
+--output json selects the versioned machine envelope.
 
 Defaults: the platform configuration path; sync is disabled by default.
-Approval requirements: none for capabilities/status. Reserved mutating commands
-remain unavailable and their future approval requirements are not activated.
+Approval requirements: none for capabilities/status. Pause and resume are
+explicit operator state changes; other reserved mutating commands remain unavailable.
 
-Exit codes: 0 success; 2 usage; 3 configuration or unavailable capability.
+Exit codes: 0 success; 2 usage; 3 configuration or unavailable capability;
+14 stale revision or blocked control; 20 storage failure; 21 migration failure.
 
-Side effects: capabilities and status read no Git, network, listener, service,
-SQLite, or live-tree state. Reserved commands fail before side effects.
+Side effects: capabilities/status perform no Git, network, listener, service,
+or live-tree effect. Pause/resume update only durable SQLite control state.
 
 Example:
   agent-dispatch sync capabilities --output json
 
-Next safe command: agent-dispatch config show`,
+Next safe command: agent-dispatch sync status --group <id> --output json`,
 	"version": `version — print the product version
 
 Usage: agent-dispatch version [--json]

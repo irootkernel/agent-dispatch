@@ -53,9 +53,6 @@ func validateSync(cfg *Config) []error {
 	}
 	s := cfg.Sync
 	var errs []error
-	if s.Enabled {
-		errs = append(errs, fmt.Errorf("sync.enabled cannot be true until runtime capabilities are implemented; E20 supports disabled contract inspection only"))
-	}
 	resource, ok := cfg.Resources[s.Resource]
 	if !ok {
 		errs = append(errs, fmt.Errorf("sync.resource %q is not defined", s.Resource))

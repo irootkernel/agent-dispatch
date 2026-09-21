@@ -13,11 +13,11 @@
 | Shipped release | v0.1.8 (published 2026-09-10) |
 | Planned SOT baseline | 1.7.0 ([D-030](../specs/decision-log.md); G17-G18 open) |
 | Release target | v0.2.0 (Two-Node Wiki Sync MVP) |
-| Current epic | E21 Signed Publication and Guarded Import (Planned) |
+| Current epic | E21 Signed Publication and Guarded Import (In Progress) |
 | Current active task | None |
-| Next task | E21-T1 Durable sync jobs, journals, and migrations |
-| Completed tasks | 106 / 116 |
-| Planned tasks | 10 / 116 |
+| Next task | E21-T2 Restricted Git, trust, and membership administration |
+| Completed tasks | 107 / 116 |
+| Planned tasks | 9 / 116 |
 | In progress tasks | 0 |
 | In review tasks | 0 |
 | Blocked tasks | 0 |
@@ -57,7 +57,7 @@
 | E18 | Absolute Watch-Root Binding | **Completed** | 2 | G14 |
 | E19 | Official Linux Support (darwin/arm64 + linux/amd64 + linux/arm64) | **Completed** | 10 | G15 |
 | E20 | Two-Node Sync Contracts and Admission | **Completed** | 5 | G16 |
-| E21 | Signed Publication and Guarded Import | **Planned** | 5 | G17 |
+| E21 | Signed Publication and Guarded Import | **In Progress** | 5 | G17 |
 | E22 | Peer Recovery, Verification, and Operations | **Planned** | 5 | G18 |
 
 ## 3. Task Status Index
@@ -170,7 +170,7 @@
 | 104 | E20-T3 | Completed | CLI and peer provider contract bundle frozen |
 | 105 | E20-T4 | Completed | Disabled configuration and capabilities implemented |
 | 106 | E20-T5 | Completed | G16 exact-revision contract baseline qualified |
-| 107 | E21-T1 | Planned | Durable sync jobs, journals, and migrations |
+| 107 | E21-T1 | Completed | Durable sync jobs, journals, and migrations |
 | 108 | E21-T2 | Planned | Restricted Git, trust, and membership administration |
 | 109 | E21-T3 | Planned | Explicit signed publication workflow |
 | 110 | E21-T4 | Planned | Guarded import and exact Watchman attribution |
@@ -5217,7 +5217,7 @@ completed on 2026-09-19; only E21-T1 is handed forward.
 
 # E21: Signed Publication and Guarded Import
 
-**Epic status:** Planned
+**Epic status:** In Progress
 
 **Purpose:** Implement durable manual publication and fast-forward import with
 exact provenance, crash recovery, and conflict stop.
@@ -5230,7 +5230,7 @@ exact provenance, crash recovery, and conflict stop.
 
 ## E21-T1: Add Durable Sync Jobs and Journals
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 

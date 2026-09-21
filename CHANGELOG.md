@@ -8,6 +8,8 @@ This file records concise shipped outcomes and pending changes.
 
 - Add the disabled-by-default two-node sync configuration contract plus
   side-effect-free `sync capabilities` and disabled `sync status` inspection.
+- Add schema v21 durable sync jobs, append-only recovery journals, fenced
+  claims, bounded retention, and revision-fenced `sync pause`/`sync resume`.
 
 ### Fixed
 

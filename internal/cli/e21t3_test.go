@@ -11,11 +11,25 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/domain/syncrecords"
 )
+
+func TestE21T3PreparedJournalReusesDeterministicCommitInputs(t *testing.T) {
+	wantTime := time.Date(2026, 9, 21, 1, 2, 3, 0, time.UTC)
+	entries := []sqlite.SyncJournalEntry{
+		{EvidenceJSON: `{}`},
+		{EvidenceJSON: `{"tree":"1111111111111111111111111111111111111111","commit_time":"2026-09-21T01:02:03Z"}`},
+		{EvidenceJSON: `{"tree":"bad","commit_time":"not-a-time"}`},
+	}
+	tree, commitTime := journalPreparedCandidate(entries)
+	if tree != "1111111111111111111111111111111111111111" || !commitTime.Equal(wantTime) {
+		t.Fatalf("prepared candidate = %q %s", tree, commitTime)
+	}
+}
 
 func TestE21T3PublishSignsFrozenSnapshotAndAdmitsDelivery(t *testing.T) {
 	cfg, err := config.Load("../../docs/examples/config.yaml")

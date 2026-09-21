@@ -102,8 +102,9 @@ the configured publisher key; checkpoint apply resolves the distinct configured
 administrator key. Both apply only the reviewed, revision-bound request.
 
 Exit codes: 0 success; 2 usage; 3 configuration or unavailable capability;
-4 rejected plan input; 13 remote effect unknown; 14 stale revision, missing
-checkpoint, or blocked control; 20 storage failure; 21 migration failure;
+4 rejected plan input; 10 deferred by a safety prerequisite; 13 protected
+effect outcome unknown; 14 stale revision, missing checkpoint, or blocked
+control; 20 storage failure; 21 migration failure;
 30 signature, membership, or content-history trust failure.
 
 Side effects: capabilities/status/membership plan perform no Git write, network,

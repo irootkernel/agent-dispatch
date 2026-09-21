@@ -248,6 +248,37 @@ func TestRemoteBindingRejectsSeparatePushURLBeforeNetwork(t *testing.T) {
 	}
 }
 
+func TestRemoteBindingRejectsRepositoryURLRewrites(t *testing.T) {
+	repo := initRepository(t)
+	gitRun(t, repo, "remote", "add", "origin", "ssh://git@example.com/repo")
+	gitRun(t, repo, "config", "url.ssh://git@mirror.example/.insteadOf", "ssh://git@example.com/")
+	gitRun(t, repo, "config", "url.ssh://git@evil.example/.insteadOf", "ssh://git@mirror.example/")
+	digest, _, err := config.RemoteRepositoryDigest("ssh://git@mirror.example/repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := New(repo, Limits{Timeout: 2 * time.Second, MaxOutput: 64 << 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.RemoteRef(context.Background(), "origin", "refs/heads/main", digest); err == nil || !strings.Contains(err.Error(), "URL rewrite") {
+		t.Fatalf("repository-local URL rewrite was accepted: %v", err)
+	}
+}
+
+func TestUpdateRefExpectedRejectsSymbolicRef(t *testing.T) {
+	repo := initRepository(t)
+	head := gitOutput(t, repo, "rev-parse", "HEAD")
+	gitRun(t, repo, "symbolic-ref", "refs/heads/sync", "refs/heads/main")
+	client, err := New(repo, Limits{Timeout: 2 * time.Second, MaxOutput: 64 << 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := client.UpdateRefExpected(context.Background(), "refs/heads/sync", head, head); err == nil || !strings.Contains(err.Error(), "symbolic ref") {
+		t.Fatalf("symbolic expected-old ref was accepted: %v", err)
+	}
+}
+
 func TestRestrictedRunnerBoundsOutputAndKillsProcessGroup(t *testing.T) {
 	repo := initRepository(t)
 	script := filepath.Join(t.TempDir(), "fake-git")
@@ -276,6 +307,7 @@ func TestPushTimeoutWithUnprovableRemoteHeadIsAmbiguous(t *testing.T) {
 	expected := "1111111111111111111111111111111111111111"
 	candidate := "2222222222222222222222222222222222222222"
 	body := "#!/bin/sh\ncase \"$*\" in\n" +
+		"  *\"config --local --name-only --get-regexp\"*) exit 1;;\n" +
 		"  *\"remote get-url --all origin\"*) echo ssh://git@example.com/repo;;\n" +
 		"  *\"remote get-url --push --all origin\"*) echo ssh://git@example.com/repo;;\n" +
 		"  *ls-remote*\"refs/agent-dispatch/membership/wiki-pair\"*) if test -f " + count + "; then exit 1; else : > " + count + "; echo '" + expected + " refs/agent-dispatch/membership/wiki-pair'; fi;;\n" +
@@ -302,6 +334,7 @@ func TestPushAlreadyAtCandidateIsConfirmed(t *testing.T) {
 	expected := "1111111111111111111111111111111111111111"
 	candidate := "2222222222222222222222222222222222222222"
 	body := "#!/bin/sh\ncase \"$*\" in\n" +
+		"  *\"config --local --name-only --get-regexp\"*) exit 1;;\n" +
 		"  *\"remote get-url --all origin\"*) echo ssh://git@example.com/repo;;\n" +
 		"  *\"remote get-url --push --all origin\"*) echo ssh://git@example.com/repo;;\n" +
 		"  *ls-remote*) echo '" + candidate + " refs/agent-dispatch/content/wiki-pair';;\n" +
@@ -367,6 +400,7 @@ func TestG17TwoWritersPreserveBothHistoriesAfterFastForwardLoss(t *testing.T) {
 	script := filepath.Join(dir, "git")
 	body := fmt.Sprintf(`#!/bin/sh
 case " $* " in
+  *" config --local --name-only --get-regexp "*) exit 1;;
   *" remote get-url --all origin "*) echo %s; exit 0;;
   *" remote get-url --push --all origin "*) echo %s; exit 0;;
   *" ls-remote "*) oid=$(sed -n '1p' %s); printf '%%s\t%s\n' "$oid"; exit 0;;

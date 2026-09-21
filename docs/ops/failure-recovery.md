@@ -24,10 +24,11 @@ Keep the same explicit `--config` path for diagnosis and resolution.
 | Config changed with ready intent | superseded/reprocess | revalidate and create new decision lineage | mutate immutable request |
 | Capability evidence mismatch | stale or changed executable capabilities | run `agent-dispatch hermes probe`, then route preflight | hand-edit the probe cache or bypass production checks |
 | Secret resolution fails | no side effect | correct reference and retry | log secret value for debugging |
-| `sync reconcile` reports `deferred` | acknowledgement, writer-idle, Git, overlap, or untracked-collision fence is not satisfied | preserve the named paths and evidence, resolve the reported fence, then rerun reconcile | stash, clean, reset, or overwrite local files |
+| `sync reconcile` reports `deferred` | `operator_pause`, `acknowledgement_stale`, `resource_busy`, `observation_unavailable`, `git_unstable`, `local_overlap`, or `untracked_collision` names the unsatisfied fence | preserve the named paths and evidence, resolve only the reported fence, then rerun reconcile | stash, clean, reset, or overwrite local files |
 | `sync reconcile` exits 14 with `blocked` | divergent history, live protected claim, or missing exact checkpoint | resolve with ordinary Git, then use reviewed `sync checkpoint plan`, `sync checkpoint apply`, and reconcile | merge, rebase, force-push, or clear the control row by hand |
 | `sync reconcile` exits 30 with `blocked` | membership, signature, or covered-history trust failure | inspect the pinned membership and signed history; create an administrator checkpoint only after review | accept an unsigned tip or widen trust implicitly |
-| `sync reconcile` exits 13 with `uncertain` | file, index, ref, and SQLite effects cannot be proven complete | stop participating writers, preserve the import journal and both Git/file states, then investigate before an administrator checkpoint | infer success from equal bytes or lease expiry alone |
+| `sync reconcile` exits 13 with `recovering` or `uncertain` | file, index, ref, and SQLite effects cannot yet be proven complete | stop participating writers, preserve the import journal and both Git/file states, then rerun only after inspection or prepare an administrator checkpoint | infer success from equal bytes or lease expiry alone |
+| `sync publish` loses its approved fast-forward | another signed child moved the remote from the same base | preserve both signed commits, resolve ordinary Git history, then use reviewed `sync checkpoint plan --kind conflict_resolution`, `sync checkpoint apply`, and reconcile | retry with force, merge, rebase, or discard either signed history |
 
 ## Recovery Principles
 

@@ -1,6 +1,7 @@
 package syncrecords
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 )
@@ -49,6 +50,9 @@ func TestControllerOnlyImportRequiresNoPathEffects(t *testing.T) {
 	raw, err := CanonicalImport(p)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !bytes.Contains(raw, []byte(`"paths":[]`)) {
+		t.Fatalf("controller-only import must encode an explicit empty path array: %s", raw)
 	}
 	decoded, err := DecodeImport(raw)
 	if err != nil || !decoded.ControllerOnly || len(decoded.Paths) != 0 {

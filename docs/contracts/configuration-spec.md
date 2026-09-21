@@ -451,7 +451,8 @@ history, subprocess time, and subprocess output values. Inline credentials,
 unknown fields, a third member, a non-Git resource, a public or credential-bearing
 endpoint, or reused trust or directional credentials fail configuration
 validation. An enabled block activates only implemented protected surfaces; it
-does not make reserved import, listener, or service capabilities available.
+does not make the reserved listener, verification, or service capabilities
+available. Guarded import is available only through explicit `sync reconcile`.
 Publication remains an explicit CLI action and never becomes automatic merely
 because the block is enabled. Membership plan needs no signing secret. Membership apply requires
 `administrator_signing_key_ref` to resolve immediately before use to OpenSSH
@@ -482,8 +483,9 @@ algorithms.
 `cooperative_import_acknowledgement` is the complete versioned record, not a
 bare digest. It is current only when every record binding equals the normalized
 configuration and its state incarnation equals the current durable local
-incarnation. E20 status does not read SQLite and therefore reports it non-current;
-E21 owns that durable-state eligibility check. A local resource, remote/ref,
+incarnation. Enabled status and `sync reconcile` read SQLite and report or
+enforce that durable currentness; disabled status remains side-effect-free and
+reports no current acknowledgement. A local resource, remote/ref,
 scope, local identity, administrator anchor, safety policy, or bound change
 therefore invalidates live-tree application without
 blocking publication, status, or later fetch-and-validate reconciliation.

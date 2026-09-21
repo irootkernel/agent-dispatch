@@ -42,6 +42,31 @@ func TestE21T1AdmissionIsIdempotentAndFingerprintBound(t *testing.T) {
 	}
 }
 
+func TestE21T1QueueAndAttemptBoundsFailClosed(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if _, err := s.EnsureSyncControl(ctx, "wiki-pair", "cfg-1", syncT0); err != nil {
+		t.Fatal(err)
+	}
+	first := syncJobFixture("job-bound-first", "cause-bound-first", `{}`)
+	first.QueueLimit = 1
+	job, _, err := s.AdmitSyncJob(ctx, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := syncJobFixture("job-bound-second", "cause-bound-second", `{}`)
+	second.QueueLimit = 1
+	if _, _, err := s.AdmitSyncJob(ctx, second); !errors.Is(err, ErrSyncQueueFull) {
+		t.Fatalf("queue exhaustion must fail closed: %v", err)
+	}
+	if _, err := s.Exec(`UPDATE sync_jobs SET attempts=20 WHERE job_id=?`, job.JobID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ClaimSyncJob(ctx, job.JobID, "worker-bound", "cfg-1", syncT0, syncT3); !errors.Is(err, ErrSyncQueueFull) {
+		t.Fatalf("attempt exhaustion must fail closed: %v", err)
+	}
+}
+
 func TestE21T1ExpiredLeaseNeedsRecoveryAndRejectsStaleWriter(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
@@ -73,6 +98,34 @@ func TestE21T1ExpiredLeaseNeedsRecoveryAndRejectsStaleWriter(t *testing.T) {
 	}
 }
 
+func TestE21T1SyncJobTransitionsCannotSkipOrMoveBackward(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if _, err := s.EnsureSyncControl(ctx, "wiki-pair", "cfg-1", syncT0); err != nil {
+		t.Fatal(err)
+	}
+	job, _, err := s.AdmitSyncJob(ctx, syncJobFixture("job-transition", "cause-transition", `{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	job, err = s.ClaimSyncJob(ctx, job.JobID, "worker-transition", "cfg-1", syncT0, syncT3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	journal := SyncJournalEntry{JournalID: "transition-skip", JobID: job.JobID, Fence: job.Fence, Phase: "publication", Outcome: "published", EvidenceJSON: `{}`, RecordedAt: syncT1}
+	if err := s.FinishSyncJob(ctx, job.JobID, "worker-transition", job.Fence, "published", true, journal, syncT1); err == nil {
+		t.Fatal("eligible publication must not skip prepared and signed states")
+	}
+	prepared := SyncJournalEntry{JournalID: "transition-prepared", JobID: job.JobID, Fence: job.Fence, Phase: "publication", Outcome: "prepared", EvidenceJSON: `{}`, RecordedAt: syncT1}
+	if err := s.AdvanceSyncJob(ctx, job.JobID, "worker-transition", job.Fence, "prepared", prepared, syncT1); err != nil {
+		t.Fatal(err)
+	}
+	backward := SyncJournalEntry{JournalID: "transition-backward", JobID: job.JobID, Fence: job.Fence, Phase: "publication", Outcome: "prepared", EvidenceJSON: `{}`, RecordedAt: syncT2}
+	if err := s.AdvanceSyncJob(ctx, job.JobID, "worker-transition", job.Fence, "eligible", backward, syncT2); err == nil {
+		t.Fatal("prepared publication must not move backward to eligible")
+	}
+}
+
 func TestE21T1ClaimExpiryUsesTimeOrderNotTimestampTextOrder(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
@@ -92,8 +145,8 @@ func TestE21T1ClaimExpiryUsesTimeOrderNotTimestampTextOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	advance := SyncJournalEntry{JournalID: "fractional-advance", JobID: first.JobID, Fence: firstClaim.Fence, Phase: "publication", Outcome: "signed", EvidenceJSON: `{}`, RecordedAt: "2026-09-21T00:00:00Z"}
-	if err := s.AdvanceSyncJob(ctx, first.JobID, "worker-a", firstClaim.Fence, "signed", advance, advance.RecordedAt); err != nil {
+	advance := SyncJournalEntry{JournalID: "fractional-advance", JobID: first.JobID, Fence: firstClaim.Fence, Phase: "publication", Outcome: "prepared", EvidenceJSON: `{}`, RecordedAt: "2026-09-21T00:00:00Z"}
+	if err := s.AdvanceSyncJob(ctx, first.JobID, "worker-a", firstClaim.Fence, "prepared", advance, advance.RecordedAt); err != nil {
 		t.Fatalf("live fractional claim must remain usable despite RFC3339 text ordering: %v", err)
 	}
 	if _, err := s.ClaimSyncJob(ctx, second.JobID, "worker-b", "cfg-1", "2026-09-21T00:00:00Z", syncT1); !errors.Is(err, ErrSyncPrecondition) {
@@ -192,6 +245,14 @@ func TestE21T1ResolvedRetentionIsChildrenFirstAndUnresolvedIsPreserved(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
+	prepared := SyncJournalEntry{JournalID: "journal-retention-prepared", JobID: job.JobID, Fence: claim.Fence, Phase: "publication", Outcome: "prepared", EvidenceJSON: `{}`, RecordedAt: syncT0}
+	if err := s.AdvanceSyncJob(ctx, job.JobID, "worker", claim.Fence, "prepared", prepared, syncT0); err != nil {
+		t.Fatal(err)
+	}
+	signed := SyncJournalEntry{JournalID: "journal-retention-signed", JobID: job.JobID, Fence: claim.Fence, Phase: "publication", Outcome: "signed", EvidenceJSON: `{}`, RecordedAt: syncT0}
+	if err := s.AdvanceSyncJob(ctx, job.JobID, "worker", claim.Fence, "signed", signed, syncT0); err != nil {
+		t.Fatal(err)
+	}
 	terminal := SyncJournalEntry{JournalID: "journal-terminal", JobID: job.JobID, Fence: claim.Fence, Phase: "publication", Outcome: "published", EvidenceJSON: `{}`, RecordedAt: syncT1}
 	if err := s.FinishSyncJob(ctx, job.JobID, "worker", claim.Fence, "published", true, terminal, syncT1); err != nil {
 		t.Fatal(err)
@@ -201,11 +262,11 @@ func TestE21T1ResolvedRetentionIsChildrenFirstAndUnresolvedIsPreserved(t *testin
 	}
 	cutoffs := PruneCutoffs{CompletedReceipts: syncT2}
 	plan, err := s.PlanPrune(ctx, cutoffs)
-	if err != nil || plan.Counts.SyncJobs != 1 || plan.Counts.SyncJournals != 1 {
+	if err != nil || plan.Counts.SyncJobs != 1 || plan.Counts.SyncJournals != 3 {
 		t.Fatalf("prune plan=%+v err=%v", plan.Counts, err)
 	}
 	counts, err := s.ExecutePrune(ctx, cutoffs, "operator", "retention", syncT3)
-	if err != nil || counts.SyncJobs != 1 || counts.SyncJournals != 1 {
+	if err != nil || counts.SyncJobs != 1 || counts.SyncJournals != 3 {
 		t.Fatalf("prune counts=%+v err=%v", counts, err)
 	}
 	var remaining int
@@ -398,6 +459,9 @@ func TestE21T3ConfirmedCandidateRecoveryReusesPublication(t *testing.T) {
 	}
 	claim, err := s.ClaimSyncJob(ctx, job.JobID, "publisher", "cfg-1", syncT0, syncT3)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AdvanceSyncJob(ctx, job.JobID, "publisher", claim.Fence, "prepared", SyncJournalEntry{JournalID: "publication-prepared", JobID: job.JobID, Fence: claim.Fence, Phase: "publication", Outcome: "prepared", EvidenceJSON: `{}`, RecordedAt: syncT0}, syncT0); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.AdvanceSyncJob(ctx, job.JobID, "publisher", claim.Fence, "signed", SyncJournalEntry{JournalID: "publication-signed", JobID: job.JobID, Fence: claim.Fence, Phase: "publication", Outcome: "signed", EvidenceJSON: `{"candidate":"1111111111111111111111111111111111111111"}`, RecordedAt: syncT1}, syncT1); err != nil {

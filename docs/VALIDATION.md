@@ -8,8 +8,8 @@ the [documentation index](README.md); for delivery status use the
 
 > **Current validation snapshot:** 2026-09-21 (E21-T5 and gate G17 completed;
 > 111 of 116 roadmap tasks are complete and five are planned)
-> **Package target:** Agent Dispatch SOT 1.7.0 / shipped implementation v0.1.8
-> plus the qualified v0.2.0 sync contract and planned runtime
+> **Package target:** Agent Dispatch SOT 1.8.0 / shipped implementation v0.1.8
+> plus the qualified E21 v0.2.0 local sync runtime
 
 ## Completed Checks
 
@@ -28,10 +28,11 @@ the [documentation index](README.md); for delivery status use the
 - Real-Watchman test legs run only when PATH resolves the exact Make-owned
   wrapper for the disposable daemon; ordinary direct `go test` skips them and
   cannot consume the operator daemon's watcher resources.
-- The roadmap contains exactly 23 epics and 116 task headings: 106 Completed
-  and ten Planned.
+- The roadmap contains exactly 23 epics and 116 task headings: 111 Completed
+  and five Planned.
 - Every task uses one allowed status value.
-- Every sequence through E20 is fully Completed; there is no active task.
+- Every sequence through E21 is fully Completed; E22 is In Progress with no
+  active task and five Planned tasks.
 - Required-spec IDs are unique.
 - Acceptance-scenario IDs are unique.
 - The D-025 functional baseline remains unchanged; D-026 moves paths and adds ownership indexes without changing roadmap identity, lifecycle, or executable-evidence claims.
@@ -43,7 +44,7 @@ the [documentation index](README.md); for delivery status use the
 - Example files: 64 (33 top-level JSON examples, 30 registered invalid JSON fixtures, and one YAML configuration example)
 - Integration reports: 4 (Hermes public interface E0-T4, Watchman public interface E0-T5, real-Hermes G11 evidence E15-T4, cold-validation evidence E17-T2)
 - Integration fixtures: 42 files, 9 under `integrations/fixtures/hermes/` and 33 under `integrations/fixtures/watchman/`
-- Roadmap tasks: 116 (106 Completed, ten Planned)
+- Roadmap tasks: 116 (111 Completed, five Planned)
 - Normative requirements: 241
 - Acceptance scenarios: 118
 

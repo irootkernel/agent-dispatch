@@ -82,19 +82,22 @@ func TestE21T4OnlyNewestEffectCanAttributeAndDuplicateFailsClosed(t *testing.T) 
 	}
 	afterValues := []string{"sha256:" + strings.Repeat("a", 64), "sha256:" + strings.Repeat("b", 64)}
 	beforeValues := []string{"absent", afterValues[0]}
+	// RFC3339Nano strings do not preserve instant order when one fractional
+	// suffix is a prefix of another: .9Z sorts after the later .95Z.
+	effectTimes := []string{"2026-09-21T00:00:00.9Z", "2026-09-21T00:00:00.95Z"}
 	for i := range afterValues {
 		jobID := "import-newest-" + string(rune('1'+i))
-		job, _, err := s.AdmitSyncJob(ctx, SyncJobInput{JobID: jobID, GroupID: "wiki-pair", Kind: "import", LogicalKey: jobID, InitialState: "validated", PayloadJSON: `{}`, ConfigRevision: "revision-1", QueueLimit: 10, Now: []string{syncT0, syncT1}[i]})
+		job, _, err := s.AdmitSyncJob(ctx, SyncJobInput{JobID: jobID, GroupID: "wiki-pair", Kind: "import", LogicalKey: jobID, InitialState: "validated", PayloadJSON: `{}`, ConfigRevision: "revision-1", QueueLimit: 10, Now: effectTimes[i]})
 		if err != nil {
 			t.Fatal(err)
 		}
 		owner := "owner-newest-" + string(rune('1'+i))
-		job, err = s.ClaimSyncJob(ctx, job.JobID, owner, "revision-1", []string{syncT0, syncT1}[i], syncT3)
+		job, err = s.ClaimSyncJob(ctx, job.JobID, owner, "revision-1", effectTimes[i], syncT3)
 		if err != nil {
 			t.Fatal(err)
 		}
 		effects := []syncrecords.ImportPath{{Path: "Inbox/a.md", Before: beforeValues[i], After: afterValues[i]}}
-		started := []string{syncT0, syncT1}[i]
+		started := effectTimes[i]
 		if err := s.BeginImportApply(ctx, job.JobID, owner, "vault-main", job.Fence, effects, SyncJournalEntry{JournalID: "start-" + jobID, JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "started", EvidenceJSON: `{}`, RecordedAt: started}, started); err != nil {
 			t.Fatal(err)
 		}

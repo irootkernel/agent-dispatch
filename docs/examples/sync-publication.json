@@ -13,12 +13,10 @@
   "contract_digest": "sha256:30cf47b1bd854a0271aa9df3e7b37f0cc14cdd86d3f06a65a2cb787c6741131b",
   "receipt_ids": ["receipt-001"],
   "cause_id": "dispatch-001",
-  "candidate_commit": "2222222222222222222222222222222222222222",
-  "remote_commit": "2222222222222222222222222222222222222222",
-  "state": "published",
+  "state": "prepared",
   "reason": "none",
-  "attempts": 1,
+  "attempts": 0,
   "claim_owner": null,
-  "fence": 4,
-  "retain_until_resolved": false
+  "fence": 1,
+  "retain_until_resolved": true
 }

@@ -1,7 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:agent-dispatch:schema:sync-publication:v1",
-  "title": "Agent Dispatch sync publication v1",
+  "title": "Agent Dispatch immutable sync publication manifest v1",
+  "description": "Immutable signed-commit manifest. Durable publication job lifecycle is stored separately in SQLite and exposed by sync status.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "publication_id", "group_id", "publisher", "state_incarnation_id", "membership_revision", "content_ref", "source_revision", "base_commit", "snapshot_digest", "scope_digest", "contract_digest", "receipt_ids", "cause_id", "state", "reason", "attempts", "claim_owner", "fence", "retain_until_resolved"],
@@ -12,19 +13,9 @@
     "content_ref": {"$ref": "#/$defs/ref"}, "source_revision": {"type": "integer", "minimum": 1}, "base_commit": {"$ref": "#/$defs/oid"},
     "snapshot_digest": {"$ref": "#/$defs/digest"}, "scope_digest": {"$ref": "#/$defs/digest"}, "contract_digest": {"$ref": "#/$defs/digest"},
     "receipt_ids": {"type": "array", "minItems": 1, "maxItems": 100, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}}, "cause_id": {"$ref": "#/$defs/id"},
-    "candidate_commit": {"$ref": "#/$defs/oid"}, "remote_commit": {"$ref": "#/$defs/oid"},
-    "state": {"enum": ["eligible", "prepared", "signed", "push_pending", "published", "blocked", "uncertain"]},
-    "reason": {"enum": ["none", "pre_signature_interruption", "remote_rejected", "membership_stale", "trust_failed", "effect_unknown", "history_rewritten", "protected_path", "bound_exhausted"]},
-    "attempts": {"type": "integer", "minimum": 0, "maximum": 20}, "claim_owner": {"oneOf": [{"$ref": "#/$defs/id"}, {"type": "null"}]}, "fence": {"type": "integer", "minimum": 1},
-    "retain_until_resolved": {"type": "boolean"}
+    "state": {"const": "prepared"}, "reason": {"const": "none"},
+    "attempts": {"const": 0}, "claim_owner": {"type": "null"}, "fence": {"const": 1},
+    "retain_until_resolved": {"const": true}
   },
-  "allOf": [
-    {"if": {"properties": {"state": {"const": "published"}}, "required": ["state"]}, "then": {"required": ["candidate_commit", "remote_commit"], "properties": {"reason": {"const": "none"}, "retain_until_resolved": {"const": false}}}},
-    {"if": {"properties": {"state": {"const": "eligible"}}, "required": ["state"]}, "then": {"properties": {"reason": {"const": "none"}, "retain_until_resolved": {"const": true}}}},
-    {"if": {"properties": {"state": {"const": "prepared"}}, "required": ["state"]}, "then": {"properties": {"reason": {"enum": ["none", "pre_signature_interruption"]}, "retain_until_resolved": {"const": true}}}},
-    {"if": {"properties": {"state": {"enum": ["signed", "push_pending"]}}, "required": ["state"]}, "then": {"required": ["candidate_commit"], "properties": {"reason": {"const": "none"}, "retain_until_resolved": {"const": true}}}},
-    {"if": {"properties": {"state": {"const": "blocked"}}, "required": ["state"]}, "then": {"properties": {"reason": {"enum": ["remote_rejected", "membership_stale", "trust_failed", "history_rewritten", "protected_path", "bound_exhausted"]}, "retain_until_resolved": {"const": true}}}},
-    {"if": {"properties": {"state": {"const": "uncertain"}}, "required": ["state"]}, "then": {"properties": {"reason": {"const": "effect_unknown"}, "retain_until_resolved": {"const": true}}}}
-  ],
   "$defs": {"id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,127}$"}, "group": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"}, "oid": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"}, "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "ref": {"type": "string", "pattern": "^refs/heads/[A-Za-z0-9](?:[A-Za-z0-9._/-]*[A-Za-z0-9])?$"}}
 }

@@ -43,7 +43,7 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 	}
 	guard, err := resourceguard.Acquire(stateDirOf(cfg), s.Resource)
 	if err != nil {
-		return reconcileEnvelope(stdout, "deferred", "git_unstable", map[string]any{"detail": err.Error()})
+		return reconcileEnvelope(stdout, "deferred", "resource_busy", map[string]any{"detail": err.Error()})
 	}
 	defer guard.Close()
 	client, err := membershipGitClient(cfg, s)
@@ -73,7 +73,21 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 		return blockReconcile(stdout, stderr, store, s.GroupID, revision, "trust_failure", "trust_failed", err)
 	}
 	if remoteMembership != localMembership {
-		return blockReconcile(stdout, stderr, store, s.GroupID, revision, "trust_failure", "membership_stale", errors.New("approved remote membership differs from the locally adopted revision"))
+		relation, compareErr := client.Compare(requestCtx(), localMembership, remoteMembership)
+		if compareErr != nil || relation != gitlocal.RelationBehind {
+			if compareErr == nil {
+				compareErr = errors.New("approved remote membership is not a signed fast-forward of the locally adopted revision")
+			}
+			return blockReconcile(stdout, stderr, store, s.GroupID, revision, "trust_failure", "membership_stale", compareErr)
+		}
+		if err := client.UpdateRefExpected(requestCtx(), s.MembershipRef, remoteMembership, localMembership); err != nil {
+			return blockReconcile(stdout, stderr, store, s.GroupID, revision, "trust_failure", "membership_stale", err)
+		}
+		return reconcileEnvelope(stdout, "membership_adopted", "none", map[string]any{
+			"previous_membership_revision": localMembership,
+			"membership_revision":          remoteMembership,
+			"side_effects":                 []string{"local_membership_ref_updated"},
+		})
 	}
 
 	contentTracking := "refs/agent-dispatch/sync/content/" + s.GroupID
@@ -151,7 +165,11 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 	}
 	observationRevision, err := store.ObservationRevision(requestCtx(), s.Resource)
 	if err != nil || observationRevision < 1 {
-		return reconcileEnvelope(stdout, "deferred", "git_unstable", map[string]any{"detail": "resource has no stable maintained observation revision"})
+		detail := "resource has no stable maintained observation revision"
+		if err != nil {
+			detail += ": " + err.Error()
+		}
+		return reconcileEnvelope(stdout, "deferred", "observation_unavailable", map[string]any{"detail": detail})
 	}
 	state, err := client.InspectImport(requestCtx(), s.ContentRef)
 	if err != nil {
@@ -169,7 +187,7 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 	reason := "none"
 	reasonDetail := ""
 	if !writersIdle {
-		reason = "git_unstable"
+		reason = "resource_busy"
 		reasonDetail = "participating maintenance writers are still active"
 	} else if state.ActiveOperation != "" {
 		reason = "git_unstable"
@@ -605,10 +623,10 @@ func finishControllerImport(stdout, stderr io.Writer, store *sqlite.Store, clien
 	}
 	if inspectErr == nil && refErr == nil && state.ActiveOperation == "" && state.Digest == expectedDigest && ref == from {
 		now := time.Now().UTC().Format(time.RFC3339Nano)
-		if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "recovering", false, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "effect_unknown", EvidenceJSON: mustJSON(map[string]any{"controller_only": true, "detail": cause.Error(), "ref": ref}), RecordedAt: now}, now); err != nil {
+		if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "validated", false, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "effect_not_started", EvidenceJSON: mustJSON(map[string]any{"controller_only": true, "detail": cause.Error(), "ref": ref}), RecordedAt: now}, now); err != nil {
 			return syncStoreError(stderr, "sync reconcile", err)
 		}
-		return reconcileEnvelopeCode(stdout, "recovering", "partial_effect", map[string]any{"import_job_id": job.JobID, "detail": cause.Error(), "ref": ref}, 13)
+		return reconcileEnvelopeCode(stdout, "deferred", "git_unstable", map[string]any{"import_job_id": job.JobID, "detail": cause.Error(), "ref": ref, "effect_not_started": true}, 10)
 	}
 	return finishImportUncertain(stdout, stderr, store, job, owner, cause)
 }

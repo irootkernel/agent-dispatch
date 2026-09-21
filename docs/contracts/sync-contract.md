@@ -163,13 +163,16 @@ The canonical v1 record schemas are `sync-membership`,
 `sync-membership-plan`, `sync-checkpoint`, `sync-checkpoint-plan`,
 `sync-import-acknowledgement`, `sync-publication`, `sync-delivery`,
 `sync-import`, `sync-control`, and `sync-verification`. Unknown fields,
-versions, states, and reasons are invalid.
+versions, states, and reasons are invalid. `sync-publication` is the immutable
+manifest stored in the signed commit: its record state is always `prepared`.
+The lifecycle below belongs to the durable SQLite job/status projection and is
+not embedded back into that signed manifest.
 Full Git object IDs are lowercase 40- or 64-hex values; abbreviated IDs and
 wall-clock time are never causal authority.
 
 | Record | State progression | Terminal or held result |
 |---|---|---|
-| publication | `eligible -> prepared -> signed -> push_pending -> published` | `blocked` or `uncertain` retains the obligation |
+| publication job | `eligible -> prepared -> signed -> push_pending -> published` | `blocked` or `uncertain` retains the obligation |
 | delivery | `pending -> attempted -> accepted` | `retryable`, `unknown`, or `refused`; HTTP 202 proves only `accepted` |
 | import | `requested -> fetched -> validated -> applying -> applied` | `deferred`, `blocked`, `recovering`, or `uncertain` |
 | control | `active <-> paused` | `blocked` requires explicit recovery evidence |
@@ -342,8 +345,9 @@ graceful shutdown has 30 seconds to reach a safe boundary before leaving the
 obligation pending. Runtime configuration may lower but not raise these
 ceilings.
 
-Resolved publication, delivery, import, and verification records are retained
-for at least 180 days. Membership and checkpoint evidence is retained for the
+Resolved publication, delivery, import, and verification jobs use the
+configured completed-receipt retention horizon, which defaults to 180 days.
+Membership and checkpoint evidence is retained for the
 life of the group. Any `blocked`, `recovering`, `uncertain`, uncovered-history,
 or unresolved predecessor obligation is exempt from age pruning until a newer
 durable record explicitly resolves and references it. Exhaustion remains a

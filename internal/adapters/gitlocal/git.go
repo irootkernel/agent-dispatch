@@ -760,6 +760,11 @@ func (c *Client) UpdateRefExpected(ctx context.Context, ref, candidate, expected
 	if !validRef(ref) || !validOID(candidate) || (expected != "" && !validOID(expected)) {
 		return fmt.Errorf("invalid expected-ref update")
 	}
+	if _, _, err := c.run(ctx, nil, nil, "symbolic-ref", "--quiet", ref); err == nil {
+		return fmt.Errorf("expected-old ref update refuses symbolic ref %q", ref)
+	} else if exitCode(err) != 1 {
+		return err
+	}
 	old := expected
 	if old == "" {
 		old = strings.Repeat("0", len(candidate))
@@ -843,6 +848,9 @@ func (c *Client) verifyRemote(ctx context.Context, remote, expectedDigest string
 	if !validRemoteName(remote) || !strings.HasPrefix(expectedDigest, "sha256:") {
 		return "", fmt.Errorf("invalid configured remote binding")
 	}
+	if err := c.rejectURLRewrites(ctx); err != nil {
+		return "", err
+	}
 	out, _, err := c.run(ctx, nil, nil, "remote", "get-url", "--all", remote)
 	if err != nil {
 		return "", err
@@ -860,6 +868,23 @@ func (c *Client) verifyRemote(ctx context.Context, remote, expectedDigest string
 		return "", fmt.Errorf("configured remote repository identity does not match its approved digest")
 	}
 	return urls[0], nil
+}
+
+func (c *Client) rejectURLRewrites(ctx context.Context) error {
+	out, _, err := c.run(ctx, nil, nil, "config", "--local", "--name-only", "--get-regexp", `^url\..*\.`)
+	if err != nil {
+		if exitCode(err) == 1 {
+			return nil
+		}
+		return err
+	}
+	for _, name := range strings.Fields(string(out)) {
+		lower := strings.ToLower(name)
+		if strings.HasSuffix(lower, ".insteadof") || strings.HasSuffix(lower, ".pushinsteadof") {
+			return fmt.Errorf("configured remote refuses repository-local URL rewrite rules")
+		}
+	}
+	return nil
 }
 
 func (c *Client) run(parent context.Context, extraEnv map[string]string, stdin []byte, args ...string) ([]byte, []byte, error) {

@@ -57,7 +57,9 @@ type ImportBinding struct {
 }
 
 func NewImport(binding ImportBinding, paths []ImportPath) (Import, error) {
-	ordered := append([]ImportPath(nil), paths...)
+	// Keep an empty effect set as [] rather than null. The published schema
+	// requires controller-only imports to carry an explicit empty array.
+	ordered := append([]ImportPath{}, paths...)
 	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Path < ordered[j].Path })
 	p := Import{
 		SchemaVersion: ImportSchema, GroupID: binding.GroupID,
@@ -142,7 +144,7 @@ func validImportDisposition(state, reason string, retained bool) bool {
 	case "applied":
 		return reason == "none" && !retained
 	case "deferred":
-		return retained && (reason == "acknowledgement_stale" || reason == "local_overlap" || reason == "untracked_collision" || reason == "git_unstable")
+		return retained && (reason == "acknowledgement_stale" || reason == "local_overlap" || reason == "untracked_collision" || reason == "git_unstable" || reason == "observation_unavailable" || reason == "resource_busy")
 	case "blocked":
 		return retained && (reason == "membership_stale" || reason == "history_uncovered" || reason == "history_diverged" || reason == "trust_failed" || reason == "bound_exhausted")
 	case "recovering", "uncertain":

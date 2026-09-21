@@ -164,6 +164,16 @@ func latestSyncJobStatus(store *sqlite.Store, groupID, kind string) (map[string]
 			}
 		}
 	}
+	if journals, journalErr := store.LoadSyncJournals(requestCtx(), row.JobID); journalErr == nil && len(journals) > 0 {
+		var evidence map[string]any
+		if json.Unmarshal([]byte(journals[len(journals)-1].EvidenceJSON), &evidence) == nil {
+			for _, key := range []string{"reason", "candidate", "remote", "push_state"} {
+				if value, ok := evidence[key].(string); ok && value != "" {
+					result[key] = value
+				}
+			}
+		}
+	}
 	if kind != "import" {
 		return result, nil
 	}

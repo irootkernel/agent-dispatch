@@ -11,7 +11,7 @@
     "case_mode": {"enum": ["sensitive", "insensitive"]},
     "controller_only": {"type": "boolean"},
     "state": {"enum": ["requested", "fetched", "validated", "deferred", "applying", "applied", "blocked", "recovering", "uncertain"]},
-    "reason": {"enum": ["none", "acknowledgement_stale", "membership_stale", "local_overlap", "untracked_collision", "git_unstable", "history_uncovered", "history_diverged", "trust_failed", "partial_effect", "bound_exhausted"]},
+    "reason": {"enum": ["none", "acknowledgement_stale", "membership_stale", "local_overlap", "untracked_collision", "git_unstable", "observation_unavailable", "resource_busy", "history_uncovered", "history_diverged", "trust_failed", "partial_effect", "bound_exhausted"]},
     "paths": {"type": "array", "maxItems": 1000, "items": {"type": "object", "additionalProperties": false, "required": ["path", "before", "after"], "properties": {"path": {"type": "string", "pattern": "^[^/\\\\\\x00-\\x1f\\x7f]+(?:/[^/\\\\\\x00-\\x1f\\x7f]+)*\\.(?:[mM][dD]|[mM][aA][rR][kK][dD][oO][wW][nN])$"}, "before": {"$ref": "#/$defs/digestOrAbsent"}, "after": {"$ref": "#/$defs/digestOrAbsent"}}}},
     "attempts": {"type": "integer", "minimum": 0, "maximum": 20}, "claim_owner": {"oneOf": [{"$ref": "#/$defs/id"}, {"type": "null"}]}, "fence": {"type": "integer", "minimum": 1}, "retain_until_resolved": {"type": "boolean"}
   },
@@ -19,7 +19,7 @@
     {"if": {"properties": {"controller_only": {"const": true}}, "required": ["controller_only"]}, "then": {"properties": {"paths": {"maxItems": 0}}}, "else": {"properties": {"paths": {"minItems": 1}}}},
     {"if": {"properties": {"state": {"enum": ["requested", "fetched", "validated", "applying"]}}, "required": ["state"]}, "then": {"properties": {"reason": {"const": "none"}, "retain_until_resolved": {"const": true}}}},
     {"if": {"properties": {"state": {"const": "applied"}}, "required": ["state"]}, "then": {"properties": {"reason": {"const": "none"}, "retain_until_resolved": {"const": false}}}},
-    {"if": {"properties": {"state": {"const": "deferred"}}, "required": ["state"]}, "then": {"properties": {"reason": {"enum": ["acknowledgement_stale", "local_overlap", "untracked_collision", "git_unstable"]}, "retain_until_resolved": {"const": true}}}},
+    {"if": {"properties": {"state": {"const": "deferred"}}, "required": ["state"]}, "then": {"properties": {"reason": {"enum": ["acknowledgement_stale", "local_overlap", "untracked_collision", "git_unstable", "observation_unavailable", "resource_busy"]}, "retain_until_resolved": {"const": true}}}},
     {"if": {"properties": {"state": {"const": "blocked"}}, "required": ["state"]}, "then": {"properties": {"reason": {"enum": ["membership_stale", "history_uncovered", "history_diverged", "trust_failed", "bound_exhausted"]}, "retain_until_resolved": {"const": true}}}},
     {"if": {"properties": {"state": {"const": "recovering"}}, "required": ["state"]}, "then": {"properties": {"reason": {"const": "partial_effect"}, "retain_until_resolved": {"const": true}}}},
     {"if": {"properties": {"state": {"const": "uncertain"}}, "required": ["state"]}, "then": {"properties": {"reason": {"const": "partial_effect"}, "retain_until_resolved": {"const": true}}}}

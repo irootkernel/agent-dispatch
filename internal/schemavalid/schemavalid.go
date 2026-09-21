@@ -67,7 +67,6 @@ var expectedSemanticRejections = map[string]string{
 	"sync-import-sensitive-alias.json":              "unique under the conservative path identity",
 	"sync-import-unicode-alias.json":                "unique under the conservative path identity",
 	"sync-import-unsafe-path.json":                  "safe relative Markdown path",
-	"sync-publication-commit-mismatch.json":         "candidate and remote commits must match",
 	"sync-verification-duplicate-node.json":         "pair instance identities must be distinct",
 	"sync-verification-duplicate-incarnation.json":  "pair incarnation identities must be distinct",
 	"sync-verification-obsolete-incarnation.json":   "incarnation is obsolete or unexpected",
@@ -85,7 +84,8 @@ var expectedSchemaRejections = map[string]string{
 	"sync-membership-public-endpoint.json":          "endpoint",
 	"sync-membership-third-active.json":             "active_members",
 	"sync-publication-contradictory-reason.json":    "reason",
-	"sync-publication-missing-proof.json":           "candidate_commit",
+	"sync-publication-missing-proof.json":           "receipt_ids",
+	"sync-publication-commit-mismatch.json":         "candidate_commit",
 	"sync-publication-unresolved-prunable.json":     "retain_until_resolved",
 	"sync-verification-empty-pair.json":             "expected_nodes",
 	"sync-verification-incomplete-pair.json":        "nodes",
@@ -488,12 +488,7 @@ func validateSyncSemantics(doc any) error {
 			seenPaths[canonical] = true
 		}
 	case "agent-dispatch.sync-publication/v1":
-		if err := validateSyncRefs(m); err != nil {
-			return err
-		}
-		if m["state"] == "published" && !sameJSONScalar(m["candidate_commit"], m["remote_commit"]) {
-			return fmt.Errorf("published candidate and remote commits must match")
-		}
+		return validateSyncRefs(m)
 	case "agent-dispatch.sync-import-acknowledgement/v1":
 		return validateSyncRefs(m)
 	case "agent-dispatch.sync-nudge/v1", "agent-dispatch.sync-status-request/v1", "agent-dispatch.sync-status-response/v1":

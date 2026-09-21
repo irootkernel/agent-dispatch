@@ -676,7 +676,7 @@ func (s *Store) AdvanceSyncJob(ctx context.Context, jobID, owner string, fence i
 	if err != nil {
 		return err
 	}
-	if !validSyncState(row.Kind, state) || !claimableSyncState(row.Kind, state) || row.ClaimOwner != owner || row.Fence != fence || timeBefore(row.ClaimExpiresAt, now) {
+	if !validSyncTransition(row.Kind, row.State, state) || !claimableSyncState(row.Kind, state) || row.ClaimOwner != owner || row.Fence != fence || timeBefore(row.ClaimExpiresAt, now) {
 		return ErrSyncPrecondition
 	}
 	if journal.JobID != jobID || journal.Fence != fence || journal.JournalID == "" || journal.RecordedAt != now || !validSyncJournal(journal.Phase, journal.Outcome) {
@@ -1033,8 +1033,7 @@ func (s *Store) LoadPendingImportEffects(ctx context.Context, resourceID string)
 		AND NOT EXISTS (SELECT 1 FROM sync_import_effects newer JOIN sync_jobs newer_job ON newer_job.job_id=newer.job_id
 			WHERE newer.resource_id=e.resource_id AND newer.path=e.path
 			AND (newer.applied_at IS NOT NULL OR (newer_job.state IN ('applying','recovering','uncertain') AND newer_job.resolved_at IS NULL))
-			AND (COALESCE(newer.applied_at,newer_job.updated_at)>COALESCE(e.applied_at,j.updated_at)
-				OR (COALESCE(newer.applied_at,newer_job.updated_at)=COALESCE(e.applied_at,j.updated_at) AND (newer.job_id>e.job_id OR (newer.job_id=e.job_id AND newer.fence>e.fence)))))
+			AND (newer_job.rowid>j.rowid OR (newer_job.rowid=j.rowid AND newer.fence>e.fence)))
 		ORDER BY e.path`, resourceID)
 	if err != nil {
 		return nil, err
@@ -1053,7 +1052,7 @@ func (s *Store) LoadPendingImportEffects(ctx context.Context, resourceID string)
 
 // LoadSyncJournals returns immutable evidence in deterministic order.
 func (s *Store) LoadSyncJournals(ctx context.Context, jobID string) ([]SyncJournalEntry, error) {
-	rows, err := s.QueryContext(ctx, `SELECT journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at FROM sync_journal_entries WHERE job_id=? ORDER BY recorded_at,journal_id`, jobID)
+	rows, err := s.QueryContext(ctx, `SELECT journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at FROM sync_journal_entries WHERE job_id=? ORDER BY rowid`, jobID)
 	if err != nil {
 		return nil, err
 	}
@@ -1303,8 +1302,8 @@ func (s *Store) FinishSyncJob(ctx context.Context, jobID, owner string, fence in
 	if err != nil {
 		return err
 	}
-	if !validSyncState(row.Kind, state) {
-		return fmt.Errorf("state %q is invalid for sync job kind %q", state, row.Kind)
+	if !validSyncTransition(row.Kind, row.State, state) {
+		return fmt.Errorf("state transition %q -> %q is invalid for sync job kind %q", row.State, state, row.Kind)
 	}
 	if journal.JobID != jobID || journal.Fence != fence || journal.JournalID == "" || journal.RecordedAt != now {
 		return fmt.Errorf("terminal journal does not bind the exact job, fence, and timestamp")
@@ -1535,6 +1534,46 @@ func validSyncState(kind, state string) bool {
 		"checkpoint":   {"planned": true, "applying": true, "applied": true, "blocked": true, "uncertain": true},
 	}
 	return allowed[kind][state]
+}
+
+// validSyncTransition is the single durable edge table for sync job heads.
+// Storage callers may not skip required phases or move a terminal state back
+// into active work merely because both names are valid for the job kind.
+func validSyncTransition(kind, from, to string) bool {
+	edges := map[string]map[string]map[string]bool{
+		"publication": {
+			"eligible":     {"eligible": true, "prepared": true, "blocked": true, "uncertain": true},
+			"prepared":     {"prepared": true, "signed": true, "blocked": true, "uncertain": true},
+			"signed":       {"signed": true, "push_pending": true, "published": true, "blocked": true, "uncertain": true},
+			"push_pending": {"push_pending": true, "published": true, "blocked": true, "uncertain": true},
+		},
+		"delivery": {
+			"pending":   {"pending": true, "attempted": true, "accepted": true, "retryable": true, "unknown": true, "refused": true},
+			"attempted": {"attempted": true, "accepted": true, "retryable": true, "unknown": true, "refused": true},
+			"retryable": {"attempted": true, "accepted": true, "retryable": true, "unknown": true, "refused": true},
+		},
+		"import": {
+			"requested":  {"requested": true, "fetched": true, "deferred": true, "blocked": true},
+			"fetched":    {"fetched": true, "validated": true, "deferred": true, "blocked": true},
+			"validated":  {"validated": true, "applying": true, "deferred": true, "blocked": true, "uncertain": true},
+			"applying":   {"applying": true, "validated": true, "applied": true, "deferred": true, "recovering": true, "uncertain": true},
+			"recovering": {"recovering": true, "validated": true, "applied": true, "uncertain": true},
+		},
+		"verification": {
+			"planned":    {"planned": true, "collecting": true, "blocked": true, "expired": true},
+			"collecting": {"collecting": true, "finished": true, "blocked": true, "expired": true},
+			"finished":   {"finished": true, "complete": true, "incomplete": true, "target_changed": true, "blocked": true, "expired": true},
+		},
+		"membership": {
+			"planned":  {"planned": true, "applying": true, "applied": true, "blocked": true, "uncertain": true},
+			"applying": {"applying": true, "applied": true, "blocked": true, "uncertain": true},
+		},
+		"checkpoint": {
+			"planned":  {"planned": true, "applying": true, "applied": true, "blocked": true, "uncertain": true},
+			"applying": {"applying": true, "applied": true, "blocked": true, "uncertain": true},
+		},
+	}
+	return edges[kind][from][to]
 }
 
 func claimableSyncState(kind, state string) bool {

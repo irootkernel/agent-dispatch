@@ -11,7 +11,7 @@
 | Field | Value |
 |---|---|
 | Shipped release | v0.1.8 (published 2026-09-10) |
-| Planned SOT baseline | 1.7.0 ([D-030](../specs/decision-log.md); G17-G18 open) |
+| Current SOT baseline | 1.8.0 ([D-030](../specs/decision-log.md); G17 complete, G18 open) |
 | Release target | v0.2.0 (Two-Node Wiki Sync MVP) |
 | Current epic | E22 Peer Recovery, Verification, and Operations (In Progress) |
 | Current active task | None |

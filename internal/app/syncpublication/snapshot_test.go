@@ -84,6 +84,16 @@ func TestCaptureRejectsGovernedSymlinkAndProtectedPath(t *testing.T) {
 	}
 }
 
+func TestValidateFilesRejectsUnicodeAliasOfProtectedPath(t *testing.T) {
+	cfg := snapshotConfig(t.TempDir())
+	route := cfg.Routes["route-main"]
+	route.Policy.Protected = []string{"notes/Caf\u00e9.md"}
+	cfg.Routes["route-main"] = route
+	if err := ValidateFiles(cfg, "vault-main", map[string][]byte{"notes/Cafe\u0301.md": []byte("hostile")}); err == nil {
+		t.Fatal("Unicode-normalization alias of protected Markdown was accepted")
+	}
+}
+
 func snapshotConfig(root string) *config.Config {
 	return &config.Config{Resources: map[string]config.Resource{"vault-main": {Type: "directory", Root: root, FileScope: "markdown"}}, Routes: map[string]config.Route{"route-main": {Source: config.Source{Resource: "vault-main", Include: []string{"**/*.md", "*.md"}, Exclude: []string{"private.md"}}, Policy: config.Policy{Protected: []string{}, Immutable: []string{}}}}}
 }

@@ -105,6 +105,12 @@ func TestE21T5StatusSeparatesDurableSyncOutcomes(t *testing.T) {
 			t.Fatalf("admit %s: %v", job.Kind, err)
 		}
 	}
+	if _, err := store.Exec(`INSERT INTO sync_journal_entries
+		(journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES
+		('publication-status-evidence','publication-job-g17',1,'publication','effect_unknown','{"candidate":"2222222222222222222222222222222222222222","remote":"1111111111111111111111111111111111111111","push_state":"ambiguous","reason":"push outcome unknown"}','2026-09-21T01:00:04Z'),
+		('import-status-evidence','import-job-g17',1,'import','deferred','{"reason":"observation_unavailable"}','2026-09-21T01:00:05Z')`); err != nil {
+		t.Fatal(err)
+	}
 	code, envelope, stderr := syncResult(t, "status", "--group", cfg.Sync.GroupID, "--config", configPath, "--output", "json")
 	if code != 0 {
 		t.Fatalf("status: %d %s", code, stderr)
@@ -122,6 +128,13 @@ func TestE21T5StatusSeparatesDurableSyncOutcomes(t *testing.T) {
 	}
 	if status["latest_publication"].(map[string]any)["publication_id"] != "publication-g17" || status["latest_delivery"].(map[string]any)["receiver"] != "node-b" || status["latest_import"].(map[string]any)["import_id"] != "import-g17" {
 		t.Fatalf("typed status details = %v", status)
+	}
+	publication := status["latest_publication"].(map[string]any)
+	if publication["candidate"] != "2222222222222222222222222222222222222222" || publication["remote"] != target || publication["push_state"] != "ambiguous" || publication["reason"] != "push outcome unknown" {
+		t.Fatalf("publication recovery evidence = %v", publication)
+	}
+	if got := status["latest_import"].(map[string]any)["reason"]; got != "observation_unavailable" {
+		t.Fatalf("import deferral reason = %v", got)
 	}
 }
 

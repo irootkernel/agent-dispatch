@@ -40,7 +40,7 @@ Not stored by default:
 | Completed/rejected attempts | 30 days |
 | Completed acceptance and work receipts | 180 days |
 | Resolved quarantine | 180 days |
-| Resolved sync jobs and journals | At least 180 days |
+| Resolved sync jobs and journals | 180 days (the configurable completed-receipt horizon) |
 | Blocked, recovering, uncertain, or unresolved sync obligations | Until explicitly resolved |
 | Unknown, ready, retrying, active, quarantined, dead-lettered | Until resolved |
 | State transition audit required by unresolved lineage | Until lineage resolves |

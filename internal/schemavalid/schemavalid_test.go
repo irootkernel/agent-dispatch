@@ -193,10 +193,10 @@ func TestRequireBasenamesFailsClosed(t *testing.T) {
 	}
 }
 
-func TestSyncSemanticValidationRejectsPublicationCommitMismatch(t *testing.T) {
-	doc := map[string]any{"schema_version": "agent-dispatch.sync-publication/v1", "state": "published", "content_ref": "refs/heads/wiki", "candidate_commit": "a", "remote_commit": "b"}
-	if err := validateSyncSemantics(doc); err == nil || !strings.Contains(err.Error(), "must match") {
-		t.Fatalf("expected publication mismatch rejection, got %v", err)
+func TestSyncSemanticValidationChecksPublicationRefsOnly(t *testing.T) {
+	doc := map[string]any{"schema_version": "agent-dispatch.sync-publication/v1", "content_ref": "refs/heads/wiki"}
+	if err := validateSyncSemantics(doc); err != nil {
+		t.Fatalf("immutable publication lifecycle is schema-owned: %v", err)
 	}
 }
 

@@ -101,8 +101,8 @@ projection includes the durable job identity, logical key, state, update time,
 resolution, claim, and fence; typed publication/import/target/receiver details
 are included when present. Import additionally reports its reason and target
 paths after strict record decoding. Resolved deferrals remain visible without
-occupying the bounded active queue; `present: false` means no job of that kind
-has been admitted yet.
+occupying the bounded active queue; `present: false` means no retained job of
+that kind exists (none was admitted or all resolved history was pruned).
 Every other unimplemented identity returns `sync_capability_unavailable`
 at exit 3 until its owning E21 or E22 task implements and truthfully advertises it. The executable
 descriptor and peer contract bundle is
@@ -399,7 +399,10 @@ Returns findings with `code`, `severity`, `summary`, `details`, and `remediation
 - `maintenance integrity [--full]`
 - `maintenance backup --output <path>`
 
-Prune is dry-run by default. Vacuum refuses while active attempts exist. Backup writes a verified owner-only snapshot of the durable store through the built-in `VACUUM INTO` path (runbook §8) and refuses to overwrite an existing file.
+Prune is dry-run by default. The configured completed-receipt horizon also
+governs resolved sync jobs and journals; it defaults to 180 days and may be
+narrowed explicitly, while unresolved sync obligations are never age-pruned.
+Vacuum refuses while active attempts exist. Backup writes a verified owner-only snapshot of the durable store through the built-in `VACUUM INTO` path (runbook §8) and refuses to overwrite an existing file.
 
 ## 12. JSON Envelope
 

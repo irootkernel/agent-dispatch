@@ -26,16 +26,18 @@ peer service -> inbox -> fetch and validate -> guarded import -> receipt
 
 ## Boundaries
 
-The sync application services live beside the existing dispatch,
-work-receipt, notification, and reconciliation services. They reuse the local
-SQLite store and resource coordination rules. A restricted Git adapter owns
+The E21 application helpers live beside the existing dispatch, work-receipt,
+notification, and reconciliation services, while the explicit CLI currently
+owns their bounded orchestration. E22 must extract or reuse that orchestration
+before adding a service so the service and manual commands cannot diverge.
+They reuse the local SQLite store and resource coordination rules. A restricted Git adapter owns
 fixed-argument subprocess execution, delimiter-safe parsing, SSH signature
 verification, explicit refspecs, deadlines, and output limits. The peer HTTP
 adapter owns authentication, parsing, size limits, and response mapping only.
 
-The service uses the same application methods as manual CLI commands. It does
-not create an alternate Git or recovery path. Local SQLite state is never
-placed in Git or on a network filesystem.
+The future service must use the same application methods as manual CLI commands
+and must not create an alternate Git or recovery path. Local SQLite state is
+never placed in Git or on a network filesystem.
 
 Membership administration is a separate signed Git history. The normal roster
 has exactly two active nodes, but historical retired/revoked entries remain

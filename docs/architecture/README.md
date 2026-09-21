@@ -11,5 +11,5 @@ then the source, persistence, reconciliation, Hermes, observability, and
 security documents for the owning subsystem.
 
 For the partially implemented v0.2.0 two-node Git sync loop—local control,
-membership, signed publication, and checkpoints are present while import and
-peer operations remain planned—read [`wiki-sync.md`](wiki-sync.md).
+membership, signed publication, checkpoints, and guarded import are present
+while peer operations remain planned—read [`wiki-sync.md`](wiki-sync.md).

@@ -134,6 +134,30 @@ func runSyncMembershipApply(args []string, stdout, stderr io.Writer) int {
 				}
 			}
 		}
+		if job.State == "planned" && job.ClaimOwner != "" {
+			expires, _ := time.Parse(time.RFC3339Nano, job.ClaimExpiresAt)
+			if expires.After(time.Now().UTC()) {
+				return syncMembershipError(stderr, command, fmt.Errorf("membership plan is still claimed by another invocation"), 14)
+			}
+			journals, loadErr := concrete.LoadSyncJournals(requestCtx(), job.JobID)
+			if loadErr != nil {
+				return syncStoreError(stderr, command, loadErr)
+			}
+			candidate := journalCandidate(journals)
+			remote, remoteErr := client.RemoteRef(requestCtx(), syncCfg.RemoteName, syncCfg.MembershipRef, syncCfg.RemoteRepositoryDigest)
+			remoteUnchanged := plan.ExpectedPredecessor == nil && errors.Is(remoteErr, gitlocal.ErrMissingRef)
+			if plan.ExpectedPredecessor != nil {
+				remoteUnchanged = remoteErr == nil && remote == *plan.ExpectedPredecessor
+			}
+			if !remoteUnchanged {
+				return syncMembershipError(stderr, command, fmt.Errorf("expired membership claim requires remote confirmation recovery for candidate %s", candidate), 14)
+			}
+			recoveryNow := time.Now().UTC().Format(time.RFC3339Nano)
+			if err := concrete.ReconcileExpiredSyncClaim(requestCtx(), job.JobID, job.Fence, "effect_not_started", sqlite.SyncJournalEntry{JournalID: randomSyncID("membership-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote_unchanged": true, "explicit_cli_reentry": true}), RecordedAt: recoveryNow}, recoveryNow); err != nil {
+				return syncStoreError(stderr, command, err)
+			}
+			job.ClaimOwner = ""
+		}
 		if job.State != "planned" || job.ClaimOwner != "" {
 			return syncMembershipError(stderr, command, fmt.Errorf("membership plan already has durable state %s and requires reconciliation", job.State), 14)
 		}
@@ -287,10 +311,10 @@ func loadMembershipConfig(command, group string, requireEnabled bool, stderr io.
 		return nil, nil, planErr(stderr, command, "sync_group_not_found", "configuration", fmt.Sprintf("sync group %q is not configured", group), 3)
 	}
 	if requireEnabled && !cfg.Sync.Enabled {
-		return nil, nil, planErr(stderr, command, "sync_precondition_failed", "conflict", "sync must be enabled before membership apply", 14)
+		return nil, nil, planErr(stderr, command, "sync_precondition_failed", "conflict", "sync must be enabled before signed apply", 14)
 	}
 	if requireEnabled && cfg.Sync.AdministratorSigningKeyRef == "" {
-		return nil, nil, planErr(stderr, command, "config_invalid", "configuration", "administrator_signing_key_ref is required for membership apply", 3)
+		return nil, nil, planErr(stderr, command, "config_invalid", "configuration", "administrator_signing_key_ref is required for signed apply", 3)
 	}
 	return cfg, cfg.Sync, 0
 }

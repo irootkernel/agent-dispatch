@@ -103,6 +103,10 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		})
 	case "membership":
 		return runSyncMembership(args[1:], stdout, stderr)
+	case "publish":
+		return runSyncPublish(args[1:], stdout, stderr)
+	case "checkpoint":
+		return runSyncCheckpoint(args[1:], stdout, stderr)
 	default:
 		if reservedSyncCommand(args) {
 			writeErrorWithResult(stderr, command, "sync_capability_unavailable", "configuration", "the requested sync capability is reserved but unavailable in this build", map[string]any{"side_effects": []string{}})
@@ -122,9 +126,9 @@ func syncCommandPath(args []string) string {
 func syncCapabilities() map[string]any {
 	return map[string]any{
 		"contract_read": true, "status_read": true,
-		"publication": false, "reconciliation": false, "pair_verification": false,
+		"publication": true, "reconciliation": false, "pair_verification": false,
 		"peer_service": false, "control": true, "membership_plan": true,
-		"membership_apply": true, "checkpoint_plan": false, "checkpoint_apply": false,
+		"membership_apply": true, "checkpoint_plan": true, "checkpoint_apply": true,
 		"service_render": false, "service_install": false, "service_inspect": false,
 		"service_stop": false, "service_disable": false, "service_uninstall": false,
 	}
@@ -135,10 +139,8 @@ func reservedSyncCommand(args []string) bool {
 		return false
 	}
 	switch args[0] {
-	case "publish", "reconcile", "verify", "serve":
+	case "reconcile", "verify", "serve":
 		return true
-	case "checkpoint":
-		return len(args) >= 2 && (args[1] == "plan" || args[1] == "apply")
 	case "service":
 		return len(args) >= 2 && (args[1] == "render" || args[1] == "install" || args[1] == "inspect" || args[1] == "stop" || args[1] == "disable" || args[1] == "uninstall")
 	default:

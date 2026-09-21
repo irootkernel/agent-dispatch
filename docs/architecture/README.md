@@ -10,5 +10,6 @@ Start with [`architecture-overview.md`](architecture-overview.md). For the multi
 then the source, persistence, reconciliation, Hermes, observability, and
 security documents for the owning subsystem.
 
-For the planned v0.2.0 two-node Git publication and import loop, read
-[`wiki-sync.md`](wiki-sync.md).
+For the partially implemented v0.2.0 two-node Git sync loop—local control,
+membership, signed publication, and checkpoints are present while import and
+peer operations remain planned—read [`wiki-sync.md`](wiki-sync.md).

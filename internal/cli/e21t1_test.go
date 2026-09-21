@@ -70,10 +70,10 @@ func TestE21T1SyncPauseResumeAndStatus(t *testing.T) {
 	}
 }
 
-func TestE21T1EnabledConfigDoesNotActivateReservedGitCommands(t *testing.T) {
+func TestE21T1EnabledConfigDoesNotActivateStillReservedGitCommands(t *testing.T) {
 	configPath := enabledSyncConfig(t)
-	code, _, stderr := syncResult(t, "publish", "--group", "wiki-pair", "--config", configPath, "--output", "json")
+	code, _, stderr := syncResult(t, "reconcile", "--group", "wiki-pair", "--config", configPath, "--output", "json")
 	if code != 3 || !bytes.Contains([]byte(stderr), []byte("sync_capability_unavailable")) {
-		t.Fatalf("reserved publish: %d %s", code, stderr)
+		t.Fatalf("reserved reconcile: %d %s", code, stderr)
 	}
 }

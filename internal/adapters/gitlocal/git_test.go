@@ -104,6 +104,52 @@ func TestSignedMembershipUsesPinnedEd25519AndClosedTree(t *testing.T) {
 	}
 }
 
+func TestSignedContentSnapshotPreservesLateWorkingTreeEdit(t *testing.T) {
+	repo := initRepository(t)
+	base := gitOutput(t, repo, "rev-parse", "HEAD")
+	key := filepath.Join(t.TempDir(), "publisher")
+	if out, err := exec.Command("ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", key).CombinedOutput(); err != nil {
+		t.Fatalf("ssh-keygen: %v: %s", err, out)
+	}
+	privateKey, err := os.ReadFile(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fingerprint := strings.Fields(commandOutput(t, "ssh-keygen", "-lf", key+".pub", "-E", "sha256"))[1]
+	client, err := New(repo, Limits{Timeout: 10 * time.Second, MaxOutput: 64 << 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree, err := client.SnapshotTreeChanges(context.Background(), base, map[string][]byte{"note.md": []byte("frozen\n"), ".agent-dispatch-sync/publications/publication-a.json": []byte("{}")}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "note.md"), []byte("late\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	candidate, err := client.CreateSignedContentCommit(context.Background(), tree, privateKey, base, time.Unix(1_700_000_001, 0), "publisher", "Publish publication-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := client.VerifySSHSignature(context.Background(), candidate, fingerprint); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := client.ReadFile(context.Background(), candidate, "note.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != "frozen\n" {
+		t.Fatalf("candidate captured %q", raw)
+	}
+	live, err := os.ReadFile(filepath.Join(repo, "note.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(live) != "late\n" {
+		t.Fatalf("working tree overwritten: %q", live)
+	}
+}
+
 func TestRemoteBindingRejectsSeparatePushURLBeforeNetwork(t *testing.T) {
 	repo := initRepository(t)
 	gitRun(t, repo, "remote", "add", "origin", "ssh://git@example.com/repo")
@@ -166,6 +212,52 @@ func TestPushTimeoutWithUnprovableRemoteHeadIsAmbiguous(t *testing.T) {
 	result := client.PushFastForward(context.Background(), "origin", "refs/agent-dispatch/membership/wiki-pair", candidate, expected, digest)
 	if result.State != "ambiguous" || !errors.Is(result.Underlying, ErrPushAmbiguous) {
 		t.Fatalf("push result=%+v", result)
+	}
+}
+
+func TestPushAlreadyAtCandidateIsConfirmed(t *testing.T) {
+	repo := initRepository(t)
+	dir := t.TempDir()
+	script := filepath.Join(dir, "fake-git")
+	expected := "1111111111111111111111111111111111111111"
+	candidate := "2222222222222222222222222222222222222222"
+	body := "#!/bin/sh\ncase \"$*\" in\n" +
+		"  *\"remote get-url --all origin\"*) echo ssh://git@example.com/repo;;\n" +
+		"  *\"remote get-url --push --all origin\"*) echo ssh://git@example.com/repo;;\n" +
+		"  *ls-remote*) echo '" + candidate + " refs/agent-dispatch/content/wiki-pair';;\n" +
+		"  *push*) exit 99;;\n" +
+		"  *) exit 2;;\nesac\n"
+	if err := os.WriteFile(script, []byte(body), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	digest, _, err := config.RemoteRepositoryDigest("ssh://git@example.com/repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &Client{root: repo, git: script, ssh: "/usr/bin/ssh", sshKeygen: "/usr/bin/ssh-keygen", timeout: 10 * time.Second, maxOutput: 64 << 10}
+	result := client.PushFastForward(context.Background(), "origin", "refs/agent-dispatch/content/wiki-pair", candidate, expected, digest)
+	if result.State != PushConfirmed || result.RemoteOID != candidate {
+		t.Fatalf("push result=%+v", result)
+	}
+}
+
+func TestReadContentFilesRejectsUnknownControllerPath(t *testing.T) {
+	repo := initRepository(t)
+	if err := os.MkdirAll(filepath.Join(repo, ".agent-dispatch-sync", "unknown"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".agent-dispatch-sync", "unknown", "payload.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, repo, "add", ".agent-dispatch-sync/unknown/payload.json")
+	gitRun(t, repo, "commit", "-q", "-m", "unknown controller")
+	client, err := New(repo, Limits{Timeout: 5 * time.Second, MaxOutput: 64 << 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	head := gitOutput(t, repo, "rev-parse", "HEAD")
+	if _, err := client.ReadContentFiles(context.Background(), head); err == nil || !strings.Contains(err.Error(), "unsupported controller path") {
+		t.Fatalf("unknown controller path accepted: %v", err)
 	}
 }
 

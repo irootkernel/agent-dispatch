@@ -73,6 +73,37 @@ func TestE21T1ExpiredLeaseNeedsRecoveryAndRejectsStaleWriter(t *testing.T) {
 	}
 }
 
+func TestE21T1ClaimExpiryUsesTimeOrderNotTimestampTextOrder(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if _, err := s.EnsureSyncControl(ctx, "wiki-pair", "cfg-1", syncT0); err != nil {
+		t.Fatal(err)
+	}
+	first, _, err := s.AdmitSyncJob(ctx, syncJobFixture("job-fractional-first", "cause-fractional-first", `{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondInput := syncJobFixture("job-fractional-second", "cause-fractional-second", `{}`)
+	second, _, err := s.AdmitSyncJob(ctx, secondInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstClaim, err := s.ClaimSyncJob(ctx, first.JobID, "worker-a", "cfg-1", "2026-09-21T00:00:00Z", "2026-09-21T00:00:00.1Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	advance := SyncJournalEntry{JournalID: "fractional-advance", JobID: first.JobID, Fence: firstClaim.Fence, Phase: "publication", Outcome: "signed", EvidenceJSON: `{}`, RecordedAt: "2026-09-21T00:00:00Z"}
+	if err := s.AdvanceSyncJob(ctx, first.JobID, "worker-a", firstClaim.Fence, "signed", advance, advance.RecordedAt); err != nil {
+		t.Fatalf("live fractional claim must remain usable despite RFC3339 text ordering: %v", err)
+	}
+	if _, err := s.ClaimSyncJob(ctx, second.JobID, "worker-b", "cfg-1", "2026-09-21T00:00:00Z", syncT1); !errors.Is(err, ErrSyncPrecondition) {
+		t.Fatalf("live fractional claim must block sibling despite RFC3339 text ordering: %v", err)
+	}
+	if _, err := s.ClaimSyncJob(ctx, second.JobID, "worker-b", "cfg-1", "2026-09-21T00:00:00.2Z", syncT1); err != nil {
+		t.Fatalf("expired fractional sibling claim must not block: %v", err)
+	}
+}
+
 func TestE21T1PauseResumeIsRevisionFencedAndPreservesBlocks(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
@@ -227,5 +258,187 @@ func TestE21T2MembershipEmergencyBlocksEffectsUntilSignedPairRecovery(t *testing
 	control, err = s.FinishMembershipJob(ctx, recovery.JobID, "admin", recoveryClaim.Fence, "normal", SyncJournalEntry{JournalID: "membership-recovery-applied", JobID: recovery.JobID, Fence: recoveryClaim.Fence, Phase: "membership", Outcome: "applied", EvidenceJSON: `{}`, RecordedAt: syncT2}, "cfg-1", syncT2)
 	if err != nil || control.State != "active" || control.Reason != "none" {
 		t.Fatalf("pair recovery control=%+v err=%v", control, err)
+	}
+}
+
+func TestE21T3PublicationAndPeerDeliveryCommitAtomically(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if _, err := s.EnsureSyncControl(ctx, "wiki-pair", "cfg-1", syncT0); err != nil {
+		t.Fatal(err)
+	}
+	job, _, err := s.AdmitSyncJob(ctx, syncJobFixture("publication-atomic", "publication-atomic", `{"publication_id":"publication-atomic"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	claim, err := s.ClaimSyncJob(ctx, job.JobID, "publisher", "cfg-1", syncT0, syncT3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	delivery := SyncJobInput{JobID: "delivery-atomic", GroupID: "wiki-pair", Kind: "delivery", LogicalKey: "publication-atomic", InitialState: "pending", PayloadJSON: `{"target_commit":"1111111111111111111111111111111111111111"}`, QueueLimit: 1000, Now: syncT1}
+	row, err := s.FinishPublicationJob(ctx, job.JobID, "publisher", claim.Fence, SyncJournalEntry{JournalID: "publication-published", JobID: job.JobID, Fence: claim.Fence, Phase: "publication", Outcome: "published", EvidenceJSON: `{"candidate":"1111111111111111111111111111111111111111"}`, RecordedAt: syncT1}, delivery, syncT1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row.Kind != "delivery" || row.State != "pending" {
+		t.Fatalf("delivery=%+v", row)
+	}
+	var publicationState, deliveryState string
+	if err := s.QueryRow(`SELECT state FROM sync_jobs WHERE job_id='publication-atomic'`).Scan(&publicationState); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.QueryRow(`SELECT state FROM sync_jobs WHERE job_id='delivery-atomic'`).Scan(&deliveryState); err != nil {
+		t.Fatal(err)
+	}
+	if publicationState != "published" || deliveryState != "pending" {
+		t.Fatalf("publication=%s delivery=%s", publicationState, deliveryState)
+	}
+}
+
+func TestE21T3PublicationEligibilityBindsIdleRouteReceiptAndFacts(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if err := s.SaveDecision(nil, DecisionRecord{DecisionID: "decision-publish", RouteID: "wiki-maintenance", RouteRevision: "route-rev-1", PolicyRevision: "policy-rev-1", GenerationLineageJSON: `{"generation":1}`, Disposition: "dispatch", Classification: "normal", ReasonCodesJSON: "[]", CreatedAt: syncT0, Actor: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveIntent(nil, IntentRecord{DispatchID: "dispatch-publish", DecisionID: "decision-publish", RouteID: "wiki-maintenance", RouteRevision: "route-rev-1", TargetID: "hermes-kanban-main", TargetType: "hermes-kanban", ResourceID: "vault-main", Generation: 1, IdempotencyKey: "idem-publish", ContentFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", ManifestDigest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", RequestVersion: "v1", RequestJSON: "{}", CreatedAt: syncT0}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveWorkReceipt(nil, WorkReceiptRecord{ReceiptID: "receipt-publish", DispatchID: "dispatch-publish", RunID: "run-publish", ResourceID: "vault-main", Status: "completed", ChangesJSON: "[]", CompletedScopeJSON: "[]", RemainingScopeJSON: "[]", SubmittedAt: syncT1, ValidationState: "valid", ValidationReasonsJSON: "[]", BegunAt: syncT0}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Exec(`UPDATE route_runtime_state SET route_state='IDLE',active_dispatch_id=NULL,pending_reconcile=0 WHERE route_id='wiki-maintenance'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Exec(`UPDATE resources SET observation_revision=1 WHERE resource_id='vault-main'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Exec(`INSERT INTO path_facts(resource_id,path,digest,"exists",observed_at) VALUES('vault-main','note.md','sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',1,?)`, syncT1); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.LoadPublicationEligibility(ctx, "vault-main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SourceRevision != 1 || len(got.ReceiptIDs) != 1 || got.ReceiptIDs[0] != "receipt-publish" || got.PathDigests["note.md"] == "" {
+		t.Fatalf("eligibility=%+v", got)
+	}
+	if _, err := s.Exec(`UPDATE route_runtime_state SET route_state='ACTIVE_DIRTY' WHERE route_id='wiki-maintenance'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.LoadPublicationEligibility(ctx, "vault-main"); !errors.Is(err, ErrSyncPrecondition) {
+		t.Fatalf("dirty route eligible: %v", err)
+	}
+}
+
+func TestE21T3PublicationEligibilityIgnoresDisabledRoute(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if _, err := s.Exec(`INSERT INTO routes(route_id,revision,policy_revision,resource_id,target_id,definition,updated_at) VALUES('disabled-route','disabled-rev','disabled-policy','vault-main','hermes-kanban-main','{}',?)`, syncT0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Exec(`INSERT INTO route_runtime_state(route_id,activation_state,route_state,pending_reconcile) VALUES('disabled-route','disabled','IDLE',0)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveDecision(nil, DecisionRecord{DecisionID: "decision-enabled", RouteID: "wiki-maintenance", RouteRevision: "route-rev-1", PolicyRevision: "policy-rev-1", GenerationLineageJSON: `{"generation":1}`, Disposition: "dispatch", Classification: "normal", ReasonCodesJSON: "[]", CreatedAt: syncT0, Actor: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveIntent(nil, IntentRecord{DispatchID: "dispatch-enabled", DecisionID: "decision-enabled", RouteID: "wiki-maintenance", RouteRevision: "route-rev-1", TargetID: "hermes-kanban-main", TargetType: "hermes-kanban", ResourceID: "vault-main", Generation: 1, IdempotencyKey: "idem-enabled", ContentFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", ManifestDigest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", RequestVersion: "v1", RequestJSON: "{}", CreatedAt: syncT0}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveWorkReceipt(nil, WorkReceiptRecord{ReceiptID: "receipt-enabled", DispatchID: "dispatch-enabled", RunID: "run-enabled", ResourceID: "vault-main", Status: "completed", ChangesJSON: "[]", CompletedScopeJSON: "[]", RemainingScopeJSON: "[]", SubmittedAt: syncT1, ValidationState: "valid", ValidationReasonsJSON: "[]", BegunAt: syncT0}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Exec(`UPDATE route_runtime_state SET route_state='IDLE',pending_reconcile=0 WHERE route_id='wiki-maintenance'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Exec(`UPDATE resources SET observation_revision=1 WHERE resource_id='vault-main'`); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.LoadPublicationEligibility(ctx, "vault-main")
+	if err != nil || len(got.ReceiptIDs) != 1 || got.ReceiptIDs[0] != "receipt-enabled" {
+		t.Fatalf("disabled route affected eligibility: got=%+v err=%v", got, err)
+	}
+}
+
+func TestE21T3PausedControlRejectsNewPublicationAdmission(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	control, err := s.EnsureSyncControl(ctx, "wiki-pair", "cfg-1", syncT0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SetSyncControl(ctx, "wiki-pair", control.Revision, "paused", "cfg-1", syncT1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Exec(`UPDATE resources SET observation_revision=1 WHERE resource_id='vault-main'`); err != nil {
+		t.Fatal(err)
+	}
+	in := syncJobFixture("paused-publication", "paused-publication", `{}`)
+	in.PublicationResourceID = "vault-main"
+	in.ExpectedSourceRevision = 1
+	if _, _, err := s.AdmitSyncJob(ctx, in); !errors.Is(err, ErrSyncControlHeld) {
+		t.Fatalf("paused publication admission was not rejected: %v", err)
+	}
+	var count int
+	if err := s.QueryRow(`SELECT COUNT(*) FROM sync_jobs WHERE job_id='paused-publication'`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("paused admission persisted a job: count=%d err=%v", count, err)
+	}
+}
+
+func TestE21T3ConfirmedCandidateRecoveryReusesPublication(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if _, err := s.EnsureSyncControl(ctx, "wiki-pair", "cfg-1", syncT0); err != nil {
+		t.Fatal(err)
+	}
+	job, _, err := s.AdmitSyncJob(ctx, syncJobFixture("publication-recovery", "publication-recovery", `{"publication_id":"publication-recovery"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	claim, err := s.ClaimSyncJob(ctx, job.JobID, "publisher", "cfg-1", syncT0, syncT3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AdvanceSyncJob(ctx, job.JobID, "publisher", claim.Fence, "signed", SyncJournalEntry{JournalID: "publication-signed", JobID: job.JobID, Fence: claim.Fence, Phase: "publication", Outcome: "signed", EvidenceJSON: `{"candidate":"1111111111111111111111111111111111111111"}`, RecordedAt: syncT1}, syncT1); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FinishSyncJob(ctx, job.JobID, "publisher", claim.Fence, "uncertain", false, SyncJournalEntry{JournalID: "publication-unknown", JobID: job.JobID, Fence: claim.Fence, Phase: "publication", Outcome: "effect_unknown", EvidenceJSON: `{}`, RecordedAt: syncT2}, syncT2); err != nil {
+		t.Fatal(err)
+	}
+	delivery := SyncJobInput{JobID: "delivery-recovery", GroupID: "wiki-pair", Kind: "delivery", LogicalKey: "publication-recovery", InitialState: "pending", PayloadJSON: `{"target_commit":"1111111111111111111111111111111111111111"}`, QueueLimit: 1000, Now: syncT3}
+	if _, err := s.FinishRecoveredPublicationJob(ctx, job.JobID, claim.Fence, SyncJournalEntry{JournalID: "publication-recovered", JobID: job.JobID, Fence: claim.Fence, Phase: "publication", Outcome: "published", EvidenceJSON: `{"candidate":"1111111111111111111111111111111111111111"}`, RecordedAt: syncT3}, delivery, syncT3); err != nil {
+		t.Fatal(err)
+	}
+	var state string
+	if err := s.QueryRow(`SELECT state FROM sync_jobs WHERE job_id='publication-recovery'`).Scan(&state); err != nil || state != "published" {
+		t.Fatalf("state=%s err=%v", state, err)
+	}
+}
+
+func TestE21T3CheckpointRecoverySettlesConfirmedCandidate(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if _, err := s.EnsureSyncControl(ctx, "wiki-pair", "cfg-1", syncT0); err != nil {
+		t.Fatal(err)
+	}
+	in := SyncJobInput{JobID: "checkpoint-recovery", GroupID: "wiki-pair", Kind: "checkpoint", LogicalKey: "checkpoint-plan-recovery", InitialState: "planned", PayloadJSON: `{"plan_id":"checkpoint-plan-recovery"}`, ConfigRevision: "cfg-1", QueueLimit: 1000, Now: syncT0}
+	job, _, err := s.AdmitSyncJob(ctx, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claim, err := s.ClaimSyncAdministrationJob(ctx, job.JobID, "administrator", "cfg-1", syncT0, syncT1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AdvanceSyncJob(ctx, job.JobID, "administrator", claim.Fence, "applying", SyncJournalEntry{JournalID: "checkpoint-signed", JobID: job.JobID, Fence: claim.Fence, Phase: "checkpoint", Outcome: "signed", EvidenceJSON: `{"candidate":"1111111111111111111111111111111111111111"}`, RecordedAt: syncT0}, syncT0); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FinishRecoveredCheckpointJob(ctx, job.JobID, claim.Fence, SyncJournalEntry{JournalID: "checkpoint-recovered", JobID: job.JobID, Fence: claim.Fence, Phase: "checkpoint", Outcome: "applied", EvidenceJSON: `{"candidate":"1111111111111111111111111111111111111111"}`, RecordedAt: syncT2}, syncT2); err != nil {
+		t.Fatal(err)
+	}
+	var state string
+	if err := s.QueryRow(`SELECT state FROM sync_jobs WHERE job_id='checkpoint-recovery'`).Scan(&state); err != nil || state != "applied" {
+		t.Fatalf("state=%s err=%v", state, err)
 	}
 }

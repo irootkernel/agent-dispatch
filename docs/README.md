@@ -9,10 +9,12 @@ and everyday use, start with the [project README](../README.md).
 
 **Language:** English.
 
-**Documentation basis:** shipped v0.1.8 plus the qualified v0.2.0 two-node Wiki
-sync contract / SOT 1.7.0. The shipped baseline is tracked
+**Documentation basis:** shipped v0.1.8 plus the unreleased v0.2.0 two-node Wiki
+sync work / SOT 1.8.0. The shipped baseline is tracked
 under [v0.1.8 - 2026-09-10](../CHANGELOG.md#v018---2026-09-10). The qualified
-contract is not runtime implementation or release evidence.
+contract is not release evidence. E21-T1 through E21-T3 provide local runtime
+control, membership, signed publication, and checkpoints; import, peer service,
+pair verification, and v0.2.0 release evidence remain incomplete.
 
 ## Start Here
 

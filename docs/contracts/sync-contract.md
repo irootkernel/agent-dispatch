@@ -29,7 +29,8 @@ agent-dispatch sync pause --group GROUP --expected-control-revision REV --output
 agent-dispatch sync resume --group GROUP --expected-control-revision REV --output json
 agent-dispatch sync membership plan --group GROUP --change KIND [--instance INSTANCE] --output json
 agent-dispatch sync membership apply --group GROUP --plan FILE --expected-membership-predecessor OID|none --output json
-agent-dispatch sync checkpoint plan|apply --group GROUP --output json
+agent-dispatch sync checkpoint plan --group GROUP --target-commit OID --kind KIND --output json
+agent-dispatch sync checkpoint apply --group GROUP --plan FILE --output json
 agent-dispatch sync service render|install|inspect|stop|disable|uninstall --group GROUP --output json
 ```
 
@@ -94,7 +95,11 @@ key and the replacement key can never authorize the same incarnation.
 `sync checkpoint plan|apply` creates the administrator-signed content adoption
 evidence used for an initial baseline, reviewed conflict resolution, or visible
 bounded-history exhaustion. It binds the exact target commit, governed snapshot,
-scope and contract digests, and membership revision.
+scope and contract digests, and membership revision. Apply journals the signed
+candidate before push. After process loss, explicit re-entry probes the approved
+remote: a confirmed candidate is verified and settled without signing again;
+an unchanged predecessor records no-effect recovery evidence and resumes the
+same candidate.
 
 `sync service` owns the managed launchd/systemd user-service definition. Install
 starts the exact rendered definition, stop preserves it, disable stops and
@@ -201,6 +206,15 @@ Checkpoint evidence binds the exact target commit, governed snapshot, scope,
 contract, and membership revision. It has only the reasons
 `initial_baseline`, `conflict_resolution`, and `history_bound_exhausted` and
 does not authorize a different target or uncovered history.
+
+Each content publication preserves prior controller metadata and adds exactly
+one regular non-executable manifest at
+`.agent-dispatch-sync/publications/<publication_id>.json`. The prepared
+manifest omits the candidate object ID to avoid self-reference; durable journal
+evidence binds the resulting signed commit. Checkpoint applies add the exact
+reviewed records at `.agent-dispatch-sync/checkpoints/<checkpoint_id>.json`
+and `.agent-dispatch-sync/checkpoint-plans/<plan_id>.json`. These controller
+paths are excluded from the governed Markdown snapshot digest.
 
 The cooperative-import acknowledgement is a distinct versioned record over
 the group, resource, configured remote name, normalized credential-free remote

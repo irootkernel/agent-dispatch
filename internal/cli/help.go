@@ -33,7 +33,7 @@ Commands:
   events         show — aggregate-event inspection with per-child evidence.
   notifications  test, list, retry, drain — the notification delivery surface.
   schedule       render, install, inspect, disable, uninstall, run — the managed launchd drain schedule.
-  sync           capabilities, control, signed membership, and reserved v0.2.0 identities.
+  sync           capabilities, control, signed publication, membership, and checkpoints.
   work           begin, complete, fail — the Hermes companion receipt surface.
   quarantine     list, release, discard — held-path operator exits.
   reconcile      Run a full-scope reconciliation generation.
@@ -58,7 +58,8 @@ Exit codes: 0 success; 2 usage; 3 configuration; 4 input rejected;
 30 security; 40 internal.
 
 Side effects and approvals: only ` + "`dispatch`" + `, ` + "`dispatches drain`" + `,
-` + "`reconcile --submit`" + `, and the watchman lifecycle touch the outside world;
+` + "`reconcile --submit`" + `, explicit sync apply/publish commands, and the watchman lifecycle touch the outside world;
+sync checkpoint plan performs an approved-remote read without a write;
 ` + "`route enable`" + ` additionally requires the two-key production gate
 (--acknowledge-production-gate <computed-revision> --yes).
 
@@ -79,27 +80,48 @@ Usage: agent-dispatch sync capabilities --output json
        agent-dispatch sync pause|resume --group <id> --expected-control-revision <n> [--config <path>] --output json
        agent-dispatch sync membership plan --group <id> --change <kind> [--instance <id>] --output json
        agent-dispatch sync membership apply --group <id> --plan <file> --expected-membership-predecessor <oid|none> --output json
+       agent-dispatch sync publish --group <id> --expected-config-revision <digest> --output json
+       agent-dispatch sync checkpoint plan --group <id> --target-commit <oid> --kind <kind> --output json
+       agent-dispatch sync checkpoint apply --group <id> --plan <file> --output json
 
-Flags: --group selects the configured sync group; --config selects an explicit
-configuration file; --expected-control-revision fences control writes;
---instance selects the affected member; --plan reads a reviewed strict-JSON file;
+Flags: --group selects the configured sync group; --config is accepted by status,
+pause, and resume; --expected-control-revision fences control writes;
+--expected-config-revision is the digest reported by sync status and fences
+publication; --instance selects the affected member; --plan reads a reviewed
+strict-JSON file; --target-commit is the full content object ID; --kind is one
+of initial_baseline, conflict_resolution, or history_bound_exhausted;
 --output json selects the versioned machine envelope.
 
 Defaults: the platform configuration path; sync is disabled by default.
-Approval requirements: none for capabilities/status. Pause and resume are
+Approval requirements: none for capabilities/status, membership plan, or
+checkpoint plan. Pause and resume are
 explicit operator state changes. Membership apply resolves the configured local
-administrator key and performs a non-force signed ref update.
+administrator key and performs a non-force signed ref update. Publish resolves
+the configured publisher key; checkpoint apply resolves the distinct configured
+administrator key. Both apply only the reviewed, revision-bound request.
 
 Exit codes: 0 success; 2 usage; 3 configuration or unavailable capability;
-14 stale revision or blocked control; 20 storage failure; 21 migration failure.
+4 rejected plan input; 13 remote effect unknown; 14 stale revision, missing
+checkpoint, or blocked control; 20 storage failure; 21 migration failure;
+30 signature, membership, or content-history trust failure.
 
 Side effects: capabilities/status/membership plan perform no Git write, network,
-listener, service, or live-tree effect. Pause/resume update only durable SQLite
-control state. Membership apply writes immutable Git objects, pushes the configured
+listener, service, or live-tree effect. Checkpoint plan is read-only but inspects
+the configured local and approved remote refs. Pause/resume update only durable
+SQLite control state. Membership apply writes immutable Git objects, pushes the configured
 membership ref, updates the local ref, and commits durable recovery evidence.
+Publish writes a private-index signed content commit, performs a non-force push,
+updates the local content ref, and atomically admits one peer-delivery obligation.
+Checkpoint apply performs the corresponding administrator-signed content-ref
+update. Re-entering apply recovers the same already-signed checkpoint candidate;
+it never signs a replacement during recovery. A publish result of
+no_eligible_snapshot is an exit-0 no-op whose reason names the maintenance gate.
+no_content_change is also an exit-0 no-op.
 
 Example:
-  agent-dispatch sync membership plan --group wiki-pair --change bootstrap --output json
+  agent-dispatch sync checkpoint plan --group wiki-pair --target-commit <oid> --kind initial_baseline --output json
+  agent-dispatch sync checkpoint apply --group wiki-pair --plan checkpoint-plan.json --output json
+  agent-dispatch sync publish --group wiki-pair --expected-config-revision <digest> --output json
 
 Next safe command: agent-dispatch sync status --group <id> --output json`,
 	"version": `version — print the product version

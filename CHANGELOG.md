@@ -12,6 +12,8 @@ This file records concise shipped outcomes and pending changes.
   claims, bounded retention, and revision-fenced `sync pause`/`sync resume`.
 - Add bounded restricted Git operations and reviewed, administrator-signed
   `sync membership plan`/`apply` with emergency revocation holds.
+- Add explicit signed `sync publish`, frozen Markdown snapshots, atomic peer
+  delivery admission, and reviewed administrator-signed checkpoints.
 
 ### Fixed
 

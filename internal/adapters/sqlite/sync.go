@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"time"
 )
 
@@ -39,15 +40,17 @@ type SyncControlRow struct {
 
 // SyncJobInput is one immutable logical admission.
 type SyncJobInput struct {
-	JobID          string
-	GroupID        string
-	Kind           string
-	LogicalKey     string
-	InitialState   string
-	PayloadJSON    string
-	ConfigRevision string
-	QueueLimit     int
-	Now            string
+	JobID                  string
+	GroupID                string
+	Kind                   string
+	LogicalKey             string
+	InitialState           string
+	PayloadJSON            string
+	ConfigRevision         string
+	QueueLimit             int
+	Now                    string
+	PublicationResourceID  string
+	ExpectedSourceRevision int64
 }
 
 // SyncJobRow is the queryable durable job head. Recovery evidence lives in
@@ -79,6 +82,104 @@ type SyncJournalEntry struct {
 	Outcome      string `json:"outcome"`
 	EvidenceJSON string `json:"evidence_json"`
 	RecordedAt   string `json:"recorded_at"`
+}
+
+// PublicationEligibility is one transactionally observed maintenance barrier.
+type PublicationEligibility struct {
+	SourceRevision int64
+	ReceiptIDs     []string
+	PathDigests    map[string]string
+}
+
+// LoadPublicationEligibility requires every enabled route governing the
+// resource to be idle and backed by a valid completed receipt for its current
+// route revision. The resource observation revision and receipt set are read
+// from the same SQLite snapshot.
+func (s *Store) LoadPublicationEligibility(ctx context.Context, resourceID string) (PublicationEligibility, error) {
+	tx, err := s.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return PublicationEligibility{}, err
+	}
+	defer tx.Rollback()
+	var out PublicationEligibility
+	out.PathDigests = map[string]string{}
+	if err := tx.QueryRowContext(ctx, `SELECT observation_revision FROM resources WHERE resource_id = ?`, resourceID).Scan(&out.SourceRevision); err != nil {
+		return out, err
+	}
+	if out.SourceRevision < 1 {
+		return out, fmt.Errorf("resource has no maintained observation revision: %w", ErrSyncPrecondition)
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT r.route_id, r.revision, COALESCE(rrs.activation_state,''), COALESCE(rrs.route_state,''), COALESCE(rrs.pending_reconcile,1)
+		FROM routes r LEFT JOIN route_runtime_state rrs ON rrs.route_id=r.route_id WHERE r.resource_id=? ORDER BY r.route_id`, resourceID)
+	if err != nil {
+		return out, err
+	}
+	type route struct {
+		id, revision, activation, state string
+		pending                         int
+	}
+	var routes []route
+	for rows.Next() {
+		var r route
+		if err := rows.Scan(&r.id, &r.revision, &r.activation, &r.state, &r.pending); err != nil {
+			rows.Close()
+			return out, err
+		}
+		routes = append(routes, r)
+	}
+	if err := rows.Close(); err != nil {
+		return out, err
+	}
+	enabled := 0
+	for _, r := range routes {
+		if r.activation == "disabled" {
+			continue
+		}
+		if r.activation != "enabled" || r.state != "IDLE" || r.pending != 0 {
+			return out, fmt.Errorf("route %s is not idle and maintained: %w", r.id, ErrSyncPrecondition)
+		}
+		enabled++
+		var receipt string
+		err := tx.QueryRowContext(ctx, `SELECT w.receipt_id FROM work_receipts w JOIN dispatch_intents i ON i.dispatch_id=w.dispatch_id
+			WHERE i.route_id=? AND w.resource_id=? AND w.route_revision=? AND w.status='completed' AND w.validation_state='valid'
+			ORDER BY w.submitted_at DESC,w.receipt_id DESC LIMIT 1`, r.id, resourceID, r.revision).Scan(&receipt)
+		if errors.Is(err, sql.ErrNoRows) {
+			return out, fmt.Errorf("route %s has no current valid completed receipt: %w", r.id, ErrSyncPrecondition)
+		}
+		if err != nil {
+			return out, err
+		}
+		out.ReceiptIDs = append(out.ReceiptIDs, receipt)
+	}
+	if enabled == 0 {
+		return out, fmt.Errorf("resource has no enabled maintained route: %w", ErrSyncPrecondition)
+	}
+	if len(out.ReceiptIDs) > 100 {
+		return out, fmt.Errorf("publication receipt evidence exceeds 100 entries: %w", ErrSyncPrecondition)
+	}
+	sort.Strings(out.ReceiptIDs)
+	facts, err := tx.QueryContext(ctx, `SELECT path,digest FROM path_facts WHERE resource_id=? AND "exists"=1 ORDER BY path`, resourceID)
+	if err != nil {
+		return out, err
+	}
+	for facts.Next() {
+		var path string
+		var digest sql.NullString
+		if err := facts.Scan(&path, &digest); err != nil {
+			facts.Close()
+			return out, err
+		}
+		if digest.Valid && digest.String != "" {
+			out.PathDigests[path] = digest.String
+		}
+	}
+	if err := facts.Close(); err != nil {
+		return out, err
+	}
+	if err := tx.Commit(); err != nil {
+		return out, err
+	}
+	return out, nil
 }
 
 // EnsureSyncControl materializes a group's initial active control without
@@ -240,12 +341,24 @@ func (s *Store) admitSyncJobOnce(ctx context.Context, in SyncJobInput) (SyncJobR
 	if !errors.Is(err, sql.ErrNoRows) {
 		return SyncJobRow{}, false, err
 	}
+	if in.Kind == "publication" && in.PublicationResourceID != "" {
+		var revision int64
+		if err := tx.QueryRowContext(ctx, `SELECT observation_revision FROM resources WHERE resource_id=?`, in.PublicationResourceID).Scan(&revision); err != nil {
+			return SyncJobRow{}, false, err
+		}
+		if revision != in.ExpectedSourceRevision {
+			return SyncJobRow{}, false, fmt.Errorf("publication source revision changed: %w", ErrSyncPrecondition)
+		}
+	}
 	var state, controlConfigRevision string
 	if err := tx.QueryRowContext(ctx, `SELECT state, config_revision FROM sync_controls WHERE group_id = ?`, in.GroupID).Scan(&state, &controlConfigRevision); err != nil {
 		return SyncJobRow{}, false, err
 	}
 	if in.ConfigRevision != "" && controlConfigRevision != in.ConfigRevision {
 		return SyncJobRow{}, false, fmt.Errorf("control configuration revision changed: %w", ErrSyncPrecondition)
+	}
+	if in.Kind == "publication" && in.PublicationResourceID != "" && state != "active" {
+		return SyncJobRow{}, false, fmt.Errorf("sync group %s is %s: %w", in.GroupID, state, ErrSyncControlHeld)
 	}
 	var pending int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sync_jobs WHERE group_id = ? AND resolved_at IS NULL`, in.GroupID).Scan(&pending); err != nil {
@@ -283,9 +396,9 @@ func (s *Store) ClaimSyncJob(ctx context.Context, jobID, owner, expectedConfigRe
 	return s.claimSyncJob(ctx, jobID, owner, expectedConfigRevision, now, expiresAt, false)
 }
 
-// ClaimSyncAdministrationJob permits only a membership repair to proceed
-// through a membership_emergency block. Operator pauses and unrelated safety
-// blocks remain absolute.
+// ClaimSyncAdministrationJob permits the matching signed administration repair
+// to proceed through its safety hold. It never permits ordinary publication,
+// import, or delivery work through a block.
 func (s *Store) ClaimSyncAdministrationJob(ctx context.Context, jobID, owner, expectedConfigRevision, now, expiresAt string) (SyncJobRow, error) {
 	return s.claimSyncJob(ctx, jobID, owner, expectedConfigRevision, now, expiresAt, true)
 }
@@ -307,7 +420,9 @@ func (s *Store) claimSyncJob(ctx context.Context, jobID, owner, expectedConfigRe
 	if err := tx.QueryRowContext(ctx, `SELECT state, reason, config_revision FROM sync_controls WHERE group_id = ?`, row.GroupID).Scan(&controlState, &controlReason, &controlConfigRevision); err != nil {
 		return SyncJobRow{}, err
 	}
-	allowedRepair := allowMembershipRepair && row.Kind == "membership" && controlState == "blocked" && controlReason == "membership_emergency"
+	allowedRepair := allowMembershipRepair && controlState == "blocked" &&
+		((row.Kind == "membership" && controlReason == "membership_emergency") ||
+			(row.Kind == "checkpoint" && (controlReason == "conflict" || controlReason == "trust_failure" || controlReason == "recovery_required")))
 	if controlState != "active" && !allowedRepair {
 		return SyncJobRow{}, fmt.Errorf("sync group %s is %s: %w", row.GroupID, controlState, ErrSyncControlHeld)
 	}
@@ -325,6 +440,24 @@ func (s *Store) claimSyncJob(ctx context.Context, jobID, owner, expectedConfigRe
 			return SyncJobRow{}, fmt.Errorf("job %s has an expired claim at fence %d; record recovery evidence before takeover: %w", jobID, row.Fence, ErrSyncPrecondition)
 		}
 		return SyncJobRow{}, fmt.Errorf("job %s is claimed by %s through %s: %w", jobID, row.ClaimOwner, row.ClaimExpiresAt, ErrSyncPrecondition)
+	}
+	claims, err := tx.QueryContext(ctx, `SELECT claim_expires_at FROM sync_jobs WHERE group_id=? AND job_id<>? AND claim_owner IS NOT NULL`, row.GroupID, row.JobID)
+	if err != nil {
+		return SyncJobRow{}, err
+	}
+	for claims.Next() {
+		var claimExpiresAt string
+		if err := claims.Scan(&claimExpiresAt); err != nil {
+			claims.Close()
+			return SyncJobRow{}, err
+		}
+		if !timeBefore(claimExpiresAt, now) {
+			claims.Close()
+			return SyncJobRow{}, fmt.Errorf("sync group %s already has a protected effect claim: %w", row.GroupID, ErrSyncPrecondition)
+		}
+	}
+	if err := claims.Close(); err != nil {
+		return SyncJobRow{}, err
 	}
 	res, err := tx.ExecContext(ctx, `UPDATE sync_jobs SET claim_owner = ?, claim_expires_at = ?,
 		fence = fence + 1, attempts = attempts + 1, updated_at = ?
@@ -374,7 +507,7 @@ func (s *Store) FinishMembershipJob(ctx context.Context, jobID, owner string, fe
 	}
 	res, err := tx.ExecContext(ctx, `UPDATE sync_jobs SET state = 'applied', claim_owner = NULL,
 		claim_expires_at = NULL, retain_until_resolved = 0, resolved_at = ?, updated_at = ?
-		WHERE job_id = ? AND claim_owner = ? AND fence = ? AND claim_expires_at >= ?`, now, now, jobID, owner, fence, now)
+		WHERE job_id = ? AND claim_owner = ? AND fence = ?`, now, now, jobID, owner, fence)
 	if err != nil {
 		return SyncControlRow{}, err
 	}
@@ -437,6 +570,262 @@ func (s *Store) AppendSyncJournal(ctx context.Context, entry SyncJournalEntry, o
 	return tx.Commit()
 }
 
+// AdvanceSyncJob atomically appends recovery evidence and advances a claimed
+// nonterminal job head without releasing its fence.
+func (s *Store) AdvanceSyncJob(ctx context.Context, jobID, owner string, fence int64, state string, journal SyncJournalEntry, now string) error {
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	row, err := loadSyncJob(ctx, tx, jobID)
+	if err != nil {
+		return err
+	}
+	if !validSyncState(row.Kind, state) || !claimableSyncState(row.Kind, state) || row.ClaimOwner != owner || row.Fence != fence || timeBefore(row.ClaimExpiresAt, now) {
+		return ErrSyncPrecondition
+	}
+	if journal.JobID != jobID || journal.Fence != fence || journal.JournalID == "" || journal.RecordedAt != now || !validSyncJournal(journal.Phase, journal.Outcome) {
+		return fmt.Errorf("advance journal does not bind the exact job")
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO sync_journal_entries (journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES (?,?,?,?,?,?,?)`, journal.JournalID, journal.JobID, journal.Fence, journal.Phase, journal.Outcome, journal.EvidenceJSON, journal.RecordedAt); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE sync_jobs SET state=?,updated_at=? WHERE job_id=? AND claim_owner=? AND fence=?`, state, now, jobID, owner, fence)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return ErrSyncPrecondition
+	}
+	return tx.Commit()
+}
+
+// LoadSyncJournals returns immutable evidence in deterministic order.
+func (s *Store) LoadSyncJournals(ctx context.Context, jobID string) ([]SyncJournalEntry, error) {
+	rows, err := s.QueryContext(ctx, `SELECT journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at FROM sync_journal_entries WHERE job_id=? ORDER BY recorded_at,journal_id`, jobID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SyncJournalEntry
+	for rows.Next() {
+		var e SyncJournalEntry
+		if err := rows.Scan(&e.JournalID, &e.JobID, &e.Fence, &e.Phase, &e.Outcome, &e.EvidenceJSON, &e.RecordedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// LoadUnresolvedSyncJobs returns retained obligations for explicit recovery.
+func (s *Store) LoadUnresolvedSyncJobs(ctx context.Context, groupID, kind string) ([]SyncJobRow, error) {
+	if !validSyncKind(kind) {
+		return nil, fmt.Errorf("unsupported sync job kind %q", kind)
+	}
+	rows, err := s.QueryContext(ctx, `SELECT job_id,group_id,kind,logical_key,request_fingerprint,state,payload_json,attempts,COALESCE(claim_owner,''),COALESCE(claim_expires_at,''),fence,retain_until_resolved,created_at,updated_at,COALESCE(resolved_at,'') FROM sync_jobs WHERE group_id=? AND kind=? AND resolved_at IS NULL ORDER BY created_at,job_id`, groupID, kind)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SyncJobRow
+	for rows.Next() {
+		var row SyncJobRow
+		var retain int
+		if err := rows.Scan(&row.JobID, &row.GroupID, &row.Kind, &row.LogicalKey, &row.RequestFingerprint, &row.State, &row.PayloadJSON, &row.Attempts, &row.ClaimOwner, &row.ClaimExpiresAt, &row.Fence, &retain, &row.CreatedAt, &row.UpdatedAt, &row.ResolvedAt); err != nil {
+			return nil, err
+		}
+		row.RetainUntilResolved = retain != 0
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
+// FindSyncJob returns the durable identity for an exact logical request,
+// including resolved rows needed for idempotent explicit re-entry.
+func (s *Store) FindSyncJob(ctx context.Context, groupID, kind, logicalKey string) (SyncJobRow, bool, error) {
+	if !validSyncKind(kind) {
+		return SyncJobRow{}, false, fmt.Errorf("unsupported sync job kind %q", kind)
+	}
+	row, err := loadSyncJobByKey(ctx, s.DB, groupID, kind, logicalKey)
+	if errors.Is(err, sql.ErrNoRows) {
+		return SyncJobRow{}, false, nil
+	}
+	return row, err == nil, err
+}
+
+// FinishPublicationJob commits the confirmed publication and its one peer
+// delivery obligation atomically. A crash can therefore expose neither half.
+func (s *Store) FinishPublicationJob(ctx context.Context, jobID, owner string, fence int64, journal SyncJournalEntry, delivery SyncJobInput, now string) (SyncJobRow, error) {
+	fingerprint, payload, err := syncRequestFingerprint("delivery", []byte(delivery.PayloadJSON))
+	if err != nil {
+		return SyncJobRow{}, err
+	}
+	delivery.PayloadJSON = payload
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return SyncJobRow{}, err
+	}
+	defer tx.Rollback()
+	job, err := loadSyncJob(ctx, tx, jobID)
+	if err != nil {
+		return SyncJobRow{}, err
+	}
+	if job.Kind != "publication" || job.ClaimOwner != owner || job.Fence != fence || timeBefore(job.ClaimExpiresAt, now) {
+		return SyncJobRow{}, ErrSyncPrecondition
+	}
+	if journal.JobID != jobID || journal.Fence != fence || journal.Phase != "publication" || journal.Outcome != "published" || journal.RecordedAt != now || journal.JournalID == "" {
+		return SyncJobRow{}, fmt.Errorf("publication terminal journal does not bind confirmation")
+	}
+	if delivery.GroupID != job.GroupID || delivery.Kind != "delivery" || delivery.InitialState != "pending" || delivery.JobID == "" || delivery.LogicalKey == "" {
+		return SyncJobRow{}, fmt.Errorf("invalid publication delivery obligation")
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO sync_journal_entries (journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES (?,?,?,?,?,?,?)`, journal.JournalID, journal.JobID, journal.Fence, journal.Phase, journal.Outcome, journal.EvidenceJSON, journal.RecordedAt); err != nil {
+		return SyncJobRow{}, err
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE sync_jobs SET state='published',claim_owner=NULL,claim_expires_at=NULL,retain_until_resolved=0,resolved_at=?,updated_at=? WHERE job_id=? AND claim_owner=? AND fence=?`, now, now, jobID, owner, fence)
+	if err != nil {
+		return SyncJobRow{}, err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return SyncJobRow{}, ErrSyncPrecondition
+	}
+	existing, loadErr := loadSyncJobByKey(ctx, tx, delivery.GroupID, "delivery", delivery.LogicalKey)
+	if loadErr == nil {
+		if existing.RequestFingerprint != fingerprint {
+			return SyncJobRow{}, ErrSyncAdmissionConflict
+		}
+		if err := tx.Commit(); err != nil {
+			return SyncJobRow{}, err
+		}
+		return existing, nil
+	}
+	if !errors.Is(loadErr, sql.ErrNoRows) {
+		return SyncJobRow{}, loadErr
+	}
+	var pending int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sync_jobs WHERE group_id=? AND resolved_at IS NULL`, delivery.GroupID).Scan(&pending); err != nil {
+		return SyncJobRow{}, err
+	}
+	if pending >= delivery.QueueLimit {
+		return SyncJobRow{}, ErrSyncQueueFull
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO sync_jobs (job_id,group_id,kind,logical_key,request_fingerprint,state,payload_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)`, delivery.JobID, delivery.GroupID, "delivery", delivery.LogicalKey, fingerprint, "pending", delivery.PayloadJSON, now, now); err != nil {
+		return SyncJobRow{}, err
+	}
+	created, err := loadSyncJobByKey(ctx, tx, delivery.GroupID, "delivery", delivery.LogicalKey)
+	if err != nil {
+		return SyncJobRow{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return SyncJobRow{}, err
+	}
+	return created, nil
+}
+
+// FinishRecoveredPublicationJob settles a measured remote-confirmed candidate
+// after the original process lost its claim. It refuses an unexpired owner and
+// still commits the peer obligation in the same transaction.
+func (s *Store) FinishRecoveredPublicationJob(ctx context.Context, jobID string, expectedFence int64, journal SyncJournalEntry, delivery SyncJobInput, now string) (SyncJobRow, error) {
+	fingerprint, payload, err := syncRequestFingerprint("delivery", []byte(delivery.PayloadJSON))
+	if err != nil {
+		return SyncJobRow{}, err
+	}
+	delivery.PayloadJSON = payload
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return SyncJobRow{}, err
+	}
+	defer tx.Rollback()
+	job, err := loadSyncJob(ctx, tx, jobID)
+	if err != nil {
+		return SyncJobRow{}, err
+	}
+	if job.Kind != "publication" || job.Fence != expectedFence || (job.State != "signed" && job.State != "push_pending" && job.State != "uncertain") || (job.ClaimOwner != "" && !timeBefore(job.ClaimExpiresAt, now)) {
+		return SyncJobRow{}, ErrSyncPrecondition
+	}
+	if journal.JobID != jobID || journal.Fence != expectedFence || journal.Phase != "publication" || journal.Outcome != "published" || journal.RecordedAt != now || journal.JournalID == "" {
+		return SyncJobRow{}, fmt.Errorf("recovered publication journal does not bind confirmation")
+	}
+	if delivery.GroupID != job.GroupID || delivery.Kind != "delivery" || delivery.InitialState != "pending" || delivery.JobID == "" || delivery.LogicalKey == "" || delivery.QueueLimit < 1 || delivery.QueueLimit > 1000 {
+		return SyncJobRow{}, fmt.Errorf("invalid recovered publication delivery obligation")
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO sync_journal_entries (journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES (?,?,?,?,?,?,?)`, journal.JournalID, journal.JobID, journal.Fence, journal.Phase, journal.Outcome, journal.EvidenceJSON, journal.RecordedAt); err != nil {
+		return SyncJobRow{}, err
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE sync_jobs SET state='published',claim_owner=NULL,claim_expires_at=NULL,retain_until_resolved=0,resolved_at=?,updated_at=? WHERE job_id=? AND fence=?`, now, now, jobID, expectedFence)
+	if err != nil {
+		return SyncJobRow{}, err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return SyncJobRow{}, ErrSyncPrecondition
+	}
+	existing, loadErr := loadSyncJobByKey(ctx, tx, delivery.GroupID, "delivery", delivery.LogicalKey)
+	if loadErr == nil {
+		if existing.RequestFingerprint != fingerprint {
+			return SyncJobRow{}, ErrSyncAdmissionConflict
+		}
+		if err := tx.Commit(); err != nil {
+			return SyncJobRow{}, err
+		}
+		return existing, nil
+	}
+	if !errors.Is(loadErr, sql.ErrNoRows) {
+		return SyncJobRow{}, loadErr
+	}
+	var pending int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sync_jobs WHERE group_id=? AND resolved_at IS NULL`, delivery.GroupID).Scan(&pending); err != nil {
+		return SyncJobRow{}, err
+	}
+	if pending >= delivery.QueueLimit {
+		return SyncJobRow{}, ErrSyncQueueFull
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO sync_jobs (job_id,group_id,kind,logical_key,request_fingerprint,state,payload_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)`, delivery.JobID, delivery.GroupID, "delivery", delivery.LogicalKey, fingerprint, "pending", delivery.PayloadJSON, now, now); err != nil {
+		return SyncJobRow{}, err
+	}
+	created, err := loadSyncJobByKey(ctx, tx, delivery.GroupID, "delivery", delivery.LogicalKey)
+	if err != nil {
+		return SyncJobRow{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return SyncJobRow{}, err
+	}
+	return created, nil
+}
+
+// FinishRecoveredCheckpointJob settles a measured remote-confirmed checkpoint
+// after the originating process lost its claim. It never creates or signs a
+// replacement candidate and refuses takeover while the original lease is live.
+func (s *Store) FinishRecoveredCheckpointJob(ctx context.Context, jobID string, expectedFence int64, journal SyncJournalEntry, now string) error {
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	job, err := loadSyncJob(ctx, tx, jobID)
+	if err != nil {
+		return err
+	}
+	if job.Kind != "checkpoint" || job.Fence != expectedFence || (job.State != "applying" && job.State != "uncertain") || (job.ClaimOwner != "" && !timeBefore(job.ClaimExpiresAt, now)) {
+		return ErrSyncPrecondition
+	}
+	if journal.JobID != jobID || journal.Fence != expectedFence || journal.Phase != "checkpoint" || journal.Outcome != "applied" || journal.RecordedAt != now || journal.JournalID == "" {
+		return fmt.Errorf("recovered checkpoint journal does not bind confirmation")
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO sync_journal_entries (journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES (?,?,?,?,?,?,?)`, journal.JournalID, journal.JobID, journal.Fence, journal.Phase, journal.Outcome, journal.EvidenceJSON, journal.RecordedAt); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE sync_jobs SET state='applied',claim_owner=NULL,claim_expires_at=NULL,retain_until_resolved=0,resolved_at=?,updated_at=? WHERE job_id=? AND fence=?`, now, now, jobID, expectedFence)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return ErrSyncPrecondition
+	}
+	return tx.Commit()
+}
+
 // FinishSyncJob records the measured head outcome under the live fencing
 // generation and releases ownership. Journal rows are retained separately.
 func (s *Store) FinishSyncJob(ctx context.Context, jobID, owner string, fence int64, state string, resolved bool, journal SyncJournalEntry, now string) error {
@@ -474,8 +863,8 @@ func (s *Store) FinishSyncJob(ctx context.Context, jobID, owner string, fence in
 	}
 	res, err := tx.ExecContext(ctx, `UPDATE sync_jobs SET state = ?, claim_owner = NULL,
 		claim_expires_at = NULL, retain_until_resolved = ?, resolved_at = ?, updated_at = ?
-		WHERE job_id = ? AND claim_owner = ? AND fence = ? AND claim_expires_at >= ?`,
-		state, retain, resolvedAt, now, jobID, owner, fence, now)
+		WHERE job_id = ? AND claim_owner = ? AND fence = ?`,
+		state, retain, resolvedAt, now, jobID, owner, fence)
 	if err != nil {
 		return err
 	}
@@ -522,6 +911,70 @@ func (s *Store) ReconcileExpiredSyncClaim(ctx context.Context, jobID string, exp
 	}
 	if err != nil {
 		return err
+	}
+	return tx.Commit()
+}
+
+// ReconcileUncertainPublication records an exact remote probe proving that an
+// ambiguous publication candidate did not move the content ref, then makes the
+// same signed candidate claimable again.
+func (s *Store) ReconcileUncertainPublication(ctx context.Context, jobID string, expectedFence int64, journal SyncJournalEntry, now string) error {
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	row, err := loadSyncJob(ctx, tx, jobID)
+	if err != nil {
+		return err
+	}
+	if row.Kind != "publication" || row.State != "uncertain" || row.Fence != expectedFence || row.ClaimOwner != "" {
+		return ErrSyncPrecondition
+	}
+	if journal.JobID != jobID || journal.Fence != expectedFence || journal.Phase != "claim_recovery" || journal.Outcome != "effect_not_started" || journal.RecordedAt != now || journal.JournalID == "" {
+		return fmt.Errorf("uncertain publication recovery evidence does not bind the job")
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO sync_journal_entries (journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES (?,?,?,?,?,?,?)`, journal.JournalID, journal.JobID, journal.Fence, journal.Phase, journal.Outcome, journal.EvidenceJSON, journal.RecordedAt); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE sync_jobs SET state='signed',updated_at=? WHERE job_id=? AND fence=? AND state='uncertain' AND claim_owner IS NULL`, now, jobID, expectedFence)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return ErrSyncPrecondition
+	}
+	return tx.Commit()
+}
+
+// ReconcileUncertainCheckpoint records a remote probe proving that the signed
+// checkpoint candidate did not move the content ref, then reopens that exact
+// candidate for the next explicit apply invocation.
+func (s *Store) ReconcileUncertainCheckpoint(ctx context.Context, jobID string, expectedFence int64, journal SyncJournalEntry, now string) error {
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	row, err := loadSyncJob(ctx, tx, jobID)
+	if err != nil {
+		return err
+	}
+	if row.Kind != "checkpoint" || row.State != "uncertain" || row.Fence != expectedFence || row.ClaimOwner != "" {
+		return ErrSyncPrecondition
+	}
+	if journal.JobID != jobID || journal.Fence != expectedFence || journal.Phase != "claim_recovery" || journal.Outcome != "effect_not_started" || journal.RecordedAt != now || journal.JournalID == "" {
+		return fmt.Errorf("uncertain checkpoint recovery evidence does not bind the job")
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO sync_journal_entries (journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES (?,?,?,?,?,?,?)`, journal.JournalID, journal.JobID, journal.Fence, journal.Phase, journal.Outcome, journal.EvidenceJSON, journal.RecordedAt); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE sync_jobs SET state='applying',updated_at=? WHERE job_id=? AND fence=? AND state='uncertain' AND claim_owner IS NULL`, now, jobID, expectedFence)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return ErrSyncPrecondition
 	}
 	return tx.Commit()
 }

@@ -416,6 +416,10 @@ func (c *Client) PushFastForward(ctx context.Context, remote, ref, candidate, ex
 		result.Underlying = err
 		return result
 	}
+	if remoteBefore == candidate {
+		result.State, result.RemoteOID = PushConfirmed, candidate
+		return result
+	}
 	if remoteBefore != expected {
 		result.State, result.RemoteOID = PushRejected, remoteBefore
 		result.Underlying = ErrPushRejected
@@ -720,6 +724,12 @@ func sshString(data []byte) ([]byte, []byte, bool) {
 // SnapshotTree creates an immutable tree from a base plus a closed set of
 // regular-file replacements in a private index. No working-tree path changes.
 func (c *Client) SnapshotTree(ctx context.Context, base string, files map[string][]byte) (string, error) {
+	return c.SnapshotTreeChanges(ctx, base, files, nil)
+}
+
+// SnapshotTreeChanges creates a private-index tree from exact additions and
+// deletions. It never changes the caller's index or working tree.
+func (c *Client) SnapshotTreeChanges(ctx context.Context, base string, files map[string][]byte, deletions []string) (string, error) {
 	if !validOID(base) || len(files) == 0 {
 		return "", fmt.Errorf("snapshot requires a base commit and files")
 	}
@@ -731,6 +741,14 @@ func (c *Client) SnapshotTree(ctx context.Context, base string, files map[string
 	env := map[string]string{"GIT_INDEX_FILE": filepath.Join(tmp, "index")}
 	if _, _, err := c.run(ctx, env, nil, "read-tree", base+"^{tree}"); err != nil {
 		return "", err
+	}
+	for _, path := range deletions {
+		if !validTreePath(path) {
+			return "", fmt.Errorf("unsafe snapshot deletion %q", path)
+		}
+		if _, _, err := c.run(ctx, env, nil, "update-index", "--force-remove", "--", path); err != nil {
+			return "", err
+		}
 	}
 	paths := make([]string, 0, len(files))
 	for path := range files {
@@ -762,6 +780,162 @@ func (c *Client) SnapshotTree(ctx context.Context, base string, files map[string
 		return "", fmt.Errorf("git returned an invalid tree ID")
 	}
 	return tree, nil
+}
+
+// ReadContentFiles returns the ordinary synchronized Markdown files from a
+// content commit. Controller metadata is ignored; every other attachment or
+// unsupported Git mode fails closed.
+func (c *Client) ReadContentFiles(ctx context.Context, oid string) (map[string][]byte, error) {
+	if !validOID(oid) {
+		return nil, fmt.Errorf("full Git object ID is required")
+	}
+	out, _, err := c.run(ctx, nil, nil, "ls-tree", "-r", "--full-tree", "-z", oid)
+	if err != nil {
+		return nil, err
+	}
+	paths := make([]string, 0)
+	for _, entry := range bytes.Split(out, []byte{0}) {
+		if len(entry) == 0 {
+			continue
+		}
+		parts := bytes.SplitN(entry, []byte{'\t'}, 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid content tree entry")
+		}
+		meta := bytes.Fields(parts[0])
+		path := string(parts[1])
+		if len(meta) != 3 || string(meta[0]) != "100644" || string(meta[1]) != "blob" || !validTreePath(path) {
+			return nil, fmt.Errorf("content tree contains an unsupported entry")
+		}
+		if strings.HasPrefix(path, ".agent-dispatch-sync/") {
+			if !validContentControllerPath(path) {
+				return nil, fmt.Errorf("content tree contains unsupported controller path %q", path)
+			}
+			continue
+		}
+		lower := strings.ToLower(path)
+		if !strings.HasSuffix(lower, ".md") && !strings.HasSuffix(lower, ".markdown") {
+			return nil, fmt.Errorf("content tree contains unsupported attachment %q", path)
+		}
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	files := make(map[string][]byte, len(paths))
+	for _, path := range paths {
+		raw, readErr := c.ReadFile(ctx, oid, path)
+		if readErr != nil {
+			return nil, readErr
+		}
+		files[path] = raw
+	}
+	return files, nil
+}
+
+func validContentControllerPath(path string) bool {
+	for _, prefix := range []string{
+		".agent-dispatch-sync/publications/",
+		".agent-dispatch-sync/checkpoints/",
+		".agent-dispatch-sync/checkpoint-plans/",
+	} {
+		if strings.HasPrefix(path, prefix) {
+			name := strings.TrimPrefix(path, prefix)
+			return name != "" && !strings.Contains(name, "/") && strings.HasSuffix(name, ".json")
+		}
+	}
+	return false
+}
+
+func (c *Client) TreeHasPrefix(ctx context.Context, oid, prefix string) (bool, error) {
+	if !validOID(oid) || !validTreePath(strings.TrimSuffix(prefix, "/")) {
+		return false, fmt.Errorf("invalid tree prefix query")
+	}
+	out, _, err := c.run(ctx, nil, nil, "ls-tree", "-r", "--name-only", "-z", oid)
+	if err != nil {
+		return false, err
+	}
+	for _, path := range bytes.Split(out, []byte{0}) {
+		if strings.HasPrefix(string(path), prefix) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// ReadTreePrefix returns regular non-executable blobs below one fixed
+// controller prefix. Unsupported modes fail closed.
+func (c *Client) ReadTreePrefix(ctx context.Context, oid, prefix string) (map[string][]byte, error) {
+	if !validOID(oid) || !validTreePath(strings.TrimSuffix(prefix, "/")) {
+		return nil, fmt.Errorf("invalid tree prefix query")
+	}
+	out, _, err := c.run(ctx, nil, nil, "ls-tree", "-r", "--full-tree", "-z", oid, "--", prefix)
+	if err != nil {
+		return nil, err
+	}
+	result := map[string][]byte{}
+	for _, entry := range bytes.Split(out, []byte{0}) {
+		if len(entry) == 0 {
+			continue
+		}
+		parts := bytes.SplitN(entry, []byte{'\t'}, 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid controller tree entry")
+		}
+		meta := bytes.Fields(parts[0])
+		path := string(parts[1])
+		if len(meta) != 3 || string(meta[0]) != "100644" || string(meta[1]) != "blob" || !strings.HasPrefix(path, prefix) || !validTreePath(path) {
+			return nil, fmt.Errorf("controller tree contains an unsupported entry")
+		}
+		raw, readErr := c.ReadFile(ctx, oid, path)
+		if readErr != nil {
+			return nil, readErr
+		}
+		result[path] = raw
+	}
+	return result, nil
+}
+
+// CreateSignedContentCommit signs an already frozen private-index tree. The
+// key exists only in a 0700 temporary directory and no ref is moved here.
+func (c *Client) CreateSignedContentCommit(ctx context.Context, tree string, privateKey []byte, predecessor string, now time.Time, role, message string) (string, error) {
+	if !validOID(tree) || len(privateKey) == 0 || (predecessor != "" && !validOID(predecessor)) {
+		return "", fmt.Errorf("signed content commit requires a tree, key, and valid predecessor")
+	}
+	if role != "publisher" && role != "administrator" {
+		return "", fmt.Errorf("unsupported content signer role")
+	}
+	if message == "" || strings.ContainsAny(message, "\r\n") {
+		return "", fmt.Errorf("invalid content commit message")
+	}
+	tmp, err := os.MkdirTemp("", "agent-dispatch-content-sign-")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(tmp)
+	keyPath := filepath.Join(tmp, "signing_key")
+	if err := os.WriteFile(keyPath, privateKey, 0o600); err != nil {
+		return "", err
+	}
+	name := "Agent Dispatch Publisher"
+	email := "publisher@agent-dispatch.invalid"
+	if role == "administrator" {
+		name = "Agent Dispatch Administrator"
+		email = "administrator@agent-dispatch.invalid"
+	}
+	env := map[string]string{"GIT_AUTHOR_DATE": now.UTC().Format(time.RFC3339), "GIT_COMMITTER_DATE": now.UTC().Format(time.RFC3339), "GIT_AUTHOR_NAME": name, "GIT_AUTHOR_EMAIL": email, "GIT_COMMITTER_NAME": name, "GIT_COMMITTER_EMAIL": email}
+	args := []string{"-c", "gpg.format=ssh", "-c", "user.signingKey=" + keyPath, "commit-tree", "-S" + keyPath, tree}
+	if predecessor != "" {
+		args = append(args, "-p", predecessor)
+	}
+	args = append(args, "-m", message)
+	out, _, err := c.run(ctx, env, nil, args...)
+	if err != nil {
+		return "", err
+	}
+	oid := strings.TrimSpace(string(out))
+	if !validOID(oid) {
+		return "", fmt.Errorf("git returned an invalid commit ID")
+	}
+	return oid, nil
 }
 
 var _ io.Writer = (*boundedBuffer)(nil)

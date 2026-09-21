@@ -15,9 +15,9 @@
 | Release target | v0.2.0 (Two-Node Wiki Sync MVP) |
 | Current epic | E21 Signed Publication and Guarded Import (In Progress) |
 | Current active task | None |
-| Next task | E21-T3 Explicit signed publication workflow |
-| Completed tasks | 108 / 116 |
-| Planned tasks | 8 / 116 |
+| Next task | E21-T4 Guarded import and exact Watchman attribution |
+| Completed tasks | 109 / 116 |
+| Planned tasks | 7 / 116 |
 | In progress tasks | 0 |
 | In review tasks | 0 |
 | Blocked tasks | 0 |
@@ -172,7 +172,7 @@
 | 106 | E20-T5 | Completed | G16 exact-revision contract baseline qualified |
 | 107 | E21-T1 | Completed | Durable sync jobs, journals, and migrations |
 | 108 | E21-T2 | Completed | Restricted Git, trust, and membership administration |
-| 109 | E21-T3 | Planned | Explicit signed publication workflow |
+| 109 | E21-T3 | Completed | Explicit signed publication workflow |
 | 110 | E21-T4 | Planned | Guarded import and exact Watchman attribution |
 | 111 | E21-T5 | Planned | Publication/import crash and conflict qualification |
 | 112 | E22-T1 | Planned | Authenticated peer service and durable nudges |
@@ -5302,7 +5302,7 @@ E21-T1 Completed.
 
 ## E21-T3: Implement Explicit Signed Publication
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -5333,6 +5333,23 @@ E21-T2 Completed.
 - A later local edit is not captured in the frozen publication or overwritten.
 - A pre-signature crash requires explicit CLI re-entry; a crash after signature
   or successful push recovers the same publication identity without another commit.
+
+### Evidence
+
+- `TestE21T3PublishSignsFrozenSnapshotAndAdmitsDelivery` exercises membership
+  bootstrap, administrator initial-baseline checkpoint, receipt-gated frozen
+  Markdown publication, signed fast-forward push, atomic peer-delivery admission,
+  and the no-content-change result against disposable repositories.
+- Snapshot, Git, and SQLite suites cover two-way maintained-fact matching,
+  private-index late-edit preservation, disabled-route eligibility, paused
+  admission refusal, controller-path allowlisting, already-confirmed remote
+  convergence, and recovered publication/checkpoint settlement.
+- Mulgae full and delta reviews (final focused run
+  `r_01a0c2fe-96cc-76e0-a6b4-eefd9aa52e84`) passed CI with complete coverage
+  and zero findings after the report-level recovery, integrity, and
+  documentation findings were remediated.
+- `make verify` passed on darwin/arm64; Gaori `manifest-check`,
+  `schema-validation`, and `traceability` passed.
 
 ## E21-T4: Implement Guarded Import and Attribution
 

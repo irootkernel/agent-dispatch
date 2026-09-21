@@ -63,11 +63,24 @@ revision-fenced `sync pause` and `sync resume`. E21-T2 implements JSON-only
 `sync membership plan` and `sync membership apply`; plan is side-effect-free,
 while apply requires a reviewed strict-JSON plan file, an exact expected
 predecessor (`none` for bootstrap), and the local administrator signing-key
-reference. Non-bootstrap plan commands require `--instance`. Pause blocks new protected
+reference. E21-T3 implements explicit `sync publish` and administrator-reviewed
+`sync checkpoint plan|apply`. Publication requires an exact configuration
+revision, an idle maintained resource with current valid completion receipts,
+and a changed frozen Markdown snapshot. A stale expected configuration revision
+is `sync_precondition_failed` at exit 14. Failure of the idle-resource,
+current-receipt, or maintained-fact barrier returns `no_eligible_snapshot` at
+exit 0 with a machine-readable reason and no admitted job or Git effect. An
+unchanged governed snapshot returns `no_content_change` at exit 0 with no commit,
+push, or delivery obligation. Checkpoint
+plan binds `--target-commit` and `--kind`; apply accepts only the unchanged
+strict-JSON plan. Re-entering apply after process loss probes the approved remote,
+reuses the journaled signed candidate, and either settles a confirmed candidate
+or resumes it only after proving the remote stayed at the reviewed predecessor.
+Non-bootstrap membership plan commands require `--instance`. Pause blocks new protected
 claims while preserving in-flight evidence; resume validates and binds the
 current configuration revision and never clears a conflict, revocation, trust,
 or recovery block. A confirmed normal replacement clears only the membership
-emergency block. Every other identity returns `sync_capability_unavailable`
+emergency block. Every other unimplemented identity returns `sync_capability_unavailable`
 at exit 3 until its owning E21 or E22 task implements and truthfully advertises it. The executable
 descriptor and peer contract bundle is
 [`sync-provider-v1`](sync-provider-v1/bundle.json). Capabilities reports both

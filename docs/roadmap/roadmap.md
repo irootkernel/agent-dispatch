@@ -13,11 +13,11 @@
 | Shipped release | v0.1.8 (published 2026-09-10) |
 | Planned SOT baseline | 1.7.0 ([D-030](../specs/decision-log.md); G17-G18 open) |
 | Release target | v0.2.0 (Two-Node Wiki Sync MVP) |
-| Current epic | E21 Signed Publication and Guarded Import (In Progress) |
+| Current epic | E22 Peer Recovery, Verification, and Operations (In Progress) |
 | Current active task | None |
-| Next task | E21-T5 Publication/import crash and conflict qualification |
-| Completed tasks | 110 / 116 |
-| Planned tasks | 6 / 116 |
+| Next task | E22-T1 Authenticated peer service and durable nudges |
+| Completed tasks | 111 / 116 |
+| Planned tasks | 5 / 116 |
 | In progress tasks | 0 |
 | In review tasks | 0 |
 | Blocked tasks | 0 |
@@ -57,8 +57,8 @@
 | E18 | Absolute Watch-Root Binding | **Completed** | 2 | G14 |
 | E19 | Official Linux Support (darwin/arm64 + linux/amd64 + linux/arm64) | **Completed** | 10 | G15 |
 | E20 | Two-Node Sync Contracts and Admission | **Completed** | 5 | G16 |
-| E21 | Signed Publication and Guarded Import | **In Progress** | 5 | G17 |
-| E22 | Peer Recovery, Verification, and Operations | **Planned** | 5 | G18 |
+| E21 | Signed Publication and Guarded Import | **Completed** | 5 | G17 |
+| E22 | Peer Recovery, Verification, and Operations | **In Progress** | 5 | G18 |
 
 ## 3. Task Status Index
 
@@ -174,7 +174,7 @@
 | 108 | E21-T2 | Completed | Restricted Git, trust, and membership administration |
 | 109 | E21-T3 | Completed | Explicit signed publication workflow |
 | 110 | E21-T4 | Completed | Guarded import and exact Watchman attribution |
-| 111 | E21-T5 | Planned | Publication/import crash and conflict qualification |
+| 111 | E21-T5 | Completed | Publication/import crash and conflict qualification |
 | 112 | E22-T1 | Planned | Authenticated peer service and durable nudges |
 | 113 | E22-T2 | Planned | Periodic reconciliation and offline catch-up |
 | 114 | E22-T3 | Planned | Pair status and fresh verification |
@@ -5217,14 +5217,12 @@ completed on 2026-09-19; only E21-T1 is handed forward.
 
 # E21: Signed Publication and Guarded Import
 
-**Epic status:** In Progress
+**Epic status:** Completed
 
 **Purpose:** Implement durable manual publication and fast-forward import with
 exact provenance, crash recovery, and conflict stop.
 
 **Gate:** G17
-
-**Execution integration map:** [E21 Signed Publication and Guarded Import](../todo/TODO-E21-SIGNED-PUBLICATION-AND-GUARDED-IMPORT.md)
 
 **Canonical Outcomes:** [SYN requirements](../specs/required-spec.md) · [Gate G17](../specs/acceptance-criteria.md) · [Sync architecture](../architecture/wiki-sync.md) · [Sync contract](../contracts/sync-contract.md) · [Validation evidence](../VALIDATION.md)
 
@@ -5405,7 +5403,7 @@ E21-T3 Completed.
 
 ## E21-T5: Qualify Publication and Import
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -5435,9 +5433,31 @@ E21-T4 Completed.
 - The reviewed result preserves both histories in every two-writer conflict.
 - No production vault, credential, remote, tag, or release is used as evidence.
 
+### Evidence
+
+- Gate G17 passed the publication/import, restricted Git, persistence, domain,
+  and CLI qualification suite against disposable repositories on
+  `darwin/arm64`, `linux/amd64`, and `linux/arm64`; the exact platform and
+  AC-1701 through AC-1711 matrix is recorded in `docs/VALIDATION.md`.
+- `TestG17TwoWritersPreserveBothHistoriesAfterFastForwardLoss` creates two
+  independently signed children of one base, accepts one fast-forward, rejects
+  the stale predecessor, and proves both local commit histories remain intact.
+- Enabled `sync status` exposes publication, peer-delivery, and import job heads
+  separately. Provider/CLI capability tests keep peer verification, service,
+  and managed lifecycle commands reserved for E22.
+- `make verify` passed on darwin/arm64. Gaori `manifest-check`,
+  `schema-validation`, and `traceability` each passed with exit 0.
+- The configured six-role Mulgae cold review
+  `r_01a0c3be-d208-71e2-b8ee-c4946f990631` completed with CI pass, complete
+  coverage, committed publication, and no Low-or-higher findings.
+- Qualification used only disposable repositories, keys, wrapper remotes,
+  containers, and state directories. The temporary E21 integration dossier was
+  retired after its durable outcomes moved to the canonical contract,
+  architecture, operations, roadmap, and validation owners.
+
 # E22: Peer Recovery, Verification, and Operations
 
-**Epic status:** Planned
+**Epic status:** In Progress
 
 **Purpose:** Add authenticated low-latency nudges, periodic correctness,
 fresh pair verification, service management, and real two-node qualification.

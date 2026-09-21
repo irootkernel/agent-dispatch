@@ -3,6 +3,7 @@ package gitlocal
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -317,6 +318,93 @@ func TestPushAlreadyAtCandidateIsConfirmed(t *testing.T) {
 	result := client.PushFastForward(context.Background(), "origin", "refs/agent-dispatch/content/wiki-pair", candidate, expected, digest)
 	if result.State != PushConfirmed || result.RemoteOID != candidate {
 		t.Fatalf("push result=%+v", result)
+	}
+}
+
+func TestG17TwoWritersPreserveBothHistoriesAfterFastForwardLoss(t *testing.T) {
+	repo := initRepository(t)
+	base := gitOutput(t, repo, "rev-parse", "HEAD")
+	key := filepath.Join(t.TempDir(), "publisher")
+	if out, err := exec.Command("ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", key).CombinedOutput(); err != nil {
+		t.Fatalf("ssh-keygen: %v: %s", err, out)
+	}
+	privateKey, err := os.ReadFile(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	real, err := New(repo, Limits{Timeout: 10 * time.Second, MaxOutput: 64 << 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	makeCandidate := func(body, manifest, message string, when time.Time) string {
+		t.Helper()
+		tree, err := real.SnapshotTreeChanges(context.Background(), base, map[string][]byte{
+			"note.md": []byte(body),
+			".agent-dispatch-sync/publications/" + manifest + ".json": []byte("{}"),
+		}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		candidate, err := real.CreateSignedContentCommit(context.Background(), tree, privateKey, base, when, "publisher", message)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return candidate
+	}
+	winner := makeCandidate("writer-a\n", "publication-a", "Publish A", time.Unix(1_700_000_001, 0))
+	loser := makeCandidate("writer-b\n", "publication-b", "Publish B", time.Unix(1_700_000_002, 0))
+	if winner == loser {
+		t.Fatal("independent writers produced the same candidate")
+	}
+
+	dir := t.TempDir()
+	remoteHead := filepath.Join(dir, "remote-head")
+	if err := os.WriteFile(remoteHead, []byte(base+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	remoteURL := "ssh://git@example.com/repo"
+	ref := "refs/agent-dispatch/content/wiki-pair"
+	script := filepath.Join(dir, "git")
+	body := fmt.Sprintf(`#!/bin/sh
+case " $* " in
+  *" remote get-url --all origin "*) echo %s; exit 0;;
+  *" remote get-url --push --all origin "*) echo %s; exit 0;;
+  *" ls-remote "*) oid=$(sed -n '1p' %s); printf '%%s\t%s\n' "$oid"; exit 0;;
+  *" push "*) for last do :; done; oid=${last%%%%:*}; printf '%%s\n' "$oid" > %s; exit 0;;
+esac
+exit 2
+`, remoteURL, remoteURL, remoteHead, ref, remoteHead)
+	if err := os.WriteFile(script, []byte(body), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ssh, err := exec.LookPath("ssh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sshKeygen, err := exec.LookPath("ssh-keygen")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &Client{root: repo, git: script, ssh: ssh, sshKeygen: sshKeygen, timeout: 10 * time.Second, maxOutput: 64 << 10}
+	digest, _, err := config.RemoteRepositoryDigest(remoteURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result := client.PushFastForward(context.Background(), "origin", ref, winner, base, digest); result.State != PushConfirmed {
+		t.Fatalf("winner push = %+v", result)
+	}
+	result := client.PushFastForward(context.Background(), "origin", ref, loser, base, digest)
+	if result.State != PushRejected || result.RemoteOID != winner || !errors.Is(result.Underlying, ErrPushRejected) {
+		t.Fatalf("losing push = %+v", result)
+	}
+	for name, candidate := range map[string]string{"winner": winner, "loser": loser} {
+		if got := gitOutput(t, repo, "cat-file", "-t", candidate); got != "commit" {
+			t.Fatalf("%s candidate was not preserved: %q", name, got)
+		}
+		parents, err := real.CommitParents(context.Background(), candidate)
+		if err != nil || len(parents) != 1 || parents[0] != base {
+			t.Fatalf("%s history = %v, %v", name, parents, err)
+		}
 	}
 }
 

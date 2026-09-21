@@ -7,7 +7,7 @@ retain their recorded scope; migrated document pointers use their current paths.
 
 ## 1.8.0 - Unreleased
 
-E21-T1 through E21-T4 implement the durable local substrate, signed membership,
+E21 implements and qualifies the durable local substrate, signed membership,
 explicit publication, checkpoints, and guarded local import for the still-manual
 two-node sync workflow. Peer service, pair verification, and release remain disabled.
 
@@ -30,6 +30,9 @@ two-node sync workflow. Peer service, pair verification, and release remain disa
 - E21-T4 adds bounded full-history import validation, current cooperative-import
   acknowledgement and Git-state fences, path-disjoint file/index/ref apply,
   schema v22 immutable import effects, and exact one-use Watchman attribution.
+- E21-T5 qualifies G17 on every supported platform with disposable repositories,
+  pins two-writer history preservation, documents the unsupported Git surface,
+  and exposes publication, delivery, and import outcomes separately in status.
 
 ## 1.7.0 - 2026-09-19
 

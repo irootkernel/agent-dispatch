@@ -1,9 +1,9 @@
 # Two-Node Wiki Sync Architecture
 
-> **Status:** Partially implemented for v0.2.0 under D-030. E21-T1 through
-> E21-T4 provide durable jobs and control, restricted Git and membership,
-> explicit signed publication, signed checkpoints, and guarded local import.
-> Peer service, pair verification, and release remain unavailable.
+> **Status:** Partially implemented for v0.2.0 under D-030. E21 provides
+> qualified durable jobs and control, restricted Git and membership, explicit
+> signed publication, signed checkpoints, guarded local import, and exact
+> attribution. Peer service, pair verification, and release remain unavailable.
 
 Agent Dispatch extends the existing maintenance loop with an explicit Git
 publication step and a peer import loop. Hermes still owns Wiki semantics.

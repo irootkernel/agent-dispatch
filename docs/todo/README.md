@@ -11,11 +11,6 @@ Future work is not permission to partially implement these features during
 roadmap tasks. Each priority candidate requires a new roadmap, requirement
 changes, and where noted a new ADR/security review.
 
-## Active Execution Dossiers
-
-- [E21 Signed Publication and Guarded Import](TODO-E21-SIGNED-PUBLICATION-AND-GUARDED-IMPORT.md) — temporary integration map for the
-  ordered E21 task sequence; lifecycle remains in the roadmap.
-
 ## Priority Candidates
 
 | Candidate | Value | Entry condition | Key risk |

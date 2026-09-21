@@ -94,10 +94,15 @@ Transient membership or content fetch transport failure emits `deferred` with
 `git_unstable` at exit 10 and does not create a trust hold. A fetch rejected as
 non-fast-forward is classified separately and retains the fail-closed trust
 behavior.
-Enabled `sync status` includes `latest_import`: the newest durable import job
-state, reason, target, and target paths. Resolved deferrals remain visible there
-without occupying the bounded active queue; `present: false` means no import
-job has been admitted yet.
+Enabled `sync status` reports `latest_publication`, `latest_delivery`, and
+`latest_import` separately so a signed or uncertain publication, pending peer
+delivery, and local import can never collapse into one claimed outcome. Every
+projection includes the durable job identity, logical key, state, update time,
+resolution, claim, and fence; typed publication/import/target/receiver details
+are included when present. Import additionally reports its reason and target
+paths after strict record decoding. Resolved deferrals remain visible without
+occupying the bounded active queue; `present: false` means no job of that kind
+has been admitted yet.
 Every other unimplemented identity returns `sync_capability_unavailable`
 at exit 3 until its owning E21 or E22 task implements and truthfully advertises it. The executable
 descriptor and peer contract bundle is

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 )
 
@@ -52,8 +53,10 @@ func TestE21T1SyncPauseResumeAndStatus(t *testing.T) {
 	if status["state"] != "active" || status["control_revision"] != float64(1) {
 		t.Fatalf("initial control = %v", status)
 	}
-	if latest, ok := status["latest_import"].(map[string]any); !ok || latest["present"] != false {
-		t.Fatalf("initial import status = %v", status["latest_import"])
+	for _, field := range []string{"latest_publication", "latest_delivery", "latest_import"} {
+		if latest, ok := status[field].(map[string]any); !ok || latest["present"] != false {
+			t.Fatalf("initial %s status = %v", field, status[field])
+		}
 	}
 	code, envelope, stderr = syncResult(t, "pause", "--group", "wiki-pair", "--expected-control-revision", "1", "--config", configPath, "--output", "json")
 	if code != 0 {
@@ -70,6 +73,55 @@ func TestE21T1SyncPauseResumeAndStatus(t *testing.T) {
 	code, envelope, stderr = syncResult(t, "resume", "--group", "wiki-pair", "--expected-control-revision", "2", "--config", configPath, "--output", "json")
 	if code != 0 || envelope["result"].(map[string]any)["state"] != "active" {
 		t.Fatalf("resume: %d %v %s", code, envelope, stderr)
+	}
+}
+
+func TestE21T5StatusSeparatesDurableSyncOutcomes(t *testing.T) {
+	configPath := enabledSyncConfig(t)
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision, ok := config.SyncRevision(cfg)
+	if !ok {
+		t.Fatal("sync revision unavailable")
+	}
+	store, err := openStateStore(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if _, err := store.EnsureSyncControl(requestCtx(), cfg.Sync.GroupID, revision, "2026-09-21T01:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	target := "1111111111111111111111111111111111111111"
+	jobs := []sqlite.SyncJobInput{
+		{JobID: "publication-job-g17", GroupID: cfg.Sync.GroupID, Kind: "publication", LogicalKey: "publication-g17", InitialState: "signed", PayloadJSON: `{"publication_id":"publication-g17","target_commit":"` + target + `"}`, QueueLimit: 10, Now: "2026-09-21T01:00:01Z"},
+		{JobID: "delivery-job-g17", GroupID: cfg.Sync.GroupID, Kind: "delivery", LogicalKey: "publication-g17", InitialState: "pending", PayloadJSON: `{"publication_id":"publication-g17","receiver":"node-b","target_commit":"` + target + `"}`, QueueLimit: 10, Now: "2026-09-21T01:00:02Z"},
+		{JobID: "import-job-g17", GroupID: cfg.Sync.GroupID, Kind: "import", LogicalKey: target, InitialState: "requested", PayloadJSON: `{"import_id":"import-g17","target_commit":"` + target + `"}`, QueueLimit: 10, Now: "2026-09-21T01:00:03Z"},
+	}
+	for _, job := range jobs {
+		if _, _, err := store.AdmitSyncJob(requestCtx(), job); err != nil {
+			t.Fatalf("admit %s: %v", job.Kind, err)
+		}
+	}
+	code, envelope, stderr := syncResult(t, "status", "--group", cfg.Sync.GroupID, "--config", configPath, "--output", "json")
+	if code != 0 {
+		t.Fatalf("status: %d %s", code, stderr)
+	}
+	status := envelope["result"].(map[string]any)
+	for field, wantState := range map[string]string{
+		"latest_publication": "signed",
+		"latest_delivery":    "pending",
+		"latest_import":      "requested",
+	} {
+		latest, ok := status[field].(map[string]any)
+		if !ok || latest["present"] != true || latest["state"] != wantState || latest["target_commit"] != target || latest["claimed"] != false || latest["resolved"] != false {
+			t.Fatalf("%s = %v", field, status[field])
+		}
+	}
+	if status["latest_publication"].(map[string]any)["publication_id"] != "publication-g17" || status["latest_delivery"].(map[string]any)["receiver"] != "node-b" || status["latest_import"].(map[string]any)["import_id"] != "import-g17" {
+		t.Fatalf("typed status details = %v", status)
 	}
 }
 

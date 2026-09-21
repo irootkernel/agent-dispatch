@@ -6,8 +6,8 @@ certify the current HEAD. For the current documentation roles and checks, use
 the [documentation index](README.md); for delivery status use the
 [roadmap](roadmap/roadmap.md).
 
-> **Current validation snapshot:** 2026-09-19 (E20-T5 and gate G16 completed;
-> 106 of 116 roadmap tasks are complete and ten are planned)
+> **Current validation snapshot:** 2026-09-21 (E21-T5 and gate G17 completed;
+> 111 of 116 roadmap tasks are complete and five are planned)
 > **Package target:** Agent Dispatch SOT 1.7.0 / shipped implementation v0.1.8
 > plus the qualified v0.2.0 sync contract and planned runtime
 
@@ -680,3 +680,65 @@ tests, race tests, manifest, schema, traceability, schedule, and sync-provider
 validation. `systemd-analyze` was absent and the existing schedule check
 reported its documented lint skip. The exact accepted revision above closes
 G16 and E20-T5; runtime sync implementation and evidence begin with E21-T1.
+
+## Gate G17: Signed Publication and Guarded Import (E21)
+
+G17 was qualified on 2026-09-21 with Go 1.26.6 against disposable repositories
+and state directories only. The focused command below passed on every D-029
+platform. It exercises the restricted Git adapter, schema v21/v22 persistence,
+publication/import services, canonical sync records, and CLI integration:
+
+```text
+go test ./internal/adapters/gitlocal ./internal/adapters/sqlite \
+  ./internal/app/syncimport ./internal/app/syncpublication \
+  ./internal/domain/syncrecords ./internal/cli \
+  -run 'Test(G17|E21|RestrictedGit|Import|Signed|Remote|Push|ReadContent|Fetch)' \
+  -count=1
+```
+
+| Platform | Tool evidence | Result |
+|---|---|---|
+| `darwin/arm64` | Go 1.26.6; Apple Git 2.54.0; OpenSSH 10.3p1 | **PASS**, native host |
+| `linux/amd64` | Go 1.26.6; Git 2.39.5; OpenSSH 9.2p1 | **PASS**, disposable `golang:1.26.6-bookworm` container under `--platform linux/amd64` |
+| `linux/arm64` | Go 1.26.6; Git 2.39.5; OpenSSH 9.2p1 | **PASS**, disposable `golang:1.26.6-bookworm` container under `--platform linux/arm64` |
+
+The repository mount was read-only in both Linux runs; test-created repositories,
+keys, wrapper remotes, SQLite stores, and process state lived in disposable
+temporary directories. No production vault, credential, remote, tag, release,
+peer endpoint, Watchman daemon, or Hermes board was used. TST-007 is satisfied
+for this gate by real Git object and OpenSSH Ed25519 signing/verification on all
+three platforms; network peer transport remains assigned to E22 and is not
+claimed here.
+
+| Criterion | Executable evidence |
+|---|---|
+| AC-1701 | `TestE21T3PublicationEligibilityBindsIdleRouteReceiptAndFacts`, `TestE21T3PausedControlRejectsNewPublicationAdmission`, and the snapshot fact-matching tests refuse publication before commit/push/delivery admission when the maintained snapshot is ineligible. |
+| AC-1702 | `TestE21T3PublishSignsFrozenSnapshotAndAdmitsDelivery` drives bootstrap, signed initial checkpoint, frozen Markdown publication, signature, confirmed fast-forward push, atomic peer obligation, and no-content no-op. |
+| AC-1703 | `TestPushAlreadyAtCandidateIsConfirmed` and `TestE21T3ConfirmedCandidateRecoveryReusesPublication` prove remote confirmation and same-identity settlement without duplicate delivery. |
+| AC-1704 | `TestG17TwoWritersPreserveBothHistoriesAfterFastForwardLoss` creates two signed children of one base, confirms one push, rejects the stale predecessor, and proves both commit objects and parent histories remain intact. |
+| AC-1705 | Restricted Git/import inspection, acknowledgement currentness, resource-writer, ignored/untracked alias, fetch classification, and deferred-reopen suites prove conservative deferral without destructive Git operations; `TestE21T5StatusSeparatesDurableSyncOutcomes` keeps publication, delivery, and import visible independently. |
+| AC-1706 | SQLite import-effect tests pin pre-apply effects, fences, applying/recovery attribution, exact one-use consumption, controller-only recovery, and atomic completion. |
+| AC-1707 | `TestApplyPreservesDisjointFilesAndDetectsLateEdit` plus newest-effect/duplicate-attribution tests retain contradictory and late edits as ordinary dirty work. |
+| AC-1708 | Membership domain, CLI, SQLite emergency, and `TestSignedMembershipUsesPinnedEd25519AndClosedTree` cover the closed change vocabulary, administrator signature, expected predecessor, fixed tree, non-force push, pair restoration, and removed-key first-seen refusal. |
+| AC-1709 | Checkpoint plan binding, confirmed-candidate recovery, content-history validation, and checkpoint-gated control reconciliation bind the exact target while leaving uncovered history blocked. |
+| AC-1710 | `TestImportIndexPreservesDisjointDirtyPath`, ignored/case-alias collision coverage, and guarded import service tests prove exact target-path application with disjoint bytes preserved and dirty. |
+| AC-1711 | Snapshot resource guards and immutable private-index capture prevent mixed attestations; signed-candidate publication/checkpoint recovery reuses the durable candidate, while only explicit CLI publication resolves the signing key. |
+
+The capability matrix remains exact against
+`docs/contracts/sync-provider-v1/commands.json`: publication, reconciliation,
+control, membership, and checkpoint commands are implemented; peer verify,
+serve, and managed service commands remain reserved and return
+`sync_capability_unavailable`. Enabled status now exposes the latest durable
+publication, delivery, and import outcomes separately, including unresolved
+signed, pending, deferred, or uncertain work. Full repository verification and
+the final cold-review disposition are recorded in the E21-T5 roadmap evidence.
+
+The final configured six-role Mulgae cold review
+`r_01a0c3be-d208-71e2-b8ee-c4946f990631` completed with CI pass, complete
+coverage, committed publication, and no Low-or-higher finding. Native
+`make verify` passed in full, including unit and race suites; the configured
+Gaori `manifest-check`, `schema-validation`, and `traceability` runs each passed
+with exit 0. The closeout-only lifecycle, dossier retirement, generated
+traceability, and manifest delta was then validated locally without reopening
+the completed semantic review. G17 and E21 are complete; only E22-T1 is handed
+forward.

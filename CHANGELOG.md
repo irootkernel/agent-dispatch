@@ -17,6 +17,8 @@ This file records concise shipped outcomes and pending changes.
 - Add guarded fast-forward `sync reconcile`, durable pre-apply import effects,
   path-disjoint live application, crash uncertainty, and exact one-use Watchman
   attribution for imported writes, renames, and deletions.
+- Add truthful sync status projections for the latest publication, peer-delivery,
+  and import outcomes, including unresolved signed and pending work.
 
 ### Fixed
 

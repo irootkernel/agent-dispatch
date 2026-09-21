@@ -60,43 +60,25 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 			return syncStoreError(stderr, command, err)
 		}
 		incarnation := localSyncIncarnation(cfg)
-		latestImport := map[string]any{"present": false}
-		if row, loadErr := concrete.LoadLatestSyncJob(requestCtx(), group, "import"); loadErr == nil {
-			latestImport = map[string]any{"present": true, "job_id": row.JobID, "state": row.State, "updated_at": row.UpdatedAt, "resolved": row.ResolvedAt != "", "fence": row.Fence, "claimed": row.ClaimOwner != ""}
-			if record, decodeErr := syncrecords.DecodeImport([]byte(row.PayloadJSON)); decodeErr == nil {
-				paths := make([]string, 0, len(record.Paths))
-				for _, effect := range record.Paths {
-					paths = append(paths, effect.Path)
-				}
-				latestImport["import_id"] = record.ImportID
-				latestImport["target_commit"] = record.TargetCommit
-				reason := record.Reason
-				switch row.State {
-				case "recovering", "uncertain":
-					reason = "partial_effect"
-				case "deferred":
-					if reason == "none" {
-						if journals, journalErr := concrete.LoadSyncJournals(requestCtx(), row.JobID); journalErr == nil && len(journals) > 0 {
-							var evidence map[string]any
-							if json.Unmarshal([]byte(journals[len(journals)-1].EvidenceJSON), &evidence) == nil {
-								if journalReason, ok := evidence["reason"].(string); ok && journalReason != "" {
-									reason = journalReason
-								}
-							}
-						}
-					}
-				}
-				latestImport["reason"] = reason
-				latestImport["target_paths"] = paths
-			}
-		} else if !errors.Is(loadErr, sql.ErrNoRows) {
-			return syncStoreError(stderr, command, loadErr)
+		latestPublication, err := latestSyncJobStatus(concrete, group, "publication")
+		if err != nil {
+			return syncStoreError(stderr, command, err)
+		}
+		latestDelivery, err := latestSyncJobStatus(concrete, group, "delivery")
+		if err != nil {
+			return syncStoreError(stderr, command, err)
+		}
+		latestImport, err := latestSyncJobStatus(concrete, group, "import")
+		if err != nil {
+			return syncStoreError(stderr, command, err)
 		}
 		return writeEnvelope(stdout, command, map[string]any{
 			"schema_version": "agent-dispatch.sync-status/v1", "group_id": group,
 			"state": control.State, "reason": control.Reason, "control_revision": control.Revision,
 			"config_revision": revision, "control_config_current": control.ConfigRevision == revision,
 			"import_acknowledgement_current": config.SyncAcknowledgementCurrent(cfg, incarnation),
+			"latest_publication":             latestPublication,
+			"latest_delivery":                latestDelivery,
 			"latest_import":                  latestImport,
 			"side_effects":                   []string{},
 		})
@@ -151,6 +133,67 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		}
 		return usageError(stderr, "sync", "unknown or incomplete sync command")
 	}
+}
+
+// latestSyncJobStatus keeps publication, delivery, and import outcomes
+// separate. A malformed retained payload must not hide the durable job head;
+// the common fields remain visible and only the optional typed details drop.
+func latestSyncJobStatus(store *sqlite.Store, groupID, kind string) (map[string]any, error) {
+	row, err := store.LoadLatestSyncJob(requestCtx(), groupID, kind)
+	if errors.Is(err, sql.ErrNoRows) {
+		return map[string]any{"present": false}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	result := map[string]any{
+		"present":     true,
+		"job_id":      row.JobID,
+		"logical_key": row.LogicalKey,
+		"state":       row.State,
+		"updated_at":  row.UpdatedAt,
+		"resolved":    row.ResolvedAt != "",
+		"fence":       row.Fence,
+		"claimed":     row.ClaimOwner != "",
+	}
+	var payload map[string]any
+	if json.Unmarshal([]byte(row.PayloadJSON), &payload) == nil {
+		for _, key := range []string{"publication_id", "import_id", "target_commit", "receiver"} {
+			if value, ok := payload[key].(string); ok && value != "" {
+				result[key] = value
+			}
+		}
+	}
+	if kind != "import" {
+		return result, nil
+	}
+	record, decodeErr := syncrecords.DecodeImport([]byte(row.PayloadJSON))
+	if decodeErr != nil {
+		return result, nil
+	}
+	paths := make([]string, 0, len(record.Paths))
+	for _, effect := range record.Paths {
+		paths = append(paths, effect.Path)
+	}
+	reason := record.Reason
+	switch row.State {
+	case "recovering", "uncertain":
+		reason = "partial_effect"
+	case "deferred":
+		if reason == "none" {
+			if journals, journalErr := store.LoadSyncJournals(requestCtx(), row.JobID); journalErr == nil && len(journals) > 0 {
+				var evidence map[string]any
+				if json.Unmarshal([]byte(journals[len(journals)-1].EvidenceJSON), &evidence) == nil {
+					if journalReason, ok := evidence["reason"].(string); ok && journalReason != "" {
+						reason = journalReason
+					}
+				}
+			}
+		}
+	}
+	result["reason"] = reason
+	result["target_paths"] = paths
+	return result, nil
 }
 
 func syncCommandPath(args []string) string {

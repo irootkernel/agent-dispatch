@@ -64,6 +64,25 @@ enters SQLite or logs. On Linux prefer `env:`, `file:`, or `fd:` —
 a `keychain:` reference fails closed naming the unsupported kind
 (D-029, E19-T6).
 
+### 2b. Sync Git and OpenSSH prerequisites
+
+The E21 manual sync workflow requires Git, `ssh`, and `ssh-keygen` on every
+participating host. Git must support SSH commit signing and the configured
+publisher and administrator keys must be OpenSSH Ed25519 keys. Agent Dispatch
+does not inherit interactive prompts, credential helpers, user SSH
+configuration, hooks, filters/LFS, recursive submodules, proxy overrides, or
+URL rewrite rules. SSH remotes use batch mode and strict host-key checking;
+only a deliberately inherited `SSH_AUTH_SOCK` may supply transport credentials.
+
+Public HTTPS fetches may work, but credential-helper-based private HTTPS
+remotes are unsupported because helpers and prompts are disabled. The `file`
+and `ext` protocols, redirects, force updates, merge/rebase/stash/reset/clean,
+symlinks, executable entries, submodules, attachments, and non-Markdown content
+are outside the E21 sync surface and fail closed. NFC plus Unicode case-fold
+path aliases are rejected on every supported platform, even when the current
+filesystem is case-sensitive. These restrictions apply equally on
+`darwin/arm64`, `linux/amd64`, and `linux/arm64`.
+
 Watchman uses a minimal environment. Configure the Hermes target's `executable`
 as an absolute path, such as `/Users/<user>/.local/bin/hermes`. A PATH-relative
 executable that works in a terminal may leave trigger delivery in `retry_wait`

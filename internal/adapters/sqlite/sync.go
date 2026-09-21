@@ -341,6 +341,57 @@ func (s *Store) HoldSyncControl(ctx context.Context, groupID, reason, configRevi
 	return row, nil
 }
 
+// ReconcileAdoptedMembership applies the protected-effect posture of a
+// verified membership revision. Emergency mode is armed before the caller
+// moves its local membership ref; normal mode clears only an earlier
+// membership emergency after that ref has been adopted.
+func (s *Store) ReconcileAdoptedMembership(ctx context.Context, groupID, mode, membershipRevision, configRevision, now string) (SyncControlRow, error) {
+	if (mode != "normal" && mode != "blocked_emergency") || membershipRevision == "" {
+		return SyncControlRow{}, ErrSyncPrecondition
+	}
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return SyncControlRow{}, err
+	}
+	defer tx.Rollback()
+	var control SyncControlRow
+	if err := tx.QueryRowContext(ctx, `SELECT group_id,revision,state,reason,config_revision,updated_at FROM sync_controls WHERE group_id=?`, groupID).Scan(&control.GroupID, &control.Revision, &control.State, &control.Reason, &control.ConfigRevision, &control.UpdatedAt); err != nil {
+		return SyncControlRow{}, err
+	}
+	targetState, targetReason := control.State, control.Reason
+	if mode == "blocked_emergency" {
+		targetState, targetReason = "blocked", "membership_emergency"
+	} else if control.State == "blocked" && control.Reason == "membership_emergency" {
+		targetState, targetReason = "active", "none"
+	}
+	if targetState == control.State && targetReason == control.Reason && (targetState != "active" || control.ConfigRevision == configRevision) {
+		return control, nil
+	}
+	previous := control.State
+	control.Revision++
+	control.State, control.Reason, control.ConfigRevision, control.UpdatedAt = targetState, targetReason, configRevision, now
+	res, err := tx.ExecContext(ctx, `UPDATE sync_controls SET revision=?,state=?,reason=?,config_revision=?,updated_at=? WHERE group_id=? AND revision=?`, control.Revision, control.State, control.Reason, control.ConfigRevision, control.UpdatedAt, control.GroupID, control.Revision-1)
+	if err != nil {
+		return SyncControlRow{}, err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return SyncControlRow{}, ErrSyncPrecondition
+	}
+	contextJSON, _ := json.Marshal(map[string]any{"reason": control.Reason, "config_revision": control.ConfigRevision, "revision": control.Revision, "membership_revision": membershipRevision})
+	if _, err := tx.ExecContext(ctx, `INSERT INTO state_transitions(transition_id,entity_type,entity_id,from_state,to_state,recorded_at,context_json) VALUES (?,?,?,?,?,?,?)`, fmt.Sprintf("sync-control:%s:%d", control.GroupID, control.Revision), "sync_control", control.GroupID, previous, control.State, now, string(contextJSON)); err != nil {
+		return SyncControlRow{}, err
+	}
+	if mode == "normal" {
+		if err := resolveBlockedSyncJobs(ctx, tx, groupID, map[string]bool{"membership": true}, "membership_replaced", membershipRevision, now); err != nil {
+			return SyncControlRow{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return SyncControlRow{}, err
+	}
+	return control, nil
+}
+
 // ReconcileSyncControlCheckpoint clears only a conflict/trust/recovery hold
 // after the caller has verified the exact administrator checkpoint at the
 // local and approved remote head.
@@ -365,6 +416,9 @@ func (s *Store) ReconcileSyncControlCheckpoint(ctx context.Context, groupID stri
 	}
 	contextJSON, _ := json.Marshal(map[string]any{"reason": "checkpoint_reconciled", "checkpoint_commit": checkpointCommit, "config_revision": configRevision, "revision": row.Revision})
 	if _, err := tx.ExecContext(ctx, `INSERT INTO state_transitions(transition_id,entity_type,entity_id,from_state,to_state,recorded_at,context_json) VALUES (?,?,?,?,?,?,?)`, fmt.Sprintf("sync-control:%s:%d", groupID, row.Revision), "sync_control", groupID, previous, "active", now, string(contextJSON)); err != nil {
+		return SyncControlRow{}, err
+	}
+	if err := resolveBlockedSyncJobs(ctx, tx, groupID, map[string]bool{"publication": true, "checkpoint": true, "import": true}, "checkpoint_reconciled", checkpointCommit, now); err != nil {
 		return SyncControlRow{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -591,6 +645,9 @@ func (s *Store) FinishMembershipJob(ctx context.Context, jobID, owner string, fe
 	if job.Kind != "membership" || job.ClaimOwner != owner || job.Fence != fence || timeBefore(job.ClaimExpiresAt, now) {
 		return SyncControlRow{}, ErrSyncPrecondition
 	}
+	if err := requireSyncTransition(job.Kind, job.State, "applied"); err != nil {
+		return SyncControlRow{}, err
+	}
 	if journal.JobID != jobID || journal.Fence != fence || journal.JournalID == "" || journal.RecordedAt != now || journal.Phase != "membership" || journal.Outcome != "applied" {
 		return SyncControlRow{}, fmt.Errorf("membership terminal journal does not bind the confirmed apply")
 	}
@@ -630,6 +687,11 @@ func (s *Store) FinishMembershipJob(ctx context.Context, jobID, owner string, fe
 		if _, err := tx.ExecContext(ctx, `INSERT INTO state_transitions
 			(transition_id, entity_type, entity_id, from_state, to_state, recorded_at, context_json)
 			VALUES (?,?,?,?,?,?,?)`, fmt.Sprintf("sync-control:%s:%d", control.GroupID, control.Revision), "sync_control", control.GroupID, previous, control.State, now, string(contextJSON)); err != nil {
+			return SyncControlRow{}, err
+		}
+	}
+	if mode == "normal" {
+		if err := resolveBlockedSyncJobs(ctx, tx, job.GroupID, map[string]bool{"membership": true}, "membership_replaced", jobID, now); err != nil {
 			return SyncControlRow{}, err
 		}
 	}
@@ -714,6 +776,9 @@ func (s *Store) BeginImportApply(ctx context.Context, jobID, owner, resourceID s
 	if row.Kind != "import" || row.ClaimOwner != owner || row.Fence != fence || timeBefore(row.ClaimExpiresAt, now) || (row.State != "validated" && row.State != "recovering" && row.State != "applying") {
 		return ErrSyncPrecondition
 	}
+	if err := requireSyncTransition(row.Kind, row.State, "applying"); err != nil {
+		return err
+	}
 	if journal.JobID != jobID || journal.Fence != fence || journal.Phase != "import" || journal.Outcome != "started" || journal.RecordedAt != now || journal.JournalID == "" {
 		return fmt.Errorf("import pre-apply journal does not bind the exact job")
 	}
@@ -769,6 +834,9 @@ func (s *Store) BeginControllerImportApply(ctx context.Context, jobID, owner str
 	if err != nil || !record.ControllerOnly || len(record.Paths) != 0 || row.Kind != "import" || row.ClaimOwner != owner || row.Fence != fence || timeBefore(row.ClaimExpiresAt, now) || (row.State != "validated" && row.State != "recovering" && row.State != "applying") {
 		return ErrSyncPrecondition
 	}
+	if err := requireSyncTransition(row.Kind, row.State, "applying"); err != nil {
+		return err
+	}
 	if journal.JobID != jobID || journal.Fence != fence || journal.Phase != "import" || journal.Outcome != "started" || journal.RecordedAt != now || journal.JournalID == "" {
 		return fmt.Errorf("controller import pre-apply journal does not bind the exact job")
 	}
@@ -803,6 +871,9 @@ func (s *Store) FinishRecoveredControllerImportJob(ctx context.Context, jobID st
 	record, err := syncrecords.DecodeImport([]byte(row.PayloadJSON))
 	if err != nil || !record.ControllerOnly || len(record.Paths) != 0 || row.Kind != "import" || row.Fence != expectedFence || (row.State != "applying" && row.State != "recovering" && row.State != "uncertain") || (row.ClaimOwner != "" && !timeBefore(row.ClaimExpiresAt, now)) {
 		return ErrSyncPrecondition
+	}
+	if err := requireSyncTransition(row.Kind, row.State, "applied"); err != nil {
+		return err
 	}
 	if journal.JobID != jobID || journal.Fence != expectedFence || journal.Phase != "import" || journal.Outcome != "applied" || journal.RecordedAt != now || journal.JournalID == "" {
 		return fmt.Errorf("recovered controller import journal does not bind confirmation")
@@ -839,6 +910,9 @@ func (s *Store) PrepareControllerImportRecovery(ctx context.Context, jobID strin
 	record, err := syncrecords.DecodeImport([]byte(row.PayloadJSON))
 	if err != nil || !record.ControllerOnly || row.Kind != "import" || row.Fence != expectedFence || (row.State != "applying" && row.State != "recovering" && row.State != "uncertain") || (row.ClaimOwner != "" && !timeBefore(row.ClaimExpiresAt, now)) {
 		return ErrSyncPrecondition
+	}
+	if err := requireSyncTransition(row.Kind, row.State, state); err != nil {
+		return err
 	}
 	wantOutcome := "effect_unknown"
 	if state == "validated" {
@@ -887,16 +961,21 @@ func (s *Store) ReopenDeferredImport(ctx context.Context, jobID, expectedConfigR
 	if err != nil {
 		return SyncJobRow{}, err
 	}
-	var controlState, controlRevision string
-	if err := tx.QueryRowContext(ctx, `SELECT state,config_revision FROM sync_controls WHERE group_id=?`, row.GroupID).Scan(&controlState, &controlRevision); err != nil {
+	var controlState, controlReason, controlRevision string
+	if err := tx.QueryRowContext(ctx, `SELECT state,reason,config_revision FROM sync_controls WHERE group_id=?`, row.GroupID).Scan(&controlState, &controlReason, &controlRevision); err != nil {
 		return SyncJobRow{}, err
-	}
-	if row.Kind != "import" || row.State != "deferred" || row.ResolvedAt == "" || row.ClaimOwner != "" || controlState != "active" || controlRevision != expectedConfigRevision {
-		return SyncJobRow{}, ErrSyncPrecondition
 	}
 	var admitted syncrecords.Import
 	if err := json.Unmarshal([]byte(row.PayloadJSON), &admitted); err != nil || admitted.State != "validated" || admitted.Reason != "none" {
 		return SyncJobRow{}, ErrSyncPrecondition
+	}
+	controllerRepair := admitted.ControllerOnly && controlState == "blocked" &&
+		(controlReason == "conflict" || controlReason == "trust_failure" || controlReason == "recovery_required")
+	if row.Kind != "import" || row.State != "deferred" || row.ResolvedAt == "" || row.ClaimOwner != "" || (controlState != "active" && !controllerRepair) || controlRevision != expectedConfigRevision {
+		return SyncJobRow{}, ErrSyncPrecondition
+	}
+	if err := requireSyncTransition(row.Kind, row.State, "validated"); err != nil {
+		return SyncJobRow{}, err
 	}
 	if journal.JobID != jobID || journal.Fence != row.Fence || journal.Phase != "claim_recovery" || journal.Outcome != "effect_not_started" || journal.RecordedAt != now || journal.JournalID == "" {
 		return SyncJobRow{}, fmt.Errorf("deferred import reopen journal does not bind the job")
@@ -949,6 +1028,9 @@ func (s *Store) finishImportJob(ctx context.Context, jobID, owner, resourceID st
 	}
 	if row.Kind != "import" || row.State != "applying" || row.ClaimOwner != owner || row.Fence != fence || timeBefore(row.ClaimExpiresAt, now) {
 		return ErrSyncPrecondition
+	}
+	if err := requireSyncTransition(row.Kind, row.State, "applied"); err != nil {
+		return err
 	}
 	if journal.JobID != jobID || journal.Fence != fence || journal.Phase != "import" || journal.Outcome != "applied" || journal.RecordedAt != now || journal.JournalID == "" {
 		return fmt.Errorf("import terminal journal does not bind the exact job")
@@ -1139,6 +1221,9 @@ func (s *Store) FinishPublicationJob(ctx context.Context, jobID, owner string, f
 	if job.Kind != "publication" || job.ClaimOwner != owner || job.Fence != fence || timeBefore(job.ClaimExpiresAt, now) {
 		return SyncJobRow{}, ErrSyncPrecondition
 	}
+	if err := requireSyncTransition(job.Kind, job.State, "published"); err != nil {
+		return SyncJobRow{}, err
+	}
 	if journal.JobID != jobID || journal.Fence != fence || journal.Phase != "publication" || journal.Outcome != "published" || journal.RecordedAt != now || journal.JournalID == "" {
 		return SyncJobRow{}, fmt.Errorf("publication terminal journal does not bind confirmation")
 	}
@@ -1209,6 +1294,9 @@ func (s *Store) FinishRecoveredPublicationJob(ctx context.Context, jobID string,
 	if job.Kind != "publication" || job.Fence != expectedFence || (job.State != "signed" && job.State != "push_pending" && job.State != "uncertain") || (job.ClaimOwner != "" && !timeBefore(job.ClaimExpiresAt, now)) {
 		return SyncJobRow{}, ErrSyncPrecondition
 	}
+	if err := requireSyncTransition(job.Kind, job.State, "published"); err != nil {
+		return SyncJobRow{}, err
+	}
 	if journal.JobID != jobID || journal.Fence != expectedFence || journal.Phase != "publication" || journal.Outcome != "published" || journal.RecordedAt != now || journal.JournalID == "" {
 		return SyncJobRow{}, fmt.Errorf("recovered publication journal does not bind confirmation")
 	}
@@ -1273,6 +1361,9 @@ func (s *Store) FinishRecoveredCheckpointJob(ctx context.Context, jobID string, 
 	}
 	if job.Kind != "checkpoint" || job.Fence != expectedFence || (job.State != "applying" && job.State != "uncertain") || (job.ClaimOwner != "" && !timeBefore(job.ClaimExpiresAt, now)) {
 		return ErrSyncPrecondition
+	}
+	if err := requireSyncTransition(job.Kind, job.State, "applied"); err != nil {
+		return err
 	}
 	if journal.JobID != jobID || journal.Fence != expectedFence || journal.Phase != "checkpoint" || journal.Outcome != "applied" || journal.RecordedAt != now || journal.JournalID == "" {
 		return fmt.Errorf("recovered checkpoint journal does not bind confirmation")
@@ -1358,6 +1449,13 @@ func (s *Store) ReconcileExpiredSyncClaim(ctx context.Context, jobID string, exp
 	if row.Fence != expectedFence || row.ClaimOwner == "" || !timeBefore(row.ClaimExpiresAt, now) {
 		return ErrSyncPrecondition
 	}
+	targetState := row.State
+	if disposition == "effect_unknown" {
+		targetState = unknownSyncState(row.Kind)
+	}
+	if err := requireSyncTransition(row.Kind, row.State, targetState); err != nil {
+		return err
+	}
 	if journal.JobID != jobID || journal.Fence != expectedFence || journal.JournalID == "" || journal.RecordedAt != now || journal.Phase != "claim_recovery" || journal.Outcome != disposition {
 		return fmt.Errorf("recovery journal does not bind the expired claim")
 	}
@@ -1399,6 +1497,9 @@ func (s *Store) PrepareImportRecovery(ctx context.Context, jobID string, expecte
 	if row.Kind != "import" || (row.State != "applying" && row.State != "recovering") || row.Fence != expectedFence || row.ClaimOwner == "" || !timeBefore(row.ClaimExpiresAt, now) {
 		return ErrSyncPrecondition
 	}
+	if err := requireSyncTransition(row.Kind, row.State, state); err != nil {
+		return err
+	}
 	expectedOutcome := "effect_unknown"
 	if state == "validated" {
 		expectedOutcome = "effect_not_started"
@@ -1439,6 +1540,9 @@ func (s *Store) ReconcileUncertainPublication(ctx context.Context, jobID string,
 	if row.Kind != "publication" || row.State != "uncertain" || row.Fence != expectedFence || row.ClaimOwner != "" {
 		return ErrSyncPrecondition
 	}
+	if err := requireSyncTransition(row.Kind, row.State, "signed"); err != nil {
+		return err
+	}
 	if journal.JobID != jobID || journal.Fence != expectedFence || journal.Phase != "claim_recovery" || journal.Outcome != "effect_not_started" || journal.RecordedAt != now || journal.JournalID == "" {
 		return fmt.Errorf("uncertain publication recovery evidence does not bind the job")
 	}
@@ -1470,6 +1574,9 @@ func (s *Store) ReconcileUncertainCheckpoint(ctx context.Context, jobID string, 
 	}
 	if row.Kind != "checkpoint" || row.State != "uncertain" || row.Fence != expectedFence || row.ClaimOwner != "" {
 		return ErrSyncPrecondition
+	}
+	if err := requireSyncTransition(row.Kind, row.State, "applying"); err != nil {
+		return err
 	}
 	if journal.JobID != jobID || journal.Fence != expectedFence || journal.Phase != "claim_recovery" || journal.Outcome != "effect_not_started" || journal.RecordedAt != now || journal.JournalID == "" {
 		return fmt.Errorf("uncertain checkpoint recovery evidence does not bind the job")
@@ -1546,6 +1653,7 @@ func validSyncTransition(kind, from, to string) bool {
 			"prepared":     {"prepared": true, "signed": true, "blocked": true, "uncertain": true},
 			"signed":       {"signed": true, "push_pending": true, "published": true, "blocked": true, "uncertain": true},
 			"push_pending": {"push_pending": true, "published": true, "blocked": true, "uncertain": true},
+			"uncertain":    {"uncertain": true, "signed": true, "published": true},
 		},
 		"delivery": {
 			"pending":   {"pending": true, "attempted": true, "accepted": true, "retryable": true, "unknown": true, "refused": true},
@@ -1553,11 +1661,13 @@ func validSyncTransition(kind, from, to string) bool {
 			"retryable": {"attempted": true, "accepted": true, "retryable": true, "unknown": true, "refused": true},
 		},
 		"import": {
-			"requested":  {"requested": true, "fetched": true, "deferred": true, "blocked": true},
-			"fetched":    {"fetched": true, "validated": true, "deferred": true, "blocked": true},
+			"requested":  {"requested": true, "fetched": true, "deferred": true, "blocked": true, "uncertain": true},
+			"fetched":    {"fetched": true, "validated": true, "deferred": true, "blocked": true, "uncertain": true},
 			"validated":  {"validated": true, "applying": true, "deferred": true, "blocked": true, "uncertain": true},
 			"applying":   {"applying": true, "validated": true, "applied": true, "deferred": true, "recovering": true, "uncertain": true},
-			"recovering": {"recovering": true, "validated": true, "applied": true, "uncertain": true},
+			"recovering": {"recovering": true, "validated": true, "applying": true, "applied": true, "uncertain": true},
+			"deferred":   {"validated": true},
+			"uncertain":  {"uncertain": true, "validated": true, "applied": true},
 		},
 		"verification": {
 			"planned":    {"planned": true, "collecting": true, "blocked": true, "expired": true},
@@ -1569,11 +1679,65 @@ func validSyncTransition(kind, from, to string) bool {
 			"applying": {"applying": true, "applied": true, "blocked": true, "uncertain": true},
 		},
 		"checkpoint": {
-			"planned":  {"planned": true, "applying": true, "applied": true, "blocked": true, "uncertain": true},
-			"applying": {"applying": true, "applied": true, "blocked": true, "uncertain": true},
+			"planned":   {"planned": true, "applying": true, "applied": true, "blocked": true, "uncertain": true},
+			"applying":  {"applying": true, "applied": true, "blocked": true, "uncertain": true},
+			"uncertain": {"uncertain": true, "applying": true, "applied": true},
 		},
 	}
 	return edges[kind][from][to]
+}
+
+func requireSyncTransition(kind, from, to string) error {
+	if !validSyncTransition(kind, from, to) {
+		return fmt.Errorf("state transition %q -> %q is invalid for sync job kind %q", from, to, kind)
+	}
+	return nil
+}
+
+func resolveBlockedSyncJobs(ctx context.Context, tx *sql.Tx, groupID string, kinds map[string]bool, resolution, resolverID, now string) error {
+	rows, err := tx.QueryContext(ctx, `SELECT job_id,fence,kind FROM sync_jobs
+		WHERE group_id=? AND state='blocked' AND resolved_at IS NULL ORDER BY job_id`, groupID)
+	if err != nil {
+		return err
+	}
+	type blockedJob struct {
+		id    string
+		fence int64
+		kind  string
+	}
+	var jobs []blockedJob
+	for rows.Next() {
+		var job blockedJob
+		if err := rows.Scan(&job.id, &job.fence, &job.kind); err != nil {
+			rows.Close()
+			return err
+		}
+		if kinds[job.kind] {
+			jobs = append(jobs, job)
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, job := range jobs {
+		evidence, _ := json.Marshal(map[string]any{"resolution": resolution, "resolver_id": resolverID})
+		digest := sha256.Sum256([]byte(resolution + "\x00" + resolverID + "\x00" + job.id))
+		journalID := fmt.Sprintf("sync-resolution-%x", digest[:16])
+		if _, err := tx.ExecContext(ctx, `INSERT INTO sync_journal_entries
+			(journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES(?,?,?,?,?,?,?)`,
+			journalID, job.id, job.fence, job.kind, "ok", string(evidence), now); err != nil {
+			return err
+		}
+		res, err := tx.ExecContext(ctx, `UPDATE sync_jobs SET retain_until_resolved=0,resolved_at=?
+			WHERE job_id=? AND state='blocked' AND resolved_at IS NULL`, now, job.id)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n != 1 {
+			return ErrSyncPrecondition
+		}
+	}
+	return nil
 }
 
 func claimableSyncState(kind, state string) bool {

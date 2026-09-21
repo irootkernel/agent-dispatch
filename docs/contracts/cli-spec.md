@@ -86,7 +86,10 @@ live mutation; overlap, untracked collision, Git instability, divergence,
 uncovered history, trust failure, and partial effects stay inspectable. An
 exact administrator checkpoint at both local and approved remote heads is the
 only reconciliation evidence that clears conflict/trust/recovery control.
-Deferred safety fences are exit-0 dispositions with no live mutation. A
+Deferred safety fences, including active participating writers, are exit-0
+dispositions with no live mutation. A controller operation that fails after
+the no-effect fence has been re-proven is retryable at exit 10; it leaves the
+same durable identity ready for re-entry. A
 conflict or protected-claim block exits 14, an unprovable partial effect exits
 13, and membership, signature, or covered-history trust failure exits 30; each
 still emits the versioned reconcile result with its durable state and reason.

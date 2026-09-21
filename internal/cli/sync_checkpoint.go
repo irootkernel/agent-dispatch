@@ -369,7 +369,7 @@ func checkpointControlMatches(kind string, control sqlite.SyncControlRow) bool {
 }
 func finishCheckpointFailure(stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, owner, state, outcome, reason string) int {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, state, state == "blocked", sqlite.SyncJournalEntry{JournalID: randomSyncID("checkpoint-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "checkpoint", Outcome: outcome, EvidenceJSON: mustJSON(map[string]any{"reason": reason}), RecordedAt: now}, now)
+	err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, state, false, sqlite.SyncJournalEntry{JournalID: randomSyncID("checkpoint-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "checkpoint", Outcome: outcome, EvidenceJSON: mustJSON(map[string]any{"reason": reason}), RecordedAt: now}, now)
 	if err != nil {
 		return syncStoreError(stderr, "sync checkpoint apply", err)
 	}

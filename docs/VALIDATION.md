@@ -652,6 +652,10 @@ unverified.
 
 ## Gate G16: Two-Node Sync Contract and Disabled Baseline (E20)
 
+This section is a historical G16 snapshot, not a statement about current
+behavior. G17 added runtime signature and linear-history verification after
+the contract-only G16 acceptance.
+
 Gate G16 closed 2026-09-19 on darwin/arm64 with Go 1.26.6. Fresh Codex Sol
 medium subagents approved the exact accepted revision
 `eb3dfe359f8a47edc0cb77cd424a322189e40ee9` with no High or Medium findings.
@@ -686,7 +690,7 @@ G16 and E20-T5; runtime sync implementation and evidence begin with E21-T1.
 
 G17 was qualified on 2026-09-21 with Go 1.26.6 against disposable repositories
 and state directories only. The focused command below passed on every D-029
-platform. It exercises the restricted Git adapter, schema v21/v22 persistence,
+platform. It exercises the restricted Git adapter, schema v21-v23 persistence,
 publication/import services, canonical sync records, and CLI integration:
 
 ```text
@@ -713,14 +717,14 @@ claimed here.
 
 | Criterion | Executable evidence |
 |---|---|
-| AC-1701 | `TestE21T3PublicationEligibilityBindsIdleRouteReceiptAndFacts`, `TestE21T3PausedControlRejectsNewPublicationAdmission`, and the snapshot fact-matching tests refuse publication before commit/push/delivery admission when the maintained snapshot is ineligible. |
+| AC-1701 | `TestE21T3PublicationEligibilityBindsIdleRouteReceiptAndFacts`, `TestE21T3PausedControlRejectsNewPublicationAdmission`, and the command-level ineligible arm of `TestE21T3PublishSignsFrozenSnapshotAndAdmitsDelivery` refuse publication before commit/push/delivery admission when the maintained snapshot is ineligible. |
 | AC-1702 | `TestE21T3PublishSignsFrozenSnapshotAndAdmitsDelivery` drives bootstrap, signed initial checkpoint, frozen Markdown publication, signature, confirmed fast-forward push, atomic peer obligation, and no-content no-op. |
-| AC-1703 | `TestPushAlreadyAtCandidateIsConfirmed` and `TestE21T3ConfirmedCandidateRecoveryReusesPublication` prove remote confirmation and same-identity settlement without duplicate delivery. |
-| AC-1704 | `TestG17TwoWritersPreserveBothHistoriesAfterFastForwardLoss` creates two signed children of one base, confirms one push, rejects the stale predecessor, and proves both commit objects and parent histories remain intact. |
+| AC-1703 | `TestPushAlreadyAtCandidateIsConfirmed` and the command-level recovery arm of `TestE21T3PublishSignsFrozenSnapshotAndAdmitsDelivery` prove remote confirmation and same-identity settlement without duplicate delivery. |
+| AC-1704 | `TestG17TwoWritersPreserveBothHistoriesAfterFastForwardLoss` and the command-level losing-fast-forward arm of `TestE21T3PublishSignsFrozenSnapshotAndAdmitsDelivery` preserve both commit objects, block the losing publication, and retain its unresolved evidence without merge, rebase, force push, reset, clean, or stash. |
 | AC-1705 | Restricted Git/import inspection, acknowledgement currentness, resource-writer, ignored/untracked alias, fetch classification, and deferred-reopen suites prove conservative deferral without destructive Git operations; `TestE21T5StatusSeparatesDurableSyncOutcomes` keeps publication, delivery, and import visible independently. |
-| AC-1706 | SQLite import-effect tests pin pre-apply effects, fences, applying/recovery attribution, exact one-use consumption, controller-only recovery, and atomic completion. |
+| AC-1706 | SQLite import-effect tests pin pre-apply effects, fences, applying/recovery attribution, exact one-use consumption, controller-only recovery, atomic completion, and the attribution-linked observation's longer retention horizon. |
 | AC-1707 | `TestApplyPreservesDisjointFilesAndDetectsLateEdit` plus newest-effect/duplicate-attribution tests retain contradictory and late edits as ordinary dirty work. |
-| AC-1708 | Membership domain, CLI, SQLite emergency, and `TestSignedMembershipUsesPinnedEd25519AndClosedTree` cover the closed change vocabulary, administrator signature, expected predecessor, fixed tree, non-force push, pair restoration, and removed-key first-seen refusal. |
+| AC-1708 | Membership domain, CLI, SQLite emergency, the peer-fetch arm of `TestE21T3PublishSignsFrozenSnapshotAndAdmitsDelivery`, and `TestSignedMembershipUsesPinnedEd25519AndClosedTree` cover the closed change vocabulary, administrator signature, expected predecessor, fetched emergency hold, fixed tree, non-force push, pair restoration, and removed-key first-seen refusal. |
 | AC-1709 | Checkpoint plan binding, confirmed-candidate recovery, content-history validation, and checkpoint-gated control reconciliation bind the exact target while leaving uncovered history blocked. |
 | AC-1710 | `TestImportIndexPreservesDisjointDirtyPath`, ignored/case-alias collision coverage, and guarded import service tests prove exact target-path application with disjoint bytes preserved and dirty. |
 | AC-1711 | Snapshot resource guards and immutable private-index capture prevent mixed attestations; signed-candidate publication/checkpoint recovery reuses the durable candidate, while only explicit CLI publication resolves the signing key. |

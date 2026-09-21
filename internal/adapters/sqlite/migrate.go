@@ -54,6 +54,7 @@ var Migrations = []Migration{
 	{Version: 20, Name: "schedule-at-overrides", SQL: schemaV20ScheduleAtOverrides},
 	{Version: 21, Name: "sync-jobs-controls-journals", SQL: schemaV21SyncJobsControlsJournals},
 	{Version: 22, Name: "sync-import-effects-attribution", SQL: schemaV22SyncImportEffectsAttribution},
+	{Version: 23, Name: "retain-blocked-sync-obligations", SQL: schemaV23RetainBlockedSyncObligations},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
@@ -163,6 +164,15 @@ CREATE TRIGGER sync_import_attributions_no_update BEFORE UPDATE ON sync_import_a
 BEGIN
 	SELECT RAISE(ABORT, 'sync import attribution is append-only');
 END;
+`
+
+// schemaV23RetainBlockedSyncObligations repairs v21/v22 rows that were marked
+// resolved at the point they became blocked. A later membership replacement or
+// checkpoint reconciliation records the evidence that actually resolves them.
+const schemaV23RetainBlockedSyncObligations = `
+UPDATE sync_jobs
+SET retain_until_resolved = 1, resolved_at = NULL
+WHERE state = 'blocked';
 `
 
 // migrationVersion resolves one registered migration's version by

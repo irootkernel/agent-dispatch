@@ -347,6 +347,10 @@ ceilings.
 
 Resolved publication, delivery, import, and verification jobs use the
 configured completed-receipt retention horizon, which defaults to 180 days.
+An observation consumed as exact import attribution follows that linked job's
+longer horizon instead of the ordinary 30-day observation horizon. Pruning
+removes the job-owned journal, effect, and attribution children before the
+released observation, in one transaction.
 Membership and checkpoint evidence is retained for the
 life of the group. Any `blocked`, `recovering`, `uncertain`, uncovered-history,
 or unresolved predecessor obligation is exempt from age pruning until a newer

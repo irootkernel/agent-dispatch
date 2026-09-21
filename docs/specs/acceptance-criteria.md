@@ -199,6 +199,11 @@ The release gate is cumulative. A later gate cannot pass while an earlier gate i
 
 ### G16: Two-Node Sync Contract and Disabled Baseline
 
+G16 records the earlier contract-only acceptance boundary. The phrase
+"without claiming runtime signature verification" is historical, not a
+description of the current runtime. G17 added live signed-membership and
+linear-history verification.
+
 | ID | Given / When / Then |
 |---|---|
 | AC-1601 | Given an existing v0.1.8 configuration with no sync block, when it is loaded and a side-effect-free ordinary inspection command runs, then its behavior is unchanged and no new sync-attributable Git, network, service, or live-tree side effect occurs. |

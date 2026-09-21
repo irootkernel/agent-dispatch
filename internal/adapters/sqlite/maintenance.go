@@ -231,8 +231,11 @@ func (s *Store) planRemaining(ctx context.Context, plan *PrunePlan, terminal str
 	}
 	if err := s.QueryRowContext(ctx, prunable+`SELECT COUNT(*) FROM source_observations o WHERE o.observed_at < ?
 		 AND NOT EXISTS (SELECT 1 FROM batch_observations bo WHERE bo.observation_id = o.observation_id
-		                  AND bo.batch_id NOT IN (SELECT batch_id FROM prunable_batches))`,
-		append(append([]any{}, args...), c.Observations)...).Scan(&plan.Counts.Observations); err != nil {
+		                  AND bo.batch_id NOT IN (SELECT batch_id FROM prunable_batches))
+		 AND NOT EXISTS (SELECT 1 FROM sync_import_attributions a JOIN sync_jobs j ON j.job_id=a.job_id
+		                  WHERE a.observation_id=o.observation_id
+		                  AND NOT (j.retain_until_resolved=0 AND j.resolved_at IS NOT NULL AND j.resolved_at < ?))`,
+		append(append([]any{}, args...), c.Observations, c.CompletedReceipts)...).Scan(&plan.Counts.Observations); err != nil {
 		return fmt.Errorf("planning observation prune: %w", err)
 	}
 	if err := s.QueryRowContext(ctx, `SELECT COUNT(*) FROM path_facts WHERE observed_at < ?`, c.Observations).Scan(&plan.Counts.PathFacts); err != nil {
@@ -338,8 +341,22 @@ func (s *Store) ExecutePrune(ctx context.Context, cutoffs PruneCutoffs, actor, r
 		 AND NOT EXISTS (SELECT 1 FROM quarantine_items q WHERE q.batch_id = change_batches.batch_id)`, c.Observations); err != nil {
 		return counts, err
 	}
+	// Sync jobs prune before observations because import-attribution rows
+	// cascade from their effects. This releases the observation foreign key in
+	// the same transaction once the completed sync evidence reaches its longer
+	// retention horizon.
+	if counts.SyncJournals, err = exec("sync journals", `DELETE FROM sync_journal_entries WHERE job_id IN (
+		SELECT job_id FROM sync_jobs WHERE retain_until_resolved = 0 AND resolved_at IS NOT NULL AND resolved_at < ?)`, c.CompletedReceipts); err != nil {
+		return counts, err
+	}
+	if counts.SyncJobs, err = exec("sync jobs", `DELETE FROM sync_jobs
+		WHERE retain_until_resolved = 0 AND resolved_at IS NOT NULL AND resolved_at < ?`, c.CompletedReceipts); err != nil {
+		return counts, err
+	}
 	if counts.Observations, err = exec("observations",
-		`DELETE FROM source_observations WHERE observed_at < ? AND NOT EXISTS (SELECT 1 FROM batch_observations bo WHERE bo.observation_id = source_observations.observation_id)`, c.Observations); err != nil {
+		`DELETE FROM source_observations WHERE observed_at < ?
+		 AND NOT EXISTS (SELECT 1 FROM batch_observations bo WHERE bo.observation_id = source_observations.observation_id)
+		 AND NOT EXISTS (SELECT 1 FROM sync_import_attributions a WHERE a.observation_id = source_observations.observation_id)`, c.Observations); err != nil {
 		return counts, err
 	}
 	// The retention cut is a durable path-fact mutation: every resource
@@ -372,14 +389,6 @@ func (s *Store) ExecutePrune(ctx context.Context, cutoffs PruneCutoffs, actor, r
 	}
 	if counts.Notifications, err = exec("notifications",
 		`DELETE FROM notification_events WHERE state IN ('delivered','refused') AND resolved_at IS NOT NULL AND resolved_at < ?`, c.Notifications); err != nil {
-		return counts, err
-	}
-	if counts.SyncJournals, err = exec("sync journals", `DELETE FROM sync_journal_entries WHERE job_id IN (
-		SELECT job_id FROM sync_jobs WHERE retain_until_resolved = 0 AND resolved_at IS NOT NULL AND resolved_at < ?)`, c.CompletedReceipts); err != nil {
-		return counts, err
-	}
-	if counts.SyncJobs, err = exec("sync jobs", `DELETE FROM sync_jobs
-		WHERE retain_until_resolved = 0 AND resolved_at IS NOT NULL AND resolved_at < ?`, c.CompletedReceipts); err != nil {
 		return counts, err
 	}
 	detail, _ := json.Marshal(map[string]any{"actor": actor, "reason": reason, "cutoffs": cutoffs, "counts": counts})

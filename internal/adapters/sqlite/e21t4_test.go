@@ -204,6 +204,86 @@ func TestE21T4ControllerOnlyImportHasDurableRecoveryBoundary(t *testing.T) {
 	}
 }
 
+func TestE21T4DeferredControllerImportReopensThroughCheckpointHold(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if _, err := s.EnsureSyncControl(ctx, "wiki-pair", "revision-1", syncT0); err != nil {
+		t.Fatal(err)
+	}
+	record := validE21T4Import(t, true)
+	payload, _ := syncrecords.CanonicalImport(record)
+	job, _, err := s.AdmitSyncJob(ctx, SyncJobInput{JobID: "import-controller-reopen", GroupID: "wiki-pair", Kind: "import", LogicalKey: record.ImportID, InitialState: "validated", PayloadJSON: string(payload), ConfigRevision: "revision-1", QueueLimit: 10, Now: syncT0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	job, err = s.ClaimSyncJob(ctx, job.JobID, "owner-controller-reopen", "revision-1", syncT0, syncT3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FinishSyncJob(ctx, job.JobID, "owner-controller-reopen", job.Fence, "deferred", true, SyncJournalEntry{JournalID: "controller-deferred", JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "deferred", EvidenceJSON: `{}`, RecordedAt: syncT1}, syncT1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.HoldSyncControl(ctx, "wiki-pair", "conflict", "revision-1", syncT1); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := s.ReopenDeferredImport(ctx, job.JobID, "revision-1", SyncJournalEntry{JournalID: "controller-reopened", JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: `{}`, RecordedAt: syncT2}, syncT2)
+	if err != nil || reopened.State != "validated" || reopened.ResolvedAt != "" {
+		t.Fatalf("controller reopen=%+v err=%v", reopened, err)
+	}
+	if _, err := s.ClaimSyncAdministrationJob(ctx, job.JobID, "owner-controller-retry", "revision-1", syncT2, syncT3); err != nil {
+		t.Fatalf("controller retry claim: %v", err)
+	}
+}
+
+func TestE21T4ImportAttributionRetainsObservationUntilSyncEvidencePrunes(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if _, err := s.EnsureSyncControl(ctx, "wiki-pair", "revision-1", syncT0); err != nil {
+		t.Fatal(err)
+	}
+	record := validE21T4Import(t, false)
+	payload, _ := syncrecords.CanonicalImport(record)
+	job, _, err := s.AdmitSyncJob(ctx, SyncJobInput{JobID: "import-retention", GroupID: "wiki-pair", Kind: "import", LogicalKey: record.ImportID, InitialState: "validated", PayloadJSON: string(payload), ConfigRevision: "revision-1", QueueLimit: 10, Now: syncT0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	job, err = s.ClaimSyncJob(ctx, job.JobID, "owner-retention", "revision-1", syncT0, syncT3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.BeginImportApply(ctx, job.JobID, "owner-retention", "vault-main", job.Fence, record.Paths, SyncJournalEntry{JournalID: "retention-start", JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "started", EvidenceJSON: `{}`, RecordedAt: syncT0}, syncT0); err != nil {
+		t.Fatal(err)
+	}
+	obs := ObservationRecord{ObservationID: "observation-import-retention", SchemaVersion: "agent-dispatch.source-observation/v1", SourceType: "watchman", SourceID: "source", TriggerName: "trigger", ResourceID: "vault-main", ObservedAt: syncT0, ReceivedAt: syncT0, RawPayloadDigest: record.Paths[0].After, IngestStatus: "accepted", FlagsJSON: `{}`, ImportAttributions: []ImportAttributionRecord{{JobID: job.JobID, Fence: job.Fence, Path: record.Paths[0].Path, AfterValue: record.Paths[0].After}}}
+	if err := s.SaveObservation(nil, obs); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FinishRecoveredImportJob(ctx, job.JobID, "owner-retention", "vault-main", job.Fence, 0, SyncJournalEntry{JournalID: "retention-finish", JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "applied", EvidenceJSON: `{}`, RecordedAt: syncT1}, syncT1); err != nil {
+		t.Fatal(err)
+	}
+	shortSyncCutoff := PruneCutoffs{Observations: syncT2, CompletedReceipts: syncT0}
+	plan, err := s.PlanPrune(ctx, shortSyncCutoff)
+	if err != nil || plan.Counts.Observations != 0 || plan.Counts.SyncJobs != 0 {
+		t.Fatalf("attributed observation pruned before sync evidence: plan=%+v err=%v", plan.Counts, err)
+	}
+	if _, err := s.ExecutePrune(ctx, shortSyncCutoff, "operator", "retention", syncT2); err != nil {
+		t.Fatal(err)
+	}
+	var observations int
+	if err := s.QueryRow(`SELECT COUNT(*) FROM source_observations WHERE observation_id=?`, obs.ObservationID).Scan(&observations); err != nil || observations != 1 {
+		t.Fatalf("attributed observation count=%d err=%v", observations, err)
+	}
+	longSyncCutoff := PruneCutoffs{Observations: syncT2, CompletedReceipts: syncT2}
+	plan, err = s.PlanPrune(ctx, longSyncCutoff)
+	if err != nil || plan.Counts.Observations != 1 || plan.Counts.SyncJobs != 1 || plan.Counts.SyncJournals != 2 {
+		t.Fatalf("joint prune plan=%+v err=%v", plan.Counts, err)
+	}
+	counts, err := s.ExecutePrune(ctx, longSyncCutoff, "operator", "retention", syncT3)
+	if err != nil || counts.Observations != 1 || counts.SyncJobs != 1 || counts.SyncJournals != 2 {
+		t.Fatalf("joint prune counts=%+v err=%v", counts, err)
+	}
+}
+
 func validE21T4Import(t *testing.T, controllerOnly bool) syncrecords.Import {
 	t.Helper()
 	paths := []syncrecords.ImportPath{{Path: "Inbox/a.md", Before: "absent", After: "sha256:" + strings.Repeat("e", 64)}}

@@ -624,7 +624,7 @@ func finishPublicationFailure(stderr io.Writer, store *sqlite.Store, job sqlite.
 
 func finishPublicationFailureWithEvidence(stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, owner, state, outcome, reason string, evidence map[string]any) int {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	resolved := state == "blocked"
+	resolved := false
 	if evidence == nil {
 		evidence = map[string]any{}
 	}

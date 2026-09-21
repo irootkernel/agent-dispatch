@@ -22,6 +22,13 @@ This file records concise shipped outcomes and pending changes.
 
 ### Fixed
 
+- Retain blocked sync obligations until a membership replacement or exact
+  checkpoint records recovery, and keep attributed observations through the
+  linked sync evidence horizon without foreign-key prune failures.
+- Apply fetched emergency membership before any protected effect, reopen safe
+  controller-only retries, and distinguish active writers from unstable Git.
+- Cover publication no-op, confirmed-candidate recovery, and fast-forward-loss
+  behavior through the public sync commands.
 - Isolate real-Watchman test legs on a disposable daemon so repeated test runs
   cannot exhaust or modify the operator's long-lived Watchman process.
 - Classify Watchman watcher-startup failures as target unavailable with

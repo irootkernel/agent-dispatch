@@ -256,7 +256,7 @@ func runSyncMembershipApply(args []string, stdout, stderr io.Writer) int {
 			"idempotent": false, "side_effects": []string{"git_objects_written", "remote_membership_ref_updated", "local_membership_ref_updated", "state_committed"},
 		})
 	case "rejected":
-		return finishClaimedMembership(stderr, concrete, job, owner, "blocked", true, "blocked", map[string]any{"candidate": candidate, "remote": push.RemoteOID, "reason": "non-force push rejected"}, terminalNow)
+		return finishClaimedMembership(stderr, concrete, job, owner, "blocked", false, "blocked", map[string]any{"candidate": candidate, "remote": push.RemoteOID, "reason": "non-force push rejected"}, terminalNow)
 	default:
 		return finishClaimedMembership(stderr, concrete, job, owner, "uncertain", false, "effect_unknown", map[string]any{"candidate": candidate, "remote": push.RemoteOID, "reason": "push outcome ambiguous"}, terminalNow)
 	}
@@ -275,7 +275,7 @@ func finishMembershipBeforeEffect(stderr io.Writer, store *sqlite.Store, job sql
 	}
 	claimed, err := store.ClaimSyncAdministrationJob(requestCtx(), job.JobID, owner, configRevision, now.Format(time.RFC3339Nano), now.Add(2*time.Minute).Format(time.RFC3339Nano))
 	if err == nil {
-		state, resolved := "blocked", true
+		state, resolved := "blocked", false
 		if retryable {
 			state, resolved = "planned", false
 		}

@@ -322,6 +322,116 @@ func TestE21T2MembershipEmergencyBlocksEffectsUntilSignedPairRecovery(t *testing
 	}
 }
 
+func TestE21T2FetchedMembershipModeReconcilesProtectedEffectHold(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if _, err := s.EnsureSyncControl(ctx, "wiki-pair", "cfg-1", syncT0); err != nil {
+		t.Fatal(err)
+	}
+	emergencyRevision := "1111111111111111111111111111111111111111"
+	blocked, err := s.ReconcileAdoptedMembership(ctx, "wiki-pair", "blocked_emergency", emergencyRevision, "cfg-1", syncT1)
+	if err != nil || blocked.State != "blocked" || blocked.Reason != "membership_emergency" {
+		t.Fatalf("emergency posture=%+v err=%v", blocked, err)
+	}
+	job, _, err := s.AdmitSyncJob(ctx, syncJobFixture("publication-emergency", "publication-emergency", `{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ClaimSyncJob(ctx, job.JobID, "publisher", "cfg-1", syncT1, syncT3); !errors.Is(err, ErrSyncControlHeld) {
+		t.Fatalf("protected effect crossed fetched emergency membership: %v", err)
+	}
+	normalRevision := "2222222222222222222222222222222222222222"
+	active, err := s.ReconcileAdoptedMembership(ctx, "wiki-pair", "normal", normalRevision, "cfg-1", syncT2)
+	if err != nil || active.State != "active" || active.Reason != "none" {
+		t.Fatalf("normal replacement posture=%+v err=%v", active, err)
+	}
+}
+
+func TestE21BlockedJobsRemainUntilRecoveryEvidence(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	control, err := s.EnsureSyncControl(ctx, "wiki-pair", "cfg-1", syncT0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.HoldSyncControl(ctx, "wiki-pair", "conflict", "cfg-1", syncT0); err != nil {
+		t.Fatal(err)
+	}
+	job, _, err := s.AdmitSyncJob(ctx, syncJobFixture("publication-blocked-retained", "publication-blocked-retained", `{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Exec(`UPDATE sync_jobs SET state='blocked',fence=1,retain_until_resolved=1,resolved_at=NULL,updated_at=? WHERE job_id=?`, syncT0, job.JobID); err != nil {
+		t.Fatal(err)
+	}
+	cutoffs := PruneCutoffs{CompletedReceipts: syncT2}
+	plan, err := s.PlanPrune(ctx, cutoffs)
+	if err != nil || plan.Counts.SyncJobs != 0 {
+		t.Fatalf("unresolved block must not prune: plan=%+v err=%v", plan.Counts, err)
+	}
+	blocked, err := s.LoadSyncControl(ctx, "wiki-pair")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if blocked.Revision == control.Revision {
+		t.Fatal("safety hold did not advance control revision")
+	}
+	if _, err := s.ReconcileSyncControlCheckpoint(ctx, "wiki-pair", blocked.Revision, "cfg-1", "checkpoint-commit", syncT1); err != nil {
+		t.Fatal(err)
+	}
+	var retain int
+	var resolved string
+	if err := s.QueryRow(`SELECT retain_until_resolved,COALESCE(resolved_at,'') FROM sync_jobs WHERE job_id=?`, job.JobID).Scan(&retain, &resolved); err != nil || retain != 0 || resolved != syncT1 {
+		t.Fatalf("reconciled job retain=%d resolved=%q err=%v", retain, resolved, err)
+	}
+	plan, err = s.PlanPrune(ctx, cutoffs)
+	if err != nil || plan.Counts.SyncJobs != 1 || plan.Counts.SyncJournals != 1 {
+		t.Fatalf("reconciled block must become prunable: plan=%+v err=%v", plan.Counts, err)
+	}
+}
+
+func TestE21Migration23ReopensLegacyBlockedObligations(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Migrate(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, err := s.EnsureSyncControl(ctx, "wiki-pair", "cfg-1", syncT0); err != nil {
+		t.Fatal(err)
+	}
+	job, _, err := s.AdmitSyncJob(ctx, syncJobFixture("legacy-blocked", "legacy-blocked", `{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Exec(`UPDATE sync_jobs SET state='blocked',fence=1,retain_until_resolved=0,resolved_at=? WHERE job_id=?`, syncT0, job.JobID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Exec(`DELETE FROM schema_migrations WHERE version=23`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.Migrate(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	var retain int
+	var resolved string
+	if err := s.QueryRow(`SELECT retain_until_resolved,COALESCE(resolved_at,'') FROM sync_jobs WHERE job_id=?`, job.JobID).Scan(&retain, &resolved); err != nil || retain != 1 || resolved != "" {
+		t.Fatalf("migrated blocked obligation retain=%d resolved=%q err=%v", retain, resolved, err)
+	}
+}
+
 func TestE21T3PublicationAndPeerDeliveryCommitAtomically(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
@@ -334,6 +444,12 @@ func TestE21T3PublicationAndPeerDeliveryCommitAtomically(t *testing.T) {
 	}
 	claim, err := s.ClaimSyncJob(ctx, job.JobID, "publisher", "cfg-1", syncT0, syncT3)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AdvanceSyncJob(ctx, job.JobID, "publisher", claim.Fence, "prepared", SyncJournalEntry{JournalID: "publication-prepared", JobID: job.JobID, Fence: claim.Fence, Phase: "publication", Outcome: "prepared", EvidenceJSON: `{}`, RecordedAt: syncT0}, syncT0); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AdvanceSyncJob(ctx, job.JobID, "publisher", claim.Fence, "signed", SyncJournalEntry{JournalID: "publication-signed", JobID: job.JobID, Fence: claim.Fence, Phase: "publication", Outcome: "signed", EvidenceJSON: `{}`, RecordedAt: syncT0}, syncT0); err != nil {
 		t.Fatal(err)
 	}
 	delivery := SyncJobInput{JobID: "delivery-atomic", GroupID: "wiki-pair", Kind: "delivery", LogicalKey: "publication-atomic", InitialState: "pending", PayloadJSON: `{"target_commit":"1111111111111111111111111111111111111111"}`, QueueLimit: 1000, Now: syncT1}

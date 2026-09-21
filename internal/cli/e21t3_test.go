@@ -89,6 +89,8 @@ func TestE21T3PublishSignsFrozenSnapshotAndAdmitsDelivery(t *testing.T) {
 	}
 	membershipState := filepath.Join(dir, "membership-head")
 	contentState := filepath.Join(dir, "content-head")
+	pushConflict := filepath.Join(dir, "content-push-conflict")
+	conflictProbe := filepath.Join(dir, "content-push-conflict-probed")
 	if err := os.WriteFile(contentState, []byte(base+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -101,11 +103,25 @@ case " $* " in
     for last do :; done
     case "$last" in
       %s) state=%s;;
-      %s) state=%s;;
+      %s) state=%s; conflict=%s; probe=%s;;
       *) exit 0;;
     esac
-    if test -s "$state"; then oid=$(sed -n '1p' "$state"); printf '%%s\t%%s\n' "$oid" "$last"; fi
+    source_state="$state"
+    if test -n "$conflict" && test -s "$conflict"; then
+      if test -e "$probe"; then source_state="$conflict"; else : > "$probe"; fi
+    fi
+    if test -s "$source_state"; then oid=$(sed -n '1p' "$source_state"); printf '%%s\t%%s\n' "$oid" "$last"; fi
     exit 0;;
+  *" fetch "*)
+    for last do :; done
+    source=${last%%%%:*}; destination=${last#*:}
+    case "$source" in
+      %s) state=%s;;
+      %s) state=%s;;
+      *) exit 2;;
+    esac
+    oid=$(sed -n '1p' "$state")
+    exec %s -C %s update-ref "$destination" "$oid";;
   *" push "*)
     for last do :; done
     oid=${last%%%%:*}; ref=${last#*:}
@@ -117,7 +133,7 @@ case " $* " in
     printf '%%s\n' "$oid" > "$state"; exit 0;;
 esac
 exec %s "$@"
-`, remoteURL, remoteURL, cfg.Sync.MembershipRef, membershipState, cfg.Sync.ContentRef, contentState, cfg.Sync.MembershipRef, membershipState, cfg.Sync.ContentRef, contentState, realGit)
+`, remoteURL, remoteURL, cfg.Sync.MembershipRef, membershipState, cfg.Sync.ContentRef, contentState, pushConflict, conflictProbe, cfg.Sync.MembershipRef, membershipState, cfg.Sync.ContentRef, contentState, realGit, repo, cfg.Sync.MembershipRef, membershipState, cfg.Sync.ContentRef, contentState, realGit)
 	if err := os.WriteFile(wrapper, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -165,8 +181,27 @@ exec %s "$@"
 	if code := Run([]string{"sync", "checkpoint", "apply", "--group", cfg.Sync.GroupID, "--plan", checkpointPath, "--output", "json"}, &checkpointOut, &checkpointErr); code != 0 {
 		t.Fatalf("checkpoint apply: %d %s", code, checkpointErr.String())
 	}
-	seedE21T3Eligibility(t, cfg, configPath, []byte("changed\n"))
+	prepareE21T3State(t, cfg, configPath)
 	revision, _ := config.SyncRevision(cfg)
+	contentBeforeIneligible := strings.TrimSpace(string(mustRead(t, contentState)))
+	var ineligibleOut, ineligibleErr bytes.Buffer
+	if code := Run([]string{"sync", "publish", "--group", cfg.Sync.GroupID, "--expected-config-revision", revision, "--output", "json"}, &ineligibleOut, &ineligibleErr); code != 0 || !bytes.Contains(ineligibleOut.Bytes(), []byte(`"state":"no_eligible_snapshot"`)) {
+		t.Fatalf("ineligible publish: %d out=%s err=%s", code, ineligibleOut.String(), ineligibleErr.String())
+	}
+	ineligibleStore, err := openStateStore(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ineligibleJobs int
+	if err := ineligibleStore.QueryRow(`SELECT COUNT(*) FROM sync_jobs WHERE kind='publication'`).Scan(&ineligibleJobs); err != nil {
+		ineligibleStore.Close()
+		t.Fatal(err)
+	}
+	ineligibleStore.Close()
+	if ineligibleJobs != 0 || strings.TrimSpace(string(mustRead(t, contentState))) != contentBeforeIneligible {
+		t.Fatalf("ineligible publish mutated state: jobs=%d remote=%s", ineligibleJobs, strings.TrimSpace(string(mustRead(t, contentState))))
+	}
+	seedE21T3Eligibility(t, cfg, configPath, []byte("changed\n"))
 	var publishOut, publishErr bytes.Buffer
 	if code := Run([]string{"sync", "publish", "--group", cfg.Sync.GroupID, "--expected-config-revision", revision, "--output", "json"}, &publishOut, &publishErr); code != 0 {
 		t.Fatalf("publish: %d %s", code, publishErr.String())
@@ -200,10 +235,159 @@ exec %s "$@"
 	if err := store.QueryRow(`SELECT COUNT(*) FROM sync_jobs WHERE kind='delivery' AND state='pending'`).Scan(&deliveries); err != nil || deliveries != 1 {
 		t.Fatalf("deliveries=%d err=%v", deliveries, err)
 	}
+	var publicationJobID, publicationPayload string
+	if err := store.QueryRow(`SELECT job_id,payload_json FROM sync_jobs WHERE kind='publication'`).Scan(&publicationJobID, &publicationPayload); err != nil {
+		t.Fatal(err)
+	}
+	publicationRecord, err := syncrecords.DecodePublication([]byte(publicationPayload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Exec(`DELETE FROM sync_jobs WHERE kind='delivery'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Exec(`UPDATE sync_jobs SET state='signed',retain_until_resolved=1,resolved_at=NULL WHERE job_id=?`, publicationJobID); err != nil {
+		t.Fatal(err)
+	}
+	gitTestRun(t, realGit, repo, "update-ref", cfg.Sync.ContentRef, publicationRecord.BaseCommit, published.Result.CandidateCommit)
+	var recoveryOut, recoveryErr bytes.Buffer
+	if code := Run([]string{"sync", "publish", "--group", cfg.Sync.GroupID, "--expected-config-revision", revision, "--output", "json"}, &recoveryOut, &recoveryErr); code != 0 {
+		t.Fatalf("confirmed publication recovery: %d out=%s err=%s", code, recoveryOut.String(), recoveryErr.String())
+	}
+	var recovered struct {
+		Result struct {
+			PublicationID   string `json:"publication_id"`
+			CandidateCommit string `json:"candidate_commit"`
+			Recovered       bool   `json:"recovered"`
+			Idempotent      bool   `json:"idempotent"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(recoveryOut.Bytes(), &recovered); err != nil {
+		t.Fatal(err)
+	}
+	if !recovered.Result.Recovered || !recovered.Result.Idempotent || recovered.Result.PublicationID != published.Result.PublicationID || recovered.Result.CandidateCommit != published.Result.CandidateCommit {
+		t.Fatalf("recovery changed publication identity: %s", recoveryOut.String())
+	}
+	if err := store.QueryRow(`SELECT COUNT(*) FROM sync_jobs WHERE kind='delivery' AND state='pending'`).Scan(&deliveries); err != nil || deliveries != 1 {
+		t.Fatalf("recovered deliveries=%d err=%v", deliveries, err)
+	}
 	var noOpOut, noOpErr bytes.Buffer
 	if code := Run([]string{"sync", "publish", "--group", cfg.Sync.GroupID, "--expected-config-revision", revision, "--output", "json"}, &noOpOut, &noOpErr); code != 0 || !bytes.Contains(noOpOut.Bytes(), []byte(`"state":"no_content_change"`)) {
 		t.Fatalf("no-op: %d out=%s err=%s", code, noOpOut.String(), noOpErr.String())
 	}
+	if err := os.WriteFile(filepath.Join(repo, "note.md"), []byte("conflict\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	conflictDigest := sha256.Sum256([]byte("conflict\n"))
+	if _, err := store.Exec(`UPDATE resources SET observation_revision=observation_revision+1 WHERE resource_id=?`, cfg.Sync.Resource); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Exec(`UPDATE path_facts SET digest=?,observed_at='2026-09-21T00:02:00Z' WHERE resource_id=? AND path='note.md'`, "sha256:"+hex.EncodeToString(conflictDigest[:]), cfg.Sync.Resource); err != nil {
+		t.Fatal(err)
+	}
+	alternateTree := gitTestOutput(t, realGit, repo, "rev-parse", published.Result.CandidateCommit+"^{tree}")
+	alternate := strings.TrimSpace(string(commandBytesWithInput(t, []byte("alternate\n"), realGit, "-C", repo, "commit-tree", alternateTree, "-p", published.Result.CandidateCommit)))
+	if err := os.WriteFile(pushConflict, []byte(alternate+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var conflictOut, conflictErr bytes.Buffer
+	if code := Run([]string{"sync", "publish", "--group", cfg.Sync.GroupID, "--expected-config-revision", revision, "--output", "json"}, &conflictOut, &conflictErr); code != 14 {
+		t.Fatalf("losing fast-forward: %d out=%s err=%s", code, conflictOut.String(), conflictErr.String())
+	}
+	control, err := store.LoadSyncControl(requestCtx(), cfg.Sync.GroupID)
+	if err != nil || control.State != "blocked" || control.Reason != "conflict" {
+		t.Fatalf("losing fast-forward control=%+v err=%v", control, err)
+	}
+	var blockedJobs int
+	if err := store.QueryRow(`SELECT COUNT(*) FROM sync_jobs WHERE kind='publication' AND state='blocked' AND resolved_at IS NULL AND retain_until_resolved=1`).Scan(&blockedJobs); err != nil || blockedJobs != 1 {
+		t.Fatalf("blocked publication obligations=%d err=%v", blockedJobs, err)
+	}
+	var blockedCandidate string
+	if err := store.QueryRow(`SELECT json_extract(evidence_json,'$.candidate') FROM sync_journal_entries WHERE job_id=(SELECT job_id FROM sync_jobs WHERE kind='publication' AND state='blocked') AND outcome='signed' ORDER BY recorded_at DESC LIMIT 1`).Scan(&blockedCandidate); err != nil {
+		t.Fatal(err)
+	}
+	gitTestRun(t, realGit, repo, "cat-file", "-e", blockedCandidate+"^{commit}")
+	if err := os.Remove(pushConflict); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(conflictProbe); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(contentState, []byte(published.Result.CandidateCommit+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Exec(`UPDATE sync_controls SET revision=revision+1,state='active',reason='none' WHERE group_id=?`, cfg.Sync.GroupID); err != nil {
+		t.Fatal(err)
+	}
+
+	normalMembership := gitTestOutput(t, realGit, repo, "rev-parse", cfg.Sync.MembershipRef)
+	emergencyMembership := e21t3ApplyMembershipChange(t, cfg, dir, "retirement", cfg.Sync.Nodes[1].InstanceID, normalMembership)
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err = openStateStore(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if _, err := store.Exec(`UPDATE sync_controls SET revision=revision+1,state='active',reason='none' WHERE group_id=?`, cfg.Sync.GroupID); err != nil {
+		t.Fatal(err)
+	}
+	gitTestRun(t, realGit, repo, "update-ref", cfg.Sync.MembershipRef, normalMembership, emergencyMembership)
+	contentBeforeEmergency := gitTestOutput(t, realGit, repo, "rev-parse", cfg.Sync.ContentRef)
+	var adoptOut, adoptErr bytes.Buffer
+	if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &adoptOut, &adoptErr); code != 0 || !bytes.Contains(adoptOut.Bytes(), []byte(`"state":"membership_adopted"`)) {
+		t.Fatalf("emergency membership adoption: %d out=%s err=%s", code, adoptOut.String(), adoptErr.String())
+	}
+	control, err = store.LoadSyncControl(requestCtx(), cfg.Sync.GroupID)
+	if err != nil || control.State != "blocked" || control.Reason != "membership_emergency" {
+		t.Fatalf("emergency membership did not arm hold: control=%+v err=%v", control, err)
+	}
+	if got := gitTestOutput(t, realGit, repo, "rev-parse", cfg.Sync.ContentRef); got != contentBeforeEmergency {
+		t.Fatalf("emergency adoption moved content: before=%s after=%s", contentBeforeEmergency, got)
+	}
+	var blockedOut, blockedErr bytes.Buffer
+	if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &blockedOut, &blockedErr); code != 30 || !bytes.Contains(blockedOut.Bytes(), []byte(`"reason":"membership_emergency"`)) {
+		t.Fatalf("emergency reconcile fence: %d out=%s err=%s", code, blockedOut.String(), blockedErr.String())
+	}
+
+}
+
+func e21t3ApplyMembershipChange(t *testing.T, cfg *config.Config, dir, change, instance, predecessor string) string {
+	t.Helper()
+	var planOut, planErr bytes.Buffer
+	if code := Run([]string{"sync", "membership", "plan", "--group", cfg.Sync.GroupID, "--change", change, "--instance", instance, "--output", "json"}, &planOut, &planErr); code != 0 {
+		t.Fatalf("membership %s plan: %d %s", change, code, planErr.String())
+	}
+	var envelope struct {
+		Result struct {
+			Plan syncrecords.MembershipPlan `json:"plan"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(planOut.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(envelope.Result.Plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "membership-"+change+".json")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var applyOut, applyErr bytes.Buffer
+	if code := Run([]string{"sync", "membership", "apply", "--group", cfg.Sync.GroupID, "--plan", path, "--expected-membership-predecessor", predecessor, "--output", "json"}, &applyOut, &applyErr); code != 0 {
+		t.Fatalf("membership %s apply: %d out=%s err=%s", change, code, applyOut.String(), applyErr.String())
+	}
+	var applied struct {
+		Result struct {
+			MembershipRevision string `json:"membership_revision"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(applyOut.Bytes(), &applied); err != nil {
+		t.Fatal(err)
+	}
+	return applied.Result.MembershipRevision
 }
 
 func seedE21T3Eligibility(t *testing.T, cfg *config.Config, configPath string, content []byte) {
@@ -216,24 +400,11 @@ func seedE21T3Eligibility(t *testing.T, cfg *config.Config, configPath string, c
 		t.Fatal(err)
 	}
 	defer store.Close()
-	resource := cfg.Resources[cfg.Sync.Resource]
-	if err := store.RegisterResource(nil, cfg.Sync.Resource, "resource-e21t3", resource.Root, resource.Root, resource.FileScope, resource.Git.Mode); err != nil {
-		t.Fatal(err)
-	}
 	for routeID, route := range cfg.Routes {
 		if route.Source.Resource != cfg.Sync.Resource {
 			continue
 		}
 		routeRevision, _ := config.RouteRevision(cfg, routeID)
-		if err := store.RegisterRoute(nil, routeID, routeRevision, config.PolicyRevision(route), cfg.Sync.Resource, route.Destinations[0].Target, "{}", "2026-09-21T00:00:00Z"); err != nil {
-			t.Fatal(err)
-		}
-		if err := store.InitializeRouteState(nil, routeID); err != nil {
-			t.Fatal(err)
-		}
-		if err := store.SetRouteActivation(requestCtx(), routeID, "enabled", routeRevision, "", "2026-09-21T00:00:00Z"); err != nil {
-			t.Fatal(err)
-		}
 		decisionID := "decision-" + routeID
 		dispatchID := "dispatch-" + routeID
 		if err := store.SaveDecision(nil, sqlite.DecisionRecord{DecisionID: decisionID, RouteID: routeID, RouteRevision: routeRevision, PolicyRevision: config.PolicyRevision(route), GenerationLineageJSON: `{"generation":1}`, Disposition: "dispatch", Classification: "normal", ReasonCodesJSON: "[]", CreatedAt: "2026-09-21T00:00:00Z", Actor: "test"}); err != nil {
@@ -258,6 +429,38 @@ func seedE21T3Eligibility(t *testing.T, cfg *config.Config, configPath string, c
 		t.Fatal(err)
 	}
 }
+
+func prepareE21T3State(t *testing.T, cfg *config.Config, configPath string) {
+	t.Helper()
+	store, err := openStateStore(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	resource := cfg.Resources[cfg.Sync.Resource]
+	if err := store.RegisterResource(nil, cfg.Sync.Resource, "resource-e21t3", resource.Root, resource.Root, resource.FileScope, resource.Git.Mode); err != nil {
+		t.Fatal(err)
+	}
+	revision, _ := config.SyncRevision(cfg)
+	if _, err := store.EnsureSyncControl(requestCtx(), cfg.Sync.GroupID, revision, "2026-09-21T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	for routeID, route := range cfg.Routes {
+		if route.Source.Resource != cfg.Sync.Resource {
+			continue
+		}
+		routeRevision, _ := config.RouteRevision(cfg, routeID)
+		if err := store.RegisterRoute(nil, routeID, routeRevision, config.PolicyRevision(route), cfg.Sync.Resource, route.Destinations[0].Target, "{}", "2026-09-21T00:00:00Z"); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.InitializeRouteState(nil, routeID); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.SetRouteActivation(requestCtx(), routeID, "enabled", routeRevision, "", "2026-09-21T00:00:00Z"); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
 func e21t3Key(t *testing.T, dir, name string) ([]byte, string) {
 	t.Helper()
 	path := filepath.Join(dir, name)
@@ -280,6 +483,17 @@ func gitTestOutput(t *testing.T, git, repo string, args ...string) string {
 func commandBytes(t *testing.T, name string, args ...string) []byte {
 	t.Helper()
 	cmd := exec.Command(name, args...)
+	cmd.Env = append(os.Environ(), "LC_ALL=C", "GIT_AUTHOR_DATE=1700000000 +0000", "GIT_COMMITTER_DATE=1700000000 +0000")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("%s %v: %v: %s", name, args, err, out)
+	}
+	return out
+}
+func commandBytesWithInput(t *testing.T, input []byte, name string, args ...string) []byte {
+	t.Helper()
+	cmd := exec.Command(name, args...)
+	cmd.Stdin = bytes.NewReader(input)
 	cmd.Env = append(os.Environ(), "LC_ALL=C", "GIT_AUTHOR_DATE=1700000000 +0000", "GIT_COMMITTER_DATE=1700000000 +0000")
 	out, err := cmd.CombinedOutput()
 	if err != nil {

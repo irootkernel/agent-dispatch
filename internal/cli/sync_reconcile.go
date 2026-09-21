@@ -72,6 +72,10 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return blockReconcile(stdout, stderr, store, s.GroupID, revision, "trust_failure", "trust_failed", err)
 	}
+	remoteMembershipRecord, ok := remoteHistory.Current()
+	if !ok {
+		return blockReconcile(stdout, stderr, store, s.GroupID, revision, "trust_failure", "trust_failed", errors.New("verified membership history has no current revision"))
+	}
 	if remoteMembership != localMembership {
 		relation, compareErr := client.Compare(requestCtx(), localMembership, remoteMembership)
 		if compareErr != nil || relation != gitlocal.RelationBehind {
@@ -80,14 +84,33 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 			}
 			return blockReconcile(stdout, stderr, store, s.GroupID, revision, "trust_failure", "membership_stale", compareErr)
 		}
+		if remoteMembershipRecord.Mode == "blocked_emergency" {
+			control, err = store.ReconcileAdoptedMembership(requestCtx(), s.GroupID, remoteMembershipRecord.Mode, remoteMembership, revision, time.Now().UTC().Format(time.RFC3339Nano))
+			if err != nil {
+				return syncStoreError(stderr, command, err)
+			}
+		}
 		if err := client.UpdateRefExpected(requestCtx(), s.MembershipRef, remoteMembership, localMembership); err != nil {
 			return blockReconcile(stdout, stderr, store, s.GroupID, revision, "trust_failure", "membership_stale", err)
+		}
+		if remoteMembershipRecord.Mode == "normal" {
+			control, err = store.ReconcileAdoptedMembership(requestCtx(), s.GroupID, remoteMembershipRecord.Mode, remoteMembership, revision, time.Now().UTC().Format(time.RFC3339Nano))
+			if err != nil {
+				return syncStoreError(stderr, command, err)
+			}
 		}
 		return reconcileEnvelope(stdout, "membership_adopted", "none", map[string]any{
 			"previous_membership_revision": localMembership,
 			"membership_revision":          remoteMembership,
 			"side_effects":                 []string{"local_membership_ref_updated"},
 		})
+	}
+	control, err = store.ReconcileAdoptedMembership(requestCtx(), s.GroupID, remoteMembershipRecord.Mode, remoteMembership, revision, time.Now().UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return syncStoreError(stderr, command, err)
+	}
+	if control.State == "blocked" && control.Reason == "membership_emergency" {
+		return reconcileEnvelopeCode(stdout, "blocked", "membership_emergency", map[string]any{"membership_revision": remoteMembership, "detail": "the verified membership revision blocks protected effects"}, 30)
 	}
 
 	contentTracking := "refs/agent-dispatch/sync/content/" + s.GroupID
@@ -240,6 +263,13 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 			if job.ClaimOwner != "" {
 				return reconcileEnvelopeCode(stdout, "blocked", "partial_effect", map[string]any{"import_id": record.ImportID, "detail": "an earlier controller-only import still owns or requires recovery"}, 14)
 			}
+			if job.State == "deferred" {
+				reopenedAt := time.Now().UTC().Format(time.RFC3339Nano)
+				job, err = store.ReopenDeferredImport(requestCtx(), job.JobID, revision, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: mustJSON(map[string]any{"reason": "retry_after_deferred_fence", "controller_only": true}), RecordedAt: reopenedAt}, reopenedAt)
+				if err != nil {
+					return syncStoreError(stderr, command, err)
+				}
+			}
 		}
 		owner := randomSyncID("import-owner")
 		claimAt := time.Now().UTC()
@@ -256,7 +286,11 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 		membershipNow, membershipErr := client.RemoteRef(requestCtx(), s.RemoteName, s.MembershipRef, s.RemoteRepositoryDigest)
 		idleNow, idleErr := store.ResourceWritersIdle(requestCtx(), s.Resource)
 		if stateErr != nil || remoteErr != nil || membershipErr != nil || idleErr != nil || !idleNow || stateNow.Digest != state.Digest || remoteNow != target || membershipNow != remoteMembership || !config.SyncAcknowledgementCurrent(cfg, localSyncIncarnation(cfg)) {
-			return finishImportDisposition(stdout, stderr, store, job, owner, "deferred", "deferred", "a controller-only pre-apply fence changed", "git_unstable")
+			fenceReason := "git_unstable"
+			if idleErr == nil && !idleNow {
+				fenceReason = "resource_busy"
+			}
+			return finishImportDisposition(stdout, stderr, store, job, owner, "deferred", "deferred", "a controller-only pre-apply fence changed", fenceReason)
 		}
 		started := time.Now().UTC().Format(time.RFC3339Nano)
 		if err := store.BeginControllerImportApply(requestCtx(), job.JobID, owner, job.Fence, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "started", EvidenceJSON: mustJSON(map[string]any{"import_id": record.ImportID, "plan_id": record.PlanID, "from_commit": from, "target_commit": target, "git_state": state.Digest, "controller_only": true}), RecordedAt: started}, started); err != nil {
@@ -352,7 +386,11 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 	observationNow, observationErr := store.ObservationRevision(requestCtx(), s.Resource)
 	idleNow, idleErr := store.ResourceWritersIdle(requestCtx(), s.Resource)
 	if stateErr != nil || remoteErr != nil || membershipErr != nil || observationErr != nil || idleErr != nil || !idleNow || stateNow.Digest != state.Digest || remoteNow != target || membershipNow != remoteMembership || observationNow != observationRevision || !config.SyncAcknowledgementCurrent(cfg, localSyncIncarnation(cfg)) {
-		return finishImportDisposition(stdout, stderr, store, job, owner, "deferred", "deferred", "a pre-apply fence changed", "git_unstable")
+		fenceReason := "git_unstable"
+		if idleErr == nil && !idleNow {
+			fenceReason = "resource_busy"
+		}
+		return finishImportDisposition(stdout, stderr, store, job, owner, "deferred", "deferred", "a pre-apply fence changed", fenceReason)
 	}
 	preapplyAt := time.Now().UTC().Format(time.RFC3339Nano)
 	if err := store.BeginImportApply(requestCtx(), job.JobID, owner, s.Resource, job.Fence, effects, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "started", EvidenceJSON: mustJSON(map[string]any{"import_id": record.ImportID, "plan_id": record.PlanID, "from_commit": from, "target_commit": target, "git_state": state.Digest, "observation_revision": observationRevision}), RecordedAt: preapplyAt}, preapplyAt); err != nil {
@@ -510,7 +548,11 @@ func recoverPendingImport(stdout, stderr io.Writer, cfg *config.Config, s *confi
 			if recoveryGit.ActiveOperation != "" {
 				detail = "recovery is waiting for Git state: " + recoveryGit.ActiveOperation
 			}
-			return true, reconcileEnvelope(stdout, "deferred", "git_unstable", map[string]any{"import_job_id": job.JobID, "detail": detail})
+			reason := "git_unstable"
+			if idleErr == nil && !idle {
+				reason = "resource_busy"
+			}
+			return true, reconcileEnvelope(stdout, "deferred", reason, map[string]any{"import_job_id": job.JobID, "detail": detail})
 		}
 		owner := randomSyncID("import-recovery-owner")
 		claimAt := time.Now().UTC()

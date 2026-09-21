@@ -80,7 +80,7 @@ Agent Dispatch turns Markdown vault changes into Hermes Kanban tasks; this file 
 
 - Root `CHANGELOG.md` is the sole product release-note source; use its version sections for GitHub Release descriptions. Pending changes use `Unreleased` or `vX.Y.Z - Unreleased` once selected. Released headings use `vX.Y.Z - YYYY-MM-DD` with concise `Added`, `Changed`, and `Fixed` outcomes. `docs/SOT-CHANGELOG.md` records specification-package versions.
 - Gaori-routed long checks are exactly `manifest-check`, `schema-validation`, and `traceability` in `.gaori/tester.yaml`, matching Makefile targets.
-- Mulgae routes every enabled role to `zcode`; `logic` is required, and high, critical, or blocker findings request changes under `.mulgae/config.yaml`.
+- Mulgae active roles, provider routing, required roles, and findings policy follow `.mulgae/config.yaml`.
 - The five tracked `.podway/procedures/aquarium-*-v2.yaml` files are managed Procedures. `.podway/runtime/` contains ignored session history and is never edited by hand.
 - `docs/MANIFEST.sha256` is generated and checked by `make manifest-check`. Keep `.mulgae/local.yaml`, `.gaori/runs/`, and `.zcode/` untracked.
 - Go is pinned to 1.26.6. Staticcheck is a `go.mod` tool dependency (SCP-005), so verification needs no network fetch.

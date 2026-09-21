@@ -101,6 +101,8 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 			"schema_version": "agent-dispatch.sync-control/v1", "group_id": control.GroupID,
 			"revision": control.Revision, "state": control.State, "reason": control.Reason,
 		})
+	case "membership":
+		return runSyncMembership(args[1:], stdout, stderr)
 	default:
 		if reservedSyncCommand(args) {
 			writeErrorWithResult(stderr, command, "sync_capability_unavailable", "configuration", "the requested sync capability is reserved but unavailable in this build", map[string]any{"side_effects": []string{}})
@@ -121,8 +123,8 @@ func syncCapabilities() map[string]any {
 	return map[string]any{
 		"contract_read": true, "status_read": true,
 		"publication": false, "reconciliation": false, "pair_verification": false,
-		"peer_service": false, "control": true, "membership_plan": false,
-		"membership_apply": false, "checkpoint_plan": false, "checkpoint_apply": false,
+		"peer_service": false, "control": true, "membership_plan": true,
+		"membership_apply": true, "checkpoint_plan": false, "checkpoint_apply": false,
 		"service_render": false, "service_install": false, "service_inspect": false,
 		"service_stop": false, "service_disable": false, "service_uninstall": false,
 	}
@@ -135,7 +137,7 @@ func reservedSyncCommand(args []string) bool {
 	switch args[0] {
 	case "publish", "reconcile", "verify", "serve":
 		return true
-	case "membership", "checkpoint":
+	case "checkpoint":
 		return len(args) >= 2 && (args[1] == "plan" || args[1] == "apply")
 	case "service":
 		return len(args) >= 2 && (args[1] == "render" || args[1] == "install" || args[1] == "inspect" || args[1] == "stop" || args[1] == "disable" || args[1] == "uninstall")
@@ -199,7 +201,7 @@ func syncControlFlags(args []string) (group string, expected int64, configPath s
 
 func syncStoreError(stderr io.Writer, command string, err error) int {
 	switch {
-	case errors.Is(err, sqlite.ErrSyncPrecondition), errors.Is(err, sqlite.ErrSyncAdmissionConflict), errors.Is(err, sqlite.ErrSyncControlHeld):
+	case errors.Is(err, sqlite.ErrSyncPrecondition), errors.Is(err, sqlite.ErrSyncAdmissionConflict), errors.Is(err, sqlite.ErrSyncControlHeld), errors.Is(err, sqlite.ErrSyncQueueFull):
 		writeError(stderr, command, "sync_precondition_failed", "conflict", err.Error())
 		return 14
 	case errors.Is(err, sql.ErrNoRows):

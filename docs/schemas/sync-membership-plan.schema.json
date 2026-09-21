@@ -9,12 +9,13 @@
     "plan_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,127}$"},
     "group_id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"},
     "change_kind": {"enum": ["bootstrap", "endpoint_update", "key_rotation", "replacement", "retirement", "emergency_revocation", "incarnation_registration"]},
+    "target_instance": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"},
     "expected_predecessor": {"oneOf": [{"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"}, {"type": "null"}]},
     "proposed_membership": {"$ref": "urn:agent-dispatch:schema:sync-membership:v1"},
     "administrator_key": {"type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]$"}
   },
   "allOf": [
-    {"if": {"properties": {"change_kind": {"const": "bootstrap"}}, "required": ["change_kind"]}, "then": {"properties": {"expected_predecessor": {"type": "null"}, "proposed_membership": {"properties": {"predecessor": {"type": "null"}}}}}},
-    {"if": {"properties": {"change_kind": {"not": {"const": "bootstrap"}}}, "required": ["change_kind"]}, "then": {"properties": {"expected_predecessor": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"}, "proposed_membership": {"properties": {"predecessor": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"}}}}}}
+    {"if": {"properties": {"change_kind": {"const": "bootstrap"}}, "required": ["change_kind"]}, "then": {"not": {"required": ["target_instance"]}, "properties": {"expected_predecessor": {"type": "null"}, "proposed_membership": {"properties": {"predecessor": {"type": "null"}}}}}},
+    {"if": {"properties": {"change_kind": {"not": {"const": "bootstrap"}}}, "required": ["change_kind"]}, "then": {"required": ["target_instance"], "properties": {"expected_predecessor": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"}, "proposed_membership": {"properties": {"predecessor": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"}}}}}}
   ]
 }

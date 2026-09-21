@@ -10,6 +10,8 @@ This file records concise shipped outcomes and pending changes.
   side-effect-free `sync capabilities` and disabled `sync status` inspection.
 - Add schema v21 durable sync jobs, append-only recovery journals, fenced
   claims, bounded retention, and revision-fenced `sync pause`/`sync resume`.
+- Add bounded restricted Git operations and reviewed, administrator-signed
+  `sync membership plan`/`apply` with emergency revocation holds.
 
 ### Fixed
 

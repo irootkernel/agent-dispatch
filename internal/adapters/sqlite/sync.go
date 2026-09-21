@@ -280,6 +280,17 @@ func (s *Store) admitSyncJobOnce(ctx context.Context, in SyncJobInput) (SyncJobR
 // ClaimSyncJob obtains a new fencing generation. An expired lease permits a
 // new claim only through this increment; it never proves the old effect safe.
 func (s *Store) ClaimSyncJob(ctx context.Context, jobID, owner, expectedConfigRevision, now, expiresAt string) (SyncJobRow, error) {
+	return s.claimSyncJob(ctx, jobID, owner, expectedConfigRevision, now, expiresAt, false)
+}
+
+// ClaimSyncAdministrationJob permits only a membership repair to proceed
+// through a membership_emergency block. Operator pauses and unrelated safety
+// blocks remain absolute.
+func (s *Store) ClaimSyncAdministrationJob(ctx context.Context, jobID, owner, expectedConfigRevision, now, expiresAt string) (SyncJobRow, error) {
+	return s.claimSyncJob(ctx, jobID, owner, expectedConfigRevision, now, expiresAt, true)
+}
+
+func (s *Store) claimSyncJob(ctx context.Context, jobID, owner, expectedConfigRevision, now, expiresAt string, allowMembershipRepair bool) (SyncJobRow, error) {
 	if owner == "" || expiresAt == "" {
 		return SyncJobRow{}, fmt.Errorf("claim owner and expiry are required")
 	}
@@ -292,11 +303,12 @@ func (s *Store) ClaimSyncJob(ctx context.Context, jobID, owner, expectedConfigRe
 	if err != nil {
 		return SyncJobRow{}, err
 	}
-	var controlState, controlConfigRevision string
-	if err := tx.QueryRowContext(ctx, `SELECT state, config_revision FROM sync_controls WHERE group_id = ?`, row.GroupID).Scan(&controlState, &controlConfigRevision); err != nil {
+	var controlState, controlReason, controlConfigRevision string
+	if err := tx.QueryRowContext(ctx, `SELECT state, reason, config_revision FROM sync_controls WHERE group_id = ?`, row.GroupID).Scan(&controlState, &controlReason, &controlConfigRevision); err != nil {
 		return SyncJobRow{}, err
 	}
-	if controlState != "active" {
+	allowedRepair := allowMembershipRepair && row.Kind == "membership" && controlState == "blocked" && controlReason == "membership_emergency"
+	if controlState != "active" && !allowedRepair {
 		return SyncJobRow{}, fmt.Errorf("sync group %s is %s: %w", row.GroupID, controlState, ErrSyncControlHeld)
 	}
 	if expectedConfigRevision == "" || controlConfigRevision != expectedConfigRevision {
@@ -330,6 +342,74 @@ func (s *Store) ClaimSyncJob(ctx context.Context, jobID, owner, expectedConfigRe
 		return SyncJobRow{}, err
 	}
 	return row, nil
+}
+
+// FinishMembershipJob atomically records the confirmed remote membership,
+// resolves its job, and applies or clears the emergency protected-effect hold.
+// A normal membership clears only membership_emergency; it cannot clear an
+// operator pause, conflict, trust failure, or generic recovery block.
+func (s *Store) FinishMembershipJob(ctx context.Context, jobID, owner string, fence int64, mode string, journal SyncJournalEntry, configRevision, now string) (SyncControlRow, error) {
+	if mode != "normal" && mode != "blocked_emergency" {
+		return SyncControlRow{}, fmt.Errorf("unsupported membership mode %q", mode)
+	}
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return SyncControlRow{}, err
+	}
+	defer tx.Rollback()
+	job, err := loadSyncJob(ctx, tx, jobID)
+	if err != nil {
+		return SyncControlRow{}, err
+	}
+	if job.Kind != "membership" || job.ClaimOwner != owner || job.Fence != fence || timeBefore(job.ClaimExpiresAt, now) {
+		return SyncControlRow{}, ErrSyncPrecondition
+	}
+	if journal.JobID != jobID || journal.Fence != fence || journal.JournalID == "" || journal.RecordedAt != now || journal.Phase != "membership" || journal.Outcome != "applied" {
+		return SyncControlRow{}, fmt.Errorf("membership terminal journal does not bind the confirmed apply")
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO sync_journal_entries
+		(journal_id, job_id, fence, phase, outcome, evidence_json, recorded_at)
+		VALUES (?,?,?,?,?,?,?)`, journal.JournalID, journal.JobID, journal.Fence, journal.Phase, journal.Outcome, journal.EvidenceJSON, journal.RecordedAt); err != nil {
+		return SyncControlRow{}, err
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE sync_jobs SET state = 'applied', claim_owner = NULL,
+		claim_expires_at = NULL, retain_until_resolved = 0, resolved_at = ?, updated_at = ?
+		WHERE job_id = ? AND claim_owner = ? AND fence = ? AND claim_expires_at >= ?`, now, now, jobID, owner, fence, now)
+	if err != nil {
+		return SyncControlRow{}, err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return SyncControlRow{}, ErrSyncPrecondition
+	}
+	var control SyncControlRow
+	if err := tx.QueryRowContext(ctx, `SELECT group_id, revision, state, reason, config_revision, updated_at
+		FROM sync_controls WHERE group_id = ?`, job.GroupID).Scan(&control.GroupID, &control.Revision, &control.State, &control.Reason, &control.ConfigRevision, &control.UpdatedAt); err != nil {
+		return SyncControlRow{}, err
+	}
+	targetState, targetReason := control.State, control.Reason
+	if mode == "blocked_emergency" {
+		targetState, targetReason = "blocked", "membership_emergency"
+	} else if control.State == "blocked" && control.Reason == "membership_emergency" {
+		targetState, targetReason = "active", "none"
+	}
+	if targetState != control.State || targetReason != control.Reason || (targetState == "active" && control.ConfigRevision != configRevision) {
+		previous := control.State
+		control.Revision++
+		control.State, control.Reason, control.ConfigRevision, control.UpdatedAt = targetState, targetReason, configRevision, now
+		if _, err := tx.ExecContext(ctx, `UPDATE sync_controls SET revision = ?, state = ?, reason = ?, config_revision = ?, updated_at = ? WHERE group_id = ?`, control.Revision, control.State, control.Reason, control.ConfigRevision, control.UpdatedAt, control.GroupID); err != nil {
+			return SyncControlRow{}, err
+		}
+		contextJSON, _ := json.Marshal(map[string]any{"reason": control.Reason, "config_revision": control.ConfigRevision, "revision": control.Revision, "membership_job_id": jobID})
+		if _, err := tx.ExecContext(ctx, `INSERT INTO state_transitions
+			(transition_id, entity_type, entity_id, from_state, to_state, recorded_at, context_json)
+			VALUES (?,?,?,?,?,?,?)`, fmt.Sprintf("sync-control:%s:%d", control.GroupID, control.Revision), "sync_control", control.GroupID, previous, control.State, now, string(contextJSON)); err != nil {
+			return SyncControlRow{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return SyncControlRow{}, err
+	}
+	return control, nil
 }
 
 // AppendSyncJournal records evidence only for the live owner and fence.

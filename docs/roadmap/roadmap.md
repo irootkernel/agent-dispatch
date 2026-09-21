@@ -15,9 +15,9 @@
 | Release target | v0.2.0 (Two-Node Wiki Sync MVP) |
 | Current epic | E21 Signed Publication and Guarded Import (In Progress) |
 | Current active task | None |
-| Next task | E21-T2 Restricted Git, trust, and membership administration |
-| Completed tasks | 107 / 116 |
-| Planned tasks | 9 / 116 |
+| Next task | E21-T3 Explicit signed publication workflow |
+| Completed tasks | 108 / 116 |
+| Planned tasks | 8 / 116 |
 | In progress tasks | 0 |
 | In review tasks | 0 |
 | Blocked tasks | 0 |
@@ -171,7 +171,7 @@
 | 105 | E20-T4 | Completed | Disabled configuration and capabilities implemented |
 | 106 | E20-T5 | Completed | G16 exact-revision contract baseline qualified |
 | 107 | E21-T1 | Completed | Durable sync jobs, journals, and migrations |
-| 108 | E21-T2 | Planned | Restricted Git, trust, and membership administration |
+| 108 | E21-T2 | Completed | Restricted Git, trust, and membership administration |
 | 109 | E21-T3 | Planned | Explicit signed publication workflow |
 | 110 | E21-T4 | Planned | Guarded import and exact Watchman attribution |
 | 111 | E21-T5 | Planned | Publication/import crash and conflict qualification |
@@ -5263,7 +5263,7 @@ E20-T5 Completed.
 
 ## E21-T2: Implement Restricted Git, Trust, and Membership Administration
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 

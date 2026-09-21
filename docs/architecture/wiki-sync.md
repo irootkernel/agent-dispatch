@@ -42,6 +42,12 @@ auditable and an emergency revocation can place the group in a blocked
 fewer-than-two state. Administrator and publisher keys are distinct roles.
 Membership and content-checkpoint changes use reviewed two-phase plan/apply
 commands with expected predecessors and no force update.
+The content binding is the configured canonical remote-repository digest; the
+content ref separately names the governed branch. A membership commit has one
+parent at most and exactly two fixed regular files: the canonical membership
+document and the reviewed canonical plan. Runtime history verification checks
+the complete bounded ancestry and the pinned administrator signature on every
+revision before trusting the current roster.
 The document carries its predecessor but never its own object ID. The full Git
 object ID of the signed commit containing it is the `membership_revision` used
 by publication, checkpoint, status, and verification records.

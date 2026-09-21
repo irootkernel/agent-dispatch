@@ -25,7 +25,7 @@ var expectedArtifacts = []string{
 // allowlisted path and its bytes in bundle order. SHA256SUMS supports ordinary
 // corruption detection; this pin ensures the checksum regeneration command
 // cannot silently bless coordinated schema/fixture drift.
-const expectedArtifactSetDigest = "c72f31cd89e42356ad572e5ad1a0912e34d0b212e4de2f18fbc1368d0813bbcf"
+const expectedArtifactSetDigest = "1c2f66af415091646cde1b6878a8c2e59c4e1eecfed4a94b7a984caa2fae4690"
 
 type bundle struct {
 	SchemaVersion  string   `json:"schema_version"`
@@ -62,13 +62,13 @@ type commandTuple struct{ Path, Capability, Availability, SideEffect string }
 var expectedCommandTuples = []commandTuple{
 	{"sync capabilities", "contract_read", "implemented", "none"}, {"sync status", "status_read", "implemented", "none"},
 	{"sync publish", "publication", "reserved", "git_write"}, {"sync reconcile", "reconciliation", "reserved", "git_read_write"}, {"sync verify", "pair_verification", "reserved", "network_read"}, {"sync serve", "peer_service", "reserved", "listener"}, {"sync pause", "control", "implemented", "state_write"}, {"sync resume", "control", "implemented", "state_write"},
-	{"sync membership plan", "membership_plan", "reserved", "none"}, {"sync membership apply", "membership_apply", "reserved", "git_write"}, {"sync checkpoint plan", "checkpoint_plan", "reserved", "none"}, {"sync checkpoint apply", "checkpoint_apply", "reserved", "git_write"},
+	{"sync membership plan", "membership_plan", "implemented", "none"}, {"sync membership apply", "membership_apply", "implemented", "git_write"}, {"sync checkpoint plan", "checkpoint_plan", "reserved", "none"}, {"sync checkpoint apply", "checkpoint_apply", "reserved", "git_write"},
 	{"sync service render", "service_render", "reserved", "none"}, {"sync service install", "service_install", "reserved", "service_write"}, {"sync service inspect", "service_inspect", "reserved", "none"}, {"sync service stop", "service_stop", "reserved", "service_write"}, {"sync service disable", "service_disable", "reserved", "service_write"}, {"sync service uninstall", "service_uninstall", "reserved", "service_write"},
 }
 
 var expectedCommandFlags = [][]string{
 	{"--output"}, {"--config", "--group", "--output"}, {"--group", "--expected-config-revision", "--output"}, {"--group", "--output"}, {"--group", "--output"}, {"--group"}, {"--group", "--expected-control-revision", "--output"}, {"--group", "--expected-control-revision", "--output"},
-	{"--group", "--change", "--output"}, {"--group", "--plan", "--expected-membership-predecessor", "--output"}, {"--group", "--target-commit", "--kind", "--output"}, {"--group", "--plan", "--output"},
+	{"--group", "--change", "--instance", "--output"}, {"--group", "--plan", "--expected-membership-predecessor", "--output"}, {"--group", "--target-commit", "--kind", "--output"}, {"--group", "--plan", "--output"},
 	{"--group", "--output"}, {"--group", "--yes", "--output"}, {"--group", "--output"}, {"--group", "--yes", "--output"}, {"--group", "--yes", "--output"}, {"--group", "--yes", "--output"},
 }
 
@@ -257,7 +257,7 @@ func Check(dir string) error {
 		return err
 	}
 	wantTrust := []struct{ name, code string }{{"membership-unpinned-administrator", "sync_trust_failed"}, {"membership-self-authorizing-root", "sync_trust_failed"}, {"membership-stale-predecessor", "sync_precondition_failed"}, {"verification-obsolete-incarnation", "sync_identity_obsolete"}}
-	if tf.SchemaVersion != "agent-dispatch.sync-provider.trust-fixtures/v1" || len(tf.Fixtures) != len(wantTrust) || !strings.Contains(tf.Claim, "runtime signature verification is not implemented") {
+	if tf.SchemaVersion != "agent-dispatch.sync-provider.trust-fixtures/v1" || len(tf.Fixtures) != len(wantTrust) || !strings.Contains(tf.Claim, "runtime signature and linear-history verification") {
 		return fmt.Errorf("trust fixture contract mismatch")
 	}
 	for i, fixture := range tf.Fixtures {

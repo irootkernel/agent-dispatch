@@ -185,3 +185,47 @@ func TestE21T1ResolvedRetentionIsChildrenFirstAndUnresolvedIsPreserved(t *testin
 		t.Fatalf("resolved journal rows=%d err=%v", remaining, err)
 	}
 }
+
+func TestE21T2MembershipEmergencyBlocksEffectsUntilSignedPairRecovery(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if _, err := s.EnsureSyncControl(ctx, "wiki-pair", "cfg-1", syncT0); err != nil {
+		t.Fatal(err)
+	}
+	input := SyncJobInput{JobID: "membership-emergency", GroupID: "wiki-pair", Kind: "membership", LogicalKey: "plan-emergency", InitialState: "planned", PayloadJSON: `{}`, ConfigRevision: "cfg-1", QueueLimit: 1000, Now: syncT0}
+	job, _, err := s.AdmitSyncJob(ctx, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claim, err := s.ClaimSyncAdministrationJob(ctx, job.JobID, "admin", "cfg-1", syncT0, syncT3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	control, err := s.FinishMembershipJob(ctx, job.JobID, "admin", claim.Fence, "blocked_emergency", SyncJournalEntry{JournalID: "membership-emergency-applied", JobID: job.JobID, Fence: claim.Fence, Phase: "membership", Outcome: "applied", EvidenceJSON: `{}`, RecordedAt: syncT1}, "cfg-1", syncT1)
+	if err != nil || control.State != "blocked" || control.Reason != "membership_emergency" {
+		t.Fatalf("emergency control=%+v err=%v", control, err)
+	}
+	publication := syncJobFixture("publication-blocked", "publication-blocked", `{}`)
+	publication.Now = syncT1
+	pubJob, _, err := s.AdmitSyncJob(ctx, publication)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ClaimSyncJob(ctx, pubJob.JobID, "publisher", "cfg-1", syncT1, syncT3); !errors.Is(err, ErrSyncControlHeld) {
+		t.Fatalf("publication crossed emergency block: %v", err)
+	}
+	recoveryInput := input
+	recoveryInput.JobID, recoveryInput.LogicalKey, recoveryInput.Now = "membership-recovery", "plan-recovery", syncT1
+	recovery, _, err := s.AdmitSyncJob(ctx, recoveryInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recoveryClaim, err := s.ClaimSyncAdministrationJob(ctx, recovery.JobID, "admin", "cfg-1", syncT1, syncT3)
+	if err != nil {
+		t.Fatalf("membership repair must cross its own hold: %v", err)
+	}
+	control, err = s.FinishMembershipJob(ctx, recovery.JobID, "admin", recoveryClaim.Fence, "normal", SyncJournalEntry{JournalID: "membership-recovery-applied", JobID: recovery.JobID, Fence: recoveryClaim.Fence, Phase: "membership", Outcome: "applied", EvidenceJSON: `{}`, RecordedAt: syncT2}, "cfg-1", syncT2)
+	if err != nil || control.State != "active" || control.Reason != "none" {
+		t.Fatalf("pair recovery control=%+v err=%v", control, err)
+	}
+}

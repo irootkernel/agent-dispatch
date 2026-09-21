@@ -6,5 +6,5 @@
     {"name":"membership-stale-predecessor","document_key":"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","pinned_key":"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","self_authorizing":false,"predecessor_matches":false,"state_incarnation_current":true,"expected_code":"sync_precondition_failed"},
     {"name":"verification-obsolete-incarnation","document_key":"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","pinned_key":"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","self_authorizing":false,"predecessor_matches":true,"state_incarnation_current":false,"expected_code":"sync_identity_obsolete"}
   ],
-  "claim":"contract fixture only; runtime signature verification is not implemented in E20"
+  "claim":"membership fixtures are enforced by E21 runtime signature and linear-history verification; later publication verification reuses the same trust outcomes"
 }

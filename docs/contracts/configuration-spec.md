@@ -449,10 +449,14 @@ command-only publisher and optional administrator signing-key
 references, direction-specific peer secret references, and bounded queue,
 history, subprocess time, and subprocess output values. Inline credentials,
 unknown fields, a third member, a non-Git resource, a public or credential-bearing
-endpoint, reused trust or directional credentials, or an enabled block fail
-configuration validation. E20 implements contract reads and
-disabled status only; it performs no Git, network, listener, SQLite, service,
-or live-tree effect.
+endpoint, or reused trust or directional credentials fail configuration
+validation. An enabled block activates only implemented protected surfaces; it
+does not make reserved publication, import, listener, or service capabilities
+available. Membership plan needs no signing secret. Membership apply requires
+`administrator_signing_key_ref` to resolve immediately before use to OpenSSH
+Ed25519 private-key bytes whose public fingerprint matches the pinned
+administrator key. The membership `content_binding` is exactly the configured
+`remote_repository_digest`.
 
 The computed acknowledgement configuration revision digests the SYN-009 local
 binding: group and resource IDs, global and local instance identities,

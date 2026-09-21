@@ -32,6 +32,11 @@ operations with a closed change kind, reviewed expected predecessor,
 administrator signature, and non-force ref update. This path owns initial
 bootstrap, endpoint and key updates, replacement, retirement, revocation, and
 re-registration after an incarnation change.
+The membership content binding is the configured canonical remote-repository
+digest, with the configured content ref carried separately. Each signed
+revision uses a fixed two-file tree containing the membership document and the
+reviewed plan. Non-bootstrap plans name the affected instance explicitly;
+blocked-pair recovery names the configured replacement being added.
 
 Historical publication evidence names the verified membership revision that
 authorized its publisher when the publication was prepared. That revision must

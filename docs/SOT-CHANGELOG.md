@@ -19,6 +19,10 @@ sync workflow without enabling publication, import, peer service, or release.
   or recovery blocks.
 - Resolved sync job evidence is eligible for children-first pruning after the
   180-day policy; unresolved and uncertain obligations remain retention roots.
+- E21-T2 adds the restricted Git adapter and two-phase signed membership
+  administration. Fixed tree layout, linear ancestry, pinned Ed25519 trust,
+  expected-old non-force updates, removed-key first-seen rejection, and
+  emergency protected-effect holds are enforced at runtime.
 
 ## 1.7.0 - 2026-09-19
 

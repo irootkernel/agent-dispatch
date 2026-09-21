@@ -1,0 +1,767 @@
+// Package gitlocal exposes the closed Git vocabulary used by Wiki sync.
+// It deliberately has no generic argv or environment entrypoint.
+package gitlocal
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/irootkernel/agent-dispatch/internal/config"
+)
+
+const (
+	maxRuntime = 120 * time.Second
+	maxOutput  = 1 << 20
+)
+
+var (
+	ErrMissingRef       = errors.New("git ref is missing")
+	ErrInvalidSignature = errors.New("git SSH signature is invalid")
+	ErrTimeout          = errors.New("git subprocess timed out")
+	ErrOutputBound      = errors.New("git subprocess output exceeded its bound")
+	ErrPushRejected     = errors.New("git fast-forward push was rejected")
+	ErrPushAmbiguous    = errors.New("git push outcome is ambiguous")
+)
+
+type Limits struct {
+	Timeout   time.Duration
+	MaxOutput int
+}
+
+type Client struct {
+	root      string
+	git       string
+	ssh       string
+	sshKeygen string
+	timeout   time.Duration
+	maxOutput int
+}
+
+type WorktreeState struct {
+	State WorktreeCondition
+	Head  string
+}
+
+type WorktreeCondition string
+
+const (
+	WorktreeClean WorktreeCondition = "clean"
+	WorktreeDirty WorktreeCondition = "dirty"
+)
+
+type Relation string
+
+const (
+	RelationEqual    Relation = "equal"
+	RelationAhead    Relation = "ahead"
+	RelationBehind   Relation = "behind"
+	RelationDiverged Relation = "diverged"
+)
+
+type PushResult struct {
+	State      PushState
+	RemoteOID  string
+	Candidate  string
+	Underlying error
+}
+
+type PushState string
+
+const (
+	PushConfirmed PushState = "confirmed"
+	PushRejected  PushState = "rejected"
+	PushAmbiguous PushState = "ambiguous"
+)
+
+func New(root string, limits Limits) (*Client, error) {
+	if !filepath.IsAbs(root) {
+		return nil, fmt.Errorf("git root must be absolute")
+	}
+	clean := filepath.Clean(root)
+	info, err := os.Stat(clean)
+	if err != nil || !info.IsDir() {
+		return nil, fmt.Errorf("git root is not a directory: %w", err)
+	}
+	git, err := exec.LookPath("git")
+	if err != nil {
+		return nil, fmt.Errorf("locating git: %w", err)
+	}
+	git, err = filepath.Abs(git)
+	if err != nil {
+		return nil, fmt.Errorf("resolving git executable: %w", err)
+	}
+	ssh, err := exec.LookPath("ssh")
+	if err != nil {
+		return nil, fmt.Errorf("locating ssh: %w", err)
+	}
+	ssh, err = filepath.Abs(ssh)
+	if err != nil {
+		return nil, fmt.Errorf("resolving ssh executable: %w", err)
+	}
+	sshKeygen, err := exec.LookPath("ssh-keygen")
+	if err != nil {
+		return nil, fmt.Errorf("locating ssh-keygen: %w", err)
+	}
+	sshKeygen, err = filepath.Abs(sshKeygen)
+	if err != nil {
+		return nil, fmt.Errorf("resolving ssh-keygen executable: %w", err)
+	}
+	if limits.Timeout <= 0 || limits.Timeout > maxRuntime {
+		return nil, fmt.Errorf("git timeout must be between 1ns and %s", maxRuntime)
+	}
+	if limits.MaxOutput < 1024 || limits.MaxOutput > maxOutput {
+		return nil, fmt.Errorf("git output bound must be 1024..%d bytes per stream", maxOutput)
+	}
+	return &Client{root: clean, git: git, ssh: ssh, sshKeygen: sshKeygen, timeout: limits.Timeout, maxOutput: limits.MaxOutput}, nil
+}
+
+func (c *Client) Inspect(ctx context.Context) (WorktreeState, error) {
+	out, _, err := c.run(ctx, nil, nil, "status", "--porcelain=v2", "-z", "--branch", "--untracked-files=all")
+	if err != nil {
+		return WorktreeState{}, err
+	}
+	state := WorktreeState{State: WorktreeClean}
+	for _, record := range bytes.Split(out, []byte{0}) {
+		line := string(record)
+		switch {
+		case strings.HasPrefix(line, "# branch.oid "):
+			state.Head = strings.TrimPrefix(line, "# branch.oid ")
+		case line != "" && !strings.HasPrefix(line, "# "):
+			state.State = WorktreeDirty
+		}
+	}
+	return state, nil
+}
+
+func (c *Client) ResolveRef(ctx context.Context, ref string) (string, error) {
+	if !validRef(ref) {
+		return "", fmt.Errorf("unsafe Git ref %q", ref)
+	}
+	out, _, err := c.run(ctx, nil, nil, "rev-parse", "--verify", "--end-of-options", ref+"^{commit}")
+	if err != nil {
+		if exitCode(err) == 128 {
+			return "", ErrMissingRef
+		}
+		return "", err
+	}
+	oid := strings.TrimSpace(string(out))
+	if !validOID(oid) {
+		return "", fmt.Errorf("git returned an invalid object ID")
+	}
+	return oid, nil
+}
+
+func (c *Client) Compare(ctx context.Context, left, right string) (Relation, error) {
+	if !validOID(left) || !validOID(right) {
+		return "", fmt.Errorf("full Git object IDs are required")
+	}
+	if left == right {
+		return RelationEqual, nil
+	}
+	leftAncestor, err := c.isAncestor(ctx, left, right)
+	if err != nil {
+		return "", err
+	}
+	rightAncestor, err := c.isAncestor(ctx, right, left)
+	if err != nil {
+		return "", err
+	}
+	switch {
+	case leftAncestor:
+		return RelationBehind, nil
+	case rightAncestor:
+		return RelationAhead, nil
+	default:
+		return RelationDiverged, nil
+	}
+}
+
+func (c *Client) isAncestor(ctx context.Context, older, newer string) (bool, error) {
+	_, _, err := c.run(ctx, nil, nil, "merge-base", "--is-ancestor", older, newer)
+	if err == nil {
+		return true, nil
+	}
+	if exitCode(err) == 1 {
+		return false, nil
+	}
+	return false, err
+}
+
+func (c *Client) Fetch(ctx context.Context, remote, sourceRef, destinationRef, repositoryDigest string) error {
+	remoteURL, err := c.verifyRemote(ctx, remote, repositoryDigest)
+	if err != nil {
+		return err
+	}
+	if !validRef(sourceRef) || !validRef(destinationRef) {
+		return fmt.Errorf("unsafe fetch ref")
+	}
+	_, _, err = c.run(ctx, nil, nil, "fetch", "--upload-pack=git-upload-pack", "--no-tags", "--no-write-fetch-head", "--no-recurse-submodules", remoteURL, sourceRef+":"+destinationRef)
+	return err
+}
+
+func (c *Client) ReadFile(ctx context.Context, oid, path string) ([]byte, error) {
+	if !validOID(oid) || !validTreePath(path) {
+		return nil, fmt.Errorf("invalid object or tree path")
+	}
+	out, _, err := c.run(ctx, nil, nil, "cat-file", "blob", oid+":"+path)
+	return out, err
+}
+
+func (c *Client) CommitParents(ctx context.Context, oid string) ([]string, error) {
+	if !validOID(oid) {
+		return nil, fmt.Errorf("full Git object ID is required")
+	}
+	out, _, err := c.run(ctx, nil, nil, "cat-file", "commit", oid)
+	if err != nil {
+		return nil, err
+	}
+	var parents []string
+	for _, line := range strings.Split(string(out), "\n") {
+		if line == "" {
+			break
+		}
+		if strings.HasPrefix(line, "parent ") {
+			parent := strings.TrimPrefix(line, "parent ")
+			if !validOID(parent) {
+				return nil, fmt.Errorf("commit contains an invalid parent")
+			}
+			parents = append(parents, parent)
+		}
+	}
+	return parents, nil
+}
+
+func (c *Client) VerifySSHSignature(ctx context.Context, oid, expectedFingerprint string) error {
+	if !validOID(oid) || !validFingerprint(expectedFingerprint) {
+		return ErrInvalidSignature
+	}
+	raw, _, err := c.run(ctx, nil, nil, "cat-file", "commit", oid)
+	if err != nil {
+		return err
+	}
+	keyType, keyBlob, fingerprint, err := embeddedSSHKey(raw)
+	if err != nil || subtle.ConstantTimeCompare([]byte(fingerprint), []byte(expectedFingerprint)) != 1 {
+		return ErrInvalidSignature
+	}
+	tmp, err := os.MkdirTemp("", "agent-dispatch-signers-")
+	if err != nil {
+		return fmt.Errorf("creating signer policy: %w", err)
+	}
+	defer os.RemoveAll(tmp)
+	allowed := filepath.Join(tmp, "allowed_signers")
+	line := "* " + keyType + " " + base64.StdEncoding.EncodeToString(keyBlob) + "\n"
+	if err := os.WriteFile(allowed, []byte(line), 0o600); err != nil {
+		return fmt.Errorf("writing signer policy: %w", err)
+	}
+	_, _, err = c.run(ctx, nil, nil,
+		"-c", "gpg.format=ssh", "-c", "gpg.ssh.allowedSignersFile="+allowed,
+		"verify-commit", "--raw", oid)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidSignature, err)
+	}
+	return nil
+}
+
+// CreateSignedMembershipCommit writes immutable objects through a private
+// index and creates one SSH-signed commit. It does not update a ref.
+func (c *Client) CreateSignedMembershipCommit(ctx context.Context, document, plan, privateKey []byte, predecessor string, now time.Time) (string, error) {
+	if len(document) == 0 || len(plan) == 0 || len(privateKey) == 0 || (predecessor != "" && !validOID(predecessor)) {
+		return "", fmt.Errorf("membership document, plan, signing key, and valid predecessor are required")
+	}
+	tmp, err := os.MkdirTemp("", "agent-dispatch-membership-")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(tmp)
+	keyPath := filepath.Join(tmp, "administrator_key")
+	if err := os.WriteFile(keyPath, privateKey, 0o600); err != nil {
+		return "", fmt.Errorf("writing ephemeral signing key: %w", err)
+	}
+	env := map[string]string{
+		"GIT_INDEX_FILE":      filepath.Join(tmp, "index"),
+		"GIT_AUTHOR_DATE":     now.UTC().Format(time.RFC3339),
+		"GIT_COMMITTER_DATE":  now.UTC().Format(time.RFC3339),
+		"GIT_AUTHOR_NAME":     "Agent Dispatch Membership",
+		"GIT_AUTHOR_EMAIL":    "membership@agent-dispatch.invalid",
+		"GIT_COMMITTER_NAME":  "Agent Dispatch Membership",
+		"GIT_COMMITTER_EMAIL": "membership@agent-dispatch.invalid",
+	}
+	blob, _, err := c.run(ctx, env, document, "hash-object", "-w", "--stdin")
+	if err != nil {
+		return "", err
+	}
+	blobOID := strings.TrimSpace(string(blob))
+	if !validOID(blobOID) {
+		return "", fmt.Errorf("git returned an invalid blob ID")
+	}
+	if _, _, err := c.run(ctx, env, nil, "read-tree", "--empty"); err != nil {
+		return "", err
+	}
+	if _, _, err := c.run(ctx, env, nil, "update-index", "--add", "--cacheinfo", "100644,"+blobOID+",.agent-dispatch-sync/membership.json"); err != nil {
+		return "", err
+	}
+	planBlob, _, err := c.run(ctx, env, plan, "hash-object", "-w", "--stdin")
+	if err != nil {
+		return "", err
+	}
+	planOID := strings.TrimSpace(string(planBlob))
+	if !validOID(planOID) {
+		return "", fmt.Errorf("git returned an invalid plan blob ID")
+	}
+	if _, _, err := c.run(ctx, env, nil, "update-index", "--add", "--cacheinfo", "100644,"+planOID+",.agent-dispatch-sync/membership-plan.json"); err != nil {
+		return "", err
+	}
+	tree, _, err := c.run(ctx, env, nil, "write-tree")
+	if err != nil {
+		return "", err
+	}
+	treeOID := strings.TrimSpace(string(tree))
+	args := []string{"-c", "gpg.format=ssh", "-c", "user.signingKey=" + keyPath, "commit-tree", "-S" + keyPath, treeOID}
+	if predecessor != "" {
+		args = append(args, "-p", predecessor)
+	}
+	args = append(args, "-m", "Update Agent Dispatch membership")
+	commit, _, err := c.run(ctx, env, nil, args...)
+	if err != nil {
+		return "", err
+	}
+	oid := strings.TrimSpace(string(commit))
+	if !validOID(oid) {
+		return "", fmt.Errorf("git returned an invalid commit ID")
+	}
+	return oid, nil
+}
+
+// ReadMembershipCommit accepts exactly the two regular files owned by the
+// membership contract. Extra paths, symlinks, and executable entries fail
+// closed before either document is trusted.
+func (c *Client) ReadMembershipCommit(ctx context.Context, oid string) ([]byte, []byte, error) {
+	if !validOID(oid) {
+		return nil, nil, fmt.Errorf("full Git object ID is required")
+	}
+	out, _, err := c.run(ctx, nil, nil, "ls-tree", "-r", "--full-tree", "-z", oid)
+	if err != nil {
+		return nil, nil, err
+	}
+	want := map[string]bool{
+		".agent-dispatch-sync/membership.json":      true,
+		".agent-dispatch-sync/membership-plan.json": true,
+	}
+	seen := map[string]bool{}
+	for _, entry := range bytes.Split(out, []byte{0}) {
+		if len(entry) == 0 {
+			continue
+		}
+		parts := bytes.SplitN(entry, []byte{'\t'}, 2)
+		meta := bytes.Fields(parts[0])
+		if len(parts) != 2 || len(meta) != 3 || string(meta[0]) != "100644" || string(meta[1]) != "blob" || !want[string(parts[1])] || seen[string(parts[1])] {
+			return nil, nil, fmt.Errorf("membership commit has a non-contract tree layout")
+		}
+		seen[string(parts[1])] = true
+	}
+	if len(seen) != len(want) {
+		return nil, nil, fmt.Errorf("membership commit is missing a contract file")
+	}
+	document, err := c.ReadFile(ctx, oid, ".agent-dispatch-sync/membership.json")
+	if err != nil {
+		return nil, nil, err
+	}
+	plan, err := c.ReadFile(ctx, oid, ".agent-dispatch-sync/membership-plan.json")
+	if err != nil {
+		return nil, nil, err
+	}
+	return document, plan, nil
+}
+
+func (c *Client) UpdateRefExpected(ctx context.Context, ref, candidate, expected string) error {
+	if !validRef(ref) || !validOID(candidate) || (expected != "" && !validOID(expected)) {
+		return fmt.Errorf("invalid expected-ref update")
+	}
+	old := expected
+	if old == "" {
+		old = strings.Repeat("0", len(candidate))
+	}
+	_, _, err := c.run(ctx, nil, nil, "update-ref", ref, candidate, old)
+	return err
+}
+
+func (c *Client) PushFastForward(ctx context.Context, remote, ref, candidate, expected, repositoryDigest string) PushResult {
+	result := PushResult{State: PushAmbiguous, Candidate: candidate}
+	if !validRef(ref) || !validOID(candidate) || (expected != "" && !validOID(expected)) {
+		result.Underlying = fmt.Errorf("invalid push identity")
+		return result
+	}
+	remoteURL, err := c.verifyRemote(ctx, remote, repositoryDigest)
+	if err != nil {
+		result.State, result.Underlying = PushRejected, err
+		return result
+	}
+	remoteBefore, err := c.remoteRefURL(ctx, remoteURL, ref)
+	if err != nil && !errors.Is(err, ErrMissingRef) {
+		result.Underlying = err
+		return result
+	}
+	if remoteBefore != expected {
+		result.State, result.RemoteOID = PushRejected, remoteBefore
+		result.Underlying = ErrPushRejected
+		return result
+	}
+	_, _, pushErr := c.run(ctx, nil, nil, "push", "--receive-pack=git-receive-pack", "--porcelain", "--no-force", "--no-verify", "--recurse-submodules=no", remoteURL, candidate+":"+ref)
+	remoteAfter, inspectErr := c.remoteRefURL(ctx, remoteURL, ref)
+	result.RemoteOID = remoteAfter
+	if inspectErr == nil && remoteAfter == candidate {
+		result.State = PushConfirmed
+		return result
+	}
+	if pushErr == nil {
+		result.Underlying = ErrPushAmbiguous
+		return result
+	}
+	if inspectErr == nil && remoteAfter == expected {
+		result.State, result.Underlying = PushRejected, fmt.Errorf("%w: %v", ErrPushRejected, pushErr)
+		return result
+	}
+	result.Underlying = fmt.Errorf("%w: push=%v inspection=%v", ErrPushAmbiguous, pushErr, inspectErr)
+	return result
+}
+
+func (c *Client) RemoteRef(ctx context.Context, remote, ref, repositoryDigest string) (string, error) {
+	remoteURL, err := c.verifyRemote(ctx, remote, repositoryDigest)
+	if err != nil {
+		return "", err
+	}
+	return c.remoteRefURL(ctx, remoteURL, ref)
+}
+
+func (c *Client) remoteRefURL(ctx context.Context, remoteURL, ref string) (string, error) {
+	if !validRef(ref) {
+		return "", fmt.Errorf("unsafe remote ref")
+	}
+	out, _, err := c.run(ctx, nil, nil, "ls-remote", "--upload-pack=git-upload-pack", "--refs", remoteURL, ref)
+	if err != nil {
+		return "", err
+	}
+	line := strings.TrimSpace(string(out))
+	if line == "" {
+		return "", ErrMissingRef
+	}
+	fields := strings.Fields(line)
+	if len(fields) != 2 || fields[1] != ref || !validOID(fields[0]) {
+		return "", fmt.Errorf("ambiguous remote-ref response")
+	}
+	return fields[0], nil
+}
+
+func (c *Client) verifyRemote(ctx context.Context, remote, expectedDigest string) (string, error) {
+	if !validRemoteName(remote) || !strings.HasPrefix(expectedDigest, "sha256:") {
+		return "", fmt.Errorf("invalid configured remote binding")
+	}
+	out, _, err := c.run(ctx, nil, nil, "remote", "get-url", "--all", remote)
+	if err != nil {
+		return "", err
+	}
+	pushOut, _, err := c.run(ctx, nil, nil, "remote", "get-url", "--push", "--all", remote)
+	if err != nil {
+		return "", err
+	}
+	urls, pushURLs := strings.Fields(string(out)), strings.Fields(string(pushOut))
+	if len(urls) != 1 || len(pushURLs) != 1 || urls[0] != pushURLs[0] {
+		return "", fmt.Errorf("configured remote must resolve to one identical fetch and push URL")
+	}
+	digest, _, err := config.RemoteRepositoryDigest(urls[0])
+	if err != nil || subtle.ConstantTimeCompare([]byte(digest), []byte(expectedDigest)) != 1 {
+		return "", fmt.Errorf("configured remote repository identity does not match its approved digest")
+	}
+	return urls[0], nil
+}
+
+func (c *Client) run(parent context.Context, extraEnv map[string]string, stdin []byte, args ...string) ([]byte, []byte, error) {
+	ctx, cancel := context.WithTimeout(parent, c.timeout)
+	defer cancel()
+	base := []string{"-C", c.root,
+		"-c", "core.bare=false",
+		"-c", "core.worktree=" + c.root,
+		"-c", "core.hooksPath=/dev/null",
+		"-c", "core.fsmonitor=false",
+		"-c", "core.pager=cat",
+		"-c", "core.attributesFile=/dev/null",
+		"-c", "core.alternateRefsCommand=",
+		"-c", "credential.helper=",
+		"-c", "http.followRedirects=false",
+		"-c", "http.proxy=",
+		"-c", "https.proxy=",
+		"-c", "http.extraHeader=",
+		"-c", "diff.external=",
+		"-c", "fetch.recurseSubmodules=false",
+		"-c", "submodule.recurse=false",
+		"-c", "protocol.ext.allow=never",
+		"-c", "protocol.file.allow=never",
+		"-c", "ssh.variant=ssh",
+		"-c", "gpg.ssh.program=" + c.sshKeygen,
+		"-c", "core.sshCommand=" + c.ssh + " -F /dev/null -oBatchMode=yes -oClearAllForwardings=yes -oPermitLocalCommand=no -oLocalCommand=none -oProxyCommand=none -oProxyJump=none -oRequestTTY=no -oStrictHostKeyChecking=yes",
+	}
+	cmd := exec.CommandContext(ctx, c.git, append(base, args...)...)
+	configureProcessGroup(cmd)
+	cmd.Stdin = bytes.NewReader(stdin)
+	cmd.Env = []string{
+		"GIT_CONFIG_NOSYSTEM=1",
+		"GIT_CONFIG_GLOBAL=/dev/null",
+		"GIT_ATTR_NOSYSTEM=1",
+		"GIT_TERMINAL_PROMPT=0",
+		"GIT_PROTOCOL_FROM_USER=0",
+		"GIT_NO_REPLACE_OBJECTS=1",
+		"GCM_INTERACTIVE=Never",
+		"GIT_ASKPASS=/bin/false",
+		"SSH_ASKPASS=/bin/false",
+		"LC_ALL=C",
+		"LANG=C",
+	}
+	if socket := os.Getenv("SSH_AUTH_SOCK"); filepath.IsAbs(socket) {
+		cmd.Env = append(cmd.Env, "SSH_AUTH_SOCK="+socket)
+	}
+	keys := make([]string, 0, len(extraEnv))
+	for key := range extraEnv {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		cmd.Env = append(cmd.Env, key+"="+extraEnv[key])
+	}
+	var stdout, stderr boundedBuffer
+	stdout.limit, stderr.limit = c.maxOutput, c.maxOutput
+	stdout.cancel, stderr.cancel = cancel, cancel
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	err := cmd.Run()
+	if stdout.exceeded || stderr.exceeded {
+		return stdout.bytes(), stderr.bytes(), ErrOutputBound
+	}
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return stdout.bytes(), stderr.bytes(), ErrTimeout
+	}
+	if err != nil {
+		return stdout.bytes(), stderr.bytes(), &CommandError{Args: append([]string(nil), args...), ExitCode: exitCode(err), Stderr: sanitize(stderr.string()), Err: err}
+	}
+	return stdout.bytes(), stderr.bytes(), nil
+}
+
+type CommandError struct {
+	Args     []string
+	ExitCode int
+	Stderr   string
+	Err      error
+}
+
+func (e *CommandError) Error() string {
+	return fmt.Sprintf("restricted git command failed (exit %d): %s", e.ExitCode, e.Stderr)
+}
+func (e *CommandError) Unwrap() error { return e.Err }
+
+type boundedBuffer struct {
+	mu       sync.Mutex
+	buf      bytes.Buffer
+	limit    int
+	exceeded bool
+	cancel   context.CancelFunc
+}
+
+func (b *boundedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	remaining := b.limit - b.buf.Len()
+	if remaining > 0 {
+		if len(p) < remaining {
+			remaining = len(p)
+		}
+		_, _ = b.buf.Write(p[:remaining])
+	}
+	if remaining < len(p) {
+		b.exceeded = true
+		if b.cancel != nil {
+			b.cancel()
+		}
+	}
+	return len(p), nil
+}
+
+func (b *boundedBuffer) bytes() []byte {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]byte(nil), b.buf.Bytes()...)
+}
+func (b *boundedBuffer) string() string { return string(b.bytes()) }
+
+func exitCode(err error) int {
+	var commandErr *CommandError
+	if errors.As(err, &commandErr) {
+		return commandErr.ExitCode
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return exitErr.ExitCode()
+	}
+	return -1
+}
+
+func sanitize(value string) string {
+	value = strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' || (r >= 0x20 && r != 0x7f) {
+			return r
+		}
+		return -1
+	}, value)
+	if len(value) > 1024 {
+		value = value[:1024]
+	}
+	return strings.TrimSpace(value)
+}
+
+var oidPattern = regexp.MustCompile(`^(?:[0-9a-f]{40}|[0-9a-f]{64})$`)
+var fingerprintPattern = regexp.MustCompile(`^SHA256:[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]$`)
+var remotePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+
+func validOID(value string) bool         { return oidPattern.MatchString(value) }
+func validFingerprint(value string) bool { return fingerprintPattern.MatchString(value) }
+func validRemoteName(value string) bool  { return remotePattern.MatchString(value) }
+
+func validRef(ref string) bool {
+	if !strings.HasPrefix(ref, "refs/") || strings.HasSuffix(ref, "/") || strings.Contains(ref, "..") || strings.Contains(ref, "@{") || strings.Contains(ref, "//") || strings.ContainsAny(ref, " ~^:?*[\\") {
+		return false
+	}
+	for _, part := range strings.Split(ref, "/") {
+		if part == "" || strings.HasPrefix(part, ".") || strings.HasSuffix(part, ".") || strings.HasSuffix(part, ".lock") {
+			return false
+		}
+	}
+	return true
+}
+
+func validTreePath(path string) bool {
+	if path == "" || strings.HasPrefix(path, "/") || strings.Contains(path, "\\") || strings.Contains(path, "//") {
+		return false
+	}
+	for _, part := range strings.Split(path, "/") {
+		if part == "" || part == "." || part == ".." || strings.ContainsRune(part, 0) {
+			return false
+		}
+	}
+	return true
+}
+
+func embeddedSSHKey(commit []byte) (string, []byte, string, error) {
+	lines := strings.Split(string(commit), "\n")
+	var armor []string
+	inside := false
+	for _, line := range lines {
+		switch {
+		case strings.HasPrefix(line, "gpgsig -----BEGIN SSH SIGNATURE-----"):
+			inside = true
+			armor = append(armor, "-----BEGIN SSH SIGNATURE-----")
+		case inside && strings.HasPrefix(line, " "):
+			trimmed := strings.TrimPrefix(line, " ")
+			armor = append(armor, trimmed)
+			if trimmed == "-----END SSH SIGNATURE-----" {
+				inside = false
+				goto decoded
+			}
+		}
+	}
+
+decoded:
+	if len(armor) < 3 || armor[len(armor)-1] != "-----END SSH SIGNATURE-----" {
+		return "", nil, "", ErrInvalidSignature
+	}
+	encoded := strings.Join(armor[1:len(armor)-1], "")
+	sshsig, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil || len(sshsig) < 10 || string(sshsig[:6]) != "SSHSIG" {
+		return "", nil, "", ErrInvalidSignature
+	}
+	if binary.BigEndian.Uint32(sshsig[6:10]) != 1 {
+		return "", nil, "", ErrInvalidSignature
+	}
+	keyBlob, rest, ok := sshString(sshsig[10:])
+	if !ok || len(rest) == 0 {
+		return "", nil, "", ErrInvalidSignature
+	}
+	keyTypeBytes, _, ok := sshString(keyBlob)
+	if !ok || string(keyTypeBytes) != "ssh-ed25519" {
+		return "", nil, "", ErrInvalidSignature
+	}
+	hash := sha256.Sum256(keyBlob)
+	fingerprint := "SHA256:" + base64.RawStdEncoding.EncodeToString(hash[:])
+	return string(keyTypeBytes), keyBlob, fingerprint, nil
+}
+
+func sshString(data []byte) ([]byte, []byte, bool) {
+	if len(data) < 4 {
+		return nil, nil, false
+	}
+	n := int(binary.BigEndian.Uint32(data[:4]))
+	if n < 0 || n > len(data)-4 {
+		return nil, nil, false
+	}
+	return data[4 : 4+n], data[4+n:], true
+}
+
+// SnapshotTree creates an immutable tree from a base plus a closed set of
+// regular-file replacements in a private index. No working-tree path changes.
+func (c *Client) SnapshotTree(ctx context.Context, base string, files map[string][]byte) (string, error) {
+	if !validOID(base) || len(files) == 0 {
+		return "", fmt.Errorf("snapshot requires a base commit and files")
+	}
+	tmp, err := os.MkdirTemp("", "agent-dispatch-index-")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(tmp)
+	env := map[string]string{"GIT_INDEX_FILE": filepath.Join(tmp, "index")}
+	if _, _, err := c.run(ctx, env, nil, "read-tree", base+"^{tree}"); err != nil {
+		return "", err
+	}
+	paths := make([]string, 0, len(files))
+	for path := range files {
+		if !validTreePath(path) {
+			return "", fmt.Errorf("unsafe snapshot path %q", path)
+		}
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	for _, path := range paths {
+		blob, _, err := c.run(ctx, env, files[path], "hash-object", "-w", "--stdin")
+		if err != nil {
+			return "", err
+		}
+		oid := strings.TrimSpace(string(blob))
+		if !validOID(oid) {
+			return "", fmt.Errorf("git returned an invalid blob ID")
+		}
+		if _, _, err := c.run(ctx, env, nil, "update-index", "--add", "--cacheinfo", "100644,"+oid+","+path); err != nil {
+			return "", err
+		}
+	}
+	out, _, err := c.run(ctx, env, nil, "write-tree")
+	if err != nil {
+		return "", err
+	}
+	tree := strings.TrimSpace(string(out))
+	if !validOID(tree) {
+		return "", fmt.Errorf("git returned an invalid tree ID")
+	}
+	return tree, nil
+}
+
+var _ io.Writer = (*boundedBuffer)(nil)

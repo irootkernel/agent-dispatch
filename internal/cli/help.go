@@ -33,7 +33,7 @@ Commands:
   events         show — aggregate-event inspection with per-child evidence.
   notifications  test, list, retry, drain — the notification delivery surface.
   schedule       render, install, inspect, disable, uninstall, run — the managed launchd drain schedule.
-  sync           capabilities, disabled status, and reserved v0.2.0 identities.
+  sync           capabilities, control, signed membership, and reserved v0.2.0 identities.
   work           begin, complete, fail — the Hermes companion receipt surface.
   quarantine     list, release, discard — held-path operator exits.
   reconcile      Run a full-scope reconciliation generation.
@@ -77,23 +77,29 @@ var commandHelp = map[string]string{
 Usage: agent-dispatch sync capabilities --output json
        agent-dispatch sync status --group <id> [--config <path>] --output json
        agent-dispatch sync pause|resume --group <id> --expected-control-revision <n> [--config <path>] --output json
+       agent-dispatch sync membership plan --group <id> --change <kind> [--instance <id>] --output json
+       agent-dispatch sync membership apply --group <id> --plan <file> --expected-membership-predecessor <oid|none> --output json
 
 Flags: --group selects the configured sync group; --config selects an explicit
 configuration file; --expected-control-revision fences control writes;
+--instance selects the affected member; --plan reads a reviewed strict-JSON file;
 --output json selects the versioned machine envelope.
 
 Defaults: the platform configuration path; sync is disabled by default.
 Approval requirements: none for capabilities/status. Pause and resume are
-explicit operator state changes; other reserved mutating commands remain unavailable.
+explicit operator state changes. Membership apply resolves the configured local
+administrator key and performs a non-force signed ref update.
 
 Exit codes: 0 success; 2 usage; 3 configuration or unavailable capability;
 14 stale revision or blocked control; 20 storage failure; 21 migration failure.
 
-Side effects: capabilities/status perform no Git, network, listener, service,
-or live-tree effect. Pause/resume update only durable SQLite control state.
+Side effects: capabilities/status/membership plan perform no Git write, network,
+listener, service, or live-tree effect. Pause/resume update only durable SQLite
+control state. Membership apply writes immutable Git objects, pushes the configured
+membership ref, updates the local ref, and commits durable recovery evidence.
 
 Example:
-  agent-dispatch sync capabilities --output json
+  agent-dispatch sync membership plan --group wiki-pair --change bootstrap --output json
 
 Next safe command: agent-dispatch sync status --group <id> --output json`,
 	"version": `version — print the product version

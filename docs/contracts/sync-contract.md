@@ -27,7 +27,8 @@ agent-dispatch sync verify --group GROUP --output json
 agent-dispatch sync serve --group GROUP
 agent-dispatch sync pause --group GROUP --expected-control-revision REV --output json
 agent-dispatch sync resume --group GROUP --expected-control-revision REV --output json
-agent-dispatch sync membership plan|apply --group GROUP --output json
+agent-dispatch sync membership plan --group GROUP --change KIND [--instance INSTANCE] --output json
+agent-dispatch sync membership apply --group GROUP --plan FILE --expected-membership-predecessor OID|none --output json
 agent-dispatch sync checkpoint plan|apply --group GROUP --output json
 agent-dispatch sync service render|install|inspect|stop|disable|uninstall --group GROUP --output json
 ```
@@ -72,6 +73,23 @@ The plan takes node endpoint, publisher key, and positive
 bootstrap constructible without peer discovery; the operator must update the
 declared incarnation before an `incarnation_registration` plan. Non-bootstrap
 plans require a non-null full predecessor object ID.
+`--instance` is forbidden for bootstrap and required for every other change;
+it names the member whose endpoint, key, incarnation, retirement, or revocation
+is reviewed. For pair restoration after a blocked emergency it names the new
+configured member. `--plan` is a regular, non-symlink strict-JSON file bounded
+at 256 KiB. Its `plan_id` is the domain-separated SHA-256 digest of the
+canonical plan with an empty self field. The signing secret resolves to
+OpenSSH Ed25519 private-key bytes.
+
+The membership `content_binding` is exactly the configured
+`remote_repository_digest`; `content_ref` binds the governed branch within
+that repository. Each membership revision contains exactly
+`.agent-dispatch-sync/membership.json` and
+`.agent-dispatch-sync/membership-plan.json` as regular non-executable files.
+Any other tree entry, merge parent, unknown or duplicate JSON field, unpinned
+signature, stale parent, or unauthorized transition fails closed.
+Publisher-key rotation also requires a fresh state incarnation, so the retired
+key and the replacement key can never authorize the same incarnation.
 
 `sync checkpoint plan|apply` creates the administrator-signed content adoption
 evidence used for an initial baseline, reviewed conflict resolution, or visible

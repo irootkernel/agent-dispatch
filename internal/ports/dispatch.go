@@ -77,8 +77,16 @@ type ObservationInput struct {
 	// PositionJSON is the source position object (watchman since/clock)
 	// persisted verbatim for the observation contract's source.position
 	// (E7-T8/M-11).
-	PositionJSON string
-	Changes      []ObservationChange
+	PositionJSON       string
+	Changes            []ObservationChange
+	ImportAttributions []ImportAttributionInput
+}
+
+type ImportAttributionInput struct {
+	JobID      string
+	Fence      int64
+	Path       string
+	AfterValue string
 }
 
 // ObservationChange is one normalized path evidence row.

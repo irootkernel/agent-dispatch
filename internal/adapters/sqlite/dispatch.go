@@ -131,6 +131,9 @@ func portsObservation(o ports.ObservationInput) ObservationRecord {
 			FileType: c.FileType, BeforeDigest: c.BeforeDigest, AfterDigest: c.AfterDigest, DigestStatus: c.DigestStatus,
 		})
 	}
+	for _, a := range o.ImportAttributions {
+		rec.ImportAttributions = append(rec.ImportAttributions, ImportAttributionRecord{JobID: a.JobID, Fence: a.Fence, Path: a.Path, AfterValue: a.AfterValue})
+	}
 	return rec
 }
 

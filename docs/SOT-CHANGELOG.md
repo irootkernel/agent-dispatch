@@ -7,9 +7,9 @@ retain their recorded scope; migrated document pointers use their current paths.
 
 ## 1.8.0 - Unreleased
 
-E21-T1 through E21-T3 implement the durable local substrate, signed membership,
-explicit publication, and checkpoints for the still-manual two-node sync
-workflow. Import, peer service, pair verification, and release remain disabled.
+E21-T1 through E21-T4 implement the durable local substrate, signed membership,
+explicit publication, checkpoints, and guarded local import for the still-manual
+two-node sync workflow. Peer service, pair verification, and release remain disabled.
 
 - SQLite schema v21 stores group controls, idempotent logical jobs, fenced
   claims, bounded attempts, and append-only recovery journals before effects.
@@ -27,6 +27,9 @@ workflow. Import, peer service, pair verification, and release remain disabled.
 - E21-T3 adds receipt-gated frozen Markdown publication, CLI-only publisher
   signing, fast-forward confirmation with recoverable candidate reuse, atomic
   peer-delivery admission, and administrator-signed checkpoint plan/apply.
+- E21-T4 adds bounded full-history import validation, current cooperative-import
+  acknowledgement and Git-state fences, path-disjoint file/index/ref apply,
+  schema v22 immutable import effects, and exact one-use Watchman attribution.
 
 ## 1.7.0 - 2026-09-19
 

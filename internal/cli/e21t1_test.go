@@ -52,6 +52,9 @@ func TestE21T1SyncPauseResumeAndStatus(t *testing.T) {
 	if status["state"] != "active" || status["control_revision"] != float64(1) {
 		t.Fatalf("initial control = %v", status)
 	}
+	if latest, ok := status["latest_import"].(map[string]any); !ok || latest["present"] != false {
+		t.Fatalf("initial import status = %v", status["latest_import"])
+	}
 	code, envelope, stderr = syncResult(t, "pause", "--group", "wiki-pair", "--expected-control-revision", "1", "--config", configPath, "--output", "json")
 	if code != 0 {
 		t.Fatalf("pause: %d %s", code, stderr)
@@ -72,8 +75,8 @@ func TestE21T1SyncPauseResumeAndStatus(t *testing.T) {
 
 func TestE21T1EnabledConfigDoesNotActivateStillReservedGitCommands(t *testing.T) {
 	configPath := enabledSyncConfig(t)
-	code, _, stderr := syncResult(t, "reconcile", "--group", "wiki-pair", "--config", configPath, "--output", "json")
+	code, _, stderr := syncResult(t, "verify", "--group", "wiki-pair", "--config", configPath, "--output", "json")
 	if code != 3 || !bytes.Contains([]byte(stderr), []byte("sync_capability_unavailable")) {
-		t.Fatalf("reserved reconcile: %d %s", code, stderr)
+		t.Fatalf("reserved verify: %d %s", code, stderr)
 	}
 }

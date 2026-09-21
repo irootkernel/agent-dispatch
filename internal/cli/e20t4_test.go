@@ -214,8 +214,8 @@ func TestE20T4CapabilitiesMatchProviderCommandVocabulary(t *testing.T) {
 
 func TestE20T4ReservedSyncCommandUnavailable(t *testing.T) {
 	var out, errOut bytes.Buffer
-	if code := Run([]string{"sync", "reconcile", "--group", "wiki-pair"}, &out, &errOut); code != 3 {
-		t.Fatalf("reconcile code = %d, stderr=%s", code, errOut.String())
+	if code := Run([]string{"sync", "verify", "--group", "wiki-pair"}, &out, &errOut); code != 3 {
+		t.Fatalf("verify code = %d, stderr=%s", code, errOut.String())
 	}
 	if out.Len() != 0 || !bytes.Contains(errOut.Bytes(), []byte("sync_capability_unavailable")) {
 		t.Fatalf("unexpected streams out=%q err=%q", out.String(), errOut.String())

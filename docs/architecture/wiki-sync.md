@@ -1,9 +1,9 @@
 # Two-Node Wiki Sync Architecture
 
 > **Status:** Partially implemented for v0.2.0 under D-030. E21-T1 through
-> E21-T3 provide durable jobs and control, restricted Git and membership,
-> explicit signed publication, and signed checkpoints. Import, peer service,
-> and pair verification remain unavailable.
+> E21-T4 provide durable jobs and control, restricted Git and membership,
+> explicit signed publication, signed checkpoints, and guarded local import.
+> Peer service, pair verification, and release remain unavailable.
 
 Agent Dispatch extends the existing maintenance loop with an explicit Git
 publication step and a peer import loop. Hermes still owns Wiki semantics.
@@ -74,13 +74,18 @@ service may recover an already-signed candidate but cannot sign unattended.
 An import plan records the from and target commits, validated membership and
 publication evidence, resource observation revision, per-path before and after
 digests or absence, and expected Git writer state before live files change.
-The resource guard covers validation, application, path-fact update, and
-observation attribution. Import refuses changes overlapping target paths,
+The resource guard serializes participating Watchman planning, validation,
+application, and the path-fact/effect commit. Import refuses changes overlapping target paths,
 untracked overwrite collisions, or unstable Git/index/ref state. Proven
 disjoint edits and out-of-scope or ignored files remain untouched and dirty.
 Route-protected and immutable paths are outside the synchronized content scope;
 a publication or import candidate touching one fails closed before content
 mutation.
+An advance that changes only controller-owned metadata uses the same durable
+import job, fence, and pre-apply journal with `controller_only: true` and an
+empty effect set. Recovery classifies its exact ref/index/worktree state before
+retrying or settling; it never infers completion from the absence of Markdown
+effects.
 Without a current cooperative-import acknowledgement, reconciliation may fetch
 and validate but defers live-tree application. Publication and import are
 fast-forward-only: Agent Dispatch never merges, rebases, stashes, force-pushes,
@@ -91,10 +96,20 @@ identity digest as well as the remote name. The Git adapter must resolve and
 recheck that identity immediately before a protected effect so a remote
 retarget cannot preserve currentness accidentally.
 
-Watchman continues recording observations. Import completion updates path facts
-and suppression evidence under the observation fence. A crash between file,
+Watchman remains active, but its dispatch process waits on the same resource
+guard before reading files or loading facts. Import completion updates path facts
+and publishes immutable suppression evidence under the observation fence. A crash between file,
 ref, index, and SQLite transitions enters recovery or uncertainty; it does not
 infer success from partial state.
+
+The implemented importer records immutable per-path before/after evidence in
+`sync_import_effects` before live mutation. An exact Watchman observation may
+consume the newest effect while its job is applying, recovering, uncertain, or
+completed; this closes the process-loss window after filesystem/Git mutation
+without treating a contradictory value as imported. The
+`sync_import_attributions` row is committed with that source observation.
+Older evidence cannot resurface after a later import, so a contradictory or
+late same-path edit stays dirty.
 
 The initial trusted state and any reviewed conflict resolution use an
 administrator-signed adoption checkpoint. Every commit from the accepted

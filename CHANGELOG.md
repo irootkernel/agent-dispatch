@@ -14,6 +14,9 @@ This file records concise shipped outcomes and pending changes.
   `sync membership plan`/`apply` with emergency revocation holds.
 - Add explicit signed `sync publish`, frozen Markdown snapshots, atomic peer
   delivery admission, and reviewed administrator-signed checkpoints.
+- Add guarded fast-forward `sync reconcile`, durable pre-apply import effects,
+  path-disjoint live application, crash uncertainty, and exact one-use Watchman
+  attribution for imported writes, renames, and deletions.
 
 ### Fixed
 
@@ -21,6 +24,9 @@ This file records concise shipped outcomes and pending changes.
   cannot exhaust or modify the operator's long-lived Watchman process.
 - Classify Watchman watcher-startup failures as target unavailable with
   state-preserving restart guidance instead of unrelated parent-watch advice.
+- Harden guarded import around active maintenance writers, concurrent Watchman
+  arrivals, ignored-file collisions, cross-host path aliases, controller-only
+  checkpoints, and nonzero blocked or uncertain outcomes.
 
 ## v0.1.8 - 2026-09-10
 

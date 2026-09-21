@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
 	"github.com/irootkernel/agent-dispatch/internal/app/ingest"
 	"github.com/irootkernel/agent-dispatch/internal/config"
@@ -63,16 +64,37 @@ func durableFacts(configPath, resourceID string) (ingest.PathFacts, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(facts) == 0 {
-		return ingest.NoFacts{}, nil
-	}
 	digests := make(ingest.MapFacts, len(facts))
 	for path, fact := range facts {
 		if fact.Exists {
 			digests[path] = records.Digest(fact.Digest)
 		}
 	}
-	return digests, nil
+	effects, err := store.LoadPendingImportEffects(context.Background(), resourceID)
+	if err != nil {
+		return nil, err
+	}
+	if len(effects) == 0 {
+		if len(digests) == 0 {
+			return ingest.NoFacts{}, nil
+		}
+		return digests, nil
+	}
+	return durableImportFacts{MapFacts: digests, effects: effects}, nil
+}
+
+type durableImportFacts struct {
+	ingest.MapFacts
+	effects []sqlite.ImportEffectRow
+}
+
+func (d durableImportFacts) MatchImportEffect(path, after string) (string, int64, bool, error) {
+	for _, effect := range d.effects {
+		if effect.Path == path && effect.After == after {
+			return effect.JobID, effect.Fence, true, nil
+		}
+	}
+	return "", 0, false, nil
 }
 
 // staleRebuilderOf builds the stale-intent rebuilder over the operator

@@ -15,6 +15,18 @@ type Guard struct{ file *os.File }
 var safeName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
 
 func Acquire(stateDir, resourceID string) (*Guard, error) {
+	return acquire(stateDir, resourceID, syscall.LOCK_EX|syscall.LOCK_NB)
+}
+
+// AcquireWait serializes a participating resource writer with an import or
+// publication already in progress. It is used by Watchman dispatch so an event
+// captured during import is evaluated only after durable import effects become
+// attributable.
+func AcquireWait(stateDir, resourceID string) (*Guard, error) {
+	return acquire(stateDir, resourceID, syscall.LOCK_EX)
+}
+
+func acquire(stateDir, resourceID string, operation int) (*Guard, error) {
 	if !filepath.IsAbs(stateDir) || !safeName.MatchString(resourceID) {
 		return nil, fmt.Errorf("invalid resource guard binding")
 	}
@@ -26,7 +38,7 @@ func Acquire(stateDir, resourceID string) (*Guard, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+	if err = syscall.Flock(int(f.Fd()), operation); err != nil {
 		f.Close()
 		return nil, fmt.Errorf("resource %s is guarded: %w", resourceID, err)
 	}

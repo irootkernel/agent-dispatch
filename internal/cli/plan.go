@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/hermeskanban"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/resourceguard"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
 	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
@@ -111,6 +112,7 @@ type planArtifacts struct {
 	input    watchman.Input
 	batch    *ingest.Result
 	plan     *dispatch.Plan
+	guard    *resourceguard.Guard
 }
 
 // planPipeline runs the shared read-only planning pipeline: parse stdin,
@@ -128,6 +130,13 @@ type factsSource func(configPath, resourceID string) (ingest.PathFacts, error)
 // plan, dry-run, and dispatch validate identically.
 
 func planPipeline(command string, args []string, stderr io.Writer, facts factsSource) (*planArtifacts, int) {
+	var writerGuard *resourceguard.Guard
+	handedOffGuard := false
+	defer func() {
+		if writerGuard != nil && !handedOffGuard {
+			_ = writerGuard.Close()
+		}
+	}()
 	opts, code := parsePlanFlags(command, args, nil, stderr)
 	if code != 0 {
 		return nil, code
@@ -156,6 +165,12 @@ func planPipeline(command string, args []string, stderr io.Writer, facts factsSo
 	revision, ok := config.RouteRevision(cfg, opts.routeID)
 	if !ok {
 		return nil, planErr(stderr, command, "internal_unclassified", "internal", "route revision could not be computed", 40)
+	}
+	if facts != nil {
+		writerGuard, err = resourceguard.AcquireWait(stateDirOf(cfg), route.Source.Resource)
+		if err != nil {
+			return nil, planErr(stderr, command, "transition_invalid", "conflict", "resource writer guard could not be acquired: "+err.Error(), 14)
+		}
 	}
 
 	env, err := watchman.ParseEnv(os.LookupEnv)
@@ -228,11 +243,13 @@ func planPipeline(command string, args []string, stderr io.Writer, facts factsSo
 	if err != nil {
 		return nil, planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
 	}
-	return &planArtifacts{
+	artifacts := &planArtifacts{
 		opts: opts, cfg: cfg, route: route, resource: resource,
 		dest: dest, resolved: resolved, revision: revision,
-		env: env, input: input, batch: batch, plan: plan, hints: hints,
-	}, 0
+		env: env, input: input, batch: batch, plan: plan, hints: hints, guard: writerGuard,
+	}
+	handedOffGuard = true
+	return artifacts, 0
 }
 
 // runPlan plans one Watchman invocation end to end with no SQLite
@@ -287,6 +304,7 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	if code != 0 {
 		return code
 	}
+	defer artifacts.guard.Close()
 	// A never-registered route — no baseline or reconciliation has
 	// materialized its trusted registration — must refuse BEFORE any
 	// durable write: every arrival row references the registration, and a
@@ -704,6 +722,10 @@ func buildHeldLineage(a *planArtifacts) (ports.Lineage, ports.QuarantineInput, e
 			DigestStatus: string(c.DigestStatus),
 		})
 	}
+	importAttributions := make([]ports.ImportAttributionInput, 0, len(a.batch.ImportMatches))
+	for _, match := range a.batch.ImportMatches {
+		importAttributions = append(importAttributions, ports.ImportAttributionInput{JobID: match.JobID, Fence: match.Fence, Path: match.Path, AfterValue: match.After})
+	}
 	flagsJSON, err := json.Marshal(a.env.Flags())
 	if err != nil {
 		return ports.Lineage{}, ports.QuarantineInput{}, err
@@ -734,7 +756,7 @@ func buildHeldLineage(a *planArtifacts) (ports.Lineage, ports.QuarantineInput, e
 				TriggerName:    a.env.Trigger, ResourceID: a.route.Source.Resource,
 				ObservedAt: now, ReceivedAt: now,
 				RawPayloadDigest: string(a.input.RawDigest), IngestStatus: "accepted",
-				FlagsJSON: string(flagsJSON), PositionJSON: string(positionJSON), Changes: changes,
+				FlagsJSON: string(flagsJSON), PositionJSON: string(positionJSON), Changes: changes, ImportAttributions: importAttributions,
 			},
 			Batch: ports.BatchInput{
 				BatchID: string(batchID), RouteID: a.opts.routeID, RouteRevision: a.plan.Route.Revision,

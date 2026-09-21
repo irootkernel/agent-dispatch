@@ -37,8 +37,9 @@ const ConfigVersion = "1"
 // adds the notification drain leases and drain-run evidence (E16-T1);
 // v20 stores the managed launchd schedule's durable --at timing
 // overrides (E17-T2); v21 adds durable sync controls, jobs, fenced claims,
-// and append-only recovery journals (E21-T1).
-const SchemaRange = "1-21"
+// and append-only recovery journals (E21-T1); v22 adds immutable sync-import
+// effects and exact Watchman attribution (E21-T4).
+const SchemaRange = "1-22"
 
 // AdapterVersions returns the pinned adapter implementation versions the
 // build carries. Each entry names the delivered surface and its verified
@@ -47,7 +48,7 @@ func AdapterVersions() map[string]string {
 	return map[string]string{
 		"watchman":      "bounded parser and managed trigger lifecycle, verified watchman 2026.07.27.00 (E2)",
 		"localfs":       "containment resolver (E2-T2)",
-		"sqlite":        "schema-v1..v21 (v2 attempts uniqueness through v7 record revision columns, v8-v9 observation revision and managed watch bindings, v10-v11 destination cutover and capability binding, v12-v13 aggregate fan-out on destination lanes, v14-v15 receipt outcomes and batch evidence, v16 durable notification outbox, v17 disabled-route baselines, v18 serialization-group topology, v19 notification drain leases and drain-run evidence, v20 managed schedule timing overrides, v21 durable sync jobs and journals)",
+		"sqlite":        "schema-v1..v22 (v2 attempts uniqueness through v7 record revision columns, v8-v9 observation revision and managed watch bindings, v10-v11 destination cutover and capability binding, v12-v13 aggregate fan-out on destination lanes, v14-v15 receipt outcomes and batch evidence, v16 durable notification outbox, v17 disabled-route baselines, v18 serialization-group topology, v19 notification drain leases and drain-run evidence, v20 managed schedule timing overrides, v21 durable sync jobs and journals, v22 exact sync-import attribution)",
 		"hermeskanban":  "public-cli transport, capability probe, and durable sink, verified hermes 0.20.5 (E15-T4)",
 		"hermeswebhook": "static-declaration HTTPS sink, transport acceptance only, from the E0-T4 s9 evidence (E6-T1)",
 	}

@@ -4,7 +4,7 @@
     {"path":"sync capabilities","capability":"contract_read","availability":"implemented","side_effect":"none"},
     {"path":"sync status","capability":"status_read","availability":"implemented","side_effect":"none"},
     {"path":"sync publish","capability":"publication","availability":"implemented","side_effect":"git_write"},
-    {"path":"sync reconcile","capability":"reconciliation","availability":"reserved","side_effect":"git_read_write"},
+    {"path":"sync reconcile","capability":"reconciliation","availability":"implemented","side_effect":"git_read_write"},
     {"path":"sync verify","capability":"pair_verification","availability":"reserved","side_effect":"network_read"},
     {"path":"sync serve","capability":"peer_service","availability":"reserved","side_effect":"listener"},
     {"path":"sync pause","capability":"control","availability":"implemented","side_effect":"state_write"},

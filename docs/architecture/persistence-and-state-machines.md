@@ -45,6 +45,8 @@ The implementation must verify the resulting journal mode and fail `doctor` if t
 | `sync_controls` | Group-scoped protected-effect control and validated configuration binding (schema v21) | primary key group ID; monotonic revision |
 | `sync_jobs` | Stable logical sync obligations, request fingerprints, bounded attempts, ownership, and fencing generations (schema v21) | unique job ID; unique group + kind + logical key |
 | `sync_journal_entries` | Immutable per-fence recovery and effect evidence (schema v21) | unique journal ID; indexed job + time |
+| `sync_import_effects` | Immutable pre-apply before/after path evidence for live import and crash attribution (schema v22) | unique job + fence + path; newest active-or-applied effect wins per resource path |
+| `sync_import_attributions` | One-use exact Watchman consumption of an applied import effect, separate from work receipts (schema v22) | unique job + fence + path; indexed observation identity |
 
 Since E12-T2 the single-active slot, the dirty generation, and the follow-up
 chain are keyed on the dispatch's destination lane (`destination_lane_state`,

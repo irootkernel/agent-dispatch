@@ -2,6 +2,7 @@ package cli
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/domain/syncrecords"
 )
 
 func runSync(args []string, stdout, stderr io.Writer) int {
@@ -58,11 +60,44 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 			return syncStoreError(stderr, command, err)
 		}
 		incarnation := localSyncIncarnation(cfg)
+		latestImport := map[string]any{"present": false}
+		if row, loadErr := concrete.LoadLatestSyncJob(requestCtx(), group, "import"); loadErr == nil {
+			latestImport = map[string]any{"present": true, "job_id": row.JobID, "state": row.State, "updated_at": row.UpdatedAt, "resolved": row.ResolvedAt != "", "fence": row.Fence, "claimed": row.ClaimOwner != ""}
+			if record, decodeErr := syncrecords.DecodeImport([]byte(row.PayloadJSON)); decodeErr == nil {
+				paths := make([]string, 0, len(record.Paths))
+				for _, effect := range record.Paths {
+					paths = append(paths, effect.Path)
+				}
+				latestImport["import_id"] = record.ImportID
+				latestImport["target_commit"] = record.TargetCommit
+				reason := record.Reason
+				switch row.State {
+				case "recovering", "uncertain":
+					reason = "partial_effect"
+				case "deferred":
+					if reason == "none" {
+						if journals, journalErr := concrete.LoadSyncJournals(requestCtx(), row.JobID); journalErr == nil && len(journals) > 0 {
+							var evidence map[string]any
+							if json.Unmarshal([]byte(journals[len(journals)-1].EvidenceJSON), &evidence) == nil {
+								if journalReason, ok := evidence["reason"].(string); ok && journalReason != "" {
+									reason = journalReason
+								}
+							}
+						}
+					}
+				}
+				latestImport["reason"] = reason
+				latestImport["target_paths"] = paths
+			}
+		} else if !errors.Is(loadErr, sql.ErrNoRows) {
+			return syncStoreError(stderr, command, loadErr)
+		}
 		return writeEnvelope(stdout, command, map[string]any{
 			"schema_version": "agent-dispatch.sync-status/v1", "group_id": group,
 			"state": control.State, "reason": control.Reason, "control_revision": control.Revision,
 			"config_revision": revision, "control_config_current": control.ConfigRevision == revision,
 			"import_acknowledgement_current": config.SyncAcknowledgementCurrent(cfg, incarnation),
+			"latest_import":                  latestImport,
 			"side_effects":                   []string{},
 		})
 	case "pause", "resume":
@@ -107,6 +142,8 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		return runSyncPublish(args[1:], stdout, stderr)
 	case "checkpoint":
 		return runSyncCheckpoint(args[1:], stdout, stderr)
+	case "reconcile":
+		return runSyncReconcile(args[1:], stdout, stderr)
 	default:
 		if reservedSyncCommand(args) {
 			writeErrorWithResult(stderr, command, "sync_capability_unavailable", "configuration", "the requested sync capability is reserved but unavailable in this build", map[string]any{"side_effects": []string{}})
@@ -126,7 +163,7 @@ func syncCommandPath(args []string) string {
 func syncCapabilities() map[string]any {
 	return map[string]any{
 		"contract_read": true, "status_read": true,
-		"publication": true, "reconciliation": false, "pair_verification": false,
+		"publication": true, "reconciliation": true, "pair_verification": false,
 		"peer_service": false, "control": true, "membership_plan": true,
 		"membership_apply": true, "checkpoint_plan": true, "checkpoint_apply": true,
 		"service_render": false, "service_install": false, "service_inspect": false,
@@ -139,7 +176,7 @@ func reservedSyncCommand(args []string) bool {
 		return false
 	}
 	switch args[0] {
-	case "reconcile", "verify", "serve":
+	case "verify", "serve":
 		return true
 	case "service":
 		return len(args) >= 2 && (args[1] == "render" || args[1] == "install" || args[1] == "inspect" || args[1] == "stop" || args[1] == "disable" || args[1] == "uninstall")

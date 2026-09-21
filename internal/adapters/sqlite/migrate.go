@@ -53,6 +53,7 @@ var Migrations = []Migration{
 	{Version: 19, Name: "notification-drain-leases", SQL: schemaV19NotificationDrainLeases},
 	{Version: 20, Name: "schedule-at-overrides", SQL: schemaV20ScheduleAtOverrides},
 	{Version: 21, Name: "sync-jobs-controls-journals", SQL: schemaV21SyncJobsControlsJournals},
+	{Version: 22, Name: "sync-import-effects-attribution", SQL: schemaV22SyncImportEffectsAttribution},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
@@ -117,6 +118,50 @@ CREATE INDEX idx_sync_journal_job ON sync_journal_entries(job_id, recorded_at, j
 CREATE TRIGGER sync_journal_entries_no_update BEFORE UPDATE ON sync_journal_entries
 BEGIN
 	SELECT RAISE(ABORT, 'sync journal is append-only');
+END;
+`
+
+// schemaV22SyncImportEffectsAttribution keeps controller provenance separate
+// from Hermes work receipts. Effects are immutable; the first exact Watchman
+// observation consumes each path through an append-only attribution row.
+const schemaV22SyncImportEffectsAttribution = `
+CREATE TABLE sync_import_effects (
+	job_id       TEXT NOT NULL REFERENCES sync_jobs(job_id) ON DELETE CASCADE,
+	fence        INTEGER NOT NULL CHECK (fence >= 1),
+	resource_id  TEXT NOT NULL REFERENCES resources(resource_id),
+	path         TEXT NOT NULL,
+	before_value TEXT NOT NULL,
+	after_value  TEXT NOT NULL,
+	applied_at   TEXT,
+	PRIMARY KEY (job_id, fence, path),
+	CHECK (before_value = 'absent' OR before_value GLOB 'sha256:[0-9a-f]*'),
+	CHECK (after_value = 'absent' OR after_value GLOB 'sha256:[0-9a-f]*'),
+	CHECK (before_value <> after_value)
+);
+CREATE INDEX idx_sync_import_effects_resource ON sync_import_effects(resource_id, path, applied_at);
+
+CREATE TABLE sync_import_attributions (
+	job_id        TEXT NOT NULL,
+	fence         INTEGER NOT NULL CHECK (fence >= 1),
+	path          TEXT NOT NULL,
+	observation_id TEXT NOT NULL REFERENCES source_observations(observation_id),
+	after_value   TEXT NOT NULL,
+	attributed_at TEXT NOT NULL,
+	PRIMARY KEY (job_id, fence, path),
+	FOREIGN KEY (job_id, fence, path) REFERENCES sync_import_effects(job_id, fence, path) ON DELETE CASCADE
+);
+CREATE INDEX idx_sync_import_attribution_observation ON sync_import_attributions(observation_id);
+
+CREATE TRIGGER sync_import_effects_no_update BEFORE UPDATE ON sync_import_effects
+WHEN NOT (OLD.applied_at IS NULL AND NEW.applied_at IS NOT NULL AND
+          OLD.job_id = NEW.job_id AND OLD.fence = NEW.fence AND OLD.resource_id = NEW.resource_id AND
+          OLD.path = NEW.path AND OLD.before_value = NEW.before_value AND OLD.after_value = NEW.after_value)
+BEGIN
+	SELECT RAISE(ABORT, 'sync import effect is immutable');
+END;
+CREATE TRIGGER sync_import_attributions_no_update BEFORE UPDATE ON sync_import_attributions
+BEGIN
+	SELECT RAISE(ABORT, 'sync import attribution is append-only');
 END;
 `
 

@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/config"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/unicode/norm"
 )
 
 const (
@@ -36,6 +38,8 @@ var (
 	ErrOutputBound      = errors.New("git subprocess output exceeded its bound")
 	ErrPushRejected     = errors.New("git fast-forward push was rejected")
 	ErrPushAmbiguous    = errors.New("git push outcome is ambiguous")
+	ErrHistoryBound     = errors.New("git history exceeds configured bound")
+	ErrFetchRewrite     = errors.New("git fetch would rewrite approved history")
 )
 
 type Limits struct {
@@ -87,6 +91,20 @@ const (
 	PushRejected  PushState = "rejected"
 	PushAmbiguous PushState = "ambiguous"
 )
+
+// ImportState is the exact Git/index/worktree fence captured before a live
+// import. DirtyPaths excludes ignored files because Git proves they cannot be
+// overwritten by a tracked target path without reporting an untracked
+// collision first.
+type ImportState struct {
+	Head            string
+	ContentRef      string
+	IndexTree       string
+	Digest          string
+	DirtyPaths      []string
+	UntrackedPaths  []string
+	ActiveOperation string
+}
 
 func New(root string, limits Limits) (*Client, error) {
 	if !filepath.IsAbs(root) {
@@ -146,6 +164,348 @@ func (c *Client) Inspect(ctx context.Context) (WorktreeState, error) {
 		}
 	}
 	return state, nil
+}
+
+// InspectImport captures a closed, digestible view of the checked-out content
+// ref, index, and non-ignored local changes. It has no mutating Git operation.
+func (c *Client) InspectImport(ctx context.Context, contentRef string) (ImportState, error) {
+	if !validRef(contentRef) {
+		return ImportState{}, fmt.Errorf("unsafe content ref")
+	}
+	headRaw, _, err := c.run(ctx, nil, nil, "rev-parse", "--verify", "HEAD^{commit}")
+	if err != nil {
+		return ImportState{}, err
+	}
+	head := strings.TrimSpace(string(headRaw))
+	if !validOID(head) {
+		return ImportState{}, fmt.Errorf("git returned an invalid HEAD")
+	}
+	content, err := c.ResolveRef(ctx, contentRef)
+	if err != nil {
+		return ImportState{}, err
+	}
+	symbolic, _, err := c.run(ctx, nil, nil, "symbolic-ref", "-q", "HEAD")
+	if err != nil || strings.TrimSpace(string(symbolic)) != contentRef || head != content {
+		return ImportState{}, fmt.Errorf("checked-out HEAD is not the configured content ref")
+	}
+	indexRaw, _, err := c.run(ctx, nil, nil, "write-tree")
+	if err != nil {
+		return ImportState{}, err
+	}
+	indexTree := strings.TrimSpace(string(indexRaw))
+	if !validOID(indexTree) {
+		return ImportState{}, fmt.Errorf("git returned an invalid index tree")
+	}
+	status, _, err := c.run(ctx, nil, nil, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=no")
+	if err != nil {
+		return ImportState{}, err
+	}
+	dirty, untracked, err := parsePorcelainPaths(status)
+	if err != nil {
+		return ImportState{}, err
+	}
+	ignoredRaw, _, ignoredErr := c.run(ctx, nil, nil, "ls-files", "--others", "--ignored", "--exclude-standard", "-z")
+	if ignoredErr != nil {
+		return ImportState{}, ignoredErr
+	}
+	for _, rawPath := range bytes.Split(ignoredRaw, []byte{0}) {
+		if len(rawPath) == 0 {
+			continue
+		}
+		path := string(rawPath)
+		if !validTreePath(path) {
+			return ImportState{}, fmt.Errorf("git ignored-file listing contains an unsafe path")
+		}
+		untracked = append(untracked, path)
+	}
+	sort.Strings(untracked)
+	operation, err := c.activeOperation(ctx)
+	if err != nil {
+		return ImportState{}, err
+	}
+	for _, path := range dirty {
+		if operation == "" && strings.HasPrefix(path, ".agent-dispatch-sync/") {
+			operation = "controller_dirty"
+			break
+		}
+	}
+	h := sha256.New()
+	for _, value := range []string{"agent-dispatch.git-import-state/v1", head, content, indexTree, operation} {
+		_, _ = h.Write([]byte(value))
+		_, _ = h.Write([]byte{0})
+	}
+	_, _ = h.Write(status)
+	// Ignored occupants participate in the closed overwrite fence even though
+	// porcelain intentionally omits them.
+	_, _ = h.Write(ignoredRaw)
+	return ImportState{Head: head, ContentRef: content, IndexTree: indexTree,
+		Digest: "sha256:" + fmt.Sprintf("%x", h.Sum(nil)), DirtyPaths: dirty,
+		UntrackedPaths: untracked, ActiveOperation: operation}, nil
+}
+
+func parsePorcelainPaths(raw []byte) ([]string, []string, error) {
+	records := bytes.Split(raw, []byte{0})
+	dirtySet, untrackedSet := map[string]bool{}, map[string]bool{}
+	for i := 0; i < len(records); i++ {
+		record := records[i]
+		if len(record) == 0 {
+			continue
+		}
+		if len(record) < 4 || record[2] != ' ' {
+			return nil, nil, fmt.Errorf("invalid Git porcelain record")
+		}
+		status, path := string(record[:2]), string(record[3:])
+		if !validTreePath(path) {
+			return nil, nil, fmt.Errorf("git status contains an unsafe path")
+		}
+		dirtySet[path] = true
+		if status == "??" {
+			untrackedSet[path] = true
+		}
+		if status[0] == 'R' || status[0] == 'C' || status[1] == 'R' || status[1] == 'C' {
+			i++
+			if i >= len(records) || len(records[i]) == 0 || !validTreePath(string(records[i])) {
+				return nil, nil, fmt.Errorf("invalid Git rename status")
+			}
+			dirtySet[string(records[i])] = true
+		}
+	}
+	dirty, untracked := make([]string, 0, len(dirtySet)), make([]string, 0, len(untrackedSet))
+	for path := range dirtySet {
+		dirty = append(dirty, path)
+	}
+	for path := range untrackedSet {
+		untracked = append(untracked, path)
+	}
+	sort.Strings(dirty)
+	sort.Strings(untracked)
+	return dirty, untracked, nil
+}
+
+func (c *Client) activeOperation(ctx context.Context) (string, error) {
+	for _, marker := range []string{"MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply", "BISECT_LOG"} {
+		raw, _, err := c.run(ctx, nil, nil, "rev-parse", "--git-path", marker)
+		if err != nil {
+			return "", err
+		}
+		path := strings.TrimSpace(string(raw))
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(c.root, path)
+		}
+		if _, err := os.Lstat(path); err == nil {
+			return marker, nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+	}
+	return "", nil
+}
+
+// ImportOverlap returns exact or Unicode/case aliases between target effects
+// and dirty paths. Case folding is intentionally conservative on every host:
+// a plan safe under this rule is also safe if the vault later moves to a
+// case-insensitive filesystem.
+func ImportOverlap(targets, dirty, untracked []string) (overlap, collisions []string) {
+	fold := cases.Fold()
+	target := map[string]string{}
+	for _, path := range targets {
+		target[fold.String(norm.NFC.String(path))] = path
+	}
+	for _, path := range dirty {
+		if _, ok := target[fold.String(norm.NFC.String(path))]; ok {
+			overlap = append(overlap, path)
+		}
+	}
+	for _, path := range untracked {
+		if _, ok := target[fold.String(norm.NFC.String(path))]; ok {
+			collisions = append(collisions, path)
+		}
+	}
+	sort.Strings(overlap)
+	sort.Strings(collisions)
+	return overlap, collisions
+}
+
+// FirstParentRange returns commits after from through target in application
+// order. Merge commits, an uncovered base, and bound exhaustion fail closed.
+func (c *Client) FirstParentRange(ctx context.Context, from, target string, limit int) ([]string, error) {
+	if !validOID(from) || !validOID(target) || limit < 1 || limit > 100000 {
+		return nil, fmt.Errorf("invalid bounded history request")
+	}
+	if from == target {
+		return []string{}, nil
+	}
+	var reverse []string
+	current := target
+	for len(reverse) < limit {
+		parents, err := c.CommitParents(ctx, current)
+		if err != nil {
+			return nil, err
+		}
+		if len(parents) != 1 {
+			return nil, fmt.Errorf("content history is not linear")
+		}
+		reverse = append(reverse, current)
+		if parents[0] == from {
+			for i, j := 0, len(reverse)-1; i < j; i, j = i+1, j-1 {
+				reverse[i], reverse[j] = reverse[j], reverse[i]
+			}
+			return reverse, nil
+		}
+		current = parents[0]
+	}
+	return nil, ErrHistoryBound
+}
+
+// ApplyImportIndex stages only the target paths and advances the checked-out
+// content ref with expected-old semantics. Disjoint staged entries remain
+// byte-for-byte represented by the existing index.
+func (c *Client) ApplyImportIndex(ctx context.Context, contentRef, from, target string, files map[string][]byte, deletions []string) error {
+	if !validRef(contentRef) || !validOID(from) || !validOID(target) || from == target {
+		return fmt.Errorf("invalid import index request")
+	}
+	paths := make([]string, 0, len(files))
+	for path := range files {
+		if !validTreePath(path) {
+			return fmt.Errorf("unsafe import path %q", path)
+		}
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	for _, path := range paths {
+		blob, _, err := c.run(ctx, nil, files[path], "hash-object", "-w", "--stdin")
+		if err != nil {
+			return err
+		}
+		oid := strings.TrimSpace(string(blob))
+		if !validOID(oid) {
+			return fmt.Errorf("git returned an invalid import blob")
+		}
+		if _, _, err := c.run(ctx, nil, nil, "update-index", "--add", "--cacheinfo", "100644,"+oid+","+path); err != nil {
+			return err
+		}
+	}
+	for _, path := range deletions {
+		if !validTreePath(path) {
+			return fmt.Errorf("unsafe import deletion %q", path)
+		}
+		if _, _, err := c.run(ctx, nil, nil, "update-index", "--force-remove", "--", path); err != nil {
+			return err
+		}
+	}
+	// Controller records are verified append-only evidence, not Watchman
+	// attribution effects. They still need to follow the checked-out commit so
+	// the index/worktree does not become dirty merely because the ref advanced.
+	controllers := map[string][]byte{}
+	for _, prefix := range []string{".agent-dispatch-sync/publications/", ".agent-dispatch-sync/checkpoints/", ".agent-dispatch-sync/checkpoint-plans/"} {
+		entries, err := c.ReadTreePrefix(ctx, target, prefix)
+		if err != nil {
+			return err
+		}
+		for path, raw := range entries {
+			controllers[path] = raw
+		}
+	}
+	controllerPaths := make([]string, 0, len(controllers))
+	for path := range controllers {
+		controllerPaths = append(controllerPaths, path)
+	}
+	sort.Strings(controllerPaths)
+	for _, path := range controllerPaths {
+		raw := controllers[path]
+		if err := c.writeControllerFile(path, raw); err != nil {
+			return err
+		}
+		blob, _, err := c.run(ctx, nil, raw, "hash-object", "-w", "--stdin")
+		if err != nil {
+			return err
+		}
+		oid := strings.TrimSpace(string(blob))
+		if !validOID(oid) {
+			return fmt.Errorf("git returned an invalid controller blob")
+		}
+		if _, _, err := c.run(ctx, nil, nil, "update-index", "--add", "--cacheinfo", "100644,"+oid+","+path); err != nil {
+			return err
+		}
+	}
+	current, err := c.ResolveRef(ctx, contentRef)
+	if err != nil {
+		return err
+	}
+	if current == target {
+		return nil
+	}
+	if current != from {
+		return fmt.Errorf("content ref changed during import")
+	}
+	return c.UpdateRefExpected(ctx, contentRef, target, from)
+}
+
+func (c *Client) writeControllerFile(path string, raw []byte) error {
+	if !validContentControllerPath(path) {
+		return fmt.Errorf("unsafe controller path")
+	}
+	dir := filepath.Dir(filepath.Join(c.root, filepath.FromSlash(path)))
+	if err := c.checkControllerAncestors(path); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	// Recheck after creating missing directories. This matches the Markdown
+	// writer's containment boundary and catches an ancestor replaced while the
+	// path was being prepared.
+	if err := c.checkControllerAncestors(path); err != nil {
+		return err
+	}
+	target := filepath.Join(c.root, filepath.FromSlash(path))
+	if info, err := os.Lstat(target); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("controller target is a symlink")
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, ".agent-dispatch-controller-*")
+	if err != nil {
+		return err
+	}
+	name := tmp.Name()
+	err = tmp.Chmod(0o600)
+	if err == nil {
+		var written int
+		written, err = tmp.Write(raw)
+		if err == nil && written != len(raw) {
+			err = fmt.Errorf("short controller write")
+		}
+	}
+	if err == nil {
+		err = tmp.Sync()
+	}
+	closeErr := tmp.Close()
+	if err == nil {
+		err = closeErr
+	}
+	if err == nil {
+		err = os.Rename(name, target)
+	}
+	if err != nil {
+		_ = os.Remove(name)
+	}
+	return err
+}
+
+func (c *Client) checkControllerAncestors(path string) error {
+	cur := c.root
+	for _, part := range strings.Split(filepath.ToSlash(filepath.Dir(path)), "/") {
+		cur = filepath.Join(cur, filepath.FromSlash(part))
+		if info, err := os.Lstat(cur); err == nil {
+			if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+				return fmt.Errorf("controller path ancestor is not a regular directory")
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
 }
 
 func (c *Client) ResolveRef(ctx context.Context, ref string) (string, error) {
@@ -210,8 +570,16 @@ func (c *Client) Fetch(ctx context.Context, remote, sourceRef, destinationRef, r
 	if !validRef(sourceRef) || !validRef(destinationRef) {
 		return fmt.Errorf("unsafe fetch ref")
 	}
-	_, _, err = c.run(ctx, nil, nil, "fetch", "--upload-pack=git-upload-pack", "--no-tags", "--no-write-fetch-head", "--no-recurse-submodules", remoteURL, sourceRef+":"+destinationRef)
+	_, stderr, err := c.run(ctx, nil, nil, "fetch", "--upload-pack=git-upload-pack", "--no-tags", "--no-write-fetch-head", "--no-recurse-submodules", remoteURL, sourceRef+":"+destinationRef)
+	if err != nil && fetchRejectedRewrite(stderr) {
+		return fmt.Errorf("%w: %v", ErrFetchRewrite, err)
+	}
 	return err
+}
+
+func fetchRejectedRewrite(stderr []byte) bool {
+	message := strings.ToLower(string(stderr))
+	return strings.Contains(message, "non-fast-forward") || strings.Contains(message, "would clobber existing tag")
 }
 
 func (c *Client) ReadFile(ctx context.Context, oid, path string) ([]byte, error) {

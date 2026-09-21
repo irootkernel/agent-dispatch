@@ -25,7 +25,7 @@ var expectedArtifacts = []string{
 // allowlisted path and its bytes in bundle order. SHA256SUMS supports ordinary
 // corruption detection; this pin ensures the checksum regeneration command
 // cannot silently bless coordinated schema/fixture drift.
-const expectedArtifactSetDigest = "1c31bc604067da286fdede9cf525eeb8f5977c1ef9e47d89bcdff3561bdbdf20"
+const expectedArtifactSetDigest = "94eb78951c47cd81a8c5cd159e3dcfc36a274d1e4f7d59fda6dfb3f37f1e219e"
 
 type bundle struct {
 	SchemaVersion  string   `json:"schema_version"`
@@ -61,7 +61,7 @@ type commandTuple struct{ Path, Capability, Availability, SideEffect string }
 
 var expectedCommandTuples = []commandTuple{
 	{"sync capabilities", "contract_read", "implemented", "none"}, {"sync status", "status_read", "implemented", "none"},
-	{"sync publish", "publication", "implemented", "git_write"}, {"sync reconcile", "reconciliation", "reserved", "git_read_write"}, {"sync verify", "pair_verification", "reserved", "network_read"}, {"sync serve", "peer_service", "reserved", "listener"}, {"sync pause", "control", "implemented", "state_write"}, {"sync resume", "control", "implemented", "state_write"},
+	{"sync publish", "publication", "implemented", "git_write"}, {"sync reconcile", "reconciliation", "implemented", "git_read_write"}, {"sync verify", "pair_verification", "reserved", "network_read"}, {"sync serve", "peer_service", "reserved", "listener"}, {"sync pause", "control", "implemented", "state_write"}, {"sync resume", "control", "implemented", "state_write"},
 	{"sync membership plan", "membership_plan", "implemented", "none"}, {"sync membership apply", "membership_apply", "implemented", "git_write"}, {"sync checkpoint plan", "checkpoint_plan", "implemented", "network_read"}, {"sync checkpoint apply", "checkpoint_apply", "implemented", "git_write"},
 	{"sync service render", "service_render", "reserved", "none"}, {"sync service install", "service_install", "reserved", "service_write"}, {"sync service inspect", "service_inspect", "reserved", "none"}, {"sync service stop", "service_stop", "reserved", "service_write"}, {"sync service disable", "service_disable", "reserved", "service_write"}, {"sync service uninstall", "service_uninstall", "reserved", "service_write"},
 }

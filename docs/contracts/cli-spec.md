@@ -64,7 +64,8 @@ revision-fenced `sync pause` and `sync resume`. E21-T2 implements JSON-only
 while apply requires a reviewed strict-JSON plan file, an exact expected
 predecessor (`none` for bootstrap), and the local administrator signing-key
 reference. E21-T3 implements explicit `sync publish` and administrator-reviewed
-`sync checkpoint plan|apply`. Publication requires an exact configuration
+`sync checkpoint plan|apply`. E21-T4 implements `sync reconcile --group <id>`
+as the guarded import and exact Watchman-attribution surface. Publication requires an exact configuration
 revision, an idle maintained resource with current valid completion receipts,
 and a changed frozen Markdown snapshot. A stale expected configuration revision
 is `sync_precondition_failed` at exit 14. Failure of the idle-resource,
@@ -80,7 +81,24 @@ Non-bootstrap membership plan commands require `--instance`. Pause blocks new pr
 claims while preserving in-flight evidence; resume validates and binds the
 current configuration revision and never clears a conflict, revocation, trust,
 or recovery block. A confirmed normal replacement clears only the membership
-emergency block. Every other unimplemented identity returns `sync_capability_unavailable`
+emergency block. Reconcile fetches and validates while unacknowledged but defers
+live mutation; overlap, untracked collision, Git instability, divergence,
+uncovered history, trust failure, and partial effects stay inspectable. An
+exact administrator checkpoint at both local and approved remote heads is the
+only reconciliation evidence that clears conflict/trust/recovery control.
+Deferred safety fences are exit-0 dispositions with no live mutation. A
+conflict or protected-claim block exits 14, an unprovable partial effect exits
+13, and membership, signature, or covered-history trust failure exits 30; each
+still emits the versioned reconcile result with its durable state and reason.
+Transient membership or content fetch transport failure emits `deferred` with
+`git_unstable` at exit 10 and does not create a trust hold. A fetch rejected as
+non-fast-forward is classified separately and retains the fail-closed trust
+behavior.
+Enabled `sync status` includes `latest_import`: the newest durable import job
+state, reason, target, and target paths. Resolved deferrals remain visible there
+without occupying the bounded active queue; `present: false` means no import
+job has been admitted yet.
+Every other unimplemented identity returns `sync_capability_unavailable`
 at exit 3 until its owning E21 or E22 task implements and truthfully advertises it. The executable
 descriptor and peer contract bundle is
 [`sync-provider-v1`](sync-provider-v1/bundle.json). Capabilities reports both

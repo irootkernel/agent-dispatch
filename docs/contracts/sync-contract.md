@@ -101,6 +101,20 @@ remote: a confirmed candidate is verified and settled without signing again;
 an unchanged predecessor records no-effect recovery evidence and resumes the
 same candidate.
 
+`sync reconcile --group <id>` is the guarded import surface. It fetches into
+controller-owned tracking refs, verifies every first-parent content commit,
+persists the exact effect set before mutation, updates only affected worktree
+and index paths, advances the configured content ref with expected-old fencing,
+and commits path facts plus import provenance atomically. Schema v22 stores the
+effects separately from work receipts; the first exact Watchman observation
+consumes an effect, while mismatches and later edits remain ordinary dirty work.
+A content advance with no governed Markdown changes is still a durable import:
+its immutable record sets `controller_only`, carries no path effects, and
+journals the pre-apply boundary so exact ref/index/worktree inspection can
+settle or retry it after process loss. Transient fetch failures defer without
+creating a trust hold; a proven non-fast-forward fetch rejection remains a
+history/trust failure.
+
 `sync service` owns the managed launchd/systemd user-service definition. Install
 starts the exact rendered definition, stop preserves it, disable stops and
 disables it, and uninstall removes only the matching managed definition while

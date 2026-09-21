@@ -150,6 +150,32 @@ func TestUnchangedModifySuppression(t *testing.T) {
 	}
 }
 
+type importFacts struct {
+	MapFacts
+	job, path, after string
+	fence            int64
+}
+
+func (f importFacts) MatchImportEffect(path, after string) (string, int64, bool, error) {
+	return f.job, f.fence, path == f.path && after == f.after, nil
+}
+
+func TestExactImportSuppressionPrecedesGenericUnchangedAndMismatchStaysDirty(t *testing.T) {
+	r, e, root := setup(t)
+	write(t, root, "note.md", "imported")
+	digest := digestOf(t, root, "note.md")
+	facts := importFacts{MapFacts: MapFacts{"note.md": digest}, job: "import-job-1", fence: 3, path: "note.md", after: string(digest)}
+	res := build(t, r, e, facts, entry("note.md", records.OpModify))
+	if len(res.Changes) != 0 || len(res.ImportMatches) != 1 || res.ImportMatches[0].Fence != 3 || len(res.Dropped) != 1 || res.Dropped[0].Reason != ReasonSyncImportExact {
+		t.Fatalf("exact import attribution=%+v dropped=%+v changes=%+v", res.ImportMatches, res.Dropped, res.Changes)
+	}
+	write(t, root, "note.md", "late local edit")
+	res = build(t, r, e, facts, entry("note.md", records.OpModify))
+	if len(res.ImportMatches) != 0 || len(res.Changes) != 1 {
+		t.Fatalf("late mismatch must remain dirty: matches=%+v changes=%+v", res.ImportMatches, res.Changes)
+	}
+}
+
 func TestDeleteNeverOpensFile(t *testing.T) {
 	r, e, _ := setup(t)
 	// The path does not exist on disk at all; a delete must not attempt
@@ -160,6 +186,15 @@ func TestDeleteNeverOpensFile(t *testing.T) {
 	}
 	if res.Changes[0].DigestStatus != records.DigestNotApplicable {
 		t.Fatal("delete digest is not applicable")
+	}
+}
+
+func TestExactImportedDeletionIsAttributed(t *testing.T) {
+	r, e, _ := setup(t)
+	facts := importFacts{MapFacts: MapFacts{"vanish.md": records.SumDigest([]byte("before"))}, job: "import-job-delete", fence: 4, path: "vanish.md", after: "absent"}
+	res := build(t, r, e, facts, entry("vanish.md", records.OpDelete))
+	if len(res.Changes) != 0 || len(res.ImportMatches) != 1 || res.ImportMatches[0].After != "absent" || len(res.Dropped) != 1 || res.Dropped[0].Reason != ReasonSyncImportExact {
+		t.Fatalf("exact imported deletion must be attributed once: %+v", res)
 	}
 }
 

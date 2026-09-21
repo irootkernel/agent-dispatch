@@ -31,6 +31,13 @@ type PathFacts interface {
 	PriorDigest(path string) (records.Digest, bool, error)
 }
 
+// ImportEffects is the optional separate controller-provenance surface. It is
+// deliberately not a work receipt and is checked before generic unchanged
+// suppression so the exact source is retained for audit.
+type ImportEffects interface {
+	MatchImportEffect(path, after string) (jobID string, fence int64, ok bool, err error)
+}
+
 // NoFacts is the no-history fallback: no path has a prior digest, so
 // every modify is meaningful (conservative, never falsely unchanged).
 type NoFacts struct{}
@@ -81,6 +88,14 @@ type Result struct {
 	Protected []string
 	// Immutable lists the batch's immutable paths.
 	Immutable []string
+	// ImportMatches are exact, one-use controller effects suppressed from
+	// ordinary dirty work and persisted with the source observation.
+	ImportMatches []ImportMatch
+}
+
+type ImportMatch struct {
+	JobID, Path, After string
+	Fence              int64
 }
 
 // ErrUnsafePath wraps containment violations (lexical escape, symlink
@@ -98,6 +113,7 @@ const (
 	ReasonUnchangedModify   = "unchanged_content"
 	ReasonCreateDeleteNever = "create_delete_never_existed"
 	ReasonExcluded          = "excluded"
+	ReasonSyncImportExact   = "sync_import_exact"
 )
 
 // Options bound the batch build.
@@ -280,6 +296,17 @@ func BuildBatch(entries []watchman.Entry, engine *policy.Engine, resolver *local
 			item.ExistsAfter = false
 			item.DigestStatus = records.DigestNotApplicable
 			item.BeforeDigest = priorDigestOrEmpty(hadPrior, prior)
+			if evidence, ok := facts.(ImportEffects); ok {
+				jobID, fence, matched, matchErr := evidence.MatchImportEffect(path, "absent")
+				if matchErr != nil {
+					return nil, fmt.Errorf("sync import attribution for %q: %w", path, matchErr)
+				}
+				if matched {
+					res.ImportMatches = append(res.ImportMatches, ImportMatch{JobID: jobID, Fence: fence, Path: path, After: "absent"})
+					res.Dropped = append(res.Dropped, DropRecord{Path: path, Reason: ReasonSyncImportExact})
+					continue
+				}
+			}
 		} else {
 			item.ExistsAfter = true
 			if status == policy.StatusProtected || status == policy.StatusImmutable || forcedUnknown[path] {
@@ -298,6 +325,17 @@ func BuildBatch(entries []watchman.Entry, engine *policy.Engine, resolver *local
 				if known {
 					item.AfterDigest = digest
 					item.DigestStatus = records.DigestKnown
+					if evidence, ok := facts.(ImportEffects); ok {
+						jobID, fence, matched, matchErr := evidence.MatchImportEffect(path, string(digest))
+						if matchErr != nil {
+							return nil, fmt.Errorf("sync import attribution for %q: %w", path, matchErr)
+						}
+						if matched {
+							res.ImportMatches = append(res.ImportMatches, ImportMatch{JobID: jobID, Fence: fence, Path: path, After: string(digest)})
+							res.Dropped = append(res.Dropped, DropRecord{Path: path, Reason: ReasonSyncImportExact})
+							continue
+						}
+					}
 					if finalOp == records.OpModify && hadPrior && prior == digest && !res.Replacements[path] {
 						// PTH-006: an unchanged modify with a known
 						// prior digest is suppressed — unless the batch
@@ -329,6 +367,7 @@ func BuildBatch(entries []watchman.Entry, engine *policy.Engine, resolver *local
 	sort.Strings(res.HashUnknown)
 	sort.Strings(res.Protected)
 	sort.Strings(res.Immutable)
+	sort.Slice(res.ImportMatches, func(i, j int) bool { return res.ImportMatches[i].Path < res.ImportMatches[j].Path })
 	fpInput := records.ContentFingerprintInput{
 		Changes:      projection(res.Changes),
 		ResourceID:   resourceID,

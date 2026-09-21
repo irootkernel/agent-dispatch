@@ -56,6 +56,85 @@ func TestRestrictedGitInspectCompareAndMissingRef(t *testing.T) {
 	}
 }
 
+func TestImportIndexPreservesDisjointDirtyPath(t *testing.T) {
+	repo := initRepository(t)
+	if err := os.WriteFile(filepath.Join(repo, "local.md"), []byte("base-local\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, repo, "add", "local.md")
+	gitRun(t, repo, "commit", "-m", "local base")
+	from := gitOutput(t, repo, "rev-parse", "HEAD")
+	if err := os.WriteFile(filepath.Join(repo, "note.md"), []byte("remote\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, repo, "add", "note.md")
+	gitRun(t, repo, "commit", "-m", "remote target")
+	target := gitOutput(t, repo, "rev-parse", "HEAD")
+	gitRun(t, repo, "reset", "--hard", from)
+	if err := os.WriteFile(filepath.Join(repo, "local.md"), []byte("local edit\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	client, err := New(repo, Limits{Timeout: 5 * time.Second, MaxOutput: 64 << 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := client.InspectImport(context.Background(), "refs/heads/main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	overlap, collisions := ImportOverlap([]string{"note.md"}, state.DirtyPaths, state.UntrackedPaths)
+	if len(overlap) != 0 || len(collisions) != 0 {
+		t.Fatalf("disjoint edit rejected: overlap=%v collisions=%v", overlap, collisions)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "note.md"), []byte("remote\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.ApplyImportIndex(context.Background(), "refs/heads/main", from, target, map[string][]byte{"note.md": []byte("remote\n")}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := gitOutput(t, repo, "rev-parse", "refs/heads/main"); got != target {
+		t.Fatalf("content ref=%s target=%s", got, target)
+	}
+	if raw, _ := os.ReadFile(filepath.Join(repo, "local.md")); string(raw) != "local edit\n" {
+		t.Fatalf("disjoint working edit changed: %q", raw)
+	}
+	status := gitOutput(t, repo, "status", "--porcelain=v1")
+	if !strings.Contains(status, "local.md") || strings.Contains(status, "note.md") {
+		t.Fatalf("unexpected status after import: %q", status)
+	}
+	commits, err := client.FirstParentRange(context.Background(), from, target, 2)
+	if err != nil || len(commits) != 1 || commits[0] != target {
+		t.Fatalf("range=%v err=%v", commits, err)
+	}
+}
+
+func TestImportInspectionIncludesIgnoredCollisionAndCaseAlias(t *testing.T) {
+	repo := initRepository(t)
+	if err := os.WriteFile(filepath.Join(repo, ".gitignore"), []byte("ignored/\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, repo, "add", ".gitignore")
+	gitRun(t, repo, "commit", "-m", "ignore local files")
+	if err := os.MkdirAll(filepath.Join(repo, "ignored"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "ignored", "Note.md"), []byte("local only\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	client, err := New(repo, Limits{Timeout: 5 * time.Second, MaxOutput: 64 << 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := client.InspectImport(context.Background(), "refs/heads/main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, collisions := ImportOverlap([]string{"ignored/note.md"}, state.DirtyPaths, state.UntrackedPaths)
+	if len(collisions) != 1 || collisions[0] != "ignored/Note.md" {
+		t.Fatalf("ignored case alias must be an overwrite collision: %+v", collisions)
+	}
+}
+
 func TestSignedMembershipUsesPinnedEd25519AndClosedTree(t *testing.T) {
 	repo := initRepository(t)
 	marker := filepath.Join(t.TempDir(), "hostile-ran")
@@ -258,6 +337,15 @@ func TestReadContentFilesRejectsUnknownControllerPath(t *testing.T) {
 	head := gitOutput(t, repo, "rev-parse", "HEAD")
 	if _, err := client.ReadContentFiles(context.Background(), head); err == nil || !strings.Contains(err.Error(), "unsupported controller path") {
 		t.Fatalf("unknown controller path accepted: %v", err)
+	}
+}
+
+func TestFetchRewriteClassificationDoesNotConfuseTransportFailure(t *testing.T) {
+	if !fetchRejectedRewrite([]byte(" ! [rejected] main -> tracking (non-fast-forward)")) {
+		t.Fatal("non-fast-forward fetch rejection must be classified as a history rewrite")
+	}
+	if fetchRejectedRewrite([]byte("fatal: Could not resolve hostname example.invalid")) {
+		t.Fatal("transport failure must remain retryable and must not become a trust hold")
 	}
 }
 

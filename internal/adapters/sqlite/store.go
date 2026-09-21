@@ -57,6 +57,20 @@ func (s *Store) SaveObservation(tx *sql.Tx, o ObservationRecord) error {
 			return err
 		}
 	}
+	for _, a := range o.ImportAttributions {
+		res, err := execOn(tx, s.DB, `INSERT INTO sync_import_attributions(job_id,fence,path,observation_id,after_value,attributed_at)
+			SELECT e.job_id,e.fence,e.path,?,?,? FROM sync_import_effects e JOIN sync_jobs j ON j.job_id=e.job_id
+			WHERE e.job_id=? AND e.fence=? AND e.path=? AND e.after_value=?
+			AND (e.applied_at IS NOT NULL OR (j.state IN ('applying','recovering','uncertain') AND j.resolved_at IS NULL))
+			AND NOT EXISTS (SELECT 1 FROM sync_import_attributions prior WHERE prior.job_id=e.job_id AND prior.fence=e.fence AND prior.path=e.path)`,
+			o.ObservationID, a.AfterValue, o.ReceivedAt, a.JobID, a.Fence, a.Path, a.AfterValue)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n != 1 {
+			return fmt.Errorf("sync import attribution for %s/%s is stale", a.JobID, a.Path)
+		}
+	}
 	return nil
 }
 
@@ -75,8 +89,14 @@ type ObservationRecord struct {
 	IngestStatus     string
 	FlagsJSON        string
 	// PositionJSON is the verbatim source position object (E7-T8/M-11).
-	PositionJSON string
-	Changes      []ChangeRecord
+	PositionJSON       string
+	Changes            []ChangeRecord
+	ImportAttributions []ImportAttributionRecord
+}
+
+type ImportAttributionRecord struct {
+	JobID, Path, AfterValue string
+	Fence                   int64
 }
 
 // ChangeRecord is the persistence shape of one normalized change.

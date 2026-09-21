@@ -15,9 +15,9 @@
 | Release target | v0.2.0 (Two-Node Wiki Sync MVP) |
 | Current epic | E21 Signed Publication and Guarded Import (In Progress) |
 | Current active task | None |
-| Next task | E21-T4 Guarded import and exact Watchman attribution |
-| Completed tasks | 109 / 116 |
-| Planned tasks | 7 / 116 |
+| Next task | E21-T5 Publication/import crash and conflict qualification |
+| Completed tasks | 110 / 116 |
+| Planned tasks | 6 / 116 |
 | In progress tasks | 0 |
 | In review tasks | 0 |
 | Blocked tasks | 0 |
@@ -173,7 +173,7 @@
 | 107 | E21-T1 | Completed | Durable sync jobs, journals, and migrations |
 | 108 | E21-T2 | Completed | Restricted Git, trust, and membership administration |
 | 109 | E21-T3 | Completed | Explicit signed publication workflow |
-| 110 | E21-T4 | Planned | Guarded import and exact Watchman attribution |
+| 110 | E21-T4 | Completed | Guarded import and exact Watchman attribution |
 | 111 | E21-T5 | Planned | Publication/import crash and conflict qualification |
 | 112 | E22-T1 | Planned | Authenticated peer service and durable nudges |
 | 113 | E22-T2 | Planned | Periodic reconciliation and offline catch-up |
@@ -5353,7 +5353,7 @@ E21-T2 Completed.
 
 ## E21-T4: Implement Guarded Import and Attribution
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -5384,6 +5384,24 @@ E21-T3 Completed.
 - Successful import suppresses only exact controller effects; contradictory and
   late observations remain dirty.
 - Every injected crash resolves to proven recovery or explicit uncertainty.
+
+### Evidence
+
+- Schema v22 stores immutable per-fence import effects and one-use Watchman
+  attribution separately from work receipts; newest exact effects cover
+  applying, recovery, uncertainty, and completed process-loss windows.
+- `sync reconcile` verifies bounded first-parent membership/content history,
+  conservative path aliases, acknowledgement, resource-writer, Git operation,
+  dirty/untracked/ignored collision, observation, remote, and ref fences before
+  applying only the reviewed Markdown paths and controller records.
+- Resource-guard serialization, active-writer refusal, unique recovery
+  journals, all-before/mixed/all-after/unexpected classification, advanced
+  observation recovery, and controller-only uncertainty preserve Watchman and
+  local-edit evidence across interruption.
+- Focused domain, Git, SQLite, ingest, import, and CLI tests cover conservative
+  sensitive-mode aliases, disjoint dirty preservation, ignored collisions,
+  exact write/delete attribution, newest-only consumption, duplicate refusal,
+  deferred queue closure/status visibility, and independent-edit refusal.
 
 ## E21-T5: Qualify Publication and Import
 

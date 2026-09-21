@@ -98,6 +98,35 @@ func MatchesObservedFacts(cfg *config.Config, resourceID string, records []syncr
 	return matched == len(observed), nil
 }
 
+// ValidateFiles independently applies the local scope and protected-path
+// policy to a verified remote snapshot. A publisher signature proves who
+// authored a tree; it does not replace the importing node's path-safety check.
+func ValidateFiles(cfg *config.Config, resourceID string, files map[string][]byte) error {
+	engines, mode, err := buildRouteEngines(cfg, resourceID)
+	if err != nil {
+		return err
+	}
+	aliases := map[string]string{}
+	for path := range files {
+		included, err := governedMarkdown(path, engines)
+		if err != nil {
+			return err
+		}
+		if !included {
+			return fmt.Errorf("remote content path %q is outside the acknowledged governed scope", path)
+		}
+		key := path
+		if mode == policy.CaseInsensitive {
+			key = strings.ToLower(path)
+		}
+		if prior, exists := aliases[key]; exists && prior != path {
+			return fmt.Errorf("remote content paths %q and %q alias", prior, path)
+		}
+		aliases[key] = path
+	}
+	return nil
+}
+
 func buildRouteEngines(cfg *config.Config, resourceID string) ([]routeEngines, policy.CaseMode, error) {
 	engines := make([]routeEngines, 0)
 	mode := policy.CaseSensitive

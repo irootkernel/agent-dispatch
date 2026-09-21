@@ -33,7 +33,7 @@ Commands:
   events         show — aggregate-event inspection with per-child evidence.
   notifications  test, list, retry, drain — the notification delivery surface.
   schedule       render, install, inspect, disable, uninstall, run — the managed launchd drain schedule.
-  sync           capabilities, control, signed publication, membership, and checkpoints.
+  sync           capabilities, control, signed publication, guarded import, membership, and checkpoints.
   work           begin, complete, fail — the Hermes companion receipt surface.
   quarantine     list, release, discard — held-path operator exits.
   reconcile      Run a full-scope reconciliation generation.
@@ -58,7 +58,7 @@ Exit codes: 0 success; 2 usage; 3 configuration; 4 input rejected;
 30 security; 40 internal.
 
 Side effects and approvals: only ` + "`dispatch`" + `, ` + "`dispatches drain`" + `,
-` + "`reconcile --submit`" + `, explicit sync apply/publish commands, and the watchman lifecycle touch the outside world;
+` + "`reconcile --submit`" + `, explicit sync apply/publish/reconcile commands, and the watchman lifecycle touch the outside world;
 sync checkpoint plan performs an approved-remote read without a write;
 ` + "`route enable`" + ` additionally requires the two-key production gate
 (--acknowledge-production-gate <computed-revision> --yes).
@@ -81,6 +81,7 @@ Usage: agent-dispatch sync capabilities --output json
        agent-dispatch sync membership plan --group <id> --change <kind> [--instance <id>] --output json
        agent-dispatch sync membership apply --group <id> --plan <file> --expected-membership-predecessor <oid|none> --output json
        agent-dispatch sync publish --group <id> --expected-config-revision <digest> --output json
+       agent-dispatch sync reconcile --group <id> --output json
        agent-dispatch sync checkpoint plan --group <id> --target-commit <oid> --kind <kind> --output json
        agent-dispatch sync checkpoint apply --group <id> --plan <file> --output json
 
@@ -112,6 +113,10 @@ SQLite control state. Membership apply writes immutable Git objects, pushes the 
 membership ref, updates the local ref, and commits durable recovery evidence.
 Publish writes a private-index signed content commit, performs a non-force push,
 updates the local content ref, and atomically admits one peer-delivery obligation.
+Reconcile fetches and verifies bounded signed history, then applies only exact
+acknowledged, path-disjoint effects to the live tree, index, local content ref,
+and path facts while publishing immutable import effects. A later exact
+Watchman observation consumes one effect as a one-use attribution record.
 Checkpoint apply performs the corresponding administrator-signed content-ref
 update. Re-entering apply recovers the same already-signed checkpoint candidate;
 it never signs a replacement during recovery. A publish result of
@@ -122,6 +127,7 @@ Example:
   agent-dispatch sync checkpoint plan --group wiki-pair --target-commit <oid> --kind initial_baseline --output json
   agent-dispatch sync checkpoint apply --group wiki-pair --plan checkpoint-plan.json --output json
   agent-dispatch sync publish --group wiki-pair --expected-config-revision <digest> --output json
+  agent-dispatch sync reconcile --group wiki-pair --output json
 
 Next safe command: agent-dispatch sync status --group <id> --output json`,
 	"version": `version — print the product version

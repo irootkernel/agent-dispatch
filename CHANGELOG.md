@@ -35,7 +35,8 @@ This file records concise shipped outcomes and pending changes.
 - Preserve stronger sync holds across emergency membership changes and report
   emergency adoption as a trust-blocked result in the adopting command.
 - Normalize policy and sync alias comparisons with NFC, apply Unicode case
-  folding to portable aliases and excluded/protected sync paths on every host, and
+  folding to portable aliases and excluded/protected/immutable sync paths on
+  every host, and
   reject repository worktree URL rewrite rules before remote access.
 - Apply fetched emergency membership before any protected effect, reopen safe
   controller-only retries, and distinguish active writers from unstable Git.

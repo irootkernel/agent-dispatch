@@ -42,8 +42,12 @@ func runSyncPublish(args []string, stdout, stderr io.Writer) int {
 	}
 	defer store.Close()
 	now := time.Now().UTC()
-	if _, err := store.EnsureSyncControl(requestCtx(), syncCfg.GroupID, revision, now.Format(time.RFC3339Nano)); err != nil {
+	control, err := store.EnsureSyncControl(requestCtx(), syncCfg.GroupID, revision, now.Format(time.RFC3339Nano))
+	if err != nil {
 		return syncStoreError(stderr, command, err)
+	}
+	if control.State == "blocked" && control.Reason == "membership_emergency" {
+		return syncMembershipError(stderr, command, errors.New("publication is blocked until a normal membership replacement is adopted"), 30)
 	}
 	guard, err := resourceguard.Acquire(stateDirOf(cfg), syncCfg.Resource)
 	if err != nil {

@@ -701,6 +701,9 @@ func (s *Store) FinishRecoveredMembershipJob(ctx context.Context, jobID string, 
 	if journal.JobID != jobID || journal.Fence != expectedFence || journal.Phase != "membership" || journal.Outcome != "applied" || journal.RecordedAt != now || journal.JournalID == "" {
 		return SyncControlRow{}, fmt.Errorf("recovered membership journal does not bind confirmation")
 	}
+	if err := requireSyncRecoveryTransition(job.Kind, job.State, "applied"); err != nil {
+		return SyncControlRow{}, err
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO sync_journal_entries (journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES (?,?,?,?,?,?,?)`, journal.JournalID, journal.JobID, journal.Fence, journal.Phase, journal.Outcome, journal.EvidenceJSON, journal.RecordedAt); err != nil {
 		return SyncControlRow{}, err
 	}
@@ -1360,13 +1363,11 @@ func (s *Store) FinishRecoveredPublicationJob(ctx context.Context, jobID string,
 	if job.Kind != "publication" || job.Fence != expectedFence || (job.State != "signed" && job.State != "push_pending" && job.State != "uncertain" && job.State != "blocked") || (job.ClaimOwner != "" && !timeBefore(job.ClaimExpiresAt, now)) {
 		return SyncJobRow{}, ErrSyncPrecondition
 	}
-	if job.State != "blocked" {
-		if err := requireSyncTransition(job.Kind, job.State, "published"); err != nil {
-			return SyncJobRow{}, err
-		}
-	}
 	if journal.JobID != jobID || journal.Fence != expectedFence || journal.Phase != "publication" || journal.Outcome != "published" || journal.RecordedAt != now || journal.JournalID == "" {
 		return SyncJobRow{}, fmt.Errorf("recovered publication journal does not bind confirmation")
+	}
+	if err := requireSyncRecoveryTransition(job.Kind, job.State, "published"); err != nil {
+		return SyncJobRow{}, err
 	}
 	if delivery.GroupID != job.GroupID || delivery.Kind != "delivery" || delivery.InitialState != "pending" || delivery.JobID == "" || delivery.LogicalKey == "" || delivery.QueueLimit < 1 || delivery.QueueLimit > 1000 {
 		return SyncJobRow{}, fmt.Errorf("invalid recovered publication delivery obligation")
@@ -1430,13 +1431,11 @@ func (s *Store) FinishRecoveredCheckpointJob(ctx context.Context, jobID string, 
 	if job.Kind != "checkpoint" || job.Fence != expectedFence || (job.State != "applying" && job.State != "uncertain" && job.State != "blocked") || (job.ClaimOwner != "" && !timeBefore(job.ClaimExpiresAt, now)) {
 		return ErrSyncPrecondition
 	}
-	if job.State != "blocked" {
-		if err := requireSyncTransition(job.Kind, job.State, "applied"); err != nil {
-			return err
-		}
-	}
 	if journal.JobID != jobID || journal.Fence != expectedFence || journal.Phase != "checkpoint" || journal.Outcome != "applied" || journal.RecordedAt != now || journal.JournalID == "" {
 		return fmt.Errorf("recovered checkpoint journal does not bind confirmation")
+	}
+	if err := requireSyncRecoveryTransition(job.Kind, job.State, "applied"); err != nil {
+		return err
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO sync_journal_entries (journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES (?,?,?,?,?,?,?)`, journal.JournalID, journal.JobID, journal.Fence, journal.Phase, journal.Outcome, journal.EvidenceJSON, journal.RecordedAt); err != nil {
 		return err
@@ -1479,6 +1478,9 @@ func (s *Store) reopenRejectedAdministrationJob(ctx context.Context, jobID strin
 	}
 	if journal.JobID != jobID || journal.Fence != expectedFence || journal.Phase != "claim_recovery" || journal.Outcome != "effect_not_started" || journal.RecordedAt != now || journal.JournalID == "" {
 		return fmt.Errorf("rejected administration recovery evidence does not bind the job")
+	}
+	if err := requireSyncRecoveryTransition(job.Kind, job.State, targetState); err != nil {
+		return err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO sync_journal_entries(journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES(?,?,?,?,?,?,?)`, journal.JournalID, journal.JobID, journal.Fence, journal.Phase, journal.Outcome, journal.EvidenceJSON, journal.RecordedAt); err != nil {
 		return err
@@ -1774,9 +1776,10 @@ func validSyncState(kind, state string) bool {
 	return allowed[kind][state]
 }
 
-// validSyncTransition is the single durable edge table for sync job heads.
-// Storage callers may not skip required phases or move a terminal state back
-// into active work merely because both names are valid for the job kind.
+// validSyncTransition is the ordinary durable edge table for sync job heads.
+// Evidence-qualified recovery edges are declared alongside it in
+// validSyncRecoveryTransition and may only be used after the caller validates
+// the journal that proves the exceptional transition.
 func validSyncTransition(kind, from, to string) bool {
 	edges := map[string]map[string]map[string]bool{
 		"publication": {
@@ -1821,6 +1824,35 @@ func validSyncTransition(kind, from, to string) bool {
 func requireSyncTransition(kind, from, to string) error {
 	if !validSyncTransition(kind, from, to) {
 		return fmt.Errorf("state transition %q -> %q is invalid for sync job kind %q", from, to, kind)
+	}
+	return nil
+}
+
+// validSyncRecoveryTransition is the single list of exceptional edges that
+// require binding recovery evidence. Keeping these edges explicit prevents a
+// blocked job from becoming generally claimable merely because one recovery
+// path is allowed to settle or reopen it.
+func validSyncRecoveryTransition(kind, from, to string) bool {
+	edges := map[string]map[string]map[string]bool{
+		"publication": {
+			"blocked": {"published": true},
+		},
+		"membership": {
+			"planned":   {"applied": true},
+			"uncertain": {"applied": true, "planned": true},
+			"blocked":   {"applied": true, "planned": true},
+		},
+		"checkpoint": {
+			"blocked":   {"applied": true, "applying": true},
+			"uncertain": {"applying": true},
+		},
+	}
+	return edges[kind][from][to]
+}
+
+func requireSyncRecoveryTransition(kind, from, to string) error {
+	if !validSyncTransition(kind, from, to) && !validSyncRecoveryTransition(kind, from, to) {
+		return fmt.Errorf("recovery state transition %q -> %q is invalid for sync job kind %q", from, to, kind)
 	}
 	return nil
 }

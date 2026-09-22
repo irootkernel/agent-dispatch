@@ -150,6 +150,9 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 	if relation == gitlocal.RelationAhead || relation == gitlocal.RelationDiverged {
 		return blockReconcile(stdout, stderr, store, s.GroupID, revision, "conflict", "history_diverged", errors.New("local and approved remote content history are not fast-forward compatible"))
 	}
+	if relation == gitlocal.RelationBehind && control.State == "blocked" && control.Reason == "membership_emergency" {
+		return reconcileEnvelopeCode(stdout, "blocked", control.Reason, map[string]any{"target_commit": target, "membership_mode": control.MembershipMode, "detail": "protected import waits for an adopted normal membership replacement"}, 30)
+	}
 	if relation == gitlocal.RelationEqual {
 		if control.State == "blocked" && (control.Reason == "conflict" || control.Reason == "trust_failure" || control.Reason == "recovery_required") {
 			if err := verifyContentHead(client, remoteHistory, cfg, s, target); err != nil || !contentHeadAddsCheckpoint(client, target) {

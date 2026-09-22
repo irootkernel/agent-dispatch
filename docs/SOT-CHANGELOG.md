@@ -41,9 +41,9 @@ two-node sync workflow. Peer service, pair verification, and release remain disa
   candidate as retryable, exact remote evidence settles interrupted work, and
   membership changes preserve stronger control holds.
 - Policy and sync alias checks share NFC comparison without changing filesystem
-  path spelling. Portable aliases and excluded/protected sync paths also use
-  Unicode case folding on every host. Repository worktree URL rewrites are
-  rejected before remote access.
+  path spelling. Portable aliases and excluded/protected/immutable sync paths
+  also use Unicode case folding on every host. Repository worktree URL rewrites
+  are rejected before remote access.
 
 ## 1.7.0 - 2026-09-19
 

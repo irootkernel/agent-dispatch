@@ -104,10 +104,61 @@ func TestValidateFilesRejectsCaseFoldedAliasOfProtectedPath(t *testing.T) {
 	}
 }
 
+func TestValidateFilesRejectsUnicodeFoldAliasOfProtectedPath(t *testing.T) {
+	cfg := snapshotConfig(t.TempDir())
+	route := cfg.Routes["route-main"]
+	route.Policy.Protected = []string{"notes/Straße.md"}
+	cfg.Routes["route-main"] = route
+	if err := ValidateFiles(cfg, "vault-main", map[string][]byte{"notes/strasse.md": []byte("hostile")}); err == nil {
+		t.Fatal("Unicode case-fold alias of protected Markdown was accepted")
+	}
+}
+
 func TestValidateFilesRejectsCaseFoldedAliasOfExcludedPath(t *testing.T) {
 	cfg := snapshotConfig(t.TempDir())
 	if err := ValidateFiles(cfg, "vault-main", map[string][]byte{"Private.md": []byte("hostile")}); err == nil {
 		t.Fatal("case-folded alias of excluded Markdown was accepted")
+	}
+}
+
+func TestCaptureOmitsCaseFoldedAliasesOfExcludedPaths(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "note.md"), []byte("kept"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "Private.md"), []byte("excluded"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, ".Git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".Git", "note.md"), []byte("excluded"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := Capture(snapshotConfig(root), "vault-main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Files) != 1 || string(snapshot.Files["note.md"]) != "kept" {
+		t.Fatalf("snapshot files=%v", snapshot.Files)
+	}
+}
+
+func TestCaptureOmitsUnicodeFoldAliasesOfExcludedPaths(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "strasse.md"), []byte("excluded"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := snapshotConfig(root)
+	route := cfg.Routes["route-main"]
+	route.Source.Exclude = []string{"Straße.md"}
+	cfg.Routes["route-main"] = route
+	snapshot, err := Capture(cfg, "vault-main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Files) != 0 {
+		t.Fatalf("snapshot files=%v", snapshot.Files)
 	}
 }
 

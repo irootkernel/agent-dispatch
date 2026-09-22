@@ -284,7 +284,7 @@ covering `<`, direct non-ASCII UTF-8, U+2028 escaping, and array order.
 
 | Digest | Domain and canonical projection |
 |---|---|
-| `contract_digest` | Domain `agent-dispatch.sync-contract/v1`; object `{"schema_version":"agent-dispatch.sync-contract/v1"}`. A semantic contract change requires a new version. |
+| `contract_digest` | Domain `agent-dispatch.sync-contract/v1`; object `{"schema_version":"agent-dispatch.sync-contract/v1"}`. After the v0.2.0 contract is released, a semantic change requires a new version. Before that first release, incompatible v1 draft changes are recorded in the current SOT changelog and frozen together by the provider artifact-set golden. |
 | `scope_digest` | Domain `agent-dispatch.sync-scope/v1`; array of route objects with `route_id`, sorted `include`, `exclude`, `protected`, and `immutable` arrays. Routes are ordered by `route_id`. |
 | `safety_policy_digest` | Domain `agent-dispatch.sync-safety-policy/v1`; the closed boolean SYN-010 policy object implemented by `syncSafetyPolicy`. |
 | `import_bounds_digest` | Domain `agent-dispatch.sync-import-bounds/v1`; object with `history_commits`, `queue`, `subprocess_bytes`, and `subprocess_seconds`. |

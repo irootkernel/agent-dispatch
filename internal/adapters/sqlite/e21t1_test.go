@@ -397,6 +397,30 @@ func TestE21SyncJournalOrderUsesDurableSequence(t *testing.T) {
 	}
 }
 
+func TestE21RecoveryEdgesAreExplicitAndNotGenerallyClaimable(t *testing.T) {
+	for _, edge := range []struct {
+		kind string
+		from string
+		to   string
+	}{
+		{kind: "publication", from: "blocked", to: "published"},
+		{kind: "membership", from: "blocked", to: "applied"},
+		{kind: "membership", from: "uncertain", to: "planned"},
+		{kind: "checkpoint", from: "blocked", to: "applied"},
+		{kind: "checkpoint", from: "blocked", to: "applying"},
+	} {
+		if validSyncTransition(edge.kind, edge.from, edge.to) {
+			t.Fatalf("recovery edge became ordinary: %#v", edge)
+		}
+		if !validSyncRecoveryTransition(edge.kind, edge.from, edge.to) {
+			t.Fatalf("recovery edge is undeclared: %#v", edge)
+		}
+	}
+	if validSyncRecoveryTransition("publication", "blocked", "signed") {
+		t.Fatal("unapproved blocked publication reopen was accepted")
+	}
+}
+
 func TestE21T2MembershipEmergencyBlocksEffectsUntilSignedPairRecovery(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()

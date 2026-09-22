@@ -103,12 +103,14 @@ administrator key. Both apply only the reviewed, revision-bound request.
 
 Exit codes: 0 success, including safety deferrals with no protected effect;
 2 usage; 3 configuration or unavailable capability; 4 rejected plan input;
-10 transient transport failure, a preserved-candidate push retry while the remote
-is still at the reviewed predecessor, or a controller retry after proven no
-effect; 13 protected effect outcome unknown; 14 stale revision, missing
-checkpoint, a moved-predecessor conflict, or blocked
-control; 20 storage failure; 21 migration failure;
-30 signature, membership, or content-history trust failure.
+10 transient transport or pre-push ref-measurement failure, a
+preserved-candidate push retry while the remote is still at the reviewed
+predecessor, or a controller retry after proven no effect; 13 protected effect
+outcome unknown; 14 stale revision, missing checkpoint, moved-predecessor
+conflict, or protected-claim block; 20 storage failure; 21 migration failure;
+30 signature, membership, content-history, or emergency-membership hold. Sync
+disposition commands may pair exits 10/13/14/30 with a versioned result on
+stdout after recording the reported state.
 
 Side effects: capabilities/status/membership plan perform no Git write, network,
 listener, service, or live-tree effect. Checkpoint plan is read-only but inspects

@@ -48,10 +48,7 @@ func runSyncCheckpointPlan(args []string, stdout, stderr io.Writer) int {
 	}
 	membership, predecessor, digest, err := checkpointBindings(client, cfg, s, v["--target-commit"])
 	if err != nil {
-		if errors.Is(err, gitlocal.ErrRemoteBinding) {
-			return syncMembershipError(stderr, command, err, 30)
-		}
-		return syncRetryableError(stderr, command, err)
+		return checkpointBindingError(stderr, command, err)
 	}
 	if v["--kind"] == "initial_baseline" {
 		if v["--target-commit"] != predecessor {
@@ -118,10 +115,7 @@ func runSyncCheckpointApply(args []string, stdout, stderr io.Writer) int {
 	}
 	membership, predecessor, digest, err := checkpointBindings(client, cfg, s, plan.ProposedCheckpoint.TargetCommit)
 	if err != nil {
-		if errors.Is(err, gitlocal.ErrRemoteBinding) {
-			return syncMembershipError(stderr, command, err, 30)
-		}
-		return syncRetryableError(stderr, command, err)
+		return checkpointBindingError(stderr, command, err)
 	}
 	if plan.ProposedCheckpoint.Kind == "initial_baseline" {
 		if plan.ProposedCheckpoint.TargetCommit != predecessor {
@@ -209,7 +203,7 @@ func runSyncCheckpointApply(args []string, stdout, stderr io.Writer) int {
 		}
 		switch classifySyncPush(push.State, push.RemoteOID, predecessor, candidate) {
 		case syncPushRetryable:
-			return finishCheckpointRetryable(stderr, store, job, owner, candidate, push.RemoteOID)
+			return finishCheckpointRetryable(stderr, store, job, owner, candidate, push.RemoteOID, push.State)
 		case syncPushConflict, syncPushUnknown:
 			state, outcome := "uncertain", "effect_unknown"
 			if classifySyncPush(push.State, push.RemoteOID, predecessor, candidate) == syncPushConflict {
@@ -312,7 +306,7 @@ func recoverCheckpointApply(stdout, stderr io.Writer, store *sqlite.Store, clien
 		return true, writeEnvelope(stdout, "sync checkpoint apply", map[string]any{"schema_version": "agent-dispatch.sync-checkpoint-apply-result/v1", "state": "applied", "plan_id": plan.PlanID, "checkpoint_id": plan.ProposedCheckpoint.CheckpointID, "content_revision": candidate, "recovered": true, "idempotent": true, "side_effects": []string{"local_content_ref_reconciled", "state_committed"}})
 	}
 	if remote != plan.ExpectedContentPredecessor {
-		return true, syncMembershipError(stderr, "sync checkpoint apply", errors.New("checkpoint recovery found an unexpected remote content revision"), 13)
+		return true, syncMembershipError(stderr, "sync checkpoint apply", errors.New("checkpoint recovery found a moved remote content revision; review history and create a new conflict-resolution checkpoint plan"), 14)
 	}
 	nowText := now.Format(time.RFC3339Nano)
 	journal := sqlite.SyncJournalEntry{JournalID: randomSyncID("checkpoint-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": remote, "plan_id": plan.PlanID}), RecordedAt: nowText}
@@ -342,38 +336,49 @@ func checkpointBindings(client *gitlocal.Client, cfg *config.Config, s *config.S
 	ctx := requestCtx()
 	membership, err := client.ResolveRef(ctx, s.MembershipRef)
 	if err != nil {
-		return "", "", "", err
+		return "", "", "", fmt.Errorf("checkpoint requires a verified local membership ref: %w: %v", syncrecords.ErrInvalidRecord, err)
 	}
 	remoteMembership, err := client.RemoteRef(ctx, s.RemoteName, s.MembershipRef, s.RemoteRepositoryDigest)
 	if err != nil {
 		return "", "", "", fmt.Errorf("membership ref could not be measured on the approved remote: %w", err)
 	}
 	if remoteMembership != membership {
-		return "", "", "", fmt.Errorf("membership ref is not current on the approved remote")
+		return "", "", "", fmt.Errorf("membership ref is not current on the approved remote: %w", gitlocal.ErrPushRejected)
 	}
 	if _, err := syncmembership.LoadHistory(ctx, client, membership, membershipBinding(cfg, s), s.Bounds.HistoryCommits); err != nil {
-		return "", "", "", err
+		return "", "", "", fmt.Errorf("membership history is not trusted: %w: %v", syncrecords.ErrInvalidRecord, err)
 	}
 	predecessor, err := client.ResolveRef(ctx, s.ContentRef)
 	if err != nil {
-		return "", "", "", fmt.Errorf("checkpoint requires an existing content predecessor: %w", err)
+		return "", "", "", fmt.Errorf("checkpoint requires an existing content predecessor: %w: %v", gitlocal.ErrPushRejected, err)
 	}
 	remotePredecessor, err := client.RemoteRef(ctx, s.RemoteName, s.ContentRef, s.RemoteRepositoryDigest)
 	if err != nil {
 		return "", "", "", fmt.Errorf("content predecessor could not be measured on the approved remote: %w", err)
 	}
 	if remotePredecessor != predecessor {
-		return "", "", "", fmt.Errorf("content predecessor is not current on the approved remote")
+		return "", "", "", fmt.Errorf("content predecessor is not current on the approved remote: %w", gitlocal.ErrPushRejected)
 	}
 	files, err := client.ReadContentFiles(ctx, target)
 	if err != nil {
-		return "", "", "", err
+		return "", "", "", fmt.Errorf("checkpoint target is not readable: %w: %v", gitlocal.ErrPushRejected, err)
 	}
 	digest, err := snapshotDigestFromFiles(files)
 	if err != nil {
 		return "", "", "", err
 	}
 	return membership, predecessor, digest, nil
+}
+
+func checkpointBindingError(stderr io.Writer, command string, err error) int {
+	switch {
+	case errors.Is(err, gitlocal.ErrRemoteBinding), errors.Is(err, syncrecords.ErrInvalidRecord):
+		return syncMembershipError(stderr, command, err, 30)
+	case errors.Is(err, gitlocal.ErrPushRejected):
+		return syncMembershipError(stderr, command, err, 14)
+	default:
+		return syncRetryableError(stderr, command, err)
+	}
 }
 
 func snapshotDigestFromFiles(files map[string][]byte) (string, error) {
@@ -412,12 +417,15 @@ func finishCheckpointFailure(stderr io.Writer, store *sqlite.Store, job sqlite.S
 	return code
 }
 
-func finishCheckpointRetryable(stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, owner, candidate, remote string) int {
+func finishCheckpointRetryable(stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, owner, candidate, remote string, pushState gitlocal.PushState) int {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	reason := "checkpoint push was rejected before the approved remote moved; rerun sync checkpoint apply"
+	if pushState == gitlocal.PushNotStarted {
+		reason = "checkpoint remote measurement failed before push started; rerun sync checkpoint apply"
+	}
 	if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "applying", sqlite.SyncJobKeepUnresolved, sqlite.SyncJournalEntry{
 		JournalID: randomSyncID("checkpoint-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "checkpoint", Outcome: "effect_not_started",
-		EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": remote, "push_state": gitlocal.PushRejected, "reason": reason}), RecordedAt: now,
+		EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": remote, "push_state": pushState, "reason": reason}), RecordedAt: now,
 	}, now); err != nil {
 		return syncStoreError(stderr, "sync checkpoint apply", err)
 	}

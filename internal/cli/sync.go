@@ -140,6 +140,15 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
+type syncStatusEvidence struct {
+	Reason     string `json:"reason"`
+	Candidate  string `json:"candidate"`
+	Remote     string `json:"remote"`
+	PushState  string `json:"push_state"`
+	Resolution string `json:"resolution"`
+	ResolverID string `json:"resolver_id"`
+}
+
 // latestSyncJobStatus keeps publication, delivery, and import outcomes
 // separate. A malformed retained payload must not hide the durable job head;
 // the common fields remain visible and only the optional typed details drop.
@@ -174,18 +183,26 @@ func latestSyncJobStatus(store *sqlite.Store, groupID, kind string) (map[string]
 	}
 	journals, journalErr := store.LoadSyncJournals(requestCtx(), row.JobID)
 	if journalErr == nil {
+		attemptFound, resolutionFound := false, false
 		for i := len(journals) - 1; i >= 0; i-- {
-			var evidence map[string]any
+			var evidence syncStatusEvidence
 			if json.Unmarshal([]byte(journals[i].EvidenceJSON), &evidence) != nil {
 				continue
 			}
-			for _, key := range []string{"reason", "candidate", "remote", "push_state", "resolution", "resolver_id"} {
-				if _, exists := result[key]; exists {
-					continue
-				}
-				if value, ok := evidence[key].(string); ok && value != "" {
-					result[key] = value
-				}
+			if !attemptFound && (evidence.Reason != "" || evidence.Candidate != "" || evidence.Remote != "" || evidence.PushState != "") {
+				copySyncStatusField(result, "reason", evidence.Reason)
+				copySyncStatusField(result, "candidate", evidence.Candidate)
+				copySyncStatusField(result, "remote", evidence.Remote)
+				copySyncStatusField(result, "push_state", evidence.PushState)
+				attemptFound = true
+			}
+			if !resolutionFound && (evidence.Resolution != "" || evidence.ResolverID != "") {
+				copySyncStatusField(result, "resolution", evidence.Resolution)
+				copySyncStatusField(result, "resolver_id", evidence.ResolverID)
+				resolutionFound = true
+			}
+			if attemptFound && resolutionFound {
+				break
 			}
 		}
 	}
@@ -214,6 +231,12 @@ func latestSyncJobStatus(store *sqlite.Store, groupID, kind string) (map[string]
 	result["reason"] = reason
 	result["target_paths"] = paths
 	return result, nil
+}
+
+func copySyncStatusField(result map[string]any, key, value string) {
+	if value != "" {
+		result[key] = value
+	}
 }
 
 func syncCommandPath(args []string) string {

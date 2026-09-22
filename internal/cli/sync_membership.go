@@ -518,8 +518,13 @@ func mustJSON(value any) string { raw, _ := json.Marshal(value); return string(r
 
 func syncMembershipError(stderr io.Writer, command string, err error, fallback int) int {
 	code, errorCode, category := fallback, "sync_precondition_failed", "conflict"
-	if fallback == 3 {
+	switch fallback {
+	case 3:
 		errorCode, category = "config_invalid", "configuration"
+	case 13:
+		errorCode, category = "sync_effect_unknown", "acceptance_unknown"
+	case 30:
+		errorCode, category = "sync_trust_failed", "security"
 	}
 	switch {
 	case errors.Is(err, gitlocal.ErrInvalidSignature), errors.Is(err, gitlocal.ErrRemoteBinding), errors.Is(err, syncrecords.ErrInvalidRecord):

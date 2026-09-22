@@ -140,9 +140,9 @@ func buildRouteEngines(cfg *config.Config, resourceID string) ([]routeEngines, p
 		if err != nil {
 			return nil, mode, err
 		}
-		// Protected and immutable names are cross-node safety identities. Match
-		// them with Unicode folding on every host while leaving ordinary scope
-		// include/exclude semantics in the configured filesystem case mode.
+		// Excluded, protected, and immutable names are cross-node safety
+		// identities. Match them with Unicode folding on every host while
+		// leaving include matching in the configured filesystem case mode.
 		guard, err := policy.NewEngine([]string{"**"}, route.Source.Exclude, route.Policy.Protected, route.Policy.Immutable, policy.CaseInsensitive)
 		if err != nil {
 			return nil, mode, err
@@ -220,6 +220,9 @@ func captureOnce(resolver *localfs.Resolver, engines []routeEngines, max int64) 
 			}
 			if guardStatus == policy.StatusProtected || guardStatus == policy.StatusImmutable {
 				return fmt.Errorf("governed path %q is protected or immutable", rel)
+			}
+			if guardStatus == policy.StatusExcluded {
+				return nil
 			}
 			status, classErr := engines.scope.Classify(policyPath)
 			if classErr != nil {

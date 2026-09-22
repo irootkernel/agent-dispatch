@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +14,7 @@ import (
 	"github.com/irootkernel/agent-dispatch/internal/adapters/gitlocal"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/domain/syncrecords"
 )
 
 func enabledSyncConfig(t *testing.T) string {
@@ -181,6 +184,26 @@ func TestE21SameBasePushRejectionIsRetryable(t *testing.T) {
 	}
 	if got := classifySyncPush(gitlocal.PushAmbiguous, candidate, base, candidate); got != syncPushConfirmed {
 		t.Fatalf("remote-confirmed candidate = %v", got)
+	}
+}
+
+func TestE21CheckpointBindingErrorsKeepDistinctExitClasses(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		code int
+		want string
+	}{
+		{name: "measurement", err: errors.New("ls-remote unavailable"), code: 10, want: `"code":"sync_retryable"`},
+		{name: "predecessor", err: fmt.Errorf("moved: %w", gitlocal.ErrPushRejected), code: 14, want: `"code":"sync_precondition_failed"`},
+		{name: "history", err: fmt.Errorf("history: %w", syncrecords.ErrInvalidRecord), code: 30, want: `"code":"sync_trust_failed"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var stderr bytes.Buffer
+			if got := checkpointBindingError(&stderr, "sync checkpoint plan", tc.err); got != tc.code || !bytes.Contains(stderr.Bytes(), []byte(tc.want)) {
+				t.Fatalf("classification code=%d stderr=%s", got, stderr.String())
+			}
+		})
 	}
 }
 

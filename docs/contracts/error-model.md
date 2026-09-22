@@ -42,6 +42,14 @@ Messages are safe for humans. Machine behavior uses `code`, `category`, and pers
 
 Exit code 1 is intentionally unassigned and must never be emitted; unclassified failures use exit 40. The CLI entry point must recover panics and exit 40, because an unrecovered Go runtime panic exits with status 2 and would be indistinguishable from the usage class.
 
+Sync disposition commands are the explicit exception to the ordinary error
+envelope rule. After they durably record a retry, unknown effect, conflict
+hold, or emergency/trust hold, they may emit a versioned `ok: true` result on
+stdout and return 10, 13, 14, or 30 without a stderr error object. The exit code
+classifies the recorded disposition; clients consume the result's `state` and
+`reason`. Commands that do emit an error object still use the one-to-one
+category mapping below.
+
 A Watchman trigger invocation may receive nonzero status, but durable state and logs remain the source of truth. Exit 13 must never cause the caller to submit through another sink.
 
 A Watchman `watch` refusal that explicitly reports watcher startup failure,
@@ -52,7 +60,10 @@ failures remain `target_response_invalid` / exit 13.
 
 ## 3. Error Categories
 
-`category` enumerates exactly one value per nonzero exit-code class. Category and exit code determine each other; implementations derive one from the other rather than assigning them independently.
+For commands that emit an error object, `category` enumerates exactly one value
+per nonzero exit-code class. Category and exit code determine each other;
+implementations derive one from the other rather than assigning them
+independently.
 
 | Category | Exit code |
 |---|---:|
@@ -70,7 +81,10 @@ failures remain `target_response_invalid` / exit 13.
 | `security` | 30 |
 | `internal` | 40 |
 
-The success class has no error category; a deterministic no-op, drop, or overflow-to-reconciliation conversion is `ok: true` with reason codes, not an error.
+The success class has no error category; a deterministic no-op, drop, or
+overflow-to-reconciliation conversion is `ok: true` with reason codes, not an
+error. The sync disposition exception above also has no error category because
+it carries a result rather than an error object.
 
 ## 4. Stable Error Code Registry
 

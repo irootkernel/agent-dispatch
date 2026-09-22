@@ -131,9 +131,15 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 	// crash window after a normal ref adoption but before its emergency bit was
 	// cleared, and refreshes an emergency posture without replacing pause or a
 	// stronger hold.
-	control, err = store.ReconcileAdoptedMembership(requestCtx(), s.GroupID, remoteMembershipRecord.Mode, remoteMembership, revision, time.Now().UTC().Format(time.RFC3339Nano))
+	control, err = store.RefreshAdoptedMembership(requestCtx(), s.GroupID, remoteMembershipRecord.Mode, remoteMembership, revision, time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return syncStoreError(stderr, command, err)
+	}
+	if control.MembershipMode == "blocked_emergency" {
+		if control.State == "paused" {
+			return reconcileEnvelope(stdout, "deferred", "operator_pause", map[string]any{"membership_mode": control.MembershipMode, "detail": "sync is paused and emergency posture also freezes protected effects; adopt a reviewed normal membership replacement before resuming"})
+		}
+		return reconcileEnvelopeCode(stdout, "blocked", control.Reason, map[string]any{"membership_mode": control.MembershipMode, "detail": "protected effects remain frozen until a reviewed normal membership replacement is adopted; a content checkpoint cannot clear this posture"}, 30)
 	}
 
 	contentTracking := "refs/agent-dispatch/sync/content/" + s.GroupID
@@ -177,7 +183,7 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 				return syncStoreError(stderr, command, err)
 			}
 			if reconciled.State == "blocked" && reconciled.Reason == "membership_emergency" {
-				return reconcileEnvelopeCode(stdout, "blocked", reconciled.Reason, map[string]any{"target_commit": target, "checkpoint_reconciled": true, "membership_mode": reconciled.MembershipMode}, 30)
+				return reconcileEnvelopeCode(stdout, "blocked", reconciled.Reason, map[string]any{"target_commit": target, "checkpoint_reconciled": true, "membership_mode": reconciled.MembershipMode, "detail": "the checkpoint was reconciled, but protected effects remain frozen until a reviewed normal membership replacement is adopted"}, 30)
 			}
 			return reconcileEnvelope(stdout, "no_change", "none", map[string]any{"target_commit": target, "checkpoint_reconciled": true})
 		}
@@ -357,7 +363,7 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 			}
 			checkpointReconciled = true
 			if reconciled.State == "blocked" && reconciled.Reason == "membership_emergency" {
-				return reconcileEnvelopeCode(stdout, "blocked", reconciled.Reason, map[string]any{"import_state": "applied", "import_id": record.ImportID, "from_commit": from, "target_commit": target, "paths": 0, "controller_only": true, "checkpoint_reconciled": true, "membership_mode": reconciled.MembershipMode, "side_effects": []string{"controller_records_updated", "index_updated", "local_content_ref_updated", "state_committed"}}, 30)
+				return reconcileEnvelopeCode(stdout, "blocked", reconciled.Reason, map[string]any{"import_state": "applied", "import_id": record.ImportID, "from_commit": from, "target_commit": target, "paths": 0, "controller_only": true, "checkpoint_reconciled": true, "membership_mode": reconciled.MembershipMode, "detail": "the checkpoint was reconciled, but protected effects remain frozen until a reviewed normal membership replacement is adopted", "side_effects": []string{"controller_records_updated", "index_updated", "local_content_ref_updated", "state_committed"}}, 30)
 			}
 		}
 		return reconcileEnvelope(stdout, "applied", "none", map[string]any{"import_id": record.ImportID, "from_commit": from, "target_commit": target, "paths": 0, "controller_only": true, "checkpoint_reconciled": checkpointReconciled, "idempotent": reused, "side_effects": []string{"controller_records_updated", "index_updated", "local_content_ref_updated", "state_committed"}})
@@ -516,7 +522,7 @@ func recoverPendingImport(stdout, stderr io.Writer, cfg *config.Config, s *confi
 					}
 					checkpointReconciled = true
 					if reconciled.State == "blocked" && reconciled.Reason == "membership_emergency" {
-						return true, reconcileEnvelopeCode(stdout, "blocked", reconciled.Reason, map[string]any{"import_state": "recovered", "import_id": record.ImportID, "target_commit": record.TargetCommit, "controller_only": true, "checkpoint_reconciled": true, "membership_mode": reconciled.MembershipMode, "side_effects": []string{"controller_state_confirmed", "state_committed"}}, 30)
+						return true, reconcileEnvelopeCode(stdout, "blocked", reconciled.Reason, map[string]any{"import_state": "recovered", "import_id": record.ImportID, "target_commit": record.TargetCommit, "controller_only": true, "checkpoint_reconciled": true, "membership_mode": reconciled.MembershipMode, "detail": "the checkpoint was reconciled, but protected effects remain frozen until a reviewed normal membership replacement is adopted", "side_effects": []string{"controller_state_confirmed", "state_committed"}}, 30)
 					}
 				}
 				return true, reconcileEnvelope(stdout, "recovered", "none", map[string]any{"import_id": record.ImportID, "target_commit": record.TargetCommit, "controller_only": true, "checkpoint_reconciled": checkpointReconciled, "side_effects": []string{"controller_state_confirmed", "state_committed"}})

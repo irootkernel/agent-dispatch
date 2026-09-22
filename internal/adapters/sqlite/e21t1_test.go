@@ -324,6 +324,13 @@ func TestE21BlockedResolutionIsKindScopedAndJournaled(t *testing.T) {
 	if _, err := s.Exec(`UPDATE sync_jobs SET fence=1 WHERE job_id LIKE 'blocked-%'`); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := s.RefreshAdoptedMembership(ctx, "wiki-pair", "normal", "membership-current", "cfg-1", syncT1); err != nil {
+		t.Fatal(err)
+	}
+	var refreshedResolution string
+	if err := s.QueryRow(`SELECT COALESCE(resolved_at,'') FROM sync_jobs WHERE job_id='blocked-membership'`).Scan(&refreshedResolution); err != nil || refreshedResolution != "" {
+		t.Fatalf("equal-ref posture refresh discharged membership job: resolved=%q err=%v", refreshedResolution, err)
+	}
 	if _, err := s.ReconcileAdoptedMembership(ctx, "wiki-pair", "normal", "membership-replacement", "cfg-1", syncT1); err != nil {
 		t.Fatal(err)
 	}

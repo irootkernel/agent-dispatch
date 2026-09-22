@@ -85,8 +85,10 @@ Failure to prove the configured remote binding, including effective URL rewrite
 rules, returns `sync_trust_failed` at exit 30 before predecessor
 classification and never creates a content-conflict hold.
 After that binding is proved, a ref-measurement failure before a push starts is
-`sync_retryable` at exit 10 and releases any acquired claim with
-`effect_not_started` evidence.
+`sync_retryable` at exit 10. When the current invocation already acquired the
+claim, it releases that claim with `effect_not_started` evidence. A recovery
+probe performed before takeover does not rewrite or release the prior
+invocation's claim until the remote can be measured.
 Non-bootstrap membership plan commands require `--instance`. Pause blocks new protected
 claims while preserving in-flight evidence; resume validates and binds the
 current configuration revision and never clears a conflict, revocation, trust,

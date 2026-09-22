@@ -46,7 +46,7 @@ func runSyncPublish(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return syncStoreError(stderr, command, err)
 	}
-	if control.State == "blocked" && control.Reason == "membership_emergency" {
+	if control.MembershipMode == "blocked_emergency" {
 		return syncMembershipError(stderr, command, errors.New("publication is blocked until a normal membership replacement is adopted"), 30)
 	}
 	guard, err := resourceguard.Acquire(stateDirOf(cfg), syncCfg.Resource)
@@ -213,7 +213,7 @@ func runSyncPublish(args []string, stdout, stderr io.Writer) int {
 			return finishPublicationFailure(stderr, store, job, owner, "prepared", "effect_not_started", "signed candidate creation failed")
 		}
 		if err := client.VerifySSHSignature(requestCtx(), candidate, member.PublisherKey); err != nil {
-			return finishPublicationFailure(stderr, store, job, owner, "blocked", "blocked", "candidate publisher signature was not pinned")
+			return finishPublicationFailure(stderr, store, job, owner, "prepared", "effect_not_started", "candidate publisher signature was not pinned")
 		}
 		signedAt := time.Now().UTC().Format(time.RFC3339Nano)
 		if err := store.AdvanceSyncJob(requestCtx(), job.JobID, owner, job.Fence, "signed", sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "publication", Outcome: "signed", EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "publication_id": publication.PublicationID}), RecordedAt: signedAt}, signedAt); err != nil {

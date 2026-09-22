@@ -24,9 +24,10 @@ This file records concise shipped outcomes and pending changes.
 
 ### Fixed
 
-- Retain blocked sync obligations until a membership replacement or exact
-  checkpoint records recovery, and keep attributed observations through the
-  linked sync evidence horizon without foreign-key prune failures.
+- Retain blocked sync obligations until exact remote confirmation, a membership
+  replacement, or an administrator checkpoint records the applicable recovery,
+  and keep attributed observations through the linked sync evidence horizon
+  without foreign-key prune failures.
 - Preserve signed candidates after same-base push rejection, settle exact
   remote-confirmed terminal jobs, and report retryable rejection at exit 10.
 - Preserve emergency membership through pause and stronger holds, classify

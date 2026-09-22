@@ -362,6 +362,16 @@ func (s *Store) HoldSyncControl(ctx context.Context, groupID, reason, configRevi
 // moves its local membership ref; normal mode clears only an earlier
 // membership emergency after that ref has been adopted.
 func (s *Store) ReconcileAdoptedMembership(ctx context.Context, groupID, mode, membershipRevision, configRevision, now string) (SyncControlRow, error) {
+	return s.reconcileAdoptedMembership(ctx, groupID, mode, membershipRevision, configRevision, now, true)
+}
+
+// RefreshAdoptedMembership repairs posture for an already-equal ref without
+// claiming that any blocked membership job was replaced by this invocation.
+func (s *Store) RefreshAdoptedMembership(ctx context.Context, groupID, mode, membershipRevision, configRevision, now string) (SyncControlRow, error) {
+	return s.reconcileAdoptedMembership(ctx, groupID, mode, membershipRevision, configRevision, now, false)
+}
+
+func (s *Store) reconcileAdoptedMembership(ctx context.Context, groupID, mode, membershipRevision, configRevision, now string, resolveReplacement bool) (SyncControlRow, error) {
 	if (mode != "normal" && mode != "blocked_emergency") || membershipRevision == "" {
 		return SyncControlRow{}, ErrSyncPrecondition
 	}
@@ -377,7 +387,7 @@ func (s *Store) ReconcileAdoptedMembership(ctx context.Context, groupID, mode, m
 	if err := applyMembershipPosture(ctx, tx, &control, mode, "membership_revision", membershipRevision, configRevision, now); err != nil {
 		return SyncControlRow{}, err
 	}
-	if mode == "normal" {
+	if resolveReplacement && mode == "normal" {
 		if err := resolveBlockedSyncJobs(ctx, tx, groupID, "membership_replaced", membershipRevision, now); err != nil {
 			return SyncControlRow{}, err
 		}
@@ -561,8 +571,8 @@ func (s *Store) claimSyncJob(ctx context.Context, jobID, owner, expectedConfigRe
 	if err != nil {
 		return SyncJobRow{}, err
 	}
-	var controlState, controlReason, controlConfigRevision string
-	if err := tx.QueryRowContext(ctx, `SELECT state, reason, config_revision FROM sync_controls WHERE group_id = ?`, row.GroupID).Scan(&controlState, &controlReason, &controlConfigRevision); err != nil {
+	var controlState, controlReason, controlMembershipMode, controlConfigRevision string
+	if err := tx.QueryRowContext(ctx, `SELECT state, reason, membership_mode, config_revision FROM sync_controls WHERE group_id = ?`, row.GroupID).Scan(&controlState, &controlReason, &controlMembershipMode, &controlConfigRevision); err != nil {
 		return SyncJobRow{}, err
 	}
 	controllerRepair := false
@@ -571,10 +581,12 @@ func (s *Store) claimSyncJob(ctx context.Context, jobID, owner, expectedConfigRe
 			controllerRepair = record.ControllerOnly
 		}
 	}
-	allowedRepair := allowMembershipRepair && controlState == "blocked" &&
-		((row.Kind == "membership" && controlReason == "membership_emergency") ||
-			(row.Kind == "checkpoint" && (controlReason == "conflict" || controlReason == "trust_failure" || controlReason == "recovery_required")) ||
-			(controllerRepair && (controlReason == "conflict" || controlReason == "trust_failure" || controlReason == "recovery_required")))
+	allowedRepair := allowMembershipRepair && controlState == "blocked" && row.Kind == "membership" && controlMembershipMode == "blocked_emergency"
+	if controlMembershipMode == "normal" {
+		allowedRepair = allowMembershipRepair && controlState == "blocked" &&
+			((row.Kind == "checkpoint" && (controlReason == "conflict" || controlReason == "trust_failure" || controlReason == "recovery_required")) ||
+				(controllerRepair && (controlReason == "conflict" || controlReason == "trust_failure" || controlReason == "recovery_required")))
+	}
 	if controlState != "active" && !allowedRepair {
 		return SyncJobRow{}, fmt.Errorf("sync group %s is %s: %w", row.GroupID, controlState, ErrSyncControlHeld)
 	}

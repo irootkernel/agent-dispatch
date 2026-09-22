@@ -167,7 +167,7 @@ func runSyncCheckpointApply(args []string, stdout, stderr io.Writer) int {
 			return finishCheckpointFailure(stderr, store, job, owner, "planned", "effect_not_started", readErr.Error())
 		}
 		if policyErr := syncpublication.ValidateTransition(cfg, s.Resource, predecessorFiles, targetFiles); policyErr != nil {
-			return finishCheckpointFailure(stderr, store, job, owner, "blocked", "blocked", policyErr.Error())
+			return finishCheckpointFailure(stderr, store, job, owner, "planned", "effect_not_started", "checkpoint target "+policyErr.Error())
 		}
 		files := cloneFiles(targetFiles)
 		files[".agent-dispatch-sync/checkpoints/"+plan.ProposedCheckpoint.CheckpointID+".json"] = cpRaw
@@ -190,7 +190,7 @@ func runSyncCheckpointApply(args []string, stdout, stderr io.Writer) int {
 			return finishCheckpointFailure(stderr, store, job, owner, "planned", "effect_not_started", "checkpoint signing failed")
 		}
 		if err := client.VerifySSHSignature(requestCtx(), candidate, s.AdministratorKey); err != nil {
-			return finishCheckpointFailure(stderr, store, job, owner, "blocked", "blocked", "checkpoint administrator signature was not pinned")
+			return finishCheckpointFailure(stderr, store, job, owner, "planned", "effect_not_started", "checkpoint administrator signature was not pinned")
 		}
 		signedAt := time.Now().UTC().Format(time.RFC3339Nano)
 		if err := store.AdvanceSyncJob(requestCtx(), job.JobID, owner, job.Fence, "applying", sqlite.SyncJournalEntry{JournalID: randomSyncID("checkpoint-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "checkpoint", Outcome: "signed", EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "plan_id": plan.PlanID}), RecordedAt: signedAt}, signedAt); err != nil {

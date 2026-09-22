@@ -104,8 +104,19 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 			return code
 		}
 		defer concrete.Close()
-		if _, err := store.EnsureSyncControl(requestCtx(), group, revision, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		current, err := store.EnsureSyncControl(requestCtx(), group, revision, time.Now().UTC().Format(time.RFC3339Nano))
+		if err != nil {
 			return syncStoreError(stderr, command, err)
+		}
+		if current.State == "blocked" && current.MembershipMode == "blocked_emergency" {
+			if current.Revision != expected {
+				return syncMembershipError(stderr, command, fmt.Errorf("control revision is %d, expected %d: %w", current.Revision, expected, sqlite.ErrSyncPrecondition), 14)
+			}
+			writeEnvelope(stdout, command, map[string]any{
+				"schema_version": "agent-dispatch.sync-control/v1", "group_id": current.GroupID,
+				"revision": current.Revision, "state": current.State, "reason": current.Reason, "membership_mode": current.MembershipMode,
+			})
+			return 30
 		}
 		target := "paused"
 		if args[0] == "resume" {
@@ -119,7 +130,7 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 			"schema_version": "agent-dispatch.sync-control/v1", "group_id": control.GroupID,
 			"revision": control.Revision, "state": control.State, "reason": control.Reason, "membership_mode": control.MembershipMode,
 		})
-		if control.State == "blocked" && control.Reason == "membership_emergency" {
+		if control.State == "blocked" && control.MembershipMode == "blocked_emergency" {
 			return 30
 		}
 		return resultCode

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/irootkernel/agent-dispatch/internal/adapters/gitlocal"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 )
@@ -108,7 +109,8 @@ func TestE21T5StatusSeparatesDurableSyncOutcomes(t *testing.T) {
 	if _, err := store.Exec(`INSERT INTO sync_journal_entries
 		(journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES
 		('publication-status-evidence','publication-job-g17',1,'publication','effect_unknown','{"candidate":"2222222222222222222222222222222222222222","remote":"1111111111111111111111111111111111111111","push_state":"ambiguous","reason":"push outcome unknown"}','2026-09-21T01:00:04Z'),
-		('import-status-evidence','import-job-g17',1,'import','deferred','{"reason":"observation_unavailable"}','2026-09-21T01:00:05Z')`); err != nil {
+		('import-status-evidence','import-job-g17',1,'import','deferred','{"reason":"observation_unavailable"}','2026-09-21T01:00:05Z'),
+		('publication-resolution-evidence','publication-job-g17',1,'publication','ok','{"resolution":"checkpoint_reconciled","resolver_id":"checkpoint-1"}','2026-09-21T01:00:03Z')`); err != nil {
 		t.Fatal(err)
 	}
 	code, envelope, stderr := syncResult(t, "status", "--group", cfg.Sync.GroupID, "--config", configPath, "--output", "json")
@@ -133,6 +135,9 @@ func TestE21T5StatusSeparatesDurableSyncOutcomes(t *testing.T) {
 	if publication["candidate"] != "2222222222222222222222222222222222222222" || publication["remote"] != target || publication["push_state"] != "ambiguous" || publication["reason"] != "push outcome unknown" {
 		t.Fatalf("publication recovery evidence = %v", publication)
 	}
+	if publication["resolution"] != "checkpoint_reconciled" || publication["resolver_id"] != "checkpoint-1" {
+		t.Fatalf("publication resolution evidence = %v", publication)
+	}
 	if got := status["latest_import"].(map[string]any)["reason"]; got != "observation_unavailable" {
 		t.Fatalf("import deferral reason = %v", got)
 	}
@@ -143,5 +148,19 @@ func TestE21T1EnabledConfigDoesNotActivateStillReservedGitCommands(t *testing.T)
 	code, _, stderr := syncResult(t, "verify", "--group", "wiki-pair", "--config", configPath, "--output", "json")
 	if code != 3 || !bytes.Contains([]byte(stderr), []byte("sync_capability_unavailable")) {
 		t.Fatalf("reserved verify: %d %s", code, stderr)
+	}
+}
+
+func TestE21SameBasePushRejectionIsRetryable(t *testing.T) {
+	base := "1111111111111111111111111111111111111111"
+	candidate := "2222222222222222222222222222222222222222"
+	if got := classifySyncPush(gitlocal.PushRejected, base, base, candidate); got != syncPushRetryable {
+		t.Fatalf("same-base rejection = %v", got)
+	}
+	if got := classifySyncPush(gitlocal.PushRejected, "3333333333333333333333333333333333333333", base, candidate); got != syncPushConflict {
+		t.Fatalf("changed-base rejection = %v", got)
+	}
+	if got := classifySyncPush(gitlocal.PushAmbiguous, candidate, base, candidate); got != syncPushConfirmed {
+		t.Fatalf("remote-confirmed candidate = %v", got)
 	}
 }

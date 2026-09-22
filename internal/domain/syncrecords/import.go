@@ -7,8 +7,6 @@ import (
 	"strings"
 
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/unicode/norm"
 )
 
 const ImportSchema = "agent-dispatch.sync-import/v1"
@@ -103,7 +101,6 @@ func (p Import) Validate() error {
 	if p.ClaimOwner != nil && !recordID(*p.ClaimOwner) {
 		return fmt.Errorf("%w: invalid import claim owner", ErrInvalidRecord)
 	}
-	fold := cases.Fold()
 	aliases := map[string]string{}
 	for i, effect := range p.Paths {
 		normalized, err := records.NormalizePath(effect.Path)
@@ -116,7 +113,7 @@ func (p Import) Validate() error {
 		// Import identity is deliberately conservative on every host. The
 		// recorded case mode describes the current filesystem; it never lets a
 		// caller admit a tree that would alias on the peer or after relocation.
-		key := fold.String(norm.NFC.String(effect.Path))
+		key := records.PortablePathIdentity(effect.Path)
 		if prior, exists := aliases[key]; exists && prior != effect.Path {
 			return fmt.Errorf("%w: import paths alias", ErrInvalidRecord)
 		}

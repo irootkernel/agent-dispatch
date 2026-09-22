@@ -266,6 +266,24 @@ func TestRemoteBindingRejectsRepositoryURLRewrites(t *testing.T) {
 	}
 }
 
+func TestRemoteBindingRejectsWorktreePushURLRewrite(t *testing.T) {
+	repo := initRepository(t)
+	gitRun(t, repo, "config", "extensions.worktreeConfig", "true")
+	gitRun(t, repo, "remote", "add", "origin", "ssh://git@example.com/repo")
+	gitRun(t, repo, "config", "--worktree", "url.ssh://git@evil.example/.pushInsteadOf", "ssh://git@example.com/")
+	digest, _, err := config.RemoteRepositoryDigest("ssh://git@example.com/repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := New(repo, Limits{Timeout: 2 * time.Second, MaxOutput: 64 << 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.RemoteRef(context.Background(), "origin", "refs/heads/main", digest); err == nil || !strings.Contains(err.Error(), "URL rewrite") {
+		t.Fatalf("worktree pushInsteadOf rewrite was accepted: %v", err)
+	}
+}
+
 func TestUpdateRefExpectedRejectsSymbolicRef(t *testing.T) {
 	repo := initRepository(t)
 	head := gitOutput(t, repo, "rev-parse", "HEAD")
@@ -307,7 +325,7 @@ func TestPushTimeoutWithUnprovableRemoteHeadIsAmbiguous(t *testing.T) {
 	expected := "1111111111111111111111111111111111111111"
 	candidate := "2222222222222222222222222222222222222222"
 	body := "#!/bin/sh\ncase \"$*\" in\n" +
-		"  *\"config --local --name-only --get-regexp\"*) exit 1;;\n" +
+		"  *\"config --name-only --get-regexp\"*) exit 1;;\n" +
 		"  *\"remote get-url --all origin\"*) echo ssh://git@example.com/repo;;\n" +
 		"  *\"remote get-url --push --all origin\"*) echo ssh://git@example.com/repo;;\n" +
 		"  *ls-remote*\"refs/agent-dispatch/membership/wiki-pair\"*) if test -f " + count + "; then exit 1; else : > " + count + "; echo '" + expected + " refs/agent-dispatch/membership/wiki-pair'; fi;;\n" +
@@ -334,7 +352,7 @@ func TestPushAlreadyAtCandidateIsConfirmed(t *testing.T) {
 	expected := "1111111111111111111111111111111111111111"
 	candidate := "2222222222222222222222222222222222222222"
 	body := "#!/bin/sh\ncase \"$*\" in\n" +
-		"  *\"config --local --name-only --get-regexp\"*) exit 1;;\n" +
+		"  *\"config --name-only --get-regexp\"*) exit 1;;\n" +
 		"  *\"remote get-url --all origin\"*) echo ssh://git@example.com/repo;;\n" +
 		"  *\"remote get-url --push --all origin\"*) echo ssh://git@example.com/repo;;\n" +
 		"  *ls-remote*) echo '" + candidate + " refs/agent-dispatch/content/wiki-pair';;\n" +
@@ -400,7 +418,7 @@ func TestG17TwoWritersPreserveBothHistoriesAfterFastForwardLoss(t *testing.T) {
 	script := filepath.Join(dir, "git")
 	body := fmt.Sprintf(`#!/bin/sh
 case " $* " in
-  *" config --local --name-only --get-regexp "*) exit 1;;
+  *" config --name-only --get-regexp "*) exit 1;;
   *" remote get-url --all origin "*) echo %s; exit 0;;
   *" remote get-url --push --all origin "*) echo %s; exit 0;;
   *" ls-remote "*) oid=$(sed -n '1p' %s); printf '%%s\t%s\n' "$oid"; exit 0;;

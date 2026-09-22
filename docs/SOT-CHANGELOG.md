@@ -33,6 +33,13 @@ two-node sync workflow. Peer service, pair verification, and release remain disa
 - E21-T5 qualifies G17 on every supported platform with disposable repositories,
   pins two-writer history preservation, documents the unsupported Git surface,
   and exposes publication, delivery, and import outcomes separately in status.
+- Validation remediation adds schema v23 retained blocked obligations and schema
+  v24 causal journal sequencing. Same-base push rejection preserves the signed
+  candidate as retryable, exact remote evidence settles interrupted work, and
+  membership changes preserve stronger control holds.
+- Path policy and sync alias checks share NFC and Unicode-folded comparison
+  identities without changing filesystem path spelling. Repository worktree URL
+  rewrites are rejected before remote access.
 
 ## 1.7.0 - 2026-09-19
 

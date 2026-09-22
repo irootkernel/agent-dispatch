@@ -25,7 +25,7 @@ var expectedArtifacts = []string{
 // allowlisted path and its bytes in bundle order. SHA256SUMS supports ordinary
 // corruption detection; this pin ensures the checksum regeneration command
 // cannot silently bless coordinated schema/fixture drift.
-const expectedArtifactSetDigest = "34dbeffc3449b32256e832842918af81481a023a8fee848ea757c6d5a945e8b2"
+const expectedArtifactSetDigest = "b7e33b1c3796ff91169e986363a1193b867783c653c712a16ac79a4d029a9970"
 
 type bundle struct {
 	SchemaVersion  string   `json:"schema_version"`
@@ -239,13 +239,13 @@ func Check(dir string) error {
 	if err := decodeClosed(filepath.Join(dir, "errors.json"), &e); err != nil {
 		return err
 	}
-	if e.SchemaVersion != "agent-dispatch.sync-provider.errors/v1" || len(e.Errors) != 8 {
+	if e.SchemaVersion != "agent-dispatch.sync-provider.errors/v1" || len(e.Errors) != 9 {
 		return fmt.Errorf("provider error registry mismatch")
 	}
 	wantErrors := []struct {
 		code, category string
 		exit           int
-	}{{"sync_group_not_found", "configuration", 3}, {"sync_capability_unavailable", "configuration", 3}, {"sync_contract_mismatch", "configuration", 3}, {"sync_payload_invalid", "input_rejected", 4}, {"sync_identity_obsolete", "input_rejected", 4}, {"sync_effect_unknown", "acceptance_unknown", 13}, {"sync_precondition_failed", "conflict", 14}, {"sync_trust_failed", "security", 30}}
+	}{{"sync_group_not_found", "configuration", 3}, {"sync_capability_unavailable", "configuration", 3}, {"sync_contract_mismatch", "configuration", 3}, {"sync_payload_invalid", "input_rejected", 4}, {"sync_identity_obsolete", "input_rejected", 4}, {"sync_retryable", "transient_local", 10}, {"sync_effect_unknown", "acceptance_unknown", 13}, {"sync_precondition_failed", "conflict", 14}, {"sync_trust_failed", "security", 30}}
 	for i, entry := range e.Errors {
 		want := wantErrors[i]
 		if entry.Code != want.code || entry.Category != want.category || entry.ExitCode != want.exit {

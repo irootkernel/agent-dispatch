@@ -113,7 +113,7 @@ func TestE21T1SyncJobTransitionsCannotSkipOrMoveBackward(t *testing.T) {
 		t.Fatal(err)
 	}
 	journal := SyncJournalEntry{JournalID: "transition-skip", JobID: job.JobID, Fence: job.Fence, Phase: "publication", Outcome: "published", EvidenceJSON: `{}`, RecordedAt: syncT1}
-	if err := s.FinishSyncJob(ctx, job.JobID, "worker-transition", job.Fence, "published", true, journal, syncT1); err == nil {
+	if err := s.FinishSyncJob(ctx, job.JobID, "worker-transition", job.Fence, "published", SyncJobResolve, journal, syncT1); err == nil {
 		t.Fatal("eligible publication must not skip prepared and signed states")
 	}
 	prepared := SyncJournalEntry{JournalID: "transition-prepared", JobID: job.JobID, Fence: job.Fence, Phase: "publication", Outcome: "prepared", EvidenceJSON: `{}`, RecordedAt: syncT1}
@@ -254,7 +254,7 @@ func TestE21T1ResolvedRetentionIsChildrenFirstAndUnresolvedIsPreserved(t *testin
 		t.Fatal(err)
 	}
 	terminal := SyncJournalEntry{JournalID: "journal-terminal", JobID: job.JobID, Fence: claim.Fence, Phase: "publication", Outcome: "published", EvidenceJSON: `{}`, RecordedAt: syncT1}
-	if err := s.FinishSyncJob(ctx, job.JobID, "worker", claim.Fence, "published", true, terminal, syncT1); err != nil {
+	if err := s.FinishSyncJob(ctx, job.JobID, "worker", claim.Fence, "published", SyncJobResolve, terminal, syncT1); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := s.AdmitSyncJob(ctx, syncJobFixture("job-pending", "cause-pending", `{"pending":true}`)); err != nil {
@@ -275,6 +275,46 @@ func TestE21T1ResolvedRetentionIsChildrenFirstAndUnresolvedIsPreserved(t *testin
 	}
 	if err := s.QueryRow(`SELECT COUNT(*) FROM sync_journal_entries WHERE job_id='job-resolved'`).Scan(&remaining); err != nil || remaining != 0 {
 		t.Fatalf("resolved journal rows=%d err=%v", remaining, err)
+	}
+}
+
+func TestE21MembershipEmergencyPreservesStrongerHold(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if _, err := s.EnsureSyncControl(ctx, "wiki-pair", "cfg-1", syncT0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.HoldSyncControl(ctx, "wiki-pair", "trust_failure", "cfg-1", syncT1); err != nil {
+		t.Fatal(err)
+	}
+	control, err := s.ReconcileAdoptedMembership(ctx, "wiki-pair", "blocked_emergency", "membership-emergency", "cfg-1", syncT2)
+	if err != nil || control.State != "blocked" || control.Reason != "trust_failure" {
+		t.Fatalf("emergency overwrote stronger hold: %+v, %v", control, err)
+	}
+	control, err = s.ReconcileAdoptedMembership(ctx, "wiki-pair", "normal", "membership-normal", "cfg-1", "2026-09-21T00:00:03Z")
+	if err != nil || control.State != "blocked" || control.Reason != "trust_failure" {
+		t.Fatalf("normal membership cleared stronger hold: %+v, %v", control, err)
+	}
+}
+
+func TestE21SyncJournalOrderUsesDurableSequence(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if _, err := s.EnsureSyncControl(ctx, "wiki-pair", "cfg-1", syncT0); err != nil {
+		t.Fatal(err)
+	}
+	job, _, err := s.AdmitSyncJob(ctx, syncJobFixture("journal-order", "journal-order", `{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Exec(`INSERT INTO sync_journal_entries(journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES
+		('journal-first',?,1,'publication','signed','{"candidate":"first"}','2026-09-21T00:00:00.900Z'),
+		('journal-second',?,1,'publication','signed','{"candidate":"second"}','2026-09-21T00:00:00.100Z')`, job.JobID, job.JobID); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := s.LoadSyncJournals(ctx, job.JobID)
+	if err != nil || len(entries) != 2 || entries[0].JournalID != "journal-first" || entries[1].JournalID != "journal-second" || entries[0].Sequence >= entries[1].Sequence {
+		t.Fatalf("journal sequence = %+v, %v", entries, err)
 	}
 }
 
@@ -411,7 +451,14 @@ func TestE21Migration23ReopensLegacyBlockedObligations(t *testing.T) {
 	if _, err := s.Exec(`UPDATE sync_jobs SET state='blocked',fence=1,retain_until_resolved=0,resolved_at=? WHERE job_id=?`, syncT0, job.JobID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Exec(`DELETE FROM schema_migrations WHERE version=23`); err != nil {
+	completed, _, err := s.AdmitSyncJob(ctx, syncJobFixture("legacy-completed", "legacy-completed", `{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Exec(`UPDATE sync_jobs SET state='published',fence=1,retain_until_resolved=0,resolved_at=? WHERE job_id=?`, syncT0, completed.JobID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Exec(`DELETE FROM schema_migrations WHERE version IN (23,24)`); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Close(); err != nil {
@@ -429,6 +476,9 @@ func TestE21Migration23ReopensLegacyBlockedObligations(t *testing.T) {
 	var resolved string
 	if err := s.QueryRow(`SELECT retain_until_resolved,COALESCE(resolved_at,'') FROM sync_jobs WHERE job_id=?`, job.JobID).Scan(&retain, &resolved); err != nil || retain != 1 || resolved != "" {
 		t.Fatalf("migrated blocked obligation retain=%d resolved=%q err=%v", retain, resolved, err)
+	}
+	if err := s.QueryRow(`SELECT retain_until_resolved,COALESCE(resolved_at,'') FROM sync_jobs WHERE job_id=?`, completed.JobID).Scan(&retain, &resolved); err != nil || retain != 0 || resolved != syncT0 {
+		t.Fatalf("migration changed completed job retain=%d resolved=%q err=%v", retain, resolved, err)
 	}
 }
 
@@ -583,7 +633,7 @@ func TestE21T3ConfirmedCandidateRecoveryReusesPublication(t *testing.T) {
 	if err := s.AdvanceSyncJob(ctx, job.JobID, "publisher", claim.Fence, "signed", SyncJournalEntry{JournalID: "publication-signed", JobID: job.JobID, Fence: claim.Fence, Phase: "publication", Outcome: "signed", EvidenceJSON: `{"candidate":"1111111111111111111111111111111111111111"}`, RecordedAt: syncT1}, syncT1); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.FinishSyncJob(ctx, job.JobID, "publisher", claim.Fence, "uncertain", false, SyncJournalEntry{JournalID: "publication-unknown", JobID: job.JobID, Fence: claim.Fence, Phase: "publication", Outcome: "effect_unknown", EvidenceJSON: `{}`, RecordedAt: syncT2}, syncT2); err != nil {
+	if err := s.FinishSyncJob(ctx, job.JobID, "publisher", claim.Fence, "uncertain", SyncJobKeepUnresolved, SyncJournalEntry{JournalID: "publication-unknown", JobID: job.JobID, Fence: claim.Fence, Phase: "publication", Outcome: "effect_unknown", EvidenceJSON: `{}`, RecordedAt: syncT2}, syncT2); err != nil {
 		t.Fatal(err)
 	}
 	delivery := SyncJobInput{JobID: "delivery-recovery", GroupID: "wiki-pair", Kind: "delivery", LogicalKey: "publication-recovery", InitialState: "pending", PayloadJSON: `{"target_commit":"1111111111111111111111111111111111111111"}`, QueueLimit: 1000, Now: syncT3}

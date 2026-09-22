@@ -163,7 +163,7 @@ func TestE21T4DeferredValidatedImportCanReopenAfterFenceClears(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.FinishSyncJob(ctx, job.JobID, "owner-reopen", job.Fence, "deferred", true, SyncJournalEntry{JournalID: "journal-deferred", JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "deferred", EvidenceJSON: `{}`, RecordedAt: syncT1}, syncT1); err != nil {
+	if err := s.FinishSyncJob(ctx, job.JobID, "owner-reopen", job.Fence, "deferred", SyncJobResolve, SyncJournalEntry{JournalID: "journal-deferred", JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "deferred", EvidenceJSON: `{}`, RecordedAt: syncT1}, syncT1); err != nil {
 		t.Fatal(err)
 	}
 	reopened, err := s.ReopenDeferredImport(ctx, job.JobID, "revision-1", SyncJournalEntry{JournalID: "journal-reopen", JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: `{}`, RecordedAt: syncT2}, syncT2)
@@ -220,7 +220,7 @@ func TestE21T4DeferredControllerImportReopensThroughCheckpointHold(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.FinishSyncJob(ctx, job.JobID, "owner-controller-reopen", job.Fence, "deferred", true, SyncJournalEntry{JournalID: "controller-deferred", JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "deferred", EvidenceJSON: `{}`, RecordedAt: syncT1}, syncT1); err != nil {
+	if err := s.FinishSyncJob(ctx, job.JobID, "owner-controller-reopen", job.Fence, "deferred", SyncJobResolve, SyncJournalEntry{JournalID: "controller-deferred", JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "deferred", EvidenceJSON: `{}`, RecordedAt: syncT1}, syncT1); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.HoldSyncControl(ctx, "wiki-pair", "conflict", "revision-1", syncT1); err != nil {

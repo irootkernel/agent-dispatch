@@ -8,7 +8,12 @@ import (
 	"regexp"
 	"strings"
 	"unicode/utf8"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/unicode/norm"
 )
+
+var portablePathFold = cases.Fold()
 
 // digestPattern is the canonical digest form (canonical-record-contracts
 // §1): sha256 with exactly 64 lowercase hex characters.
@@ -80,4 +85,12 @@ func NormalizePath(p string) (string, error) {
 		}
 	}
 	return p, nil
+}
+
+// PortablePathIdentity returns the conservative identity used to detect paths
+// that would alias after Unicode normalization or a move to a case-insensitive
+// filesystem. It is for comparison only; callers must retain the original path
+// for filesystem access and persisted records.
+func PortablePathIdentity(p string) string {
+	return portablePathFold.String(norm.NFC.String(p))
 }

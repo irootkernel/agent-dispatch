@@ -77,11 +77,18 @@ plan binds `--target-commit` and `--kind`; apply accepts only the unchanged
 strict-JSON plan. Re-entering apply after process loss probes the approved remote,
 reuses the journaled signed candidate, and either settles a confirmed candidate
 or resumes it only after proving the remote stayed at the reviewed predecessor.
+If a non-force publication, checkpoint, or membership push is rejected while
+the approved remote is still at that predecessor, the command preserves the
+signed candidate and returns `sync_retryable` at exit 10. Exit 14 is reserved
+for a changed predecessor or another actual conflict.
 Non-bootstrap membership plan commands require `--instance`. Pause blocks new protected
 claims while preserving in-flight evidence; resume validates and binds the
 current configuration revision and never clears a conflict, revocation, trust,
-or recovery block. A confirmed normal replacement clears only the membership
-emergency block. Reconcile fetches and validates while unacknowledged but defers
+or recovery block. Emergency membership can arm an active group but cannot
+replace an operator pause or a stronger conflict, trust, or recovery hold. A
+confirmed normal replacement clears only the membership emergency block.
+Adopting an emergency membership updates the local membership ref and returns
+exit 30 in the same invocation. Reconcile fetches and validates while unacknowledged but defers
 live mutation; overlap, untracked collision, Git instability, divergence,
 uncovered history, trust failure, and partial effects stay inspectable. An
 exact administrator checkpoint at both local and approved remote heads is the
@@ -101,7 +108,9 @@ Enabled `sync status` reports `latest_publication`, `latest_delivery`, and
 `latest_import` separately so a signed or uncertain publication, pending peer
 delivery, and local import can never collapse into one claimed outcome. Every
 projection includes the durable job identity, logical key, state, update time,
-resolution, claim, and fence; typed publication/import/target/receiver details
+resolution, claim, and fence. Resolution evidence is reported separately from
+the historical terminal state, and later resolver journals do not erase the
+latest reason, candidate, remote, or push disposition. Typed publication/import/target/receiver details
 are included when present. Import additionally reports its reason and target
 paths after strict record decoding. Resolved deferrals remain visible without
 occupying the bounded active queue; `present: false` means no retained job of

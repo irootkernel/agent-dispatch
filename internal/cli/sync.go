@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/irootkernel/agent-dispatch/internal/adapters/gitlocal"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/domain/syncrecords"
@@ -156,6 +157,9 @@ func latestSyncJobStatus(store *sqlite.Store, groupID, kind string) (map[string]
 		"fence":       row.Fence,
 		"claimed":     row.ClaimOwner != "",
 	}
+	if row.ResolvedAt != "" {
+		result["resolved_at"] = row.ResolvedAt
+	}
 	var payload map[string]any
 	if json.Unmarshal([]byte(row.PayloadJSON), &payload) == nil {
 		for _, key := range []string{"publication_id", "import_id", "target_commit", "receiver"} {
@@ -164,10 +168,17 @@ func latestSyncJobStatus(store *sqlite.Store, groupID, kind string) (map[string]
 			}
 		}
 	}
-	if journals, journalErr := store.LoadSyncJournals(requestCtx(), row.JobID); journalErr == nil && len(journals) > 0 {
-		var evidence map[string]any
-		if json.Unmarshal([]byte(journals[len(journals)-1].EvidenceJSON), &evidence) == nil {
-			for _, key := range []string{"reason", "candidate", "remote", "push_state"} {
+	journals, journalErr := store.LoadSyncJournals(requestCtx(), row.JobID)
+	if journalErr == nil {
+		for i := len(journals) - 1; i >= 0; i-- {
+			var evidence map[string]any
+			if json.Unmarshal([]byte(journals[i].EvidenceJSON), &evidence) != nil {
+				continue
+			}
+			for _, key := range []string{"reason", "candidate", "remote", "push_state", "resolution", "resolver_id"} {
+				if _, exists := result[key]; exists {
+					continue
+				}
 				if value, ok := evidence[key].(string); ok && value != "" {
 					result[key] = value
 				}
@@ -191,13 +202,8 @@ func latestSyncJobStatus(store *sqlite.Store, groupID, kind string) (map[string]
 		reason = "partial_effect"
 	case "deferred":
 		if reason == "none" {
-			if journals, journalErr := store.LoadSyncJournals(requestCtx(), row.JobID); journalErr == nil && len(journals) > 0 {
-				var evidence map[string]any
-				if json.Unmarshal([]byte(journals[len(journals)-1].EvidenceJSON), &evidence) == nil {
-					if journalReason, ok := evidence["reason"].(string); ok && journalReason != "" {
-						reason = journalReason
-					}
-				}
+			if journalReason, ok := result["reason"].(string); ok && journalReason != "" {
+				reason = journalReason
 			}
 		}
 	}
@@ -222,6 +228,28 @@ func syncCapabilities() map[string]any {
 		"service_render": false, "service_install": false, "service_inspect": false,
 		"service_stop": false, "service_disable": false, "service_uninstall": false,
 	}
+}
+
+type syncPushDisposition uint8
+
+const (
+	syncPushConfirmed syncPushDisposition = iota
+	syncPushRetryable
+	syncPushConflict
+	syncPushUnknown
+)
+
+func classifySyncPush(state gitlocal.PushState, remote, predecessor, candidate string) syncPushDisposition {
+	if state == gitlocal.PushConfirmed || remote == candidate {
+		return syncPushConfirmed
+	}
+	if state == gitlocal.PushRejected {
+		if remote == predecessor {
+			return syncPushRetryable
+		}
+		return syncPushConflict
+	}
+	return syncPushUnknown
 }
 
 func reservedSyncCommand(args []string) bool {

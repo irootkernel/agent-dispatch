@@ -267,7 +267,7 @@ func TestE10T1MigrationV8BackfillAndIntegrity(t *testing.T) {
 		`ALTER TABLE resources DROP COLUMN observation_revision`,
 		`ALTER TABLE route_runtime_state DROP COLUMN capability_fingerprint`,
 		`ALTER TABLE change_batches DROP COLUMN selected_destinations_json`,
-		`DELETE FROM schema_migrations WHERE version IN (8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23)`,
+		`DELETE FROM schema_migrations WHERE version IN (8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24)`,
 	} {
 		if _, err := crashed.Exec(stmt); err != nil {
 			t.Fatalf("rewind %q: %v", stmt, err)

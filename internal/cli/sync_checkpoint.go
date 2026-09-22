@@ -198,9 +198,12 @@ func runSyncCheckpointApply(args []string, stdout, stderr io.Writer) int {
 	remoteNow, remoteErr := client.RemoteRef(requestCtx(), s.RemoteName, s.ContentRef, s.RemoteRepositoryDigest)
 	if remoteErr != nil || remoteNow != candidate {
 		push := client.PushFastForward(requestCtx(), s.RemoteName, s.ContentRef, candidate, predecessor, s.RemoteRepositoryDigest)
-		if push.State != "confirmed" {
+		switch classifySyncPush(push.State, push.RemoteOID, predecessor, candidate) {
+		case syncPushRetryable:
+			return finishCheckpointRetryable(stderr, store, job, owner, candidate, push.RemoteOID)
+		case syncPushConflict, syncPushUnknown:
 			state, outcome := "uncertain", "effect_unknown"
-			if push.State == "rejected" {
+			if classifySyncPush(push.State, push.RemoteOID, predecessor, candidate) == syncPushConflict {
 				state, outcome = "blocked", "blocked"
 			}
 			return finishCheckpointFailure(stderr, store, job, owner, state, outcome, fmt.Sprintf("checkpoint push %s", push.State))
@@ -213,7 +216,7 @@ func runSyncCheckpointApply(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	terminal := time.Now().UTC().Format(time.RFC3339Nano)
-	if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "applied", true, sqlite.SyncJournalEntry{JournalID: randomSyncID("checkpoint-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "checkpoint", Outcome: "applied", EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": candidate, "plan_id": plan.PlanID}), RecordedAt: terminal}, terminal); err != nil {
+	if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "applied", sqlite.SyncJobResolve, sqlite.SyncJournalEntry{JournalID: randomSyncID("checkpoint-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "checkpoint", Outcome: "applied", EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": candidate, "plan_id": plan.PlanID}), RecordedAt: terminal}, terminal); err != nil {
 		return syncStoreError(stderr, command, err)
 	}
 	return checkpointResult(stdout, plan, candidate, false)
@@ -305,6 +308,16 @@ func recoverCheckpointApply(stdout, stderr io.Writer, store *sqlite.Store, clien
 		if err := store.ReconcileUncertainCheckpoint(requestCtx(), job.JobID, job.Fence, journal, nowText); err != nil {
 			return true, syncStoreError(stderr, "sync checkpoint apply", err)
 		}
+	} else if job.State == "blocked" {
+		if candidate == "" {
+			return true, syncMembershipError(stderr, "sync checkpoint apply", errors.New("blocked checkpoint has no signed candidate to retry"), 14)
+		}
+		if err := client.VerifySSHSignature(requestCtx(), candidate, s.AdministratorKey); err != nil {
+			return true, syncMembershipError(stderr, "sync checkpoint apply", err, 30)
+		}
+		if err := store.ReopenRejectedCheckpoint(requestCtx(), job.JobID, job.Fence, journal, nowText); err != nil {
+			return true, syncStoreError(stderr, "sync checkpoint apply", err)
+		}
 	} else if claimExpired {
 		if err := store.ReconcileExpiredSyncClaim(requestCtx(), job.JobID, job.Fence, "effect_not_started", journal, nowText); err != nil {
 			return true, syncStoreError(stderr, "sync checkpoint apply", err)
@@ -369,7 +382,7 @@ func checkpointControlMatches(kind string, control sqlite.SyncControlRow) bool {
 }
 func finishCheckpointFailure(stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, owner, state, outcome, reason string) int {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, state, false, sqlite.SyncJournalEntry{JournalID: randomSyncID("checkpoint-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "checkpoint", Outcome: outcome, EvidenceJSON: mustJSON(map[string]any{"reason": reason}), RecordedAt: now}, now)
+	err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, state, sqlite.SyncJobKeepUnresolved, sqlite.SyncJournalEntry{JournalID: randomSyncID("checkpoint-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "checkpoint", Outcome: outcome, EvidenceJSON: mustJSON(map[string]any{"reason": reason}), RecordedAt: now}, now)
 	if err != nil {
 		return syncStoreError(stderr, "sync checkpoint apply", err)
 	}
@@ -379,6 +392,19 @@ func finishCheckpointFailure(stderr io.Writer, store *sqlite.Store, job sqlite.S
 	}
 	writeError(stderr, "sync checkpoint apply", map[bool]string{true: "sync_effect_unknown", false: "sync_precondition_failed"}[state == "uncertain"], map[bool]string{true: "acceptance_unknown", false: "conflict"}[state == "uncertain"], reason)
 	return code
+}
+
+func finishCheckpointRetryable(stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, owner, candidate, remote string) int {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	reason := "checkpoint push was rejected before the approved remote moved; rerun sync checkpoint apply"
+	if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "applying", sqlite.SyncJobKeepUnresolved, sqlite.SyncJournalEntry{
+		JournalID: randomSyncID("checkpoint-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "checkpoint", Outcome: "effect_not_started",
+		EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": remote, "push_state": gitlocal.PushRejected, "reason": reason}), RecordedAt: now,
+	}, now); err != nil {
+		return syncStoreError(stderr, "sync checkpoint apply", err)
+	}
+	writeError(stderr, "sync checkpoint apply", "sync_retryable", "transient_local", reason)
+	return 10
 }
 func checkpointResult(stdout io.Writer, p syncrecords.CheckpointPlan, candidate string, idempotent bool) int {
 	return writeEnvelope(stdout, "sync checkpoint apply", map[string]any{"schema_version": "agent-dispatch.sync-checkpoint-apply-result/v1", "state": "applied", "plan_id": p.PlanID, "checkpoint_id": p.ProposedCheckpoint.CheckpointID, "content_revision": candidate, "idempotent": idempotent, "side_effects": func() []string {

@@ -138,6 +138,7 @@ The v0.1 registry is closed: implementations emit only the codes below. Adding o
 | `sync_payload_invalid` | `input_rejected` | 4 |
 | `sync_precondition_failed` | `conflict` | 14 |
 | `sync_effect_unknown` | `acceptance_unknown` | 13 |
+| `sync_retryable` | `transient_local` | 10 |
 | `sync_trust_failed` | `security` | 30 |
 
 Reserved code names — defined, never emitted in v0.1:

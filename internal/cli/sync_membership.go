@@ -134,6 +134,35 @@ func runSyncMembershipApply(args []string, stdout, stderr io.Writer) int {
 				}
 			}
 		}
+		if recovered, result := recoverConfirmedMembership(stdout, stderr, concrete, client, syncCfg, plan, job, configRevision); recovered {
+			return result
+		}
+		if job.State == "blocked" || job.State == "uncertain" {
+			journals, loadErr := concrete.LoadSyncJournals(requestCtx(), job.JobID)
+			if loadErr != nil {
+				return syncStoreError(stderr, command, loadErr)
+			}
+			candidate := journalCandidate(journals)
+			remote, remoteErr := client.RemoteRef(requestCtx(), syncCfg.RemoteName, syncCfg.MembershipRef, syncCfg.RemoteRepositoryDigest)
+			remoteUnchanged := plan.ExpectedPredecessor == nil && errors.Is(remoteErr, gitlocal.ErrMissingRef)
+			if plan.ExpectedPredecessor != nil {
+				remoteUnchanged = remoteErr == nil && remote == *plan.ExpectedPredecessor
+			}
+			if candidate == "" || !remoteUnchanged {
+				return syncMembershipError(stderr, command, errors.New("membership recovery requires the exact signed candidate or predecessor on the approved remote"), 14)
+			}
+			if err := client.VerifySSHSignature(requestCtx(), candidate, syncCfg.AdministratorKey); err != nil {
+				return syncMembershipError(stderr, command, err, 30)
+			}
+			recoveryNow := time.Now().UTC().Format(time.RFC3339Nano)
+			if err := concrete.ReopenRejectedMembership(requestCtx(), job.JobID, job.Fence, sqlite.SyncJournalEntry{
+				JournalID: randomSyncID("membership-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started",
+				EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": remote, "remote_unchanged": true}), RecordedAt: recoveryNow,
+			}, recoveryNow); err != nil {
+				return syncStoreError(stderr, command, err)
+			}
+			job.State, job.ClaimOwner = "planned", ""
+		}
 		if job.State == "planned" && job.ClaimOwner != "" {
 			expires, _ := time.Parse(time.RFC3339Nano, job.ClaimExpiresAt)
 			if expires.After(time.Now().UTC()) {
@@ -207,40 +236,47 @@ func runSyncMembershipApply(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return syncStoreError(stderr, command, err)
 	}
-	ref, err := config.ParseSecretRef(syncCfg.AdministratorSigningKeyRef)
-	if err != nil {
-		return finishClaimedMembership(stderr, concrete, job, owner, "planned", false, "effect_not_started", map[string]any{"reason": "administrator signing key reference is unavailable"}, time.Now().UTC())
-	}
-	privateKey, err := secretresolver.Resolve(requestCtx(), ref)
-	if err != nil {
-		return finishClaimedMembership(stderr, concrete, job, owner, "planned", false, "effect_not_started", map[string]any{"reason": "administrator signing key could not be resolved"}, time.Now().UTC())
-	}
-	documentRaw, _ := syncrecords.CanonicalMembership(plan.ProposedMembership)
 	predecessor := ""
 	if plan.ExpectedPredecessor != nil {
 		predecessor = *plan.ExpectedPredecessor
 	}
-	candidate, err := client.CreateSignedMembershipCommit(requestCtx(), documentRaw, canonicalPlan, []byte(privateKey), predecessor, claimNow)
-	privateKey = ""
+	journals, err := concrete.LoadSyncJournals(requestCtx(), job.JobID)
 	if err != nil {
-		return finishClaimedMembership(stderr, concrete, job, owner, "planned", false, "effect_not_started", map[string]any{"reason": "signed candidate creation failed"}, time.Now().UTC())
+		return syncStoreError(stderr, command, err)
+	}
+	candidate := journalCandidate(journals)
+	if candidate == "" {
+		ref, parseErr := config.ParseSecretRef(syncCfg.AdministratorSigningKeyRef)
+		if parseErr != nil {
+			return finishClaimedMembership(stderr, concrete, job, owner, "planned", "effect_not_started", map[string]any{"reason": "administrator signing key reference is unavailable"}, time.Now().UTC())
+		}
+		privateKey, resolveErr := secretresolver.Resolve(requestCtx(), ref)
+		if resolveErr != nil {
+			return finishClaimedMembership(stderr, concrete, job, owner, "planned", "effect_not_started", map[string]any{"reason": "administrator signing key could not be resolved"}, time.Now().UTC())
+		}
+		documentRaw, _ := syncrecords.CanonicalMembership(plan.ProposedMembership)
+		candidate, err = client.CreateSignedMembershipCommit(requestCtx(), documentRaw, canonicalPlan, []byte(privateKey), predecessor, claimNow)
+		privateKey = ""
+		if err != nil {
+			return finishClaimedMembership(stderr, concrete, job, owner, "planned", "effect_not_started", map[string]any{"reason": "signed candidate creation failed"}, time.Now().UTC())
+		}
+		journalNow := time.Now().UTC().Format(time.RFC3339Nano)
+		if err := concrete.AppendSyncJournal(requestCtx(), sqlite.SyncJournalEntry{
+			JournalID: randomSyncID("membership-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "membership", Outcome: "signed",
+			EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "plan_id": plan.PlanID}), RecordedAt: journalNow,
+		}, owner); err != nil {
+			return syncStoreError(stderr, command, err)
+		}
 	}
 	if err := client.VerifySSHSignature(requestCtx(), candidate, syncCfg.AdministratorKey); err != nil {
-		return finishClaimedMembership(stderr, concrete, job, owner, "planned", false, "effect_not_started", map[string]any{"reason": "candidate administrator signature was not pinned"}, time.Now().UTC())
-	}
-	journalNow := time.Now().UTC().Format(time.RFC3339Nano)
-	if err := concrete.AppendSyncJournal(requestCtx(), sqlite.SyncJournalEntry{
-		JournalID: randomSyncID("membership-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "membership", Outcome: "signed",
-		EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "plan_id": plan.PlanID}), RecordedAt: journalNow,
-	}, owner); err != nil {
-		return syncStoreError(stderr, command, err)
+		return finishClaimedMembership(stderr, concrete, job, owner, "planned", "effect_not_started", map[string]any{"reason": "candidate administrator signature was not pinned"}, time.Now().UTC())
 	}
 	push := client.PushFastForward(requestCtx(), syncCfg.RemoteName, syncCfg.MembershipRef, candidate, predecessor, syncCfg.RemoteRepositoryDigest)
 	terminalNow := time.Now().UTC()
-	switch push.State {
-	case "confirmed":
+	switch classifySyncPush(push.State, push.RemoteOID, predecessor, candidate) {
+	case syncPushConfirmed:
 		if err := client.UpdateRefExpected(requestCtx(), syncCfg.MembershipRef, candidate, predecessor); err != nil {
-			return finishClaimedMembership(stderr, concrete, job, owner, "uncertain", false, "effect_unknown", map[string]any{"candidate": candidate, "remote": push.RemoteOID, "reason": "remote confirmed but local ref update failed"}, terminalNow)
+			return finishClaimedMembership(stderr, concrete, job, owner, "uncertain", "effect_unknown", map[string]any{"candidate": candidate, "remote": push.RemoteOID, "reason": "remote confirmed but local ref update failed"}, terminalNow)
 		}
 		terminalText := terminalNow.Format(time.RFC3339Nano)
 		control, err := concrete.FinishMembershipJob(requestCtx(), job.JobID, owner, job.Fence, plan.ProposedMembership.Mode, sqlite.SyncJournalEntry{
@@ -250,16 +286,89 @@ func runSyncMembershipApply(args []string, stdout, stderr io.Writer) int {
 		if err != nil {
 			return syncStoreError(stderr, command, err)
 		}
-		return writeEnvelope(stdout, command, map[string]any{
+		resultCode := writeEnvelope(stdout, command, map[string]any{
 			"schema_version": "agent-dispatch.sync-membership-apply-result/v1", "state": "applied", "plan_id": plan.PlanID,
 			"membership_revision": candidate, "control_state": control.State, "control_reason": control.Reason,
 			"idempotent": false, "side_effects": []string{"git_objects_written", "remote_membership_ref_updated", "local_membership_ref_updated", "state_committed"},
 		})
-	case "rejected":
-		return finishClaimedMembership(stderr, concrete, job, owner, "blocked", false, "blocked", map[string]any{"candidate": candidate, "remote": push.RemoteOID, "reason": "non-force push rejected"}, terminalNow)
+		if control.State == "blocked" {
+			return 30
+		}
+		return resultCode
+	case syncPushRetryable:
+		reason := "membership push was rejected before the approved remote moved; rerun sync membership apply"
+		return finishClaimedMembershipRetryable(stderr, concrete, job, owner, map[string]any{"candidate": candidate, "remote": push.RemoteOID, "push_state": push.State, "reason": reason}, terminalNow)
+	case syncPushConflict:
+		return finishClaimedMembership(stderr, concrete, job, owner, "blocked", "blocked", map[string]any{"candidate": candidate, "remote": push.RemoteOID, "reason": "non-force push rejected"}, terminalNow)
 	default:
-		return finishClaimedMembership(stderr, concrete, job, owner, "uncertain", false, "effect_unknown", map[string]any{"candidate": candidate, "remote": push.RemoteOID, "reason": "push outcome ambiguous"}, terminalNow)
+		return finishClaimedMembership(stderr, concrete, job, owner, "uncertain", "effect_unknown", map[string]any{"candidate": candidate, "remote": push.RemoteOID, "reason": "push outcome ambiguous"}, terminalNow)
 	}
+}
+
+func recoverConfirmedMembership(stdout, stderr io.Writer, store *sqlite.Store, client *gitlocal.Client, syncCfg *config.Sync, plan syncrecords.MembershipPlan, job sqlite.SyncJobRow, configRevision string) (bool, int) {
+	if job.State != "planned" && job.State != "uncertain" && job.State != "blocked" {
+		return false, 0
+	}
+	journals, err := store.LoadSyncJournals(requestCtx(), job.JobID)
+	if err != nil {
+		return true, syncStoreError(stderr, "sync membership apply", err)
+	}
+	candidate := journalCandidate(journals)
+	if candidate == "" {
+		return false, 0
+	}
+	remote, remoteErr := client.RemoteRef(requestCtx(), syncCfg.RemoteName, syncCfg.MembershipRef, syncCfg.RemoteRepositoryDigest)
+	if remoteErr != nil || remote != candidate {
+		return false, 0
+	}
+	if err := client.VerifySSHSignature(requestCtx(), candidate, syncCfg.AdministratorKey); err != nil {
+		return true, syncMembershipError(stderr, "sync membership apply", err, 30)
+	}
+	predecessor := ""
+	if plan.ExpectedPredecessor != nil {
+		predecessor = *plan.ExpectedPredecessor
+	}
+	local, localErr := client.ResolveRef(requestCtx(), syncCfg.MembershipRef)
+	if localErr != nil && !errors.Is(localErr, gitlocal.ErrMissingRef) {
+		return true, syncMembershipError(stderr, "sync membership apply", localErr, 14)
+	}
+	if local != candidate {
+		if local != predecessor {
+			return true, syncMembershipError(stderr, "sync membership apply", errors.New("local membership ref moved during recovery"), 14)
+		}
+		if err := client.UpdateRefExpected(requestCtx(), syncCfg.MembershipRef, candidate, predecessor); err != nil {
+			return true, syncMembershipError(stderr, "sync membership apply", err, 14)
+		}
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	control, err := store.FinishRecoveredMembershipJob(requestCtx(), job.JobID, job.Fence, plan.ProposedMembership.Mode, sqlite.SyncJournalEntry{
+		JournalID: randomSyncID("membership-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "membership", Outcome: "applied",
+		EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": candidate, "plan_id": plan.PlanID, "recovered": true}), RecordedAt: now,
+	}, configRevision, now)
+	if err != nil {
+		return true, syncStoreError(stderr, "sync membership apply", err)
+	}
+	code := writeEnvelope(stdout, "sync membership apply", map[string]any{
+		"schema_version": "agent-dispatch.sync-membership-apply-result/v1", "state": "applied", "plan_id": plan.PlanID,
+		"membership_revision": candidate, "control_state": control.State, "control_reason": control.Reason,
+		"recovered": true, "idempotent": true, "side_effects": []string{"local_membership_ref_reconciled", "state_committed"},
+	})
+	if control.State == "blocked" {
+		return true, 30
+	}
+	return true, code
+}
+
+func finishClaimedMembershipRetryable(stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, owner string, evidence map[string]any, now time.Time) int {
+	nowText := now.UTC().Format(time.RFC3339Nano)
+	if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "planned", sqlite.SyncJobKeepUnresolved, sqlite.SyncJournalEntry{
+		JournalID: randomSyncID("membership-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "membership", Outcome: "effect_not_started",
+		EvidenceJSON: mustJSON(evidence), RecordedAt: nowText,
+	}, nowText); err != nil {
+		return syncStoreError(stderr, "sync membership apply", err)
+	}
+	writeError(stderr, "sync membership apply", "sync_retryable", "transient_local", fmt.Sprint(evidence["reason"]))
+	return 10
 }
 
 func membershipApplyResult(stdout io.Writer, command string, plan syncrecords.MembershipPlan, revision string) int {
@@ -275,18 +384,18 @@ func finishMembershipBeforeEffect(stderr io.Writer, store *sqlite.Store, job sql
 	}
 	claimed, err := store.ClaimSyncAdministrationJob(requestCtx(), job.JobID, owner, configRevision, now.Format(time.RFC3339Nano), now.Add(2*time.Minute).Format(time.RFC3339Nano))
 	if err == nil {
-		state, resolved := "blocked", false
+		state := "blocked"
 		if retryable {
-			state, resolved = "planned", false
+			state = "planned"
 		}
-		return finishClaimedMembership(stderr, store, claimed, owner, state, resolved, "effect_not_started", map[string]any{"reason": reason}, now)
+		return finishClaimedMembership(stderr, store, claimed, owner, state, "effect_not_started", map[string]any{"reason": reason}, now)
 	}
 	return syncStoreError(stderr, "sync membership apply", err)
 }
 
-func finishClaimedMembership(stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, owner, state string, resolved bool, outcome string, evidence map[string]any, now time.Time) int {
+func finishClaimedMembership(stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, owner, state, outcome string, evidence map[string]any, now time.Time) int {
 	nowText := now.UTC().Format(time.RFC3339Nano)
-	err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, state, resolved, sqlite.SyncJournalEntry{
+	err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, state, sqlite.SyncJobKeepUnresolved, sqlite.SyncJournalEntry{
 		JournalID: randomSyncID("membership-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "membership", Outcome: outcome,
 		EvidenceJSON: mustJSON(evidence), RecordedAt: nowText,
 	}, nowText)
@@ -389,7 +498,7 @@ func syncMembershipError(stderr io.Writer, command string, err error, fallback i
 		errorCode, category = "config_invalid", "configuration"
 	}
 	switch {
-	case errors.Is(err, gitlocal.ErrInvalidSignature), errors.Is(err, syncrecords.ErrInvalidRecord):
+	case errors.Is(err, gitlocal.ErrInvalidSignature), errors.Is(err, gitlocal.ErrRemoteBinding), errors.Is(err, syncrecords.ErrInvalidRecord):
 		code, errorCode, category = 30, "sync_trust_failed", "security"
 	case errors.Is(err, syncrecords.ErrInvalidTransition), errors.Is(err, gitlocal.ErrPushRejected):
 		code, errorCode = 14, "sync_precondition_failed"

@@ -336,7 +336,7 @@ exec %s "$@"
 	gitTestRun(t, realGit, repo, "update-ref", cfg.Sync.MembershipRef, normalMembership, emergencyMembership)
 	contentBeforeEmergency := gitTestOutput(t, realGit, repo, "rev-parse", cfg.Sync.ContentRef)
 	var adoptOut, adoptErr bytes.Buffer
-	if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &adoptOut, &adoptErr); code != 0 || !bytes.Contains(adoptOut.Bytes(), []byte(`"state":"membership_adopted"`)) {
+	if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &adoptOut, &adoptErr); code != 30 || !bytes.Contains(adoptOut.Bytes(), []byte(`"state":"membership_adopted"`)) || !bytes.Contains(adoptOut.Bytes(), []byte(`"control_reason":"membership_emergency"`)) {
 		t.Fatalf("emergency membership adoption: %d out=%s err=%s", code, adoptOut.String(), adoptErr.String())
 	}
 	control, err = store.LoadSyncControl(requestCtx(), cfg.Sync.GroupID)
@@ -376,7 +376,7 @@ func e21t3ApplyMembershipChange(t *testing.T, cfg *config.Config, dir, change, i
 		t.Fatal(err)
 	}
 	var applyOut, applyErr bytes.Buffer
-	if code := Run([]string{"sync", "membership", "apply", "--group", cfg.Sync.GroupID, "--plan", path, "--expected-membership-predecessor", predecessor, "--output", "json"}, &applyOut, &applyErr); code != 0 {
+	if code := Run([]string{"sync", "membership", "apply", "--group", cfg.Sync.GroupID, "--plan", path, "--expected-membership-predecessor", predecessor, "--output", "json"}, &applyOut, &applyErr); code != 0 && !(change == "retirement" && code == 30) {
 		t.Fatalf("membership %s apply: %d out=%s err=%s", change, code, applyOut.String(), applyErr.String())
 	}
 	var applied struct {

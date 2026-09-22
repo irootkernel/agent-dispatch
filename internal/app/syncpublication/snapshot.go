@@ -16,8 +16,8 @@ import (
 	"github.com/irootkernel/agent-dispatch/internal/adapters/localfs"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/domain/policy"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 	"github.com/irootkernel/agent-dispatch/internal/domain/syncrecords"
-	"golang.org/x/text/unicode/norm"
 )
 
 type Snapshot struct {
@@ -46,15 +46,15 @@ func Capture(cfg *config.Config, resourceID string) (Snapshot, error) {
 	if cfg.Limits.MaxHashFileBytes != nil {
 		max = *cfg.Limits.MaxHashFileBytes
 	}
-	engines, mode, err := buildRouteEngines(cfg, resourceID)
+	engines, _, err := buildRouteEngines(cfg, resourceID)
 	if err != nil {
 		return Snapshot{}, err
 	}
-	first, err := captureOnce(resolver, engines, max, mode == policy.CaseInsensitive)
+	first, err := captureOnce(resolver, engines, max)
 	if err != nil {
 		return Snapshot{}, err
 	}
-	second, err := captureOnce(resolver, engines, max, mode == policy.CaseInsensitive)
+	second, err := captureOnce(resolver, engines, max)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -103,7 +103,7 @@ func MatchesObservedFacts(cfg *config.Config, resourceID string, records []syncr
 // policy to a verified remote snapshot. A publisher signature proves who
 // authored a tree; it does not replace the importing node's path-safety check.
 func ValidateFiles(cfg *config.Config, resourceID string, files map[string][]byte) error {
-	engines, mode, err := buildRouteEngines(cfg, resourceID)
+	engines, _, err := buildRouteEngines(cfg, resourceID)
 	if err != nil {
 		return err
 	}
@@ -116,10 +116,7 @@ func ValidateFiles(cfg *config.Config, resourceID string, files map[string][]byt
 		if !included {
 			return fmt.Errorf("remote content path %q is outside the acknowledged governed scope", path)
 		}
-		key := norm.NFC.String(path)
-		if mode == policy.CaseInsensitive {
-			key = strings.ToLower(key)
-		}
+		key := records.PortablePathIdentity(path)
 		if prior, exists := aliases[key]; exists && prior != path {
 			return fmt.Errorf("remote content paths %q and %q alias", prior, path)
 		}
@@ -139,11 +136,11 @@ func buildRouteEngines(cfg *config.Config, resourceID string) ([]routeEngines, p
 		if route.Source.Resource != resourceID {
 			continue
 		}
-		e, err := policy.NewEngine(nfcStrings(route.Source.Include), nfcStrings(route.Source.Exclude), nfcStrings(route.Policy.Protected), nfcStrings(route.Policy.Immutable), mode)
+		e, err := policy.NewEngine(route.Source.Include, route.Source.Exclude, route.Policy.Protected, route.Policy.Immutable, mode)
 		if err != nil {
 			return nil, mode, err
 		}
-		guard, err := policy.NewEngine([]string{"**"}, nil, nfcStrings(route.Policy.Protected), nfcStrings(route.Policy.Immutable), mode)
+		guard, err := policy.NewEngine([]string{"**"}, nil, route.Policy.Protected, route.Policy.Immutable, mode)
 		if err != nil {
 			return nil, mode, err
 		}
@@ -156,7 +153,6 @@ func buildRouteEngines(cfg *config.Config, resourceID string) ([]routeEngines, p
 }
 
 func governedMarkdown(path string, engines []routeEngines) (bool, error) {
-	path = norm.NFC.String(path)
 	lower := strings.ToLower(path)
 	if !strings.HasSuffix(lower, ".md") && !strings.HasSuffix(lower, ".markdown") {
 		return false, nil
@@ -184,7 +180,7 @@ func governedMarkdown(path string, engines []routeEngines) (bool, error) {
 	return included, nil
 }
 
-func captureOnce(resolver *localfs.Resolver, engines []routeEngines, max int64, fold bool) (map[string][]byte, error) {
+func captureOnce(resolver *localfs.Resolver, engines []routeEngines, max int64) (map[string][]byte, error) {
 	out := map[string][]byte{}
 	aliases := map[string]string{}
 	err := filepath.WalkDir(resolver.Root(), func(path string, d fs.DirEntry, walkErr error) error {
@@ -199,7 +195,7 @@ func captureOnce(resolver *localfs.Resolver, engines []routeEngines, max int64, 
 			return err
 		}
 		rel = filepath.ToSlash(rel)
-		policyPath := norm.NFC.String(rel)
+		policyPath := rel
 		if d.IsDir() {
 			if rel == ".git" || rel == ".agent-dispatch-sync" {
 				return fs.SkipDir
@@ -236,10 +232,7 @@ func captureOnce(resolver *localfs.Resolver, engines []routeEngines, max int64, 
 		if d.Type()&fs.ModeSymlink != 0 || !d.Type().IsRegular() {
 			return fmt.Errorf("governed path %q is not a regular file", rel)
 		}
-		key := norm.NFC.String(rel)
-		if fold {
-			key = strings.ToLower(key)
-		}
+		key := records.PortablePathIdentity(rel)
 		if prior, exists := aliases[key]; exists && prior != rel {
 			return fmt.Errorf("governed paths %q and %q alias", prior, rel)
 		}
@@ -273,14 +266,6 @@ func captureOnce(resolver *localfs.Resolver, engines []routeEngines, max int64, 
 		return nil, err
 	}
 	return out, nil
-}
-
-func nfcStrings(values []string) []string {
-	out := make([]string, len(values))
-	for i, value := range values {
-		out[i] = norm.NFC.String(value)
-	}
-	return out
 }
 
 func sortedRouteIDs(cfg *config.Config) []string {

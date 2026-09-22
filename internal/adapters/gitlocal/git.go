@@ -22,8 +22,7 @@ import (
 	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/config"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/unicode/norm"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 )
 
 const (
@@ -40,6 +39,7 @@ var (
 	ErrPushAmbiguous    = errors.New("git push outcome is ambiguous")
 	ErrHistoryBound     = errors.New("git history exceeds configured bound")
 	ErrFetchRewrite     = errors.New("git fetch would rewrite approved history")
+	ErrRemoteBinding    = errors.New("git remote binding is not approved")
 )
 
 type Limits struct {
@@ -306,18 +306,17 @@ func (c *Client) activeOperation(ctx context.Context) (string, error) {
 // a plan safe under this rule is also safe if the vault later moves to a
 // case-insensitive filesystem.
 func ImportOverlap(targets, dirty, untracked []string) (overlap, collisions []string) {
-	fold := cases.Fold()
 	target := map[string]string{}
 	for _, path := range targets {
-		target[fold.String(norm.NFC.String(path))] = path
+		target[records.PortablePathIdentity(path)] = path
 	}
 	for _, path := range dirty {
-		if _, ok := target[fold.String(norm.NFC.String(path))]; ok {
+		if _, ok := target[records.PortablePathIdentity(path)]; ok {
 			overlap = append(overlap, path)
 		}
 	}
 	for _, path := range untracked {
-		if _, ok := target[fold.String(norm.NFC.String(path))]; ok {
+		if _, ok := target[records.PortablePathIdentity(path)]; ok {
 			collisions = append(collisions, path)
 		}
 	}
@@ -846,7 +845,7 @@ func (c *Client) remoteRefURL(ctx context.Context, remoteURL, ref string) (strin
 
 func (c *Client) verifyRemote(ctx context.Context, remote, expectedDigest string) (string, error) {
 	if !validRemoteName(remote) || !strings.HasPrefix(expectedDigest, "sha256:") {
-		return "", fmt.Errorf("invalid configured remote binding")
+		return "", fmt.Errorf("invalid configured remote binding: %w", ErrRemoteBinding)
 	}
 	if err := c.rejectURLRewrites(ctx); err != nil {
 		return "", err
@@ -861,17 +860,17 @@ func (c *Client) verifyRemote(ctx context.Context, remote, expectedDigest string
 	}
 	urls, pushURLs := strings.Fields(string(out)), strings.Fields(string(pushOut))
 	if len(urls) != 1 || len(pushURLs) != 1 || urls[0] != pushURLs[0] {
-		return "", fmt.Errorf("configured remote must resolve to one identical fetch and push URL")
+		return "", fmt.Errorf("configured remote must resolve to one identical fetch and push URL: %w", ErrRemoteBinding)
 	}
 	digest, _, err := config.RemoteRepositoryDigest(urls[0])
 	if err != nil || subtle.ConstantTimeCompare([]byte(digest), []byte(expectedDigest)) != 1 {
-		return "", fmt.Errorf("configured remote repository identity does not match its approved digest")
+		return "", fmt.Errorf("configured remote repository identity does not match its approved digest: %w", ErrRemoteBinding)
 	}
 	return urls[0], nil
 }
 
 func (c *Client) rejectURLRewrites(ctx context.Context) error {
-	out, _, err := c.run(ctx, nil, nil, "config", "--local", "--name-only", "--get-regexp", `^url\..*\.`)
+	out, _, err := c.run(ctx, nil, nil, "config", "--name-only", "--get-regexp", `^url\..*\.`)
 	if err != nil {
 		if exitCode(err) == 1 {
 			return nil
@@ -881,7 +880,7 @@ func (c *Client) rejectURLRewrites(ctx context.Context) error {
 	for _, name := range strings.Fields(string(out)) {
 		lower := strings.ToLower(name)
 		if strings.HasSuffix(lower, ".insteadof") || strings.HasSuffix(lower, ".pushinsteadof") {
-			return fmt.Errorf("configured remote refuses repository-local URL rewrite rules")
+			return fmt.Errorf("configured remote refuses repository URL rewrite rules: %w", ErrRemoteBinding)
 		}
 	}
 	return nil

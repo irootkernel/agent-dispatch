@@ -99,15 +99,26 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 				return syncStoreError(stderr, command, err)
 			}
 		}
+		if control.State == "blocked" {
+			return reconcileEnvelopeCode(stdout, "membership_adopted", control.Reason, map[string]any{
+				"previous_membership_revision": localMembership,
+				"membership_revision":          remoteMembership,
+				"control_state":                control.State,
+				"control_reason":               control.Reason,
+				"side_effects":                 []string{"local_membership_ref_updated"},
+			}, 30)
+		}
 		return reconcileEnvelope(stdout, "membership_adopted", "none", map[string]any{
 			"previous_membership_revision": localMembership,
 			"membership_revision":          remoteMembership,
 			"side_effects":                 []string{"local_membership_ref_updated"},
 		})
 	}
-	control, err = store.ReconcileAdoptedMembership(requestCtx(), s.GroupID, remoteMembershipRecord.Mode, remoteMembership, revision, time.Now().UTC().Format(time.RFC3339Nano))
-	if err != nil {
-		return syncStoreError(stderr, command, err)
+	if remoteMembershipRecord.Mode == "blocked_emergency" {
+		control, err = store.ReconcileAdoptedMembership(requestCtx(), s.GroupID, remoteMembershipRecord.Mode, remoteMembership, revision, time.Now().UTC().Format(time.RFC3339Nano))
+		if err != nil {
+			return syncStoreError(stderr, command, err)
+		}
 	}
 	if control.State == "blocked" && control.Reason == "membership_emergency" {
 		return reconcileEnvelopeCode(stdout, "blocked", "membership_emergency", map[string]any{"membership_revision": remoteMembership, "detail": "the verified membership revision blocks protected effects"}, 30)
@@ -289,6 +300,8 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 			fenceReason := "git_unstable"
 			if idleErr == nil && !idleNow {
 				fenceReason = "resource_busy"
+			} else if !config.SyncAcknowledgementCurrent(cfg, localSyncIncarnation(cfg)) {
+				fenceReason = "acknowledgement_stale"
 			}
 			return finishImportDisposition(stdout, stderr, store, job, owner, "deferred", "deferred", "a controller-only pre-apply fence changed", fenceReason)
 		}
@@ -305,7 +318,7 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 			return finishControllerImport(stdout, stderr, store, client, job, owner, s.ContentRef, from, target, state.Digest, errors.New("controller-only import did not reach its exact target"))
 		}
 		terminal := time.Now().UTC().Format(time.RFC3339Nano)
-		if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "applied", true, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "applied", EvidenceJSON: mustJSON(map[string]any{"import_id": record.ImportID, "target_commit": target, "controller_only": true}), RecordedAt: terminal}, terminal); err != nil {
+		if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "applied", sqlite.SyncJobResolve, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "applied", EvidenceJSON: mustJSON(map[string]any{"import_id": record.ImportID, "target_commit": target, "controller_only": true}), RecordedAt: terminal}, terminal); err != nil {
 			return syncStoreError(stderr, command, err)
 		}
 		checkpointReconciled := false
@@ -389,6 +402,10 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 		fenceReason := "git_unstable"
 		if idleErr == nil && !idleNow {
 			fenceReason = "resource_busy"
+		} else if observationErr != nil || observationNow != observationRevision {
+			fenceReason = "observation_unavailable"
+		} else if !config.SyncAcknowledgementCurrent(cfg, localSyncIncarnation(cfg)) {
+			fenceReason = "acknowledgement_stale"
 		}
 		return finishImportDisposition(stdout, stderr, store, job, owner, "deferred", "deferred", "a pre-apply fence changed", fenceReason)
 	}
@@ -647,7 +664,11 @@ func blockReconcile(stdout, stderr io.Writer, store *sqlite.Store, group, revisi
 
 func finishImportDisposition(stdout, stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, owner, state, outcome, detail, reason string) int {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, state, state == "deferred", sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: outcome, EvidenceJSON: mustJSON(map[string]any{"detail": detail, "reason": reason}), RecordedAt: now}, now); err != nil {
+	disposition := sqlite.SyncJobKeepUnresolved
+	if state == "deferred" {
+		disposition = sqlite.SyncJobResolve
+	}
+	if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, state, disposition, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: outcome, EvidenceJSON: mustJSON(map[string]any{"detail": detail, "reason": reason}), RecordedAt: now}, now); err != nil {
 		return syncStoreError(stderr, "sync reconcile", err)
 	}
 	return reconcileEnvelope(stdout, state, reason, map[string]any{"detail": detail})
@@ -658,14 +679,14 @@ func finishControllerImport(stdout, stderr io.Writer, store *sqlite.Store, clien
 	ref, refErr := client.ResolveRef(requestCtx(), contentRef)
 	if inspectErr == nil && refErr == nil && state.ActiveOperation == "" && ref == target {
 		now := time.Now().UTC().Format(time.RFC3339Nano)
-		if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "applied", true, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "applied", EvidenceJSON: mustJSON(map[string]any{"controller_only": true, "target_commit": target, "recovered_after_error": cause.Error()}), RecordedAt: now}, now); err != nil {
+		if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "applied", sqlite.SyncJobResolve, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "applied", EvidenceJSON: mustJSON(map[string]any{"controller_only": true, "target_commit": target, "recovered_after_error": cause.Error()}), RecordedAt: now}, now); err != nil {
 			return syncStoreError(stderr, "sync reconcile", err)
 		}
 		return reconcileEnvelope(stdout, "applied", "none", map[string]any{"import_job_id": job.JobID, "target_commit": target, "controller_only": true, "recovered": true})
 	}
 	if inspectErr == nil && refErr == nil && state.ActiveOperation == "" && state.Digest == expectedDigest && ref == from {
 		now := time.Now().UTC().Format(time.RFC3339Nano)
-		if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "validated", false, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "effect_not_started", EvidenceJSON: mustJSON(map[string]any{"controller_only": true, "detail": cause.Error(), "ref": ref}), RecordedAt: now}, now); err != nil {
+		if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "validated", sqlite.SyncJobKeepUnresolved, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "effect_not_started", EvidenceJSON: mustJSON(map[string]any{"controller_only": true, "detail": cause.Error(), "ref": ref}), RecordedAt: now}, now); err != nil {
 			return syncStoreError(stderr, "sync reconcile", err)
 		}
 		return reconcileEnvelopeCode(stdout, "deferred", "git_unstable", map[string]any{"import_job_id": job.JobID, "detail": cause.Error(), "ref": ref, "effect_not_started": true}, 10)
@@ -675,7 +696,7 @@ func finishControllerImport(stdout, stderr io.Writer, store *sqlite.Store, clien
 
 func finishImportUncertain(stdout, stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, owner string, cause error) int {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "uncertain", false, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "effect_unknown", EvidenceJSON: mustJSON(map[string]any{"detail": cause.Error()}), RecordedAt: now}, now); err != nil {
+	if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "uncertain", sqlite.SyncJobKeepUnresolved, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "effect_unknown", EvidenceJSON: mustJSON(map[string]any{"detail": cause.Error()}), RecordedAt: now}, now); err != nil {
 		return syncStoreError(stderr, "sync reconcile", err)
 	}
 	control, loadErr := store.LoadSyncControl(requestCtx(), job.GroupID)
@@ -695,7 +716,7 @@ func finishImportRecovering(stdout, stderr io.Writer, store *sqlite.Store, clien
 		return finishImportUncertain(stdout, stderr, store, job, owner, cause)
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "recovering", false, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "effect_unknown", EvidenceJSON: mustJSON(map[string]any{"detail": cause.Error(), "path_state": effectState, "ref": refNow}), RecordedAt: now}, now); err != nil {
+	if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "recovering", sqlite.SyncJobKeepUnresolved, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "effect_unknown", EvidenceJSON: mustJSON(map[string]any{"detail": cause.Error(), "path_state": effectState, "ref": refNow}), RecordedAt: now}, now); err != nil {
 		return syncStoreError(stderr, "sync reconcile", err)
 	}
 	return reconcileEnvelopeCode(stdout, "recovering", "partial_effect", map[string]any{"import_job_id": job.JobID, "detail": cause.Error(), "path_state": effectState, "ref": refNow}, 13)

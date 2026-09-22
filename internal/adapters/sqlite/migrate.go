@@ -55,6 +55,7 @@ var Migrations = []Migration{
 	{Version: 21, Name: "sync-jobs-controls-journals", SQL: schemaV21SyncJobsControlsJournals},
 	{Version: 22, Name: "sync-import-effects-attribution", SQL: schemaV22SyncImportEffectsAttribution},
 	{Version: 23, Name: "retain-blocked-sync-obligations", SQL: schemaV23RetainBlockedSyncObligations},
+	{Version: 24, Name: "sequence-sync-journals", SQL: schemaV24SequenceSyncJournals},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
@@ -173,6 +174,35 @@ const schemaV23RetainBlockedSyncObligations = `
 UPDATE sync_jobs
 SET retain_until_resolved = 1, resolved_at = NULL
 WHERE state = 'blocked';
+`
+
+// schemaV24SequenceSyncJournals makes causal journal order explicit. The
+// global sequence is also monotonic within each job and survives timestamp
+// collisions, journal-ID ordering differences, and VACUUM.
+const schemaV24SequenceSyncJournals = `
+DROP TRIGGER sync_journal_entries_no_update;
+DROP INDEX idx_sync_journal_job;
+ALTER TABLE sync_journal_entries RENAME TO sync_journal_entries_v23;
+CREATE TABLE sync_journal_entries (
+	sequence      INTEGER PRIMARY KEY AUTOINCREMENT,
+	journal_id    TEXT NOT NULL UNIQUE,
+	job_id        TEXT NOT NULL REFERENCES sync_jobs(job_id),
+	fence         INTEGER NOT NULL CHECK (fence >= 1),
+	phase         TEXT NOT NULL CHECK (phase IN ('claim_recovery','publication','delivery','import','verification','membership','checkpoint')),
+	outcome       TEXT NOT NULL CHECK (outcome IN ('started','prepared','signed','push_pending','published','accepted','applied','finished','effect_not_started','effect_unknown','blocked','deferred','retryable','refused','failed','ok')),
+	evidence_json TEXT NOT NULL,
+	recorded_at   TEXT NOT NULL,
+	UNIQUE (job_id, fence, phase, journal_id)
+);
+INSERT INTO sync_journal_entries(sequence,journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at)
+SELECT rowid,journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at
+FROM sync_journal_entries_v23 ORDER BY rowid;
+DROP TABLE sync_journal_entries_v23;
+CREATE INDEX idx_sync_journal_job ON sync_journal_entries(job_id, sequence);
+CREATE TRIGGER sync_journal_entries_no_update BEFORE UPDATE ON sync_journal_entries
+BEGIN
+	SELECT RAISE(ABORT, 'sync journal is append-only');
+END;
 `
 
 // migrationVersion resolves one registered migration's version by

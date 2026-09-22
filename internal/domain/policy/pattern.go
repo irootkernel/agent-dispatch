@@ -17,6 +17,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/unicode/norm"
 )
 
 // CaseMode selects pattern case behavior (configuration-spec §7). v0.1
@@ -129,7 +131,7 @@ func NewEngine(include, exclude, protected, immutable []string, mode CaseMode) (
 		for _, set := range [][][]segment{e.include, e.exclude, e.protected, e.immutable} {
 			for _, pat := range set {
 				for i := range pat {
-					pat[i].matchText = strings.ToLower(pat[i].matchText)
+					pat[i].matchText = cases.Fold().String(pat[i].matchText)
 				}
 			}
 		}
@@ -169,7 +171,9 @@ func compile(pattern string) ([]segment, error) {
 		return nil, fmt.Errorf("cannot contain . segments")
 	}
 	var segs []segment
-	for _, raw := range strings.Split(pattern, "/") {
+	original := strings.Split(pattern, "/")
+	normalized := strings.Split(norm.NFC.String(pattern), "/")
+	for index, raw := range normalized {
 		if raw == "" {
 			return nil, fmt.Errorf("empty segment")
 		}
@@ -180,13 +184,13 @@ func compile(pattern string) ([]segment, error) {
 			return nil, fmt.Errorf("cannot contain . segments")
 		}
 		if raw == "**" {
-			segs = append(segs, segment{text: "**", matchText: "**", recursive: true})
+			segs = append(segs, segment{text: original[index], matchText: "**", recursive: true})
 			continue
 		}
 		if strings.Contains(raw, "**") {
 			return nil, fmt.Errorf("** must be a whole segment")
 		}
-		segs = append(segs, segment{text: raw, matchText: raw})
+		segs = append(segs, segment{text: original[index], matchText: raw})
 	}
 	return segs, nil
 }
@@ -214,7 +218,7 @@ func (e *Engine) Classify(path string) (Status, error) {
 	if _, err := records.NormalizePath(path); err != nil {
 		return "", fmt.Errorf("unusable path: %v", err)
 	}
-	names := strings.Split(path, "/")
+	names := strings.Split(norm.NFC.String(path), "/")
 	if e.fold {
 		names = foldAll(names)
 	}
@@ -372,8 +376,9 @@ func matchSegment(pattern, name string) bool {
 
 func foldAll(names []string) []string {
 	out := make([]string, len(names))
+	fold := cases.Fold()
 	for i, n := range names {
-		out[i] = strings.ToLower(n)
+		out[i] = fold.String(n)
 	}
 	return out
 }

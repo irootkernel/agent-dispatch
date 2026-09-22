@@ -203,17 +203,18 @@ func runSyncPublish(args []string, stdout, stderr io.Writer) int {
 	confirmed := remoteErr == nil && remoteNow == candidate
 	if !confirmed {
 		push := client.PushFastForward(requestCtx(), syncCfg.RemoteName, syncCfg.ContentRef, candidate, base, syncCfg.RemoteRepositoryDigest)
-		if push.State != "confirmed" {
+		switch classifySyncPush(push.State, push.RemoteOID, base, candidate) {
+		case syncPushRetryable:
 			evidence := map[string]any{"candidate": candidate, "remote": push.RemoteOID, "push_state": push.State}
-			if push.State == gitlocal.PushRejected && push.RemoteOID == base {
-				return finishPublicationRetryable(stderr, store, job, owner, evidence, "content push was rejected before the approved remote moved; rerun sync publish")
+			return finishPublicationRetryable(stderr, store, job, owner, evidence, "content push was rejected before the approved remote moved; rerun sync publish")
+		case syncPushConflict:
+			evidence := map[string]any{"candidate": candidate, "remote": push.RemoteOID, "push_state": push.State}
+			if _, err := store.HoldSyncControl(requestCtx(), syncCfg.GroupID, "conflict", revision, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+				return syncStoreError(stderr, command, err)
 			}
-			if push.State == gitlocal.PushRejected {
-				if _, err := store.HoldSyncControl(requestCtx(), syncCfg.GroupID, "conflict", revision, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
-					return syncStoreError(stderr, command, err)
-				}
-				return finishPublicationFailureWithEvidence(stderr, store, job, owner, "blocked", "blocked", "content fast-forward lost; resolve ordinary Git history, then run sync checkpoint plan --kind conflict_resolution", evidence)
-			}
+			return finishPublicationFailureWithEvidence(stderr, store, job, owner, "blocked", "blocked", "content fast-forward lost; resolve ordinary Git history, then run sync checkpoint plan --kind conflict_resolution", evidence)
+		case syncPushUnknown:
+			evidence := map[string]any{"candidate": candidate, "remote": push.RemoteOID, "push_state": push.State}
 			return finishPublicationFailureWithEvidence(stderr, store, job, owner, "uncertain", "effect_unknown", "content push outcome is ambiguous; rerun sync publish for remote confirmation", evidence)
 		}
 	}
@@ -307,23 +308,29 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 					return true, syncStoreError(stderr, "sync publish", err)
 				}
 			}
+			// Validate the exact signed candidate before any recovery push. A
+			// malformed retained object must never be allowed to move the remote.
+			if verifyErr := verifyContentHead(client, history, cfg, s, candidate); verifyErr != nil {
+				return true, syncMembershipError(stderr, "sync publish", verifyErr, 30)
+			}
 			owner := randomSyncID("publication-owner")
 			claimed, claimErr := store.ClaimSyncJob(requestCtx(), job.JobID, owner, revision, now.Format(time.RFC3339Nano), now.Add(time.Duration(s.Bounds.SubprocessSeconds*4+60)*time.Second).Format(time.RFC3339Nano))
 			if claimErr != nil {
 				return true, syncStoreError(stderr, "sync publish", claimErr)
 			}
 			push := client.PushFastForward(requestCtx(), s.RemoteName, s.ContentRef, candidate, publication.BaseCommit, s.RemoteRepositoryDigest)
-			if push.State != gitlocal.PushConfirmed {
+			switch classifySyncPush(push.State, push.RemoteOID, publication.BaseCommit, candidate) {
+			case syncPushRetryable:
 				evidence := map[string]any{"candidate": candidate, "remote": push.RemoteOID, "push_state": push.State, "recovered": true}
-				if push.State == gitlocal.PushRejected && push.RemoteOID == publication.BaseCommit {
-					return true, finishPublicationRetryable(stderr, store, claimed, owner, evidence, "content push was rejected before the approved remote moved; rerun sync publish")
+				return true, finishPublicationRetryable(stderr, store, claimed, owner, evidence, "content push was rejected before the approved remote moved; rerun sync publish")
+			case syncPushConflict:
+				evidence := map[string]any{"candidate": candidate, "remote": push.RemoteOID, "push_state": push.State, "recovered": true}
+				if _, err := store.HoldSyncControl(requestCtx(), s.GroupID, "conflict", revision, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+					return true, syncStoreError(stderr, "sync publish", err)
 				}
-				if push.State == gitlocal.PushRejected {
-					if _, err := store.HoldSyncControl(requestCtx(), s.GroupID, "conflict", revision, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
-						return true, syncStoreError(stderr, "sync publish", err)
-					}
-					return true, finishPublicationFailureWithEvidence(stderr, store, claimed, owner, "blocked", "blocked", "content fast-forward lost during publication recovery", evidence)
-				}
+				return true, finishPublicationFailureWithEvidence(stderr, store, claimed, owner, "blocked", "blocked", "content fast-forward lost during publication recovery", evidence)
+			case syncPushUnknown:
+				evidence := map[string]any{"candidate": candidate, "remote": push.RemoteOID, "push_state": push.State, "recovered": true}
 				return true, finishPublicationFailureWithEvidence(stderr, store, claimed, owner, "uncertain", "effect_unknown", "content push outcome remains ambiguous", evidence)
 			}
 			remote = candidate
@@ -624,12 +631,11 @@ func finishPublicationFailure(stderr io.Writer, store *sqlite.Store, job sqlite.
 
 func finishPublicationFailureWithEvidence(stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, owner, state, outcome, reason string, evidence map[string]any) int {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	resolved := false
 	if evidence == nil {
 		evidence = map[string]any{}
 	}
 	evidence["reason"] = reason
-	err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, state, resolved, sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "publication", Outcome: outcome, EvidenceJSON: mustJSON(evidence), RecordedAt: now}, now)
+	err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, state, sqlite.SyncJobKeepUnresolved, sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "publication", Outcome: outcome, EvidenceJSON: mustJSON(evidence), RecordedAt: now}, now)
 	if err != nil {
 		return syncStoreError(stderr, "sync publish", err)
 	}
@@ -644,11 +650,11 @@ func finishPublicationFailureWithEvidence(stderr io.Writer, store *sqlite.Store,
 func finishPublicationRetryable(stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, owner string, evidence map[string]any, reason string) int {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	evidence["reason"] = reason
-	if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "signed", false, sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "publication", Outcome: "effect_not_started", EvidenceJSON: mustJSON(evidence), RecordedAt: now}, now); err != nil {
+	if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "signed", sqlite.SyncJobKeepUnresolved, sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "publication", Outcome: "effect_not_started", EvidenceJSON: mustJSON(evidence), RecordedAt: now}, now); err != nil {
 		return syncStoreError(stderr, "sync publish", err)
 	}
-	writeError(stderr, "sync publish", "sync_precondition_failed", "conflict", reason)
-	return 14
+	writeError(stderr, "sync publish", "sync_retryable", "transient_local", reason)
+	return 10
 }
 func publicationResult(stdout io.Writer, p syncrecords.Publication, candidate string, idempotent bool) int {
 	return writeEnvelope(stdout, "sync publish", map[string]any{"schema_version": "agent-dispatch.sync-publish-result/v1", "state": "published", "publication_id": p.PublicationID, "candidate_commit": candidate, "remote_commit": candidate, "idempotent": idempotent, "side_effects": func() []string {

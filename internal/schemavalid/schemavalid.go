@@ -15,9 +15,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 	"github.com/santhosh-tekuri/jsonschema/v6"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/unicode/norm"
 	"gopkg.in/yaml.v3"
 )
 
@@ -478,7 +477,7 @@ func validateSyncSemantics(doc any) error {
 			// resolved application mode. NFC plus Unicode case folding on every
 			// host prevents a caller-authored case_mode from weakening the
 			// cross-node path identity boundary.
-			canonical := cases.Fold().String(norm.NFC.String(path))
+			canonical := records.PortablePathIdentity(path)
 			if seenPaths[canonical] {
 				if mode, _ := m["case_mode"].(string); mode == "sensitive" {
 					return fmt.Errorf("import paths must be unique under the conservative path identity")

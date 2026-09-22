@@ -178,6 +178,13 @@ wall-clock time are never causal authority.
 | control | `active <-> paused` | `blocked` requires explicit recovery evidence |
 | verification | `planned -> collecting -> finished` | `complete`, `incomplete`, `target_changed`, `blocked`, or `expired` |
 
+The generic transition graph keeps `blocked` terminal. Exact remote evidence
+may settle a blocked publication, checkpoint, or membership through its
+kind-specific recovery transaction without opening a general blocked-to-active
+edge. A normal membership replacement resolves membership jobs only. An exact
+administrator checkpoint resolves publication, checkpoint, and import jobs;
+each affected job receives its own resolver identifier in the journal.
+
 `expected_nodes` always fixes the exact two-node target. Verification `nodes`
 contains collected evidence only: it may contain zero, one, or two distinct
 expected nodes while `planned` or `collecting`, and `complete` requires exactly
@@ -348,7 +355,9 @@ ceilings.
 Resolved publication, delivery, import, and verification jobs use the
 configured completed-receipt retention horizon, which defaults to 180 days.
 An observation consumed as exact import attribution follows that linked job's
-longer horizon instead of the ordinary 30-day observation horizon. Pruning
+retention constraint as well as the ordinary observation horizon: it remains
+until both cutoffs have elapsed, regardless of which configured horizon is
+longer. Pruning
 removes the job-owned journal, effect, and attribution children before the
 released observation, in one transaction.
 Membership and checkpoint evidence is retained for the
@@ -357,3 +366,8 @@ or unresolved predecessor obligation is exempt from age pruning until a newer
 durable record explicitly resolves and references it. Exhaustion remains a
 visible held result; it never truncates a node pair, drops work, or reports
 convergence.
+
+The canonical import document is immutable pre-apply evidence. A deferred job
+may later be marked resolved or reopened in SQLite, but those queue and
+retention fields are a mutable job projection and never rewrite the canonical
+import payload.

@@ -113,6 +113,20 @@ func TestCaseFoldingIsExplicit(t *testing.T) {
 	}
 }
 
+func TestUnicodeNormalizationIsComparisonOnly(t *testing.T) {
+	engine, err := NewEngine([]string{"Caf\u00e9/**"}, nil, nil, nil, CaseSensitive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := engine.Classify("Cafe\u0301/note.md"); err != nil || got != StatusNormal {
+		t.Fatalf("NFD path classification = %q, %v", got, err)
+	}
+	include, _, _, _ := engine.Patterns()
+	if len(include) != 1 || include[0] != "Caf\u00e9/**" {
+		t.Fatalf("configured spelling changed: %q", include)
+	}
+}
+
 func TestInvalidPatternsFailClosed(t *testing.T) {
 	bad := []string{
 		"", "/abs.md", `back\slash.md`, "../escape.md", "./rel.md",

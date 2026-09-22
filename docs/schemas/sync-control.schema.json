@@ -3,8 +3,8 @@
   "$id": "urn:agent-dispatch:schema:sync-control:v1",
   "title": "Agent Dispatch sync control v1",
   "type": "object", "additionalProperties": false,
-  "required": ["schema_version", "group_id", "revision", "state", "reason"],
-  "properties": {"schema_version": {"const": "agent-dispatch.sync-control/v1"}, "group_id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"}, "revision": {"type": "integer", "minimum": 1}, "state": {"enum": ["active", "paused", "blocked"]}, "reason": {"enum": ["none", "operator_pause", "membership_emergency", "conflict", "trust_failure", "recovery_required"]}},
+  "required": ["schema_version", "group_id", "revision", "state", "reason", "membership_mode"],
+  "properties": {"schema_version": {"const": "agent-dispatch.sync-control/v1"}, "group_id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"}, "revision": {"type": "integer", "minimum": 1}, "state": {"enum": ["active", "paused", "blocked"]}, "reason": {"enum": ["none", "operator_pause", "membership_emergency", "conflict", "trust_failure", "recovery_required"]}, "membership_mode": {"enum": ["normal", "blocked_emergency"]}},
   "allOf": [
     {"if": {"properties": {"state": {"const": "active"}}, "required": ["state"]}, "then": {"properties": {"reason": {"const": "none"}}}},
     {"if": {"properties": {"state": {"const": "paused"}}, "required": ["state"]}, "then": {"properties": {"reason": {"const": "operator_pause"}}}},

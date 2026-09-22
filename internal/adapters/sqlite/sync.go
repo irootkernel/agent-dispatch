@@ -307,7 +307,7 @@ func (s *Store) SetSyncControl(ctx context.Context, groupID string, expectedRevi
 	if n, _ := res.RowsAffected(); n != 1 {
 		return SyncControlRow{}, ErrSyncPrecondition
 	}
-	contextJSON, _ := json.Marshal(map[string]any{"reason": reason, "config_revision": boundConfigRevision, "revision": expectedRevision + 1})
+	contextJSON, _ := json.Marshal(map[string]any{"reason": reason, "membership_mode": current.MembershipMode, "config_revision": boundConfigRevision, "revision": expectedRevision + 1})
 	if _, err := tx.ExecContext(ctx, `INSERT INTO state_transitions
 		(transition_id, entity_type, entity_id, from_state, to_state, recorded_at, context_json)
 		VALUES (?,?,?,?,?,?,?)`, fmt.Sprintf("sync-control:%s:%d", groupID, expectedRevision+1), "sync_control", groupID, current.State, targetState, now, string(contextJSON)); err != nil {
@@ -378,7 +378,7 @@ func (s *Store) ReconcileAdoptedMembership(ctx context.Context, groupID, mode, m
 		return SyncControlRow{}, err
 	}
 	if mode == "normal" {
-		if err := resolveBlockedSyncJobs(ctx, tx, groupID, map[string]bool{"membership": true}, "membership_replaced", membershipRevision, now); err != nil {
+		if err := resolveBlockedSyncJobs(ctx, tx, groupID, "membership_replaced", membershipRevision, now); err != nil {
 			return SyncControlRow{}, err
 		}
 	}
@@ -422,7 +422,7 @@ func (s *Store) ReconcileSyncControlCheckpoint(ctx context.Context, groupID stri
 	if _, err := tx.ExecContext(ctx, `INSERT INTO state_transitions(transition_id,entity_type,entity_id,from_state,to_state,recorded_at,context_json) VALUES (?,?,?,?,?,?,?)`, fmt.Sprintf("sync-control:%s:%d", groupID, row.Revision), "sync_control", groupID, previous, targetState, now, string(contextJSON)); err != nil {
 		return SyncControlRow{}, err
 	}
-	if err := resolveBlockedSyncJobs(ctx, tx, groupID, map[string]bool{"publication": true, "checkpoint": true, "import": true}, "checkpoint_reconciled", checkpointCommit, now); err != nil {
+	if err := resolveBlockedSyncJobs(ctx, tx, groupID, "checkpoint_reconciled", checkpointCommit, now); err != nil {
 		return SyncControlRow{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -730,7 +730,7 @@ func applyMembershipControl(ctx context.Context, tx *sql.Tx, groupID, resolverID
 		return SyncControlRow{}, err
 	}
 	if mode == "normal" {
-		if err := resolveBlockedSyncJobs(ctx, tx, groupID, map[string]bool{"membership": true}, "membership_replaced", resolverID, now); err != nil {
+		if err := resolveBlockedSyncJobs(ctx, tx, groupID, "membership_replaced", resolverID, now); err != nil {
 			return SyncControlRow{}, err
 		}
 	}
@@ -1825,7 +1825,16 @@ func requireSyncTransition(kind, from, to string) error {
 	return nil
 }
 
-func resolveBlockedSyncJobs(ctx context.Context, tx *sql.Tx, groupID string, kinds map[string]bool, resolution, resolverID, now string) error {
+func resolveBlockedSyncJobs(ctx context.Context, tx *sql.Tx, groupID, resolution, resolverID, now string) error {
+	var kinds map[string]bool
+	switch resolution {
+	case "membership_replaced":
+		kinds = map[string]bool{"membership": true}
+	case "checkpoint_reconciled":
+		kinds = map[string]bool{"publication": true, "checkpoint": true, "import": true}
+	default:
+		return fmt.Errorf("unsupported blocked sync resolution %q", resolution)
+	}
 	rows, err := tx.QueryContext(ctx, `SELECT job_id,fence,kind FROM sync_jobs
 		WHERE group_id=? AND state='blocked' AND resolved_at IS NULL ORDER BY job_id`, groupID)
 	if err != nil {
@@ -1856,7 +1865,7 @@ func resolveBlockedSyncJobs(ctx context.Context, tx *sql.Tx, groupID string, kin
 		journalID := fmt.Sprintf("sync-resolution-%x", digest[:16])
 		if _, err := tx.ExecContext(ctx, `INSERT INTO sync_journal_entries
 			(journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES(?,?,?,?,?,?,?)`,
-			journalID, job.id, job.fence, job.kind, "ok", string(evidence), now); err != nil {
+			journalID, job.id, job.fence, "claim_recovery", "ok", string(evidence), now); err != nil {
 			return err
 		}
 		res, err := tx.ExecContext(ctx, `UPDATE sync_jobs SET retain_until_resolved=0,resolved_at=?,updated_at=?

@@ -87,9 +87,10 @@ type PushResult struct {
 type PushState string
 
 const (
-	PushConfirmed PushState = "confirmed"
-	PushRejected  PushState = "rejected"
-	PushAmbiguous PushState = "ambiguous"
+	PushConfirmed  PushState = "confirmed"
+	PushRejected   PushState = "rejected"
+	PushNotStarted PushState = "not_started"
+	PushAmbiguous  PushState = "ambiguous"
 )
 
 // ImportState is the exact Git/index/worktree fence captured before a live
@@ -795,7 +796,7 @@ func (c *Client) PushFastForward(ctx context.Context, remote, ref, candidate, ex
 	}
 	remoteBefore, err := c.remoteRefURL(ctx, remoteURL, ref)
 	if err != nil && !errors.Is(err, ErrMissingRef) {
-		result.Underlying = err
+		result.State, result.Underlying = PushNotStarted, err
 		return result
 	}
 	if remoteBefore == candidate {
@@ -861,15 +862,15 @@ func (c *Client) verifyRemote(ctx context.Context, remote, expectedDigest string
 		return "", fmt.Errorf("invalid configured remote binding: %w", ErrRemoteBinding)
 	}
 	if err := c.rejectURLRewrites(ctx); err != nil {
-		return "", err
+		return "", fmt.Errorf("configured remote rewrite policy could not be verified: %w: %v", ErrRemoteBinding, err)
 	}
 	out, _, err := c.run(ctx, nil, nil, "remote", "get-url", "--all", remote)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("configured remote fetch URL could not be verified: %w: %v", ErrRemoteBinding, err)
 	}
 	pushOut, _, err := c.run(ctx, nil, nil, "remote", "get-url", "--push", "--all", remote)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("configured remote push URL could not be verified: %w: %v", ErrRemoteBinding, err)
 	}
 	urls, pushURLs := strings.Fields(string(out)), strings.Fields(string(pushOut))
 	if len(urls) != 1 || len(pushURLs) != 1 || urls[0] != pushURLs[0] {

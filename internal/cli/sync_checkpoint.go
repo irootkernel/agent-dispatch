@@ -48,7 +48,10 @@ func runSyncCheckpointPlan(args []string, stdout, stderr io.Writer) int {
 	}
 	membership, predecessor, digest, err := checkpointBindings(client, cfg, s, v["--target-commit"])
 	if err != nil {
-		return syncMembershipError(stderr, command, err, 14)
+		if errors.Is(err, gitlocal.ErrRemoteBinding) {
+			return syncMembershipError(stderr, command, err, 30)
+		}
+		return syncRetryableError(stderr, command, err)
 	}
 	if v["--kind"] == "initial_baseline" {
 		if v["--target-commit"] != predecessor {
@@ -115,7 +118,10 @@ func runSyncCheckpointApply(args []string, stdout, stderr io.Writer) int {
 	}
 	membership, predecessor, digest, err := checkpointBindings(client, cfg, s, plan.ProposedCheckpoint.TargetCommit)
 	if err != nil {
-		return syncMembershipError(stderr, command, err, 14)
+		if errors.Is(err, gitlocal.ErrRemoteBinding) {
+			return syncMembershipError(stderr, command, err, 30)
+		}
+		return syncRetryableError(stderr, command, err)
 	}
 	if plan.ProposedCheckpoint.Kind == "initial_baseline" {
 		if plan.ProposedCheckpoint.TargetCommit != predecessor {
@@ -199,7 +205,7 @@ func runSyncCheckpointApply(args []string, stdout, stderr io.Writer) int {
 	if remoteErr != nil || remoteNow != candidate {
 		push := client.PushFastForward(requestCtx(), s.RemoteName, s.ContentRef, candidate, predecessor, s.RemoteRepositoryDigest)
 		if errors.Is(push.Underlying, gitlocal.ErrRemoteBinding) {
-			return syncMembershipError(stderr, command, push.Underlying, 30)
+			return finishClaimedSyncTrustFailure(stderr, command, store, job, owner, "applying", "checkpoint", push.Underlying, map[string]any{"candidate": candidate})
 		}
 		switch classifySyncPush(push.State, push.RemoteOID, predecessor, candidate) {
 		case syncPushRetryable:

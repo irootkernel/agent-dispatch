@@ -178,7 +178,7 @@ uses the explicit v25 sync-job sequence and fence, never a hidden SQLite
 | publication job | `eligible -> prepared -> signed -> push_pending -> published` | `blocked` or `uncertain` retains the obligation |
 | delivery | `pending -> attempted -> accepted` | `retryable`, `unknown`, or `refused`; HTTP 202 proves only `accepted` |
 | import | `requested -> fetched -> validated -> applying -> applied` | `deferred`, `blocked`, `recovering`, or `uncertain` |
-| control | `active <-> paused` | `blocked` requires explicit recovery evidence; adopted membership mode is a separate durable posture |
+| control | `active <-> paused` | `blocked` requires explicit recovery evidence; `membership_mode` records the separate adopted posture in every canonical control record |
 | verification | `planned -> collecting -> finished` | `complete`, `incomplete`, `target_changed`, `blocked`, or `expired` |
 
 The generic transition graph keeps `blocked` terminal. Exact remote evidence

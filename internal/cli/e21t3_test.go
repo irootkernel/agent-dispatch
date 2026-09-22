@@ -379,6 +379,10 @@ exec %s "$@"
 	if got := gitTestOutput(t, realGit, repo, "rev-parse", cfg.Sync.ContentRef); got != contentBeforeEmergency {
 		t.Fatalf("emergency adoption moved content: before=%s after=%s", contentBeforeEmergency, got)
 	}
+	var pausedOut, pausedErr bytes.Buffer
+	if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &pausedOut, &pausedErr); code != 0 || !bytes.Contains(pausedOut.Bytes(), []byte(`"state":"deferred"`)) || !bytes.Contains(pausedOut.Bytes(), []byte(`"reason":"operator_pause"`)) || !bytes.Contains(pausedOut.Bytes(), []byte(`"membership_mode":"blocked_emergency"`)) {
+		t.Fatalf("paused emergency reconcile: %d out=%s err=%s", code, pausedOut.String(), pausedErr.String())
+	}
 	var resumeOut, resumeErr bytes.Buffer
 	if code := Run([]string{"sync", "resume", "--group", cfg.Sync.GroupID, "--expected-control-revision", strconv.FormatInt(control.Revision, 10), "--output", "json"}, &resumeOut, &resumeErr); code != 30 || !bytes.Contains(resumeOut.Bytes(), []byte(`"state":"blocked"`)) || !bytes.Contains(resumeOut.Bytes(), []byte(`"reason":"membership_emergency"`)) {
 		t.Fatalf("resume crossed emergency membership: %d out=%s err=%s", code, resumeOut.String(), resumeErr.String())
@@ -386,6 +390,32 @@ exec %s "$@"
 	var blockedOut, blockedErr bytes.Buffer
 	if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &blockedOut, &blockedErr); code != 30 || !bytes.Contains(blockedOut.Bytes(), []byte(`"reason":"membership_emergency"`)) {
 		t.Fatalf("emergency reconcile fence: %d out=%s err=%s", code, blockedOut.String(), blockedErr.String())
+	}
+
+	_, replacementFingerprint := e21t3Key(t, dir, "replacement-publisher")
+	cfg.Sync.Nodes[1].PublisherKey = replacementFingerprint
+	cfg.Sync.Nodes[1].StateIncarnationID = "node-b-0002"
+	updatedConfig, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, updatedConfig, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	normalRestoration := e21t3ApplyMembershipChange(t, cfg, dir, "replacement", cfg.Sync.Nodes[1].InstanceID, emergencyMembership)
+	if _, err := store.Exec(`UPDATE sync_controls SET revision=revision+1,state='blocked',reason='membership_emergency',membership_mode='blocked_emergency' WHERE group_id=?`, cfg.Sync.GroupID); err != nil {
+		t.Fatal(err)
+	}
+	if got := gitTestOutput(t, realGit, repo, "rev-parse", cfg.Sync.MembershipRef); got != normalRestoration {
+		t.Fatalf("normal restoration ref=%s want=%s", got, normalRestoration)
+	}
+	var clearedOut, clearedErr bytes.Buffer
+	if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &clearedOut, &clearedErr); code != 0 {
+		t.Fatalf("equal-ref normal membership did not clear stale posture: %d out=%s err=%s", code, clearedOut.String(), clearedErr.String())
+	}
+	control, err = store.LoadSyncControl(requestCtx(), cfg.Sync.GroupID)
+	if err != nil || control.State != "active" || control.Reason != "none" || control.MembershipMode != "normal" {
+		t.Fatalf("normal equal-ref reconcile control=%+v err=%v", control, err)
 	}
 
 }

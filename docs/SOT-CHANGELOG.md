@@ -21,7 +21,8 @@ two-node sync workflow. Peer service, pair verification, and release remain disa
   current configuration policy and never clears conflict, revocation, trust,
   or recovery blocks.
 - Resolved sync job evidence is eligible for children-first pruning after the
-  180-day policy; unresolved and uncertain obligations remain retention roots.
+  configured completed-receipt horizon, which defaults to 180 days; unresolved
+  and uncertain obligations remain retention roots.
 - E21-T2 adds the restricted Git adapter and two-phase signed membership
   administration. Fixed tree layout, linear ancestry, pinned Ed25519 trust,
   expected-old non-force updates, removed-key first-seen rejection, and
@@ -39,9 +40,10 @@ two-node sync workflow. Peer service, pair verification, and release remain disa
   v24 causal journal sequencing. Same-base push rejection preserves the signed
   candidate as retryable, exact remote evidence settles interrupted work, and
   membership changes preserve stronger control holds.
-- Path policy and sync alias checks share NFC and Unicode-folded comparison
-  identities without changing filesystem path spelling. Repository worktree URL
-  rewrites are rejected before remote access.
+- Policy and sync alias checks share NFC comparison without changing filesystem
+  path spelling. Portable aliases and excluded/protected sync paths also use
+  Unicode case folding on every host. Repository worktree URL rewrites are
+  rejected before remote access.
 
 ## 1.7.0 - 2026-09-19
 

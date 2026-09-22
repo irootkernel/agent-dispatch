@@ -62,7 +62,7 @@ var expectedSemanticRejections = map[string]string{
 	"sync-membership-invalid-ref.json":              "valid configured Git ref",
 	"sync-membership-plan-stale-predecessor.json":   "membership plan binding mismatch",
 	"sync-nudge-invalid-ref.json":                   "valid configured Git ref",
-	"sync-import-duplicate-alias.json":              "unique under the resolved case mode",
+	"sync-import-duplicate-alias.json":              "unique under the conservative path identity",
 	"sync-import-sensitive-alias.json":              "unique under the conservative path identity",
 	"sync-import-unicode-alias.json":                "unique under the conservative path identity",
 	"sync-import-unsafe-path.json":                  "safe relative Markdown path",
@@ -479,10 +479,7 @@ func validateSyncSemantics(doc any) error {
 			// cross-node path identity boundary.
 			canonical := records.PortablePathIdentity(path)
 			if seenPaths[canonical] {
-				if mode, _ := m["case_mode"].(string); mode == "sensitive" {
-					return fmt.Errorf("import paths must be unique under the conservative path identity")
-				}
-				return fmt.Errorf("import paths must be unique under the resolved case mode")
+				return fmt.Errorf("import paths must be unique under the conservative path identity")
 			}
 			seenPaths[canonical] = true
 		}

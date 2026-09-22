@@ -94,6 +94,23 @@ func TestValidateFilesRejectsUnicodeAliasOfProtectedPath(t *testing.T) {
 	}
 }
 
+func TestValidateFilesRejectsCaseFoldedAliasOfProtectedPath(t *testing.T) {
+	cfg := snapshotConfig(t.TempDir())
+	route := cfg.Routes["route-main"]
+	route.Policy.Protected = []string{"notes/Secret.md"}
+	cfg.Routes["route-main"] = route
+	if err := ValidateFiles(cfg, "vault-main", map[string][]byte{"notes/secret.md": []byte("hostile")}); err == nil {
+		t.Fatal("case-folded alias of protected Markdown was accepted")
+	}
+}
+
+func TestValidateFilesRejectsCaseFoldedAliasOfExcludedPath(t *testing.T) {
+	cfg := snapshotConfig(t.TempDir())
+	if err := ValidateFiles(cfg, "vault-main", map[string][]byte{"Private.md": []byte("hostile")}); err == nil {
+		t.Fatal("case-folded alias of excluded Markdown was accepted")
+	}
+}
+
 func snapshotConfig(root string) *config.Config {
 	return &config.Config{Resources: map[string]config.Resource{"vault-main": {Type: "directory", Root: root, FileScope: "markdown"}}, Routes: map[string]config.Route{"route-main": {Source: config.Source{Resource: "vault-main", Include: []string{"**/*.md", "*.md"}, Exclude: []string{"private.md"}}, Policy: config.Policy{Protected: []string{}, Immutable: []string{}}}}}
 }

@@ -3,5 +3,6 @@
   "group_id": "wiki-pair",
   "revision": 1,
   "state": "active",
-  "reason": "none"
+  "reason": "none",
+  "membership_mode": "normal"
 }

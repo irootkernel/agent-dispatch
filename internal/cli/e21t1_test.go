@@ -66,7 +66,7 @@ func TestE21T1SyncPauseResumeAndStatus(t *testing.T) {
 		t.Fatalf("pause: %d %s", code, stderr)
 	}
 	control := envelope["result"].(map[string]any)
-	if control["schema_version"] != "agent-dispatch.sync-control/v1" || control["state"] != "paused" || control["revision"] != float64(2) || len(control) != 5 {
+	if control["schema_version"] != "agent-dispatch.sync-control/v1" || control["state"] != "paused" || control["revision"] != float64(2) || control["membership_mode"] != "normal" || len(control) != 6 {
 		t.Fatalf("pause result = %v", control)
 	}
 	code, _, stderr = syncResult(t, "resume", "--group", "wiki-pair", "--expected-control-revision", "1", "--config", configPath, "--output", "json")
@@ -175,6 +175,9 @@ func TestE21SameBasePushRejectionIsRetryable(t *testing.T) {
 	}
 	if got := classifySyncPush(gitlocal.PushRejected, "3333333333333333333333333333333333333333", base, candidate); got != syncPushConflict {
 		t.Fatalf("changed-base rejection = %v", got)
+	}
+	if got := classifySyncPush(gitlocal.PushNotStarted, "", base, candidate); got != syncPushRetryable {
+		t.Fatalf("pre-push measurement failure = %v", got)
 	}
 	if got := classifySyncPush(gitlocal.PushAmbiguous, candidate, base, candidate); got != syncPushConfirmed {
 		t.Fatalf("remote-confirmed candidate = %v", got)

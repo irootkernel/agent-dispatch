@@ -117,7 +117,7 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		}
 		resultCode := writeEnvelope(stdout, command, map[string]any{
 			"schema_version": "agent-dispatch.sync-control/v1", "group_id": control.GroupID,
-			"revision": control.Revision, "state": control.State, "reason": control.Reason,
+			"revision": control.Revision, "state": control.State, "reason": control.Reason, "membership_mode": control.MembershipMode,
 		})
 		if control.State == "blocked" && control.Reason == "membership_emergency" {
 			return 30
@@ -247,6 +247,9 @@ func classifySyncPush(state gitlocal.PushState, remote, predecessor, candidate s
 	if state == gitlocal.PushConfirmed || remote == candidate {
 		return syncPushConfirmed
 	}
+	if state == gitlocal.PushNotStarted {
+		return syncPushRetryable
+	}
 	if state == gitlocal.PushRejected {
 		if remote == predecessor {
 			return syncPushRetryable
@@ -254,6 +257,25 @@ func classifySyncPush(state gitlocal.PushState, remote, predecessor, candidate s
 		return syncPushConflict
 	}
 	return syncPushUnknown
+}
+
+func syncRetryableError(stderr io.Writer, command string, err error) int {
+	writeError(stderr, command, "sync_retryable", "transient_local", err.Error())
+	return 10
+}
+
+func finishClaimedSyncTrustFailure(stderr io.Writer, command string, store *sqlite.Store, job sqlite.SyncJobRow, owner, state, phase string, cause error, evidence map[string]any) int {
+	if evidence == nil {
+		evidence = map[string]any{}
+	}
+	evidence["reason"] = cause.Error()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, state, sqlite.SyncJobKeepUnresolved, sqlite.SyncJournalEntry{
+		JournalID: randomSyncID(phase + "-journal"), JobID: job.JobID, Fence: job.Fence, Phase: phase, Outcome: "effect_not_started", EvidenceJSON: mustJSON(evidence), RecordedAt: now,
+	}, now); err != nil {
+		return syncStoreError(stderr, command, err)
+	}
+	return syncMembershipError(stderr, command, cause, 30)
 }
 
 func reservedSyncCommand(args []string) bool {

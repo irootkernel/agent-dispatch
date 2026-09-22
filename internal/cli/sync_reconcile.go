@@ -112,17 +112,17 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 		return reconcileEnvelope(stdout, "membership_adopted", "none", map[string]any{
 			"previous_membership_revision": localMembership,
 			"membership_revision":          remoteMembership,
+			"membership_mode":              control.MembershipMode,
 			"side_effects":                 []string{"local_membership_ref_updated"},
 		})
 	}
-	if remoteMembershipRecord.Mode == "blocked_emergency" {
-		control, err = store.ReconcileAdoptedMembership(requestCtx(), s.GroupID, remoteMembershipRecord.Mode, remoteMembership, revision, time.Now().UTC().Format(time.RFC3339Nano))
-		if err != nil {
-			return syncStoreError(stderr, command, err)
-		}
-	}
-	if remoteMembershipRecord.Mode == "blocked_emergency" {
-		return reconcileEnvelopeCode(stdout, "blocked", control.Reason, map[string]any{"membership_revision": remoteMembership, "membership_mode": control.MembershipMode, "control_state": control.State, "control_reason": control.Reason, "detail": "the verified membership revision blocks protected effects"}, 30)
+	// Reconcile posture even when the refs already match. This closes the
+	// crash window after a normal ref adoption but before its emergency bit was
+	// cleared, and refreshes an emergency posture without replacing pause or a
+	// stronger hold.
+	control, err = store.ReconcileAdoptedMembership(requestCtx(), s.GroupID, remoteMembershipRecord.Mode, remoteMembership, revision, time.Now().UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return syncStoreError(stderr, command, err)
 	}
 
 	contentTracking := "refs/agent-dispatch/sync/content/" + s.GroupID
@@ -163,6 +163,12 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 				return reconcileEnvelopeCode(stdout, "blocked", reconciled.Reason, map[string]any{"target_commit": target, "checkpoint_reconciled": true, "membership_mode": reconciled.MembershipMode}, 30)
 			}
 			return reconcileEnvelope(stdout, "no_change", "none", map[string]any{"target_commit": target, "checkpoint_reconciled": true})
+		}
+		if control.State == "paused" {
+			return reconcileEnvelope(stdout, "deferred", "operator_pause", map[string]any{"target_commit": target, "membership_mode": control.MembershipMode, "detail": "sync is paused; run sync resume after review"})
+		}
+		if control.State == "blocked" && control.Reason == "membership_emergency" {
+			return reconcileEnvelopeCode(stdout, "blocked", control.Reason, map[string]any{"target_commit": target, "membership_mode": control.MembershipMode, "detail": "the verified membership revision blocks protected effects"}, 30)
 		}
 		return reconcileEnvelope(stdout, "no_change", "none", map[string]any{"target_commit": target})
 	}
@@ -239,7 +245,7 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 		reason = "acknowledgement_stale"
 		reasonDetail = "the cooperative import acknowledgement or control configuration binding is stale"
 	} else if control.State == "paused" {
-		return reconcileEnvelope(stdout, "deferred", "operator_pause", map[string]any{"target_commit": target, "detail": "sync is paused; run sync resume after review"})
+		return reconcileEnvelope(stdout, "deferred", "operator_pause", map[string]any{"target_commit": target, "membership_mode": control.MembershipMode, "detail": "sync is paused; run sync resume after review"})
 	} else if control.State == "blocked" && !(len(effects) == 0 && (control.Reason == "conflict" || control.Reason == "trust_failure" || control.Reason == "recovery_required")) {
 		return reconcileEnvelopeCode(stdout, "blocked", control.Reason, map[string]any{"target_commit": target, "detail": "the existing sync safety hold must be resolved before Markdown import"}, 14)
 	}

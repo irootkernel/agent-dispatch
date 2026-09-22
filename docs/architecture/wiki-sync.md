@@ -18,10 +18,14 @@ local change -> Watchman -> maintenance lanes -> validated receipt
                                       signed commit and push
                                                    |
                                           durable peer nudge
+                                                   |
+                             explicit sync reconcile (implemented)
                                                    v
-peer service -> inbox -> fetch and validate -> guarded import -> receipt
-      ^                                      |
-      +---- periodic reconciliation --------+
+                                  fetch and validate -> guarded import -> receipt
+
+future: peer service -> inbox -> the same reconciliation/import path
+             ^
+             +---- periodic reconciliation
 ```
 
 ## Boundaries

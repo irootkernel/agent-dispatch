@@ -60,7 +60,11 @@ func runSyncPublish(args []string, stdout, stderr io.Writer) int {
 	}
 	remoteMembership, err := client.RemoteRef(requestCtx(), syncCfg.RemoteName, syncCfg.MembershipRef, syncCfg.RemoteRepositoryDigest)
 	if err != nil {
-		return syncMembershipError(stderr, command, fmt.Errorf("membership ref could not be measured on the approved remote: %w", err), 30)
+		wrapped := fmt.Errorf("membership ref could not be measured on the approved remote: %w", err)
+		if errors.Is(err, gitlocal.ErrRemoteBinding) {
+			return syncMembershipError(stderr, command, wrapped, 30)
+		}
+		return syncRetryableError(stderr, command, wrapped)
 	}
 	if remoteMembership != membershipHead {
 		return syncMembershipError(stderr, command, fmt.Errorf("membership ref is not current on the approved remote"), 30)
@@ -92,7 +96,11 @@ func runSyncPublish(args []string, stdout, stderr io.Writer) int {
 	}
 	remoteBase, err := client.RemoteRef(requestCtx(), syncCfg.RemoteName, syncCfg.ContentRef, syncCfg.RemoteRepositoryDigest)
 	if err != nil {
-		return syncMembershipError(stderr, command, fmt.Errorf("content predecessor could not be measured on the approved remote: %w", err), 14)
+		wrapped := fmt.Errorf("content predecessor could not be measured on the approved remote: %w", err)
+		if errors.Is(err, gitlocal.ErrRemoteBinding) {
+			return syncMembershipError(stderr, command, wrapped, 30)
+		}
+		return syncRetryableError(stderr, command, wrapped)
 	}
 	if remoteBase != base {
 		return syncMembershipError(stderr, command, fmt.Errorf("content predecessor is not current on the approved remote"), 14)
@@ -210,7 +218,7 @@ func runSyncPublish(args []string, stdout, stderr io.Writer) int {
 	if !confirmed {
 		push := client.PushFastForward(requestCtx(), syncCfg.RemoteName, syncCfg.ContentRef, candidate, base, syncCfg.RemoteRepositoryDigest)
 		if errors.Is(push.Underlying, gitlocal.ErrRemoteBinding) {
-			return syncMembershipError(stderr, command, push.Underlying, 30)
+			return finishClaimedSyncTrustFailure(stderr, command, store, job, owner, "signed", "publication", push.Underlying, map[string]any{"candidate": candidate})
 		}
 		switch classifySyncPush(push.State, push.RemoteOID, base, candidate) {
 		case syncPushRetryable:
@@ -329,7 +337,7 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 			}
 			push := client.PushFastForward(requestCtx(), s.RemoteName, s.ContentRef, candidate, publication.BaseCommit, s.RemoteRepositoryDigest)
 			if errors.Is(push.Underlying, gitlocal.ErrRemoteBinding) {
-				return true, syncMembershipError(stderr, "sync publish", push.Underlying, 30)
+				return true, finishClaimedSyncTrustFailure(stderr, "sync publish", store, claimed, owner, "signed", "publication", push.Underlying, map[string]any{"candidate": candidate, "recovered": true})
 			}
 			switch classifySyncPush(push.State, push.RemoteOID, publication.BaseCommit, candidate) {
 			case syncPushRetryable:

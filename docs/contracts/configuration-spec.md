@@ -194,11 +194,15 @@ routes:
 
 ## 7. Include and Exclude Semantics
 
-- Patterns apply to normalized slash-separated relative paths.
+- Patterns apply to NFC-normalized slash-separated relative paths without
+  rewriting the filesystem spelling.
 - `**` recursive matching is required.
 - Exclude patterns are directory-aware (E10-T2, PTH-009): a pattern that matches a path prefix at a segment boundary excludes everything inside that directory, so an exact-directory exclusion (`Secrets`) covers its whole subtree exactly like a recursive one (`Secrets/**`), and a file or glob pattern also covers a same-named directory.
 - Exclude takes precedence over include.
 - Protected and immutable patterns are evaluated after include/exclude.
+- Sync publication and import additionally match excluded, protected, and
+  immutable paths under Unicode case folding on every host so a portable alias
+  cannot bypass a safety rule.
 - Pattern behavior is explicit per host through the resolved case mode (supported hosts are `darwin/arm64`, `linux/amd64`, and `linux/arm64` under D-029; the resolver stays host-derived so each platform carries its own explicit mode).
 - Case sensitivity follows the configured policy, not an accidental host filesystem behavior. v0.1 default is `filesystem`, and the resolved behavior is recorded in the route revision.
 
@@ -482,10 +486,11 @@ algorithms.
 
 `cooperative_import_acknowledgement` is the complete versioned record, not a
 bare digest. It is current only when every record binding equals the normalized
-configuration and its state incarnation equals the current durable local
-incarnation. Enabled status and `sync reconcile` read SQLite and report or
-enforce that durable currentness; disabled status remains side-effect-free and
-reports no current acknowledgement. A local resource, remote/ref,
+configuration and its state incarnation equals the configured local
+incarnation. Enabled status reports this record self-consistency separately
+from the SQLite-backed `control_config_current` binding; `sync reconcile`
+enforces both. Disabled status remains side-effect-free and reports no current
+acknowledgement. A local resource, remote/ref,
 scope, local identity, administrator anchor, safety policy, or bound change
 therefore invalidates live-tree application without
 blocking publication, status, or later fetch-and-validate reconciliation.

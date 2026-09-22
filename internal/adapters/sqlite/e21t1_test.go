@@ -537,6 +537,9 @@ func TestE21Migration23ReopensLegacyBlockedObligations(t *testing.T) {
 	if _, err := s.Exec(`UPDATE sync_jobs SET state='published',fence=1,retain_until_resolved=0,resolved_at=? WHERE job_id=?`, syncT0, completed.JobID); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := s.Exec(`UPDATE sync_controls SET state='blocked',reason='membership_emergency' WHERE group_id='wiki-pair'`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := s.Exec(`DROP TRIGGER sync_jobs_assign_sequence`); err != nil {
 		t.Fatal(err)
 	}
@@ -567,6 +570,10 @@ func TestE21Migration23ReopensLegacyBlockedObligations(t *testing.T) {
 	}
 	if err := s.QueryRow(`SELECT retain_until_resolved,COALESCE(resolved_at,'') FROM sync_jobs WHERE job_id=?`, completed.JobID).Scan(&retain, &resolved); err != nil || retain != 0 || resolved != syncT0 {
 		t.Fatalf("migration changed completed job retain=%d resolved=%q err=%v", retain, resolved, err)
+	}
+	var membershipMode string
+	if err := s.QueryRow(`SELECT membership_mode FROM sync_controls WHERE group_id='wiki-pair'`).Scan(&membershipMode); err != nil || membershipMode != "blocked_emergency" {
+		t.Fatalf("migration lost emergency membership posture: mode=%q err=%v", membershipMode, err)
 	}
 }
 

@@ -140,7 +140,10 @@ func buildRouteEngines(cfg *config.Config, resourceID string) ([]routeEngines, p
 		if err != nil {
 			return nil, mode, err
 		}
-		guard, err := policy.NewEngine([]string{"**"}, nil, route.Policy.Protected, route.Policy.Immutable, mode)
+		// Protected and immutable names are cross-node safety identities. Match
+		// them with Unicode folding on every host while leaving ordinary scope
+		// include/exclude semantics in the configured filesystem case mode.
+		guard, err := policy.NewEngine([]string{"**"}, route.Source.Exclude, route.Policy.Protected, route.Policy.Immutable, policy.CaseInsensitive)
 		if err != nil {
 			return nil, mode, err
 		}
@@ -165,6 +168,9 @@ func governedMarkdown(path string, engines []routeEngines) (bool, error) {
 		}
 		if guardStatus == policy.StatusProtected || guardStatus == policy.StatusImmutable {
 			return false, fmt.Errorf("governed path %q is protected or immutable", path)
+		}
+		if guardStatus == policy.StatusExcluded {
+			return false, nil
 		}
 		status, err := engine.scope.Classify(path)
 		if err != nil {

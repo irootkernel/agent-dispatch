@@ -84,6 +84,9 @@ for a changed predecessor or another actual conflict.
 Failure to prove the configured remote binding, including effective URL rewrite
 rules, returns `sync_trust_failed` at exit 30 before predecessor
 classification and never creates a content-conflict hold.
+After that binding is proved, a ref-measurement failure before a push starts is
+`sync_retryable` at exit 10 and releases any acquired claim with
+`effect_not_started` evidence.
 Non-bootstrap membership plan commands require `--instance`. Pause blocks new protected
 claims while preserving in-flight evidence; resume validates and binds the
 current configuration revision and never clears a conflict, revocation, trust,
@@ -107,6 +110,9 @@ for re-entry. A
 conflict or protected-claim block exits 14, an unprovable partial effect exits
 13, and membership, signature, or covered-history trust failure exits 30; each
 still emits the versioned reconcile result with its durable state and reason.
+Every `agent-dispatch.sync-control/v1` result includes `membership_mode` so the
+posture remains visible while pause or a stronger hold owns `state` and
+`reason`.
 Transient membership or content fetch transport failure emits `deferred` with
 `git_unstable` at exit 10 and does not create a trust hold. A fetch rejected as
 non-fast-forward is classified separately and retains the fail-closed trust

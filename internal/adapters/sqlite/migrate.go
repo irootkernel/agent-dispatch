@@ -213,6 +213,8 @@ END;
 const schemaV25SyncMembershipPostureAndJobSequence = `
 ALTER TABLE sync_controls ADD COLUMN membership_mode TEXT NOT NULL DEFAULT 'normal'
 	CHECK (membership_mode IN ('normal','blocked_emergency'));
+UPDATE sync_controls SET membership_mode='blocked_emergency'
+WHERE state='blocked' AND reason='membership_emergency';
 
 CREATE TABLE sync_job_sequences (
 	sequence INTEGER PRIMARY KEY AUTOINCREMENT,

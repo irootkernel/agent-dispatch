@@ -283,7 +283,7 @@ func runSyncMembershipApply(args []string, stdout, stderr io.Writer) int {
 	push := client.PushFastForward(requestCtx(), syncCfg.RemoteName, syncCfg.MembershipRef, candidate, predecessor, syncCfg.RemoteRepositoryDigest)
 	terminalNow := time.Now().UTC()
 	if errors.Is(push.Underlying, gitlocal.ErrRemoteBinding) {
-		return syncMembershipError(stderr, command, push.Underlying, 30)
+		return finishClaimedSyncTrustFailure(stderr, command, concrete, job, owner, "planned", "membership", push.Underlying, map[string]any{"candidate": candidate})
 	}
 	switch classifySyncPush(push.State, push.RemoteOID, predecessor, candidate) {
 	case syncPushConfirmed:
@@ -409,11 +409,10 @@ func finishMembershipBeforeEffect(stderr io.Writer, store *sqlite.Store, job sql
 	}
 	claimed, err := store.ClaimSyncAdministrationJob(requestCtx(), job.JobID, owner, configRevision, now.Format(time.RFC3339Nano), now.Add(2*time.Minute).Format(time.RFC3339Nano))
 	if err == nil {
-		state := "blocked"
 		if retryable {
-			state = "planned"
+			return finishClaimedMembershipRetryable(stderr, store, claimed, owner, map[string]any{"reason": reason}, now)
 		}
-		return finishClaimedMembership(stderr, store, claimed, owner, state, "effect_not_started", map[string]any{"reason": reason}, now)
+		return finishClaimedMembership(stderr, store, claimed, owner, "blocked", "effect_not_started", map[string]any{"reason": reason}, now)
 	}
 	return syncStoreError(stderr, "sync membership apply", err)
 }

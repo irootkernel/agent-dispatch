@@ -380,6 +380,33 @@ func TestPushTimeoutWithUnprovableRemoteHeadIsAmbiguous(t *testing.T) {
 	}
 }
 
+func TestPushRemoteMeasurementFailureDoesNotStartPush(t *testing.T) {
+	repo := initRepository(t)
+	dir := t.TempDir()
+	script := filepath.Join(dir, "fake-git")
+	expected := "1111111111111111111111111111111111111111"
+	candidate := "2222222222222222222222222222222222222222"
+	body := "#!/bin/sh\ncase \"$*\" in\n" +
+		"  *\"config --name-only --get-regexp\"*) exit 1;;\n" +
+		"  *\"remote get-url --all origin\"*) echo ssh://git@example.com/repo;;\n" +
+		"  *\"remote get-url --push --all origin\"*) echo ssh://git@example.com/repo;;\n" +
+		"  *ls-remote*) exit 2;;\n" +
+		"  *push*) exit 99;;\n" +
+		"  *) exit 2;;\nesac\n"
+	if err := os.WriteFile(script, []byte(body), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	digest, _, err := config.RemoteRepositoryDigest("ssh://git@example.com/repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &Client{root: repo, git: script, ssh: "/usr/bin/ssh", sshKeygen: "/usr/bin/ssh-keygen", timeout: 10 * time.Second, maxOutput: 64 << 10}
+	result := client.PushFastForward(context.Background(), "origin", "refs/agent-dispatch/content/wiki-pair", candidate, expected, digest)
+	if result.State != PushNotStarted || result.Underlying == nil {
+		t.Fatalf("push result=%+v", result)
+	}
+}
+
 func TestPushAlreadyAtCandidateIsConfirmed(t *testing.T) {
 	repo := initRepository(t)
 	dir := t.TempDir()

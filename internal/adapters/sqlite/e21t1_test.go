@@ -291,6 +291,17 @@ func TestE21MembershipEmergencyPreservesStrongerHold(t *testing.T) {
 	if err != nil || control.State != "blocked" || control.Reason != "trust_failure" || control.MembershipMode != "blocked_emergency" {
 		t.Fatalf("emergency overwrote stronger hold: %+v, %v", control, err)
 	}
+	checkpoint, _, err := s.AdmitSyncJob(ctx, SyncJobInput{JobID: "checkpoint-through-emergency-hold", GroupID: "wiki-pair", Kind: "checkpoint", LogicalKey: "checkpoint-through-emergency-hold", InitialState: "planned", PayloadJSON: `{"plan_id":"checkpoint-through-emergency-hold"}`, ConfigRevision: "cfg-1", QueueLimit: 1000, Now: syncT2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkpoint, err = s.ClaimSyncAdministrationJob(ctx, checkpoint.JobID, "checkpoint-admin", "cfg-1", syncT2, syncT3)
+	if err != nil {
+		t.Fatalf("checkpoint repair did not cross stronger hold with emergency posture: %v", err)
+	}
+	if err := s.FinishSyncJob(ctx, checkpoint.JobID, "checkpoint-admin", checkpoint.Fence, "planned", SyncJobKeepUnresolved, SyncJournalEntry{JournalID: "checkpoint-not-started", JobID: checkpoint.JobID, Fence: checkpoint.Fence, Phase: "checkpoint", Outcome: "effect_not_started", EvidenceJSON: `{}`, RecordedAt: syncT2}, syncT2); err != nil {
+		t.Fatal(err)
+	}
 	control, err = s.ReconcileAdoptedMembership(ctx, "wiki-pair", "normal", "membership-normal", "cfg-1", "2026-09-21T00:00:03Z")
 	if err != nil || control.State != "blocked" || control.Reason != "trust_failure" || control.MembershipMode != "normal" {
 		t.Fatalf("normal membership cleared stronger hold: %+v, %v", control, err)

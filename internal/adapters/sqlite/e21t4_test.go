@@ -229,6 +229,10 @@ func TestE21T4DeferredControllerImportReopensThroughCheckpointHold(t *testing.T)
 	if _, err := s.HoldSyncControl(ctx, "wiki-pair", "conflict", "revision-1", syncT1); err != nil {
 		t.Fatal(err)
 	}
+	control, err := s.ReconcileAdoptedMembership(ctx, "wiki-pair", "blocked_emergency", "membership-emergency", "revision-1", syncT1)
+	if err != nil || control.Reason != "conflict" || control.MembershipMode != "blocked_emergency" {
+		t.Fatalf("emergency stronger hold=%+v err=%v", control, err)
+	}
 	reopened, err := s.ReopenDeferredImport(ctx, job.JobID, "revision-1", SyncJournalEntry{JournalID: "controller-reopened", JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: `{}`, RecordedAt: syncT2}, syncT2)
 	if err != nil || reopened.State != "validated" || reopened.ResolvedAt != "" {
 		t.Fatalf("controller reopen=%+v err=%v", reopened, err)

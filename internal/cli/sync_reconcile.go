@@ -139,7 +139,12 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 		if control.State == "paused" {
 			return reconcileEnvelope(stdout, "deferred", "operator_pause", map[string]any{"membership_mode": control.MembershipMode, "detail": "sync is paused and emergency posture also freezes protected effects; adopt a reviewed normal membership replacement before resuming"})
 		}
-		return reconcileEnvelopeCode(stdout, "blocked", control.Reason, map[string]any{"membership_mode": control.MembershipMode, "detail": "protected effects remain frozen until a reviewed normal membership replacement is adopted; a content checkpoint cannot clear this posture"}, 30)
+		if control.Reason == "membership_emergency" {
+			return reconcileEnvelopeCode(stdout, "blocked", control.Reason, map[string]any{"membership_mode": control.MembershipMode, "detail": "protected effects remain frozen until a reviewed normal membership replacement is adopted"}, 30)
+		}
+		if control.State != "blocked" || (control.Reason != "conflict" && control.Reason != "trust_failure" && control.Reason != "recovery_required") {
+			return reconcileEnvelopeCode(stdout, "blocked", control.Reason, map[string]any{"membership_mode": control.MembershipMode, "detail": "emergency membership posture has an unsupported visible control state"}, 30)
+		}
 	}
 
 	contentTracking := "refs/agent-dispatch/sync/content/" + s.GroupID
@@ -601,14 +606,19 @@ func recoverPendingImport(stdout, stderr io.Writer, cfg *config.Config, s *confi
 			return true, reconcileEnvelope(stdout, "deferred", "acknowledgement_stale", map[string]any{"import_job_id": job.JobID, "detail": "recovery requires the current cooperative import acknowledgement"})
 		}
 		idle, idleErr := store.ResourceWritersIdle(requestCtx(), s.Resource)
+		if idleErr != nil {
+			return true, syncStoreError(stderr, "sync reconcile", idleErr)
+		}
 		recoveryGit, gitErr := client.InspectImport(requestCtx(), s.ContentRef)
-		if idleErr != nil || gitErr != nil || !idle || recoveryGit.ActiveOperation != "" {
+		if gitErr != nil || !idle || recoveryGit.ActiveOperation != "" {
 			detail := "recovery is waiting for idle participating writers and stable Git state"
-			if recoveryGit.ActiveOperation != "" {
+			if gitErr != nil {
+				detail = "recovery is waiting for stable Git state: " + gitErr.Error()
+			} else if recoveryGit.ActiveOperation != "" {
 				detail = "recovery is waiting for Git state: " + recoveryGit.ActiveOperation
 			}
 			reason := "git_unstable"
-			if idleErr == nil && !idle {
+			if !idle {
 				reason = "resource_busy"
 			}
 			return true, reconcileEnvelope(stdout, "deferred", reason, map[string]any{"import_job_id": job.JobID, "detail": detail})

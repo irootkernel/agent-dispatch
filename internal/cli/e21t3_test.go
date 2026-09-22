@@ -32,6 +32,27 @@ func TestE21T3PreparedJournalReusesDeterministicCommitInputs(t *testing.T) {
 	}
 }
 
+func TestE21MembershipApplyExitCodeMatchesDurableControl(t *testing.T) {
+	tests := []struct {
+		name          string
+		candidateMode string
+		control       sqlite.SyncControlRow
+		want          int
+	}{
+		{name: "normal active", candidateMode: "normal", control: sqlite.SyncControlRow{State: "active", Reason: "none", MembershipMode: "normal"}, want: 0},
+		{name: "normal preserves conflict", candidateMode: "normal", control: sqlite.SyncControlRow{State: "blocked", Reason: "conflict", MembershipMode: "normal"}, want: 14},
+		{name: "normal preserves trust hold", candidateMode: "normal", control: sqlite.SyncControlRow{State: "blocked", Reason: "trust_failure", MembershipMode: "normal"}, want: 30},
+		{name: "emergency remains trust exit", candidateMode: "blocked_emergency", control: sqlite.SyncControlRow{State: "paused", Reason: "operator_pause", MembershipMode: "blocked_emergency"}, want: 30},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := membershipApplyExitCode(test.candidateMode, test.control, 0); got != test.want {
+				t.Fatalf("exit=%d want=%d", got, test.want)
+			}
+		})
+	}
+}
+
 func TestE21T3PublishSignsFrozenSnapshotAndAdmitsDelivery(t *testing.T) {
 	cfg, err := config.Load("../../docs/examples/config.yaml")
 	if err != nil {

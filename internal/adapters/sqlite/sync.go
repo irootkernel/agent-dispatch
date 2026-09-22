@@ -504,14 +504,14 @@ func (s *Store) admitSyncJobOnce(ctx context.Context, in SyncJobInput) (SyncJobR
 			return SyncJobRow{}, false, fmt.Errorf("publication source revision changed: %w", ErrSyncPrecondition)
 		}
 	}
-	var state, controlConfigRevision string
-	if err := tx.QueryRowContext(ctx, `SELECT state, config_revision FROM sync_controls WHERE group_id = ?`, in.GroupID).Scan(&state, &controlConfigRevision); err != nil {
+	var state, membershipMode, controlConfigRevision string
+	if err := tx.QueryRowContext(ctx, `SELECT state, membership_mode, config_revision FROM sync_controls WHERE group_id = ?`, in.GroupID).Scan(&state, &membershipMode, &controlConfigRevision); err != nil {
 		return SyncJobRow{}, false, err
 	}
 	if in.ConfigRevision != "" && controlConfigRevision != in.ConfigRevision {
 		return SyncJobRow{}, false, fmt.Errorf("control configuration revision changed: %w", ErrSyncPrecondition)
 	}
-	if in.Kind == "publication" && in.PublicationResourceID != "" && state != "active" {
+	if in.Kind == "publication" && in.PublicationResourceID != "" && (state != "active" || membershipMode != "normal") {
 		return SyncJobRow{}, false, fmt.Errorf("sync group %s is %s: %w", in.GroupID, state, ErrSyncControlHeld)
 	}
 	var pending int
@@ -581,12 +581,7 @@ func (s *Store) claimSyncJob(ctx context.Context, jobID, owner, expectedConfigRe
 			controllerRepair = record.ControllerOnly
 		}
 	}
-	allowedRepair := allowMembershipRepair && controlState == "blocked" && row.Kind == "membership" && controlMembershipMode == "blocked_emergency"
-	if controlMembershipMode == "normal" {
-		allowedRepair = allowMembershipRepair && controlState == "blocked" &&
-			((row.Kind == "checkpoint" && (controlReason == "conflict" || controlReason == "trust_failure" || controlReason == "recovery_required")) ||
-				(controllerRepair && (controlReason == "conflict" || controlReason == "trust_failure" || controlReason == "recovery_required")))
-	}
+	allowedRepair := allowMembershipRepair && administrationRepairAllowed(row.Kind, controllerRepair, controlState, controlReason, controlMembershipMode)
 	if controlState != "active" && !allowedRepair {
 		return SyncJobRow{}, fmt.Errorf("sync group %s is %s: %w", row.GroupID, controlState, ErrSyncControlHeld)
 	}
@@ -1046,16 +1041,15 @@ func (s *Store) ReopenDeferredImport(ctx context.Context, jobID, expectedConfigR
 	if err != nil {
 		return SyncJobRow{}, err
 	}
-	var controlState, controlReason, controlRevision string
-	if err := tx.QueryRowContext(ctx, `SELECT state,reason,config_revision FROM sync_controls WHERE group_id=?`, row.GroupID).Scan(&controlState, &controlReason, &controlRevision); err != nil {
+	var controlState, controlReason, controlMembershipMode, controlRevision string
+	if err := tx.QueryRowContext(ctx, `SELECT state,reason,membership_mode,config_revision FROM sync_controls WHERE group_id=?`, row.GroupID).Scan(&controlState, &controlReason, &controlMembershipMode, &controlRevision); err != nil {
 		return SyncJobRow{}, err
 	}
-	var admitted syncrecords.Import
-	if err := json.Unmarshal([]byte(row.PayloadJSON), &admitted); err != nil || admitted.State != "validated" || admitted.Reason != "none" {
+	admitted, err := syncrecords.DecodeImport([]byte(row.PayloadJSON))
+	if err != nil || admitted.State != "validated" || admitted.Reason != "none" {
 		return SyncJobRow{}, ErrSyncPrecondition
 	}
-	controllerRepair := admitted.ControllerOnly && controlState == "blocked" &&
-		(controlReason == "conflict" || controlReason == "trust_failure" || controlReason == "recovery_required")
+	controllerRepair := administrationRepairAllowed(row.Kind, admitted.ControllerOnly, controlState, controlReason, controlMembershipMode)
 	if row.Kind != "import" || row.State != "deferred" || row.ResolvedAt == "" || row.ClaimOwner != "" || (controlState != "active" && !controllerRepair) || controlRevision != expectedConfigRevision {
 		return SyncJobRow{}, ErrSyncPrecondition
 	}
@@ -1083,6 +1077,17 @@ func (s *Store) ReopenDeferredImport(ctx context.Context, jobID, expectedConfigR
 		return SyncJobRow{}, err
 	}
 	return row, nil
+}
+
+func administrationRepairAllowed(kind string, controllerOnly bool, state, reason, membershipMode string) bool {
+	if state != "blocked" {
+		return false
+	}
+	if kind == "membership" {
+		return membershipMode == "blocked_emergency"
+	}
+	strongerHold := reason == "conflict" || reason == "trust_failure" || reason == "recovery_required"
+	return strongerHold && (kind == "checkpoint" || (kind == "import" && controllerOnly))
 }
 
 // FinishImportJob atomically marks exact effects applied, advances path facts

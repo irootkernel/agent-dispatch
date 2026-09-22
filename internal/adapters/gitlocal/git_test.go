@@ -266,6 +266,23 @@ func TestRemoteBindingRejectsRepositoryURLRewrites(t *testing.T) {
 	}
 }
 
+func TestRemoteBindingRejectsURLRewriteKeyContainingSpace(t *testing.T) {
+	repo := initRepository(t)
+	gitRun(t, repo, "remote", "add", "origin", "ssh://git@example.com/repo")
+	gitRun(t, repo, "config", "url.ssh://git@evil.example/a b.insteadOf", "ssh://git@example.com/")
+	digest, _, err := config.RemoteRepositoryDigest("ssh://git@example.com/repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := New(repo, Limits{Timeout: 2 * time.Second, MaxOutput: 64 << 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.RemoteRef(context.Background(), "origin", "refs/heads/main", digest); err == nil || !strings.Contains(err.Error(), "URL rewrite") {
+		t.Fatalf("URL rewrite with whitespace in its key was accepted: %v", err)
+	}
+}
+
 func TestRemoteBindingRejectsWorktreePushURLRewrite(t *testing.T) {
 	repo := initRepository(t)
 	gitRun(t, repo, "config", "extensions.worktreeConfig", "true")
@@ -300,6 +317,9 @@ func TestPushPreservesRemoteBindingFailure(t *testing.T) {
 	result := client.PushFastForward(context.Background(), "origin", "refs/agent-dispatch/content/wiki-pair", head, head, digest)
 	if !errors.Is(result.Underlying, ErrRemoteBinding) {
 		t.Fatalf("push binding error = %+v", result)
+	}
+	if result.State != PushRejected {
+		t.Fatalf("binding failure state=%s want=%s", result.State, PushRejected)
 	}
 }
 

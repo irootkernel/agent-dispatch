@@ -113,6 +113,9 @@ func ValidateFiles(cfg *config.Config, resourceID string, files map[string][]byt
 	}
 	aliases := map[string]string{}
 	for path := range files {
+		if reservedMetadataPath(path) {
+			return fmt.Errorf("remote content path %q targets reserved sync or Git metadata", path)
+		}
 		included, err := governedMarkdown(path, engines)
 		if err != nil {
 			return err
@@ -143,6 +146,9 @@ func ValidateTransition(cfg *config.Config, resourceID string, before, after map
 	for path := range before {
 		if _, present := after[path]; present {
 			continue
+		}
+		if reservedMetadataPath(path) {
+			return fmt.Errorf("remote content deletion targets reserved sync or Git metadata path %q", path)
 		}
 		if err := rejectProtectedPath(path, engines); err != nil {
 			return fmt.Errorf("remote content deletion is not allowed: %w", err)
@@ -248,7 +254,7 @@ func captureOnce(resolver *localfs.Resolver, engines []routeEngines, max int64) 
 		rel = filepath.ToSlash(rel)
 		policyPath := rel
 		if d.IsDir() {
-			if rel == ".git" || rel == ".agent-dispatch-sync" {
+			if reservedMetadataPath(rel) {
 				return fs.SkipDir
 			}
 			return nil
@@ -301,6 +307,16 @@ func captureOnce(resolver *localfs.Resolver, engines []routeEngines, max int64) 
 		return nil, err
 	}
 	return out, nil
+}
+
+func reservedMetadataPath(path string) bool {
+	path = filepath.ToSlash(path)
+	first := path
+	if slash := strings.IndexByte(path, '/'); slash >= 0 {
+		first = path[:slash]
+	}
+	identity := records.PortablePathIdentity(first)
+	return identity == ".git" || identity == ".agent-dispatch-sync"
 }
 
 func sortedRouteIDs(cfg *config.Config) []string {

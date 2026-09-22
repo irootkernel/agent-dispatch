@@ -386,7 +386,7 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 				return true, syncMembershipError(stderr, "sync publish", errors.New("local content ref moved during publication recovery"), 14)
 			}
 			if err := client.UpdateRefExpected(requestCtx(), s.ContentRef, candidate, publication.BaseCommit); err != nil {
-				return true, syncMembershipError(stderr, "sync publish", err, 14)
+				return true, syncMembershipError(stderr, "sync publish", fmt.Errorf("remote publication is confirmed but the local content ref did not move: %w", err), 13)
 			}
 		}
 		nudge := syncrecords.Nudge{SchemaVersion: syncrecords.NudgeSchema, GroupID: s.GroupID, PublicationID: publication.PublicationID, Sender: self.InstanceID, Receiver: peer.InstanceID, MembershipRevision: membership, ContentRef: s.ContentRef, TargetCommit: candidate}

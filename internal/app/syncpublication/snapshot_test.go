@@ -191,6 +191,26 @@ func TestValidateTransitionRejectsProtectedDeletion(t *testing.T) {
 	}
 }
 
+func TestValidateFilesRejectsReservedMetadataAliases(t *testing.T) {
+	cfg := snapshotConfig(t.TempDir())
+	for _, path := range []string{".Git/note.md", ".Agent-Dispatch-Sync/state.md"} {
+		if err := ValidateFiles(cfg, "vault-main", map[string][]byte{path: []byte("hostile")}); err == nil {
+			t.Fatalf("reserved metadata alias %q was accepted", path)
+		}
+	}
+}
+
+func TestValidateTransitionRejectsImmutableDeletion(t *testing.T) {
+	cfg := snapshotConfig(t.TempDir())
+	route := cfg.Routes["route-main"]
+	route.Policy.Immutable = []string{"Straße.md"}
+	cfg.Routes["route-main"] = route
+	before := map[string][]byte{"strasse.md": []byte("immutable")}
+	if err := ValidateTransition(cfg, "vault-main", before, map[string][]byte{}); err == nil {
+		t.Fatal("case-folded immutable deletion was accepted")
+	}
+}
+
 func snapshotConfig(root string) *config.Config {
 	return &config.Config{Resources: map[string]config.Resource{"vault-main": {Type: "directory", Root: root, FileScope: "markdown"}}, Routes: map[string]config.Route{"route-main": {Source: config.Source{Resource: "vault-main", Include: []string{"**/*.md", "*.md"}, Exclude: []string{"private.md"}}, Policy: config.Policy{Protected: []string{}, Immutable: []string{}}}}}
 }

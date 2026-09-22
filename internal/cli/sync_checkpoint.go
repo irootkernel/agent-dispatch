@@ -208,12 +208,13 @@ func runSyncCheckpointApply(args []string, stdout, stderr io.Writer) int {
 		switch classifySyncPush(push.State, push.RemoteOID, predecessor, candidate) {
 		case syncPushRetryable:
 			return finishCheckpointRetryable(stderr, store, job, owner, candidate, push.RemoteOID, push.State)
-		case syncPushConflict, syncPushUnknown:
-			state, outcome := "uncertain", "effect_unknown"
-			if classifySyncPush(push.State, push.RemoteOID, predecessor, candidate) == syncPushConflict {
-				state, outcome = "blocked", "blocked"
+		case syncPushConflict:
+			if _, err := store.HoldSyncControl(requestCtx(), s.GroupID, "conflict", configRevision, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+				return syncStoreError(stderr, command, err)
 			}
-			return finishCheckpointFailure(stderr, store, job, owner, state, outcome, fmt.Sprintf("checkpoint push %s", push.State))
+			return finishCheckpointFailure(stderr, store, job, owner, "blocked", "blocked", fmt.Sprintf("checkpoint push %s; review history and create a conflict-resolution checkpoint plan", push.State))
+		case syncPushUnknown:
+			return finishCheckpointFailure(stderr, store, job, owner, "uncertain", "effect_unknown", fmt.Sprintf("checkpoint push %s", push.State))
 		}
 	}
 	if err := client.UpdateRefExpected(requestCtx(), s.ContentRef, candidate, predecessor); err != nil {
@@ -309,7 +310,7 @@ func recoverCheckpointApply(stdout, stderr io.Writer, store *sqlite.Store, clien
 				return true, syncMembershipError(stderr, "sync checkpoint apply", errors.New("local content ref moved during checkpoint recovery"), 14)
 			}
 			if updateErr := client.UpdateRefExpected(requestCtx(), s.ContentRef, candidate, plan.ExpectedContentPredecessor); updateErr != nil {
-				return true, syncMembershipError(stderr, "sync checkpoint apply", updateErr, 14)
+				return true, syncMembershipError(stderr, "sync checkpoint apply", fmt.Errorf("remote checkpoint is confirmed but the local content ref did not move: %w", updateErr), 13)
 			}
 		}
 		nowText := now.Format(time.RFC3339Nano)
@@ -319,6 +320,10 @@ func recoverCheckpointApply(stdout, stderr io.Writer, store *sqlite.Store, clien
 		return true, writeEnvelope(stdout, "sync checkpoint apply", map[string]any{"schema_version": "agent-dispatch.sync-checkpoint-apply-result/v1", "state": "applied", "plan_id": plan.PlanID, "checkpoint_id": plan.ProposedCheckpoint.CheckpointID, "content_revision": candidate, "recovered": true, "idempotent": true, "side_effects": []string{"local_content_ref_reconciled", "state_committed"}})
 	}
 	if remote != plan.ExpectedContentPredecessor {
+		revision, _ := config.SyncRevision(cfg)
+		if _, holdErr := store.HoldSyncControl(requestCtx(), s.GroupID, "conflict", revision, now.Format(time.RFC3339Nano)); holdErr != nil {
+			return true, syncStoreError(stderr, "sync checkpoint apply", holdErr)
+		}
 		return true, syncMembershipError(stderr, "sync checkpoint apply", errors.New("checkpoint recovery found a moved remote content revision; review history and create a new conflict-resolution checkpoint plan"), 14)
 	}
 	nowText := now.Format(time.RFC3339Nano)

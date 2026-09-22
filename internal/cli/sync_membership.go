@@ -130,7 +130,11 @@ func runSyncMembershipApply(args []string, stdout, stderr io.Writer) int {
 				_, embeddedRaw, readErr := client.ReadMembershipCommit(requestCtx(), head)
 				embedded, decodeErr := syncrecords.DecodePlan(embeddedRaw)
 				if historyErr == nil && readErr == nil && decodeErr == nil && embedded.PlanID == plan.PlanID {
-					return membershipApplyResult(stdout, command, plan, head)
+					control, controlErr := concrete.LoadSyncControl(requestCtx(), group)
+					if controlErr != nil {
+						return syncStoreError(stderr, command, controlErr)
+					}
+					return membershipApplyResult(stdout, command, plan, head, control)
 				}
 			}
 		}
@@ -317,10 +321,7 @@ func runSyncMembershipApply(args []string, stdout, stderr io.Writer) int {
 			"membership_revision": candidate, "membership_mode": control.MembershipMode, "control_state": control.State, "control_reason": control.Reason,
 			"idempotent": false, "side_effects": []string{"git_objects_written", "remote_membership_ref_updated", "local_membership_ref_updated", "state_committed"},
 		})
-		if plan.ProposedMembership.Mode == "blocked_emergency" || control.State == "blocked" {
-			return 30
-		}
-		return resultCode
+		return membershipApplyExitCode(plan.ProposedMembership.Mode, control, resultCode)
 	case syncPushRetryable:
 		reason := "membership push was rejected before the approved remote moved; rerun sync membership apply"
 		return finishClaimedMembershipRetryable(stderr, concrete, job, owner, map[string]any{"candidate": candidate, "remote": push.RemoteOID, "push_state": push.State, "reason": reason}, terminalNow)
@@ -374,7 +375,11 @@ func recoverConfirmedMembership(stdout, stderr io.Writer, store *sqlite.Store, c
 			}
 		}
 		if err := client.UpdateRefExpected(requestCtx(), syncCfg.MembershipRef, candidate, predecessor); err != nil {
-			return true, syncMembershipError(stderr, "sync membership apply", err, 14)
+			message := fmt.Errorf("remote membership is confirmed but the local membership ref did not move: %w", err)
+			if plan.ProposedMembership.Mode == "blocked_emergency" {
+				return true, syncMembershipError(stderr, "sync membership apply", fmt.Errorf("membership_adoption_incomplete: %w", message), 30)
+			}
+			return true, syncMembershipError(stderr, "sync membership apply", message, 13)
 		}
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -390,10 +395,7 @@ func recoverConfirmedMembership(stdout, stderr io.Writer, store *sqlite.Store, c
 		"membership_revision": candidate, "membership_mode": control.MembershipMode, "control_state": control.State, "control_reason": control.Reason,
 		"recovered": true, "idempotent": true, "side_effects": []string{"local_membership_ref_reconciled", "state_committed"},
 	})
-	if plan.ProposedMembership.Mode == "blocked_emergency" || control.State == "blocked" {
-		return true, 30
-	}
-	return true, code
+	return true, membershipApplyExitCode(plan.ProposedMembership.Mode, control, code)
 }
 
 func finishClaimedMembershipRetryable(stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, owner string, evidence map[string]any, now time.Time) int {
@@ -408,8 +410,23 @@ func finishClaimedMembershipRetryable(stderr io.Writer, store *sqlite.Store, job
 	return 10
 }
 
-func membershipApplyResult(stdout io.Writer, command string, plan syncrecords.MembershipPlan, revision string) int {
-	return writeEnvelope(stdout, command, map[string]any{"schema_version": "agent-dispatch.sync-membership-apply-result/v1", "state": "applied", "plan_id": plan.PlanID, "membership_revision": revision, "idempotent": true, "side_effects": []string{}})
+func membershipApplyResult(stdout io.Writer, command string, plan syncrecords.MembershipPlan, revision string, control sqlite.SyncControlRow) int {
+	code := writeEnvelope(stdout, command, map[string]any{
+		"schema_version": "agent-dispatch.sync-membership-apply-result/v1", "state": "applied", "plan_id": plan.PlanID,
+		"membership_revision": revision, "membership_mode": control.MembershipMode, "control_state": control.State,
+		"control_reason": control.Reason, "idempotent": true, "side_effects": []string{},
+	})
+	return membershipApplyExitCode(plan.ProposedMembership.Mode, control, code)
+}
+
+func membershipApplyExitCode(candidateMode string, control sqlite.SyncControlRow, successCode int) int {
+	if candidateMode == "blocked_emergency" {
+		return 30
+	}
+	if control.State == "blocked" {
+		return syncControlHoldExitCode(control.MembershipMode, control.Reason)
+	}
+	return successCode
 }
 
 func finishMembershipBeforeEffect(stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, reason string, retryable bool) int {

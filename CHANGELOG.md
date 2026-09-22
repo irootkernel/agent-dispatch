@@ -37,10 +37,12 @@ This file records concise shipped outcomes and pending changes.
   emergency adoption as a trust-blocked result in the adopting command.
 - Normalize policy and sync alias comparisons with NFC, apply Unicode case
   folding to portable aliases and excluded/protected/immutable sync paths on
-  every host, refuse protected or immutable deletions, and reject
-  repository-local and worktree URL rewrite rules before remote access.
+  every host, refuse protected or immutable deletions and metadata aliases,
+  and reject effective URL rewrite rules before remote access.
 - Apply fetched emergency membership before any protected effect, reopen safe
-  controller-only retries, and distinguish active writers from unstable Git.
+  checkpoint and controller-only retries through stronger holds, preserve the
+  emergency latch after checkpoint recovery, and distinguish active writers
+  from unstable Git.
 - Cover publication no-op, confirmed-candidate recovery, and fast-forward-loss
   behavior through the public sync commands.
 - Isolate real-Watchman test legs on a disposable daemon so repeated test runs

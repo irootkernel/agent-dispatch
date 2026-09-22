@@ -199,10 +199,12 @@ routes:
 - `**` recursive matching is required.
 - Exclude patterns are directory-aware (E10-T2, PTH-009): a pattern that matches a path prefix at a segment boundary excludes everything inside that directory, so an exact-directory exclusion (`Secrets`) covers its whole subtree exactly like a recursive one (`Secrets/**`), and a file or glob pattern also covers a same-named directory.
 - Exclude takes precedence over include.
-- Protected and immutable patterns are evaluated after include/exclude.
+- Ordinary route classification evaluates protected and immutable patterns
+  after include/exclude.
 - Sync publication and import additionally match excluded, protected, and
   immutable paths under Unicode case folding on every host so a portable alias
-  cannot bypass a safety rule.
+  cannot bypass a safety rule. A sync protected or immutable match fails the
+  operation even when the same path also matches an exclusion.
 - Pattern behavior is explicit per host through the resolved case mode (supported hosts are `darwin/arm64`, `linux/amd64`, and `linux/arm64` under D-029; the resolver stays host-derived so each platform carries its own explicit mode).
 - Case sensitivity follows the configured policy, not an accidental host filesystem behavior. v0.1 default is `filesystem`, and the resolved behavior is recorded in the route revision.
 

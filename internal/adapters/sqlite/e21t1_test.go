@@ -320,6 +320,57 @@ func TestE21MembershipEmergencyPreservesStrongerHold(t *testing.T) {
 	}
 }
 
+func TestE21PausedEmergencyAllowsNormalMembershipRepairClaim(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	control, err := s.EnsureSyncControl(ctx, "wiki-pair", "cfg-1", syncT0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	control, err = s.SetSyncControl(ctx, "wiki-pair", control.Revision, "paused", "cfg-1", syncT1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	control, err = s.ReconcileAdoptedMembership(ctx, "wiki-pair", "blocked_emergency", "membership-emergency", "cfg-1", syncT2)
+	if err != nil || control.State != "paused" || control.MembershipMode != "blocked_emergency" {
+		t.Fatalf("paused emergency control=%+v err=%v", control, err)
+	}
+	job, _, err := s.AdmitSyncJob(ctx, SyncJobInput{JobID: "paused-membership-repair", GroupID: "wiki-pair", Kind: "membership", LogicalKey: "paused-membership-repair", InitialState: "planned", PayloadJSON: `{}`, ConfigRevision: "cfg-1", QueueLimit: 1000, Now: syncT2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ClaimSyncAdministrationJob(ctx, job.JobID, "administrator", "cfg-1", syncT2, syncT3); err != nil {
+		t.Fatalf("normal membership repair could not cross paused emergency posture: %v", err)
+	}
+}
+
+func TestE21RemoteMoveBlocksUnclaimedSyncJob(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if _, err := s.EnsureSyncControl(ctx, "wiki-pair", "cfg-1", syncT0); err != nil {
+		t.Fatal(err)
+	}
+	job, _, err := s.AdmitSyncJob(ctx, SyncJobInput{JobID: "checkpoint-remote-move", GroupID: "wiki-pair", Kind: "checkpoint", LogicalKey: "checkpoint-remote-move", InitialState: "planned", PayloadJSON: `{"plan_id":"checkpoint-remote-move"}`, ConfigRevision: "cfg-1", QueueLimit: 1000, Now: syncT0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	job, err = s.ClaimSyncAdministrationJob(ctx, job.JobID, "checkpoint-owner", "cfg-1", syncT0, syncT1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FinishSyncJob(ctx, job.JobID, "checkpoint-owner", job.Fence, "planned", SyncJobKeepUnresolved, SyncJournalEntry{JournalID: "checkpoint-candidate-preserved", JobID: job.JobID, Fence: job.Fence, Phase: "checkpoint", Outcome: "effect_not_started", EvidenceJSON: `{"candidate":"1111111111111111111111111111111111111111"}`, RecordedAt: syncT0}, syncT0); err != nil {
+		t.Fatal(err)
+	}
+	journal := SyncJournalEntry{JournalID: "checkpoint-remote-move-blocked", JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "blocked", EvidenceJSON: `{"candidate":"1111111111111111111111111111111111111111","remote":"2222222222222222222222222222222222222222"}`, RecordedAt: syncT1}
+	if err := s.BlockSyncJobAfterRemoteMove(ctx, job.JobID, job.Fence, journal, syncT1); err != nil {
+		t.Fatal(err)
+	}
+	blocked, found, err := s.FindSyncJob(ctx, "wiki-pair", "checkpoint", "checkpoint-remote-move")
+	if err != nil || !found || blocked.State != "blocked" || blocked.ResolvedAt != "" || !blocked.RetainUntilResolved {
+		t.Fatalf("blocked=%+v found=%v err=%v", blocked, found, err)
+	}
+}
+
 func TestE21BlockedResolutionIsKindScopedAndJournaled(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()

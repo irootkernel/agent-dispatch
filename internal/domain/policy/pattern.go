@@ -100,6 +100,16 @@ type Engine struct {
 // CaseSensitive or CaseInsensitive before compiling, so engine behavior
 // is deterministic and recorded in the route revision.
 func NewEngine(include, exclude, protected, immutable []string, mode CaseMode) (*Engine, error) {
+	return newEngine(include, exclude, protected, immutable, mode, true)
+}
+
+// NewProtectionEngine compiles protected and immutable patterns without the
+// structural exclusion set, so an exclusion can never hide a protection hit.
+func NewProtectionEngine(protected, immutable []string, mode CaseMode) (*Engine, error) {
+	return newEngine([]string{"**"}, nil, protected, immutable, mode, false)
+}
+
+func newEngine(include, exclude, protected, immutable []string, mode CaseMode, withDefaults bool) (*Engine, error) {
 	switch mode {
 	case CaseSensitive, CaseInsensitive:
 	default:
@@ -119,12 +129,16 @@ func NewEngine(include, exclude, protected, immutable []string, mode CaseMode) (
 	if e.immutable, err = compileAll(immutable, "immutable"); err != nil {
 		return nil, err
 	}
-	// Default exclusions are structural and cannot be disabled (PTH-007).
-	defaults, err := compileAll(DefaultExclusions, "default exclusion")
-	if err != nil {
-		return nil, err
+	if withDefaults {
+		// Default exclusions are structural and cannot be disabled for ordinary
+		// classification (PTH-007). Protection-only classification deliberately
+		// omits them so structural exclusions cannot mask immutable content.
+		defaults, err := compileAll(DefaultExclusions, "default exclusion")
+		if err != nil {
+			return nil, err
+		}
+		e.exclude = append(e.exclude, defaults...)
 	}
-	e.exclude = append(e.exclude, defaults...)
 	if e.fold {
 		// Fold only the matching text; `text` keeps the configured form
 		// so Patterns() reports what the operator wrote.

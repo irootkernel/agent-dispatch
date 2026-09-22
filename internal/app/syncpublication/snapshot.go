@@ -179,7 +179,7 @@ func buildRouteEngines(cfg *config.Config, resourceID string) ([]routeEngines, p
 		if err != nil {
 			return nil, mode, err
 		}
-		protected, err := policy.NewEngine([]string{"**"}, nil, route.Policy.Protected, route.Policy.Immutable, policy.CaseInsensitive)
+		protected, err := policy.NewProtectionEngine(route.Policy.Protected, route.Policy.Immutable, policy.CaseInsensitive)
 		if err != nil {
 			return nil, mode, err
 		}

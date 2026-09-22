@@ -275,7 +275,10 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 	} else if control.State == "paused" {
 		return reconcileEnvelope(stdout, "deferred", "operator_pause", map[string]any{"target_commit": target, "membership_mode": control.MembershipMode, "detail": "sync is paused; run sync resume after review"})
 	} else if control.State == "blocked" && !(len(effects) == 0 && (control.Reason == "conflict" || control.Reason == "trust_failure" || control.Reason == "recovery_required")) {
-		return reconcileEnvelopeCode(stdout, "blocked", control.Reason, map[string]any{"target_commit": target, "detail": "the existing sync safety hold must be resolved before Markdown import"}, 14)
+		return reconcileEnvelopeCode(stdout, "blocked", control.Reason, map[string]any{
+			"target_commit": target, "membership_mode": control.MembershipMode, "control_state": control.State,
+			"control_reason": control.Reason, "detail": "the existing sync safety hold must be resolved before Markdown import",
+		}, syncControlHoldExitCode(control.MembershipMode, control.Reason))
 	}
 	if len(effects) == 0 {
 		if reason != "none" {
@@ -520,7 +523,11 @@ func recoverPendingImport(stdout, stderr io.Writer, cfg *config.Config, s *confi
 					return true, syncStoreError(stderr, "sync reconcile", err)
 				}
 				checkpointReconciled := false
-				if control, loadErr := store.LoadSyncControl(requestCtx(), s.GroupID); loadErr == nil && control.State == "blocked" && contentHeadAddsCheckpoint(client, record.TargetCommit) {
+				control, loadErr := store.LoadSyncControl(requestCtx(), s.GroupID)
+				if loadErr != nil {
+					return true, syncStoreError(stderr, "sync reconcile", loadErr)
+				}
+				if control.State == "blocked" && contentHeadAddsCheckpoint(client, record.TargetCommit) {
 					reconciled, reconcileErr := store.ReconcileSyncControlCheckpoint(requestCtx(), s.GroupID, control.Revision, revision, record.TargetCommit, now)
 					if reconcileErr != nil {
 						return true, syncStoreError(stderr, "sync reconcile", reconcileErr)
@@ -529,6 +536,18 @@ func recoverPendingImport(stdout, stderr io.Writer, cfg *config.Config, s *confi
 					if reconciled.State == "blocked" && reconciled.Reason == "membership_emergency" {
 						return true, reconcileEnvelopeCode(stdout, "blocked", reconciled.Reason, map[string]any{"import_state": "recovered", "import_id": record.ImportID, "target_commit": record.TargetCommit, "controller_only": true, "checkpoint_reconciled": true, "membership_mode": reconciled.MembershipMode, "detail": "the checkpoint was reconciled, but protected effects remain frozen until a reviewed normal membership replacement is adopted", "side_effects": []string{"controller_state_confirmed", "state_committed"}}, 30)
 					}
+					control = reconciled
+				}
+				if control.State == "blocked" {
+					return true, reconcileEnvelopeCode(stdout, "blocked", control.Reason, map[string]any{
+						"import_state": "recovered", "import_id": record.ImportID, "target_commit": record.TargetCommit,
+						"controller_only": true, "checkpoint_reconciled": checkpointReconciled, "membership_mode": control.MembershipMode,
+						"control_state": control.State, "control_reason": control.Reason, "detail": "controller state recovered while the sync safety hold remains",
+						"side_effects": []string{"controller_state_confirmed", "state_committed"},
+					}, syncControlHoldExitCode(control.MembershipMode, control.Reason))
+				}
+				if control.State == "paused" {
+					return true, reconcileEnvelope(stdout, "deferred", "operator_pause", map[string]any{"import_state": "recovered", "import_id": record.ImportID, "membership_mode": control.MembershipMode, "detail": "controller state recovered while the operator pause remains"})
 				}
 				return true, reconcileEnvelope(stdout, "recovered", "none", map[string]any{"import_id": record.ImportID, "target_commit": record.TargetCommit, "controller_only": true, "checkpoint_reconciled": checkpointReconciled, "side_effects": []string{"controller_state_confirmed", "state_committed"}})
 			}

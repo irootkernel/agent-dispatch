@@ -1080,14 +1080,47 @@ func (s *Store) ReopenDeferredImport(ctx context.Context, jobID, expectedConfigR
 }
 
 func administrationRepairAllowed(kind string, controllerOnly bool, state, reason, membershipMode string) bool {
+	if kind == "membership" {
+		return membershipMode == "blocked_emergency" && (state == "blocked" || state == "paused")
+	}
 	if state != "blocked" {
 		return false
 	}
-	if kind == "membership" {
-		return membershipMode == "blocked_emergency"
-	}
 	strongerHold := reason == "conflict" || reason == "trust_failure" || reason == "recovery_required"
 	return strongerHold && (kind == "checkpoint" || (kind == "import" && controllerOnly))
+}
+
+// BlockSyncJobAfterRemoteMove records a measured predecessor loss on re-entry.
+// It preserves the signed candidate and refuses to steal an unexpired claim.
+func (s *Store) BlockSyncJobAfterRemoteMove(ctx context.Context, jobID string, expectedFence int64, journal SyncJournalEntry, now string) error {
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	row, err := loadSyncJob(ctx, tx, jobID)
+	if err != nil {
+		return err
+	}
+	allowed := (row.Kind == "publication" && (row.State == "signed" || row.State == "push_pending" || row.State == "uncertain")) ||
+		(row.Kind == "checkpoint" && (row.State == "planned" || row.State == "applying" || row.State == "uncertain"))
+	if !allowed || row.Fence != expectedFence || row.ResolvedAt != "" || (row.ClaimOwner != "" && !timeBefore(row.ClaimExpiresAt, now)) {
+		return ErrSyncPrecondition
+	}
+	if journal.JobID != jobID || journal.Fence != expectedFence || journal.Phase != "claim_recovery" || journal.Outcome != "blocked" || journal.RecordedAt != now || journal.JournalID == "" {
+		return fmt.Errorf("remote-move recovery evidence does not bind the job")
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO sync_journal_entries (journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES (?,?,?,?,?,?,?)`, journal.JournalID, journal.JobID, journal.Fence, journal.Phase, journal.Outcome, journal.EvidenceJSON, journal.RecordedAt); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE sync_jobs SET state='blocked',claim_owner=NULL,claim_expires_at=NULL,retain_until_resolved=1,resolved_at=NULL,updated_at=? WHERE job_id=? AND fence=? AND resolved_at IS NULL`, now, jobID, expectedFence)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return ErrSyncPrecondition
+	}
+	return tx.Commit()
 }
 
 // FinishImportJob atomically marks exact effects applied, advances path facts

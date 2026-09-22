@@ -224,10 +224,9 @@ func runSyncPublish(args []string, stdout, stderr io.Writer) int {
 	confirmed := remoteErr == nil && remoteNow == candidate
 	if !confirmed {
 		push := client.PushFastForward(requestCtx(), syncCfg.RemoteName, syncCfg.ContentRef, candidate, base, syncCfg.RemoteRepositoryDigest)
-		if errors.Is(push.Underlying, gitlocal.ErrRemoteBinding) {
+		switch classifySyncPush(push.State, push.RemoteOID, base, candidate, push.Underlying) {
+		case syncPushTrust:
 			return finishClaimedSyncTrustFailure(stderr, command, store, job, owner, "signed", "publication", push.Underlying, map[string]any{"candidate": candidate})
-		}
-		switch classifySyncPush(push.State, push.RemoteOID, base, candidate) {
 		case syncPushRetryable:
 			evidence := map[string]any{"candidate": candidate, "remote": push.RemoteOID, "push_state": push.State}
 			return finishPublicationRetryable(stderr, store, job, owner, evidence, "content push was rejected before the approved remote moved; rerun sync publish")
@@ -314,7 +313,25 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 		}
 		recoveryOwner := ""
 		if candidate != remote {
-			if remote != publication.BaseCommit || (job.State != "signed" && job.State != "uncertain") {
+			if remote != publication.BaseCommit {
+				now := time.Now().UTC()
+				if job.ClaimOwner != "" {
+					expires, _ := time.Parse(time.RFC3339Nano, job.ClaimExpiresAt)
+					if expires.After(now) {
+						return true, syncMembershipError(stderr, "sync publish", errors.New("pending publication still has an unexpired claim"), 14)
+					}
+				}
+				nowText := now.Format(time.RFC3339Nano)
+				evidence := map[string]any{"candidate": candidate, "remote": remote, "base": publication.BaseCommit, "reason": "remote predecessor moved during publication recovery"}
+				if err := store.BlockSyncJobAfterRemoteMove(requestCtx(), job.JobID, job.Fence, sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "blocked", EvidenceJSON: mustJSON(evidence), RecordedAt: nowText}, nowText); err != nil {
+					return true, syncStoreError(stderr, "sync publish", err)
+				}
+				if _, err := store.HoldSyncControl(requestCtx(), s.GroupID, "conflict", revision, nowText); err != nil {
+					return true, syncStoreError(stderr, "sync publish", err)
+				}
+				return true, syncMembershipError(stderr, "sync publish", errors.New("publication recovery found a moved remote content revision; review history and create a conflict-resolution checkpoint plan"), 14)
+			}
+			if job.State != "signed" && job.State != "uncertain" {
 				continue
 			}
 			now := time.Now().UTC()
@@ -346,10 +363,9 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 				return true, syncStoreError(stderr, "sync publish", claimErr)
 			}
 			push := client.PushFastForward(requestCtx(), s.RemoteName, s.ContentRef, candidate, publication.BaseCommit, s.RemoteRepositoryDigest)
-			if errors.Is(push.Underlying, gitlocal.ErrRemoteBinding) {
+			switch classifySyncPush(push.State, push.RemoteOID, publication.BaseCommit, candidate, push.Underlying) {
+			case syncPushTrust:
 				return true, finishClaimedSyncTrustFailure(stderr, "sync publish", store, claimed, owner, "signed", "publication", push.Underlying, map[string]any{"candidate": candidate, "recovered": true})
-			}
-			switch classifySyncPush(push.State, push.RemoteOID, publication.BaseCommit, candidate) {
 			case syncPushRetryable:
 				evidence := map[string]any{"candidate": candidate, "remote": push.RemoteOID, "push_state": push.State, "recovered": true}
 				return true, finishPublicationRetryable(stderr, store, claimed, owner, evidence, "content push was rejected before the approved remote moved; rerun sync publish")
@@ -529,6 +545,9 @@ func verifyContentHead(client *gitlocal.Client, history syncmembership.History, 
 	files, err := client.ReadContentFiles(requestCtx(), head)
 	if err != nil {
 		return err
+	}
+	if err := syncpublication.ValidateFiles(cfg, s.Resource, files); err != nil {
+		return fmt.Errorf("content head violates local path safety: %w", err)
 	}
 	digest, err := snapshotDigestFromFiles(files)
 	if err != nil {

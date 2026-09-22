@@ -202,10 +202,9 @@ func runSyncCheckpointApply(args []string, stdout, stderr io.Writer) int {
 	remoteNow, remoteErr := client.RemoteRef(requestCtx(), s.RemoteName, s.ContentRef, s.RemoteRepositoryDigest)
 	if remoteErr != nil || remoteNow != candidate {
 		push := client.PushFastForward(requestCtx(), s.RemoteName, s.ContentRef, candidate, predecessor, s.RemoteRepositoryDigest)
-		if errors.Is(push.Underlying, gitlocal.ErrRemoteBinding) {
+		switch classifySyncPush(push.State, push.RemoteOID, predecessor, candidate, push.Underlying) {
+		case syncPushTrust:
 			return finishClaimedSyncTrustFailure(stderr, command, store, job, owner, "applying", "checkpoint", push.Underlying, map[string]any{"candidate": candidate})
-		}
-		switch classifySyncPush(push.State, push.RemoteOID, predecessor, candidate) {
 		case syncPushRetryable:
 			return finishCheckpointRetryable(stderr, store, job, owner, candidate, push.RemoteOID, push.State)
 		case syncPushConflict:
@@ -320,8 +319,13 @@ func recoverCheckpointApply(stdout, stderr io.Writer, store *sqlite.Store, clien
 		return true, writeEnvelope(stdout, "sync checkpoint apply", map[string]any{"schema_version": "agent-dispatch.sync-checkpoint-apply-result/v1", "state": "applied", "plan_id": plan.PlanID, "checkpoint_id": plan.ProposedCheckpoint.CheckpointID, "content_revision": candidate, "recovered": true, "idempotent": true, "side_effects": []string{"local_content_ref_reconciled", "state_committed"}})
 	}
 	if remote != plan.ExpectedContentPredecessor {
+		nowText := now.Format(time.RFC3339Nano)
+		evidence := map[string]any{"candidate": candidate, "remote": remote, "base": plan.ExpectedContentPredecessor, "reason": "remote predecessor moved during checkpoint recovery"}
+		if err := store.BlockSyncJobAfterRemoteMove(requestCtx(), job.JobID, job.Fence, sqlite.SyncJournalEntry{JournalID: randomSyncID("checkpoint-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "blocked", EvidenceJSON: mustJSON(evidence), RecordedAt: nowText}, nowText); err != nil {
+			return true, syncStoreError(stderr, "sync checkpoint apply", err)
+		}
 		revision, _ := config.SyncRevision(cfg)
-		if _, holdErr := store.HoldSyncControl(requestCtx(), s.GroupID, "conflict", revision, now.Format(time.RFC3339Nano)); holdErr != nil {
+		if _, holdErr := store.HoldSyncControl(requestCtx(), s.GroupID, "conflict", revision, nowText); holdErr != nil {
 			return true, syncStoreError(stderr, "sync checkpoint apply", holdErr)
 		}
 		return true, syncMembershipError(stderr, "sync checkpoint apply", errors.New("checkpoint recovery found a moved remote content revision; review history and create a new conflict-resolution checkpoint plan"), 14)

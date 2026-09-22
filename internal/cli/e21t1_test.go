@@ -174,17 +174,20 @@ func TestE21T1EnabledConfigDoesNotActivateStillReservedGitCommands(t *testing.T)
 func TestE21SameBasePushRejectionIsRetryable(t *testing.T) {
 	base := "1111111111111111111111111111111111111111"
 	candidate := "2222222222222222222222222222222222222222"
-	if got := classifySyncPush(gitlocal.PushRejected, base, base, candidate); got != syncPushRetryable {
+	if got := classifySyncPush(gitlocal.PushRejected, base, base, candidate, nil); got != syncPushRetryable {
 		t.Fatalf("same-base rejection = %v", got)
 	}
-	if got := classifySyncPush(gitlocal.PushRejected, "3333333333333333333333333333333333333333", base, candidate); got != syncPushConflict {
+	if got := classifySyncPush(gitlocal.PushRejected, "3333333333333333333333333333333333333333", base, candidate, nil); got != syncPushConflict {
 		t.Fatalf("changed-base rejection = %v", got)
 	}
-	if got := classifySyncPush(gitlocal.PushNotStarted, "", base, candidate); got != syncPushRetryable {
+	if got := classifySyncPush(gitlocal.PushNotStarted, "", base, candidate, nil); got != syncPushRetryable {
 		t.Fatalf("pre-push measurement failure = %v", got)
 	}
-	if got := classifySyncPush(gitlocal.PushAmbiguous, candidate, base, candidate); got != syncPushConfirmed {
+	if got := classifySyncPush(gitlocal.PushAmbiguous, candidate, base, candidate, nil); got != syncPushConfirmed {
 		t.Fatalf("remote-confirmed candidate = %v", got)
+	}
+	if got := classifySyncPush(gitlocal.PushRejected, "", base, candidate, gitlocal.ErrRemoteBinding); got != syncPushTrust {
+		t.Fatalf("remote binding disposition=%v", got)
 	}
 }
 

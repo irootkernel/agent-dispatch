@@ -295,10 +295,9 @@ func runSyncMembershipApply(args []string, stdout, stderr io.Writer) int {
 	}
 	push := client.PushFastForward(requestCtx(), syncCfg.RemoteName, syncCfg.MembershipRef, candidate, predecessor, syncCfg.RemoteRepositoryDigest)
 	terminalNow := time.Now().UTC()
-	if errors.Is(push.Underlying, gitlocal.ErrRemoteBinding) {
+	switch classifySyncPush(push.State, push.RemoteOID, predecessor, candidate, push.Underlying) {
+	case syncPushTrust:
 		return finishClaimedSyncTrustFailure(stderr, command, concrete, job, owner, "planned", "membership", push.Underlying, map[string]any{"candidate": candidate})
-	}
-	switch classifySyncPush(push.State, push.RemoteOID, predecessor, candidate) {
 	case syncPushConfirmed:
 		if plan.ProposedMembership.Mode == "blocked_emergency" {
 			if _, err := concrete.ReconcileAdoptedMembership(requestCtx(), syncCfg.GroupID, plan.ProposedMembership.Mode, candidate, configRevision, terminalNow.Format(time.RFC3339Nano)); err != nil {

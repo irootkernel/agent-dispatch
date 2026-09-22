@@ -51,10 +51,11 @@ The implementation must verify the resulting journal mode and fail `doctor` if t
 Migration v25 is the current schema head. Migration v23 conservatively reopens
 legacy `blocked` rows that older code marked resolved, v24 makes journal order
 explicit, and v25 persists membership posture separately and assigns every sync
-job a durable creation sequence. A blocked obligation becomes eligible for
-age-based pruning only after exact remote confirmation settles that same job,
-a normal membership replacement resolves a membership job, or an exact
-administrator checkpoint resolves a publication, checkpoint, or import job.
+job a durable creation sequence. Exact remote confirmation, a normal membership
+replacement, or an exact administrator checkpoint may resolve the applicable
+blocked obligation. Resolution makes publication and import jobs eligible for
+the completed-receipt horizon; membership and checkpoint jobs and journals
+remain for the life of the sync group.
 
 Since E12-T2 the single-active slot, the dirty generation, and the follow-up
 chain are keyed on the dispatch's destination lane (`destination_lane_state`,
@@ -234,9 +235,10 @@ transaction, and stale owners cannot append evidence or finish work.
 Control changes use an expected revision. Pausing prevents new claims while an
 existing owner may reach a recorded safe boundary. Resume rebinds the currently
 validated configuration revision and cannot clear a blocked safety reason.
-Resolved rows and their journal children may be pruned after the retention
-cutoff. Rows with `resolved_at` unset or `retain_until_resolved` set remain
-roots. Exact remote confirmation commits the kind-specific terminal journal
-with `resolved_at`; membership replacement and checkpoint reconciliation use a
-per-job `claim_recovery` resolver journal. A formerly blocked row becomes
-eligible only after one of those applicable records commits.
+Resolved publication, delivery, import, and verification rows and their journal
+children may be pruned after the completed-receipt cutoff. Rows with
+`resolved_at` unset or `retain_until_resolved` set remain roots. Exact remote
+confirmation commits the kind-specific terminal journal with `resolved_at`;
+membership replacement and checkpoint reconciliation use a per-job
+`claim_recovery` resolver journal. Resolving membership or checkpoint evidence
+does not make it age-prunable.

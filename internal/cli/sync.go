@@ -273,9 +273,13 @@ const (
 	syncPushRetryable
 	syncPushConflict
 	syncPushUnknown
+	syncPushTrust
 )
 
-func classifySyncPush(state gitlocal.PushState, remote, predecessor, candidate string) syncPushDisposition {
+func classifySyncPush(state gitlocal.PushState, remote, predecessor, candidate string, underlying error) syncPushDisposition {
+	if errors.Is(underlying, gitlocal.ErrRemoteBinding) {
+		return syncPushTrust
+	}
 	if state == gitlocal.PushConfirmed || remote == candidate {
 		return syncPushConfirmed
 	}

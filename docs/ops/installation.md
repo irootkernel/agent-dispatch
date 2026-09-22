@@ -73,6 +73,9 @@ does not inherit interactive prompts, credential helpers, user SSH
 configuration, hooks, filters/LFS, recursive submodules, proxy overrides, or
 URL rewrite rules. SSH remotes use batch mode and strict host-key checking;
 only a deliberately inherited `SSH_AUTH_SOCK` may supply transport credentials.
+Repository, included, and worktree `http.*` transport overrides are rejected
+before an HTTPS remote is used; TLS verification is also forced on as a
+backstop.
 
 Public HTTPS fetches may work, but credential-helper-based private HTTPS
 remotes are unsupported because helpers and prompts are disabled. The `file`

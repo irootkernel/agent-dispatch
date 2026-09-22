@@ -121,7 +121,7 @@ func Apply(root string, effects []syncrecords.ImportPath, writes map[string][]by
 		if value != effect.Before {
 			return fmt.Errorf("path %q changed after import planning", effect.Path)
 		}
-		target, err := resolver.Resolve(effect.Path)
+		target, err := resolver.ResolveNoSymlinks(effect.Path)
 		if err != nil {
 			return err
 		}
@@ -140,7 +140,7 @@ func Apply(root string, effects []syncrecords.ImportPath, writes map[string][]by
 		}
 		// Re-resolve after directory creation so a replaced/symlinked ancestor
 		// is detected before opening the temporary file.
-		target, err = resolver.Resolve(effect.Path)
+		target, err = resolver.ResolveNoSymlinks(effect.Path)
 		if err != nil {
 			return err
 		}
@@ -183,7 +183,7 @@ func Apply(root string, effects []syncrecords.ImportPath, writes map[string][]by
 }
 
 func currentDigest(resolver *localfs.Resolver, path string) (string, error) {
-	target, err := resolver.Resolve(path)
+	target, err := resolver.ResolveNoSymlinks(path)
 	if err != nil {
 		return "", err
 	}

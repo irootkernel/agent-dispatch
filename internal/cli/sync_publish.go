@@ -331,6 +331,13 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 				}
 				return true, syncMembershipError(stderr, "sync publish", errors.New("publication recovery found a moved remote content revision; review history and create a conflict-resolution checkpoint plan"), 14)
 			}
+			if job.State == "blocked" {
+				nowText := time.Now().UTC().Format(time.RFC3339Nano)
+				if _, err := store.HoldSyncControl(requestCtx(), s.GroupID, "conflict", revision, nowText); err != nil {
+					return true, syncStoreError(stderr, "sync publish", err)
+				}
+				return true, syncMembershipError(stderr, "sync publish", errors.New("publication remains blocked after predecessor loss; preserve the signed candidate and create a conflict-resolution checkpoint plan"), 14)
+			}
 			if job.State != "signed" && job.State != "uncertain" {
 				continue
 			}

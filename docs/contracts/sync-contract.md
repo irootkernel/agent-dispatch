@@ -374,7 +374,10 @@ durable record explicitly resolves and references it. Exhaustion remains a
 visible held result; it never truncates a node pair, drops work, or reports
 convergence.
 
-The canonical import document is immutable pre-apply evidence. A deferred job
-may later be marked resolved or reopened in SQLite, but those queue and
-retention fields are a mutable job projection and never rewrite the canonical
-import payload.
+The canonical import document is immutable pre-apply evidence. Its identity is
+computed from the commits, membership, acknowledgement, observation, Git-state,
+history, case mode, controller marker, and exact path effects. The canonical
+payload keeps the initial `validated` / `none` disposition; state, reason,
+attempts, claim, fence, and retention are mutable SQLite job projections and do
+not change the import identity. A deferred job may later be resolved or reopened
+under that same logical key without rewriting the canonical payload.

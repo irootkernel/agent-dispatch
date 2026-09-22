@@ -168,13 +168,13 @@ BEGIN
 END;
 `
 
-// schemaV23RetainBlockedSyncObligations repairs v21/v22 rows that were marked
-// resolved at the point they became blocked. A later membership replacement or
-// checkpoint reconciliation records the evidence that actually resolves them.
+// schemaV23RetainBlockedSyncObligations is intentionally a compatibility
+// marker. Historical blocked rows were terminal without a corresponding group
+// hold, so reopening them would create an obligation that no checkpoint could
+// discharge. Current writers retain new blocked obligations when they create
+// the matching hold.
 const schemaV23RetainBlockedSyncObligations = `
-UPDATE sync_jobs
-SET retain_until_resolved = 1, resolved_at = NULL
-WHERE state = 'blocked';
+SELECT 1;
 `
 
 // schemaV24SequenceSyncJournals makes causal journal order explicit. The

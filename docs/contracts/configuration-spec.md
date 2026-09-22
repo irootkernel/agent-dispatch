@@ -198,7 +198,9 @@ routes:
   rewriting the filesystem spelling.
 - `**` recursive matching is required.
 - Exclude patterns are directory-aware (E10-T2, PTH-009): a pattern that matches a path prefix at a segment boundary excludes everything inside that directory, so an exact-directory exclusion (`Secrets`) covers its whole subtree exactly like a recursive one (`Secrets/**`), and a file or glob pattern also covers a same-named directory.
-- Exclude takes precedence over include.
+- Within one route, exclude takes precedence over include. When multiple routes
+  govern the same resource, an exclusion removes the path only from that
+  route; another route may still include it.
 - Ordinary route classification evaluates protected and immutable patterns
   after include/exclude.
 - Sync publication and import additionally match excluded, protected, and

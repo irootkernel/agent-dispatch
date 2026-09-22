@@ -102,8 +102,11 @@ reconciliation re-arms `membership_emergency` instead of exposing an active
 group. Reconcile fetches and validates while unacknowledged but defers
 live mutation; overlap, untracked collision, Git instability, divergence,
 uncovered history, trust failure, and partial effects stay inspectable. An
-exact administrator checkpoint at both local and approved remote heads is the
-only reconciliation evidence that clears conflict/trust/recovery control.
+exact verified administrator checkpoint is the only reconciliation evidence
+that clears conflict/trust/recovery control. A lagging node may import the
+checkpoint's already-validated governed Markdown while that stronger hold is
+active, then clears the hold only after its local and approved remote heads both
+equal the checkpoint.
 Deferred safety fences, including active participating writers, are exit-0
 dispositions with no live mutation. A controller operation that fails after
 the no-effect fence has been re-proven is retryable at exit 10; it leaves the

@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/irootkernel/agent-dispatch/internal/domain/syncrecords"
 )
 
 func TestApplyPreservesDisjointFilesAndDetectsLateEdit(t *testing.T) {
@@ -42,5 +44,23 @@ func TestApplyPreservesDisjointFilesAndDetectsLateEdit(t *testing.T) {
 	}
 	if raw, _ := os.ReadFile(filepath.Join(root, "a.md")); string(raw) != "late" {
 		t.Fatalf("refused recovery overwrote the independent edit: %q", raw)
+	}
+}
+
+func TestApplyRefusesInRootSymlink(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "protected.md")
+	if err := os.WriteFile(target, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("protected.md", filepath.Join(root, "note.md")); err != nil {
+		t.Fatal(err)
+	}
+	effects := []syncrecords.ImportPath{{Path: "note.md", Before: Digest([]byte("old")), After: Digest([]byte("new"))}}
+	if err := Apply(root, effects, map[string][]byte{"note.md": []byte("new")}); err == nil {
+		t.Fatal("import followed an in-root symlink")
+	}
+	if raw, err := os.ReadFile(target); err != nil || string(raw) != "old" {
+		t.Fatalf("symlink target changed: raw=%q err=%v", raw, err)
 	}
 }

@@ -236,6 +236,8 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 	if len(effects) > 1000 {
 		return blockReconcile(stdout, stderr, store, s.GroupID, revision, "trust_failure", "bound_exhausted", errors.New("import path set exceeds 1000 effects"))
 	}
+	strongerHold := control.State == "blocked" && (control.Reason == "conflict" || control.Reason == "trust_failure" || control.Reason == "recovery_required")
+	administratorCheckpointImport := strongerHold && contentHeadAddsCheckpoint(client, target)
 	observationRevision, err := store.ObservationRevision(requestCtx(), s.Resource)
 	if err != nil || observationRevision < 1 {
 		detail := "resource has no stable maintained observation revision"
@@ -274,7 +276,7 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 		reasonDetail = "the cooperative import acknowledgement or control configuration binding is stale"
 	} else if control.State == "paused" {
 		return reconcileEnvelope(stdout, "deferred", "operator_pause", map[string]any{"target_commit": target, "membership_mode": control.MembershipMode, "detail": "sync is paused; run sync resume after review"})
-	} else if control.State == "blocked" && !(len(effects) == 0 && (control.Reason == "conflict" || control.Reason == "trust_failure" || control.Reason == "recovery_required")) {
+	} else if control.State == "blocked" && !(len(effects) == 0 && strongerHold) && !administratorCheckpointImport {
 		return reconcileEnvelopeCode(stdout, "blocked", control.Reason, map[string]any{
 			"target_commit": target, "membership_mode": control.MembershipMode, "control_state": control.State,
 			"control_reason": control.Reason, "detail": "the existing sync safety hold must be resolved before Markdown import",
@@ -389,7 +391,7 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 		GroupID: s.GroupID, FromCommit: from, TargetCommit: target,
 		MembershipRevision: remoteMembership, AcknowledgementID: ackID,
 		ResourceObservationRevision: observationRevision, ExpectedGitStateDigest: state.Digest,
-		HistoryEvidenceID: historyID, CaseMode: config.CaseMode(), State: recordState, Reason: reason,
+		HistoryEvidenceID: historyID, CaseMode: config.CaseMode(), State: "validated", Reason: "none",
 	}, effects)
 	if err != nil {
 		return syncMembershipError(stderr, command, err, 14)
@@ -434,7 +436,11 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 	}
 	owner := randomSyncID("import-owner")
 	claimAt := time.Now().UTC()
-	job, err = store.ClaimSyncJob(requestCtx(), job.JobID, owner, revision, claimAt.Format(time.RFC3339Nano), claimAt.Add(time.Duration(s.Bounds.SubprocessSeconds*4+60)*time.Second).Format(time.RFC3339Nano))
+	if administratorCheckpointImport {
+		job, err = store.ClaimSyncAdministrationJob(requestCtx(), job.JobID, owner, revision, claimAt.Format(time.RFC3339Nano), claimAt.Add(time.Duration(s.Bounds.SubprocessSeconds*4+60)*time.Second).Format(time.RFC3339Nano))
+	} else {
+		job, err = store.ClaimSyncJob(requestCtx(), job.JobID, owner, revision, claimAt.Format(time.RFC3339Nano), claimAt.Add(time.Duration(s.Bounds.SubprocessSeconds*4+60)*time.Second).Format(time.RFC3339Nano))
+	}
 	if err != nil {
 		return syncStoreError(stderr, command, err)
 	}
@@ -476,6 +482,15 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 		recoveredAt := time.Now().UTC().Format(time.RFC3339Nano)
 		if recoveredErr := store.FinishRecoveredImportJob(requestCtx(), job.JobID, owner, s.Resource, job.Fence, observationRevision, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "applied", EvidenceJSON: mustJSON(map[string]any{"import_id": record.ImportID, "target_commit": target, "effect_count": len(effects), "advanced_observation_recovery": true}), RecordedAt: recoveredAt}, recoveredAt); recoveredErr != nil {
 			return finishImportRecovering(stdout, stderr, store, client, job, owner, resourceRoot, s.ContentRef, from, target, effects, errors.Join(err, recoveredErr))
+		}
+	}
+	if administratorCheckpointImport {
+		reconciled, reconcileErr := store.ReconcileSyncControlCheckpoint(requestCtx(), s.GroupID, control.Revision, revision, target, time.Now().UTC().Format(time.RFC3339Nano))
+		if reconcileErr != nil {
+			return syncStoreError(stderr, command, reconcileErr)
+		}
+		if reconciled.State == "blocked" && reconciled.Reason == "membership_emergency" {
+			return reconcileEnvelopeCode(stdout, "blocked", reconciled.Reason, map[string]any{"import_state": "applied", "import_id": record.ImportID, "from_commit": from, "target_commit": target, "paths": len(effects), "checkpoint_reconciled": true, "membership_mode": reconciled.MembershipMode, "detail": "the checkpoint content was imported, but protected effects remain frozen until a reviewed normal membership replacement is adopted", "side_effects": []string{"live_tree_updated", "index_updated", "local_content_ref_updated", "import_effects_published", "path_facts_updated", "state_committed"}}, 30)
 		}
 	}
 	return reconcileEnvelope(stdout, "applied", "none", map[string]any{"import_id": record.ImportID, "from_commit": from, "target_commit": target, "paths": len(effects), "idempotent": false, "side_effects": []string{"live_tree_updated", "index_updated", "local_content_ref_updated", "import_effects_published", "path_facts_updated", "state_committed"}})

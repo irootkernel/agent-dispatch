@@ -861,8 +861,8 @@ func (c *Client) verifyRemote(ctx context.Context, remote, expectedDigest string
 	if !validRemoteName(remote) || !strings.HasPrefix(expectedDigest, "sha256:") {
 		return "", fmt.Errorf("invalid configured remote binding: %w", ErrRemoteBinding)
 	}
-	if err := c.rejectURLRewrites(ctx); err != nil {
-		return "", fmt.Errorf("configured remote rewrite policy could not be verified: %w: %v", ErrRemoteBinding, err)
+	if err := c.rejectRemoteTransportOverrides(ctx); err != nil {
+		return "", fmt.Errorf("configured remote transport policy could not be verified: %w: %v", ErrRemoteBinding, err)
 	}
 	out, _, err := c.run(ctx, nil, nil, "remote", "get-url", "--all", remote)
 	if err != nil {
@@ -883,22 +883,33 @@ func (c *Client) verifyRemote(ctx context.Context, remote, expectedDigest string
 	return urls[0], nil
 }
 
-func (c *Client) rejectURLRewrites(ctx context.Context) error {
-	out, _, err := c.run(ctx, nil, nil, "config", "--name-only", "--get-regexp", `^url\..*\.`)
+func (c *Client) rejectRemoteTransportOverrides(ctx context.Context) error {
+	out, _, err := c.run(ctx, nil, nil, "config", "-z", "--show-origin", "--name-only", "--get-regexp", `^(url\..*\.|http\.)`)
 	if err != nil {
 		if exitCode(err) == 1 {
 			return nil
 		}
 		return err
 	}
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		name := strings.TrimSpace(line)
+	fields := strings.Split(string(out), "\x00")
+	for i := 0; i+1 < len(fields); i += 2 {
+		origin := fields[i]
+		name := strings.TrimSpace(fields[i+1])
 		if name == "" {
+			continue
+		}
+		// The hardened wrapper's own -c values are the binding defense, not
+		// repository policy. Every file-backed value remains subject to this
+		// rejection, including included and worktree configuration.
+		if origin == "command line:" {
 			continue
 		}
 		lower := strings.ToLower(name)
 		if strings.HasSuffix(lower, ".insteadof") || strings.HasSuffix(lower, ".pushinsteadof") {
 			return fmt.Errorf("configured remote refuses effective URL rewrite rule %q: %w", name, ErrRemoteBinding)
+		}
+		if strings.HasPrefix(lower, "http.") {
+			return fmt.Errorf("configured remote refuses repository HTTP transport override %q: %w", name, ErrRemoteBinding)
 		}
 	}
 	return nil
@@ -917,6 +928,7 @@ func (c *Client) run(parent context.Context, extraEnv map[string]string, stdin [
 		"-c", "core.alternateRefsCommand=",
 		"-c", "credential.helper=",
 		"-c", "http.followRedirects=false",
+		"-c", "http.sslVerify=true",
 		"-c", "http.proxy=",
 		"-c", "https.proxy=",
 		"-c", "http.extraHeader=",

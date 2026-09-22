@@ -365,6 +365,12 @@ func TestE21RemoteMoveBlocksUnclaimedSyncJob(t *testing.T) {
 	if err := s.BlockSyncJobAfterRemoteMove(ctx, job.JobID, job.Fence, journal, syncT1); err != nil {
 		t.Fatal(err)
 	}
+	replay := journal
+	replay.JournalID = "checkpoint-remote-move-blocked-replay"
+	replay.RecordedAt = syncT2
+	if err := s.BlockSyncJobAfterRemoteMove(ctx, job.JobID, job.Fence, replay, syncT2); err != nil {
+		t.Fatalf("blocked remote move was not idempotent: %v", err)
+	}
 	blocked, found, err := s.FindSyncJob(ctx, "wiki-pair", "checkpoint", "checkpoint-remote-move")
 	if err != nil || !found || blocked.State != "blocked" || blocked.ResolvedAt != "" || !blocked.RetainUntilResolved {
 		t.Fatalf("blocked=%+v found=%v err=%v", blocked, found, err)
@@ -642,7 +648,7 @@ func TestE21BlockedJobsRemainUntilRecoveryEvidence(t *testing.T) {
 	}
 }
 
-func TestE21Migration23ReopensLegacyBlockedObligations(t *testing.T) {
+func TestE21Migration23PreservesLegacyBlockedFinality(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "state.db")
 	s, err := Open(path)
@@ -698,7 +704,7 @@ func TestE21Migration23ReopensLegacyBlockedObligations(t *testing.T) {
 	}
 	var retain int
 	var resolved string
-	if err := s.QueryRow(`SELECT retain_until_resolved,COALESCE(resolved_at,'') FROM sync_jobs WHERE job_id=?`, job.JobID).Scan(&retain, &resolved); err != nil || retain != 1 || resolved != "" {
+	if err := s.QueryRow(`SELECT retain_until_resolved,COALESCE(resolved_at,'') FROM sync_jobs WHERE job_id=?`, job.JobID).Scan(&retain, &resolved); err != nil || retain != 0 || resolved != syncT0 {
 		t.Fatalf("migrated blocked obligation retain=%d resolved=%q err=%v", retain, resolved, err)
 	}
 	if err := s.QueryRow(`SELECT retain_until_resolved,COALESCE(resolved_at,'') FROM sync_jobs WHERE job_id=?`, completed.JobID).Scan(&retain, &resolved); err != nil || retain != 0 || resolved != syncT0 {

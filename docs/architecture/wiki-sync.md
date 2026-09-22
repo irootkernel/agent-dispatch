@@ -72,8 +72,10 @@ ID.
 Snapshot capture holds the resource guard and uses a private index or equivalent
 immutable-object method. It never runs broad `git add -A` over a mutable live
 tree. Edits that arrive after the frozen snapshot remain local and dirty. The
-publisher key is available only to the explicit `sync publish` process. The
-service may recover an already-signed candidate but cannot sign unattended.
+publisher key is available only to the explicit `sync publish` process.
+Explicit re-entry of `sync publish` may recover an already-signed candidate.
+No peer service performs that recovery until E22, and a future service cannot
+sign unattended.
 
 ## Import and attribution
 

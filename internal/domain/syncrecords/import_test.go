@@ -63,3 +63,25 @@ func TestControllerOnlyImportRequiresNoPathEffects(t *testing.T) {
 		t.Fatal("an empty ordinary import must fail closed")
 	}
 }
+
+func TestImportIdentityExcludesMutableJobDisposition(t *testing.T) {
+	binding := ImportBinding{
+		GroupID: "wiki-pair", FromCommit: strings.Repeat("a", 40), TargetCommit: strings.Repeat("b", 40),
+		MembershipRevision: strings.Repeat("c", 40), AcknowledgementID: "acknowledgement-1",
+		ResourceObservationRevision: 7, ExpectedGitStateDigest: "sha256:" + strings.Repeat("d", 64),
+		HistoryEvidenceID: "history-evidence-stable", CaseMode: "sensitive", State: "validated", Reason: "none",
+	}
+	paths := []ImportPath{{Path: "note.md", Before: "absent", After: "sha256:" + strings.Repeat("e", 64)}}
+	validated, err := NewImport(binding, paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding.State, binding.Reason = "deferred", "resource_busy"
+	deferred, err := NewImport(binding, paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if validated.ImportID != deferred.ImportID || validated.PlanID != deferred.PlanID {
+		t.Fatalf("job disposition changed canonical import identity: validated=%s/%s deferred=%s/%s", validated.ImportID, validated.PlanID, deferred.ImportID, deferred.PlanID)
+	}
+}

@@ -8,6 +8,11 @@ import (
 	"os"
 )
 
+// syncAgePrunableKindsSQL is the single persistence projection of the sync
+// retention classes. Membership and checkpoint evidence is group-lifetime;
+// every kind listed here uses the completed-receipt horizon once resolved.
+const syncAgePrunableKindsSQL = "('publication','delivery','import','verification')"
+
 // intentStates maps the durable intent-state vocabulary for the
 // operational counters (status, doctor).
 func intentStates() []string {
@@ -248,12 +253,12 @@ func (s *Store) planRemaining(ctx context.Context, plan *PrunePlan, terminal str
 		return fmt.Errorf("planning notification prune: %w", err)
 	}
 	if err := s.QueryRowContext(ctx, `SELECT COUNT(*) FROM sync_journal_entries WHERE job_id IN (
-		SELECT job_id FROM sync_jobs WHERE kind NOT IN ('membership','checkpoint')
+		SELECT job_id FROM sync_jobs WHERE kind IN `+syncAgePrunableKindsSQL+`
 		AND retain_until_resolved = 0 AND resolved_at IS NOT NULL AND resolved_at < ?)`, c.CompletedReceipts).Scan(&plan.Counts.SyncJournals); err != nil {
 		return fmt.Errorf("planning sync journal prune: %w", err)
 	}
 	if err := s.QueryRowContext(ctx, `SELECT COUNT(*) FROM sync_jobs
-		WHERE kind NOT IN ('membership','checkpoint')
+		WHERE kind IN `+syncAgePrunableKindsSQL+`
 		AND retain_until_resolved = 0 AND resolved_at IS NOT NULL AND resolved_at < ?`, c.CompletedReceipts).Scan(&plan.Counts.SyncJobs); err != nil {
 		return fmt.Errorf("planning sync job prune: %w", err)
 	}
@@ -348,12 +353,12 @@ func (s *Store) ExecutePrune(ctx context.Context, cutoffs PruneCutoffs, actor, r
 	// the same transaction once the completed sync evidence reaches its longer
 	// retention horizon.
 	if counts.SyncJournals, err = exec("sync journals", `DELETE FROM sync_journal_entries WHERE job_id IN (
-		SELECT job_id FROM sync_jobs WHERE kind NOT IN ('membership','checkpoint')
+		SELECT job_id FROM sync_jobs WHERE kind IN `+syncAgePrunableKindsSQL+`
 		AND retain_until_resolved = 0 AND resolved_at IS NOT NULL AND resolved_at < ?)`, c.CompletedReceipts); err != nil {
 		return counts, err
 	}
 	if counts.SyncJobs, err = exec("sync jobs", `DELETE FROM sync_jobs
-		WHERE kind NOT IN ('membership','checkpoint')
+		WHERE kind IN `+syncAgePrunableKindsSQL+`
 		AND retain_until_resolved = 0 AND resolved_at IS NOT NULL AND resolved_at < ?`, c.CompletedReceipts); err != nil {
 		return counts, err
 	}

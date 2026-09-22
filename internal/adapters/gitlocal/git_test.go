@@ -266,6 +266,23 @@ func TestRemoteBindingRejectsRepositoryURLRewrites(t *testing.T) {
 	}
 }
 
+func TestRemoteBindingRejectsRepositoryHTTPTransportOverrides(t *testing.T) {
+	repo := initRepository(t)
+	gitRun(t, repo, "remote", "add", "origin", "https://example.com/repo.git")
+	gitRun(t, repo, "config", "http.https://example.com/.sslVerify", "false")
+	digest, _, err := config.RemoteRepositoryDigest("https://example.com/repo.git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := New(repo, Limits{Timeout: 2 * time.Second, MaxOutput: 64 << 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.RemoteRef(context.Background(), "origin", "refs/heads/main", digest); err == nil || !errors.Is(err, ErrRemoteBinding) || !strings.Contains(err.Error(), "HTTP transport override") {
+		t.Fatalf("repository HTTP transport override was accepted: %v", err)
+	}
+}
+
 func TestRemoteBindingRejectsURLRewriteKeyContainingSpace(t *testing.T) {
 	repo := initRepository(t)
 	gitRun(t, repo, "remote", "add", "origin", "ssh://git@example.com/repo")

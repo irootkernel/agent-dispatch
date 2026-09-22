@@ -180,6 +180,28 @@ func TestProtectedAliasTakesPrecedenceOverFoldedExclude(t *testing.T) {
 	}
 }
 
+func TestRouteExcludeDoesNotOverrideAnotherRouteInclude(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "skip", "keep"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "skip", "keep", "note.md"), []byte("kept"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := snapshotConfig(root)
+	first := cfg.Routes["route-main"]
+	first.Source.Exclude = []string{"skip/**"}
+	cfg.Routes["route-main"] = first
+	cfg.Routes["route-secondary"] = config.Route{Source: config.Source{Resource: "vault-main", Include: []string{"skip/keep/**"}}, Policy: config.Policy{Protected: []string{}, Immutable: []string{}}}
+	snapshot, err := Capture(cfg, "vault-main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(snapshot.Files["skip/keep/note.md"]) != "kept" {
+		t.Fatalf("second route include was overridden: files=%v", snapshot.Files)
+	}
+}
+
 func TestValidateTransitionRejectsProtectedDeletion(t *testing.T) {
 	cfg := snapshotConfig(t.TempDir())
 	route := cfg.Routes["route-main"]

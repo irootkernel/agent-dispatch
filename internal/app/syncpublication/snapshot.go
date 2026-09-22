@@ -199,17 +199,15 @@ func governedMarkdown(path string, engines []routeEngines) (bool, error) {
 	if err := rejectProtectedPath(path, engines); err != nil {
 		return false, err
 	}
+	included := false
 	for _, engine := range engines {
-		status, err := engine.exclusions.Classify(path)
+		excluded, err := engine.exclusions.Classify(path)
 		if err != nil {
 			return false, err
 		}
-		if status == policy.StatusExcluded {
-			return false, nil
+		if excluded == policy.StatusExcluded {
+			continue
 		}
-	}
-	included := false
-	for _, engine := range engines {
 		status, err := engine.scope.Classify(path)
 		if err != nil {
 			return false, err

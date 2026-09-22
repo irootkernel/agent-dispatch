@@ -68,7 +68,7 @@ func NewImport(binding ImportBinding, paths []ImportPath) (Import, error) {
 		CaseMode: binding.CaseMode, ControllerOnly: binding.ControllerOnly, State: binding.State, Reason: binding.Reason, Paths: ordered,
 		Attempts: 0, Fence: 1, RetainUntilResolved: binding.State != "applied",
 	}
-	planProjection := p
+	planProjection := stableImportProjection(p)
 	planProjection.ImportID, planProjection.PlanID, planProjection.JournalID = "", "", ""
 	d, err := framedDigest("agent-dispatch.sync-import-plan-id/v1", planProjection)
 	if err != nil {
@@ -76,7 +76,7 @@ func NewImport(binding ImportBinding, paths []ImportPath) (Import, error) {
 	}
 	p.PlanID = "import-plan-" + d[len("sha256:"):len("sha256:")+32]
 	p.JournalID = "import-journal-" + d[len("sha256:"):len("sha256:")+32]
-	idProjection := p
+	idProjection := stableImportProjection(p)
 	idProjection.ImportID = ""
 	d, err = framedDigest("agent-dispatch.sync-import-id/v1", idProjection)
 	if err != nil {
@@ -119,19 +119,29 @@ func (p Import) Validate() error {
 		}
 		aliases[key] = effect.Path
 	}
-	copy := p
+	copy := stableImportProjection(p)
 	copy.ImportID = ""
 	d, _ := framedDigest("agent-dispatch.sync-import-id/v1", copy)
 	if p.ImportID != "import-"+d[len("sha256:"):len("sha256:")+32] {
 		return fmt.Errorf("%w: import_id mismatch", ErrInvalidRecord)
 	}
-	copy = p
+	copy = stableImportProjection(p)
 	copy.ImportID, copy.PlanID, copy.JournalID = "", "", ""
 	d, _ = framedDigest("agent-dispatch.sync-import-plan-id/v1", copy)
 	if p.PlanID != "import-plan-"+d[len("sha256:"):len("sha256:")+32] {
 		return fmt.Errorf("%w: plan_id mismatch", ErrInvalidRecord)
 	}
 	return nil
+}
+
+func stableImportProjection(p Import) Import {
+	p.State = "validated"
+	p.Reason = "none"
+	p.Attempts = 0
+	p.ClaimOwner = nil
+	p.Fence = 1
+	p.RetainUntilResolved = true
+	return p
 }
 
 func validImportDisposition(state, reason string, retained bool) bool {

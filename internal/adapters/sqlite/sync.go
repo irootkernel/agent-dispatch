@@ -1079,7 +1079,7 @@ func (s *Store) ReopenDeferredImport(ctx context.Context, jobID, expectedConfigR
 	return row, nil
 }
 
-func administrationRepairAllowed(kind string, controllerOnly bool, state, reason, membershipMode string) bool {
+func administrationRepairAllowed(kind string, _ bool, state, reason, membershipMode string) bool {
 	if kind == "membership" {
 		return membershipMode == "blocked_emergency" && (state == "blocked" || state == "paused")
 	}
@@ -1087,7 +1087,7 @@ func administrationRepairAllowed(kind string, controllerOnly bool, state, reason
 		return false
 	}
 	strongerHold := reason == "conflict" || reason == "trust_failure" || reason == "recovery_required"
-	return strongerHold && (kind == "checkpoint" || (kind == "import" && controllerOnly))
+	return strongerHold && (kind == "checkpoint" || kind == "import")
 }
 
 // BlockSyncJobAfterRemoteMove records a measured predecessor loss on re-entry.
@@ -1103,7 +1103,8 @@ func (s *Store) BlockSyncJobAfterRemoteMove(ctx context.Context, jobID string, e
 		return err
 	}
 	allowed := (row.Kind == "publication" && (row.State == "signed" || row.State == "push_pending" || row.State == "uncertain")) ||
-		(row.Kind == "checkpoint" && (row.State == "planned" || row.State == "applying" || row.State == "uncertain"))
+		(row.Kind == "checkpoint" && (row.State == "planned" || row.State == "applying" || row.State == "uncertain")) ||
+		((row.Kind == "publication" || row.Kind == "checkpoint") && row.State == "blocked")
 	if !allowed || row.Fence != expectedFence || row.ResolvedAt != "" || (row.ClaimOwner != "" && !timeBefore(row.ClaimExpiresAt, now)) {
 		return ErrSyncPrecondition
 	}

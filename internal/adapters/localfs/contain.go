@@ -134,6 +134,31 @@ func (r *Resolver) Resolve(rel string) (string, error) {
 	return real, nil
 }
 
+// ResolveNoSymlinks returns the lexical contained path only when no existing
+// component is a symlink. Mutation paths use this stricter form so a governed
+// Git path can never be redirected onto a different in-root file.
+func (r *Resolver) ResolveNoSymlinks(rel string) (string, error) {
+	normalized, err := r.checkPath(rel)
+	if err != nil {
+		return "", err
+	}
+	cur := r.root
+	for _, part := range strings.Split(normalized, "/") {
+		cur = filepath.Join(cur, part)
+		info, statErr := os.Lstat(cur)
+		if errors.Is(statErr, fs.ErrNotExist) {
+			return filepath.Join(r.root, filepath.FromSlash(normalized)), nil
+		}
+		if statErr != nil {
+			return "", fmt.Errorf("lstat %q: %w", normalized, statErr)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return "", fmt.Errorf("%w: %q contains a symlink", ErrNotRegular, normalized)
+		}
+	}
+	return filepath.Join(r.root, filepath.FromSlash(normalized)), nil
+}
+
 // checkAncestors verifies every existing ancestor directory of a
 // not-currently-existing path resolves inside the root, so a dangling
 // symlink or symlinked directory cannot position a future path outside.

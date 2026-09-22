@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -348,4 +349,31 @@ func validE21T4Import(t *testing.T, controllerOnly bool) syncrecords.Import {
 		t.Fatal(err)
 	}
 	return record
+}
+
+func TestE21T4AdministratorCheckpointImportCrossesStrongerHold(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	control, err := s.EnsureSyncControl(ctx, "wiki-pair", "revision-1", syncT0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.HoldSyncControl(ctx, "wiki-pair", "conflict", "revision-1", syncT1); err != nil {
+		t.Fatal(err)
+	}
+	record := validE21T4Import(t, false)
+	payload, err := syncrecords.CanonicalImport(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	job, _, err := s.AdmitSyncJob(ctx, SyncJobInput{JobID: "administrator-checkpoint-import", GroupID: "wiki-pair", Kind: "import", LogicalKey: record.ImportID, InitialState: "validated", PayloadJSON: string(payload), ConfigRevision: "revision-1", QueueLimit: 1000, Now: syncT1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ClaimSyncJob(ctx, job.JobID, "ordinary", "revision-1", syncT1, syncT3); !errors.Is(err, ErrSyncControlHeld) {
+		t.Fatalf("ordinary import crossed stronger hold: %v", err)
+	}
+	if _, err := s.ClaimSyncAdministrationJob(ctx, job.JobID, "administrator", "revision-1", syncT1, syncT3); err != nil {
+		t.Fatalf("verified administrator checkpoint import could not cross stronger hold at revision %d: %v", control.Revision, err)
+	}
 }

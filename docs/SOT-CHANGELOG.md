@@ -13,6 +13,8 @@ two-node sync workflow. Peer service, pair verification, and release remain disa
 
 - SQLite schema v21 stores group controls, idempotent logical jobs, fenced
   claims, bounded attempts, and append-only recovery journals before effects.
+- SQLite schemas v24-v25 add causal journal and job sequences and persist the
+  adopted membership posture separately from operator and stronger safety holds.
 - Expired claims require explicit recovery evidence before a new fence can be
   claimed; stale owners cannot append or finish work.
 - `sync pause` and `sync resume` use exact control revisions. Resume rebinds

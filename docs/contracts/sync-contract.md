@@ -169,13 +169,16 @@ The lifecycle below belongs to the durable SQLite job/status projection and is
 not embedded back into that signed manifest.
 Full Git object IDs are lowercase 40- or 64-hex values; abbreviated IDs and
 wall-clock time are never causal authority.
+Journal order uses the explicit v24 sequence. Newest import-effect selection
+uses the explicit v25 sync-job sequence and fence, never a hidden SQLite
+`rowid` or timestamp.
 
 | Record | State progression | Terminal or held result |
 |---|---|---|
 | publication job | `eligible -> prepared -> signed -> push_pending -> published` | `blocked` or `uncertain` retains the obligation |
 | delivery | `pending -> attempted -> accepted` | `retryable`, `unknown`, or `refused`; HTTP 202 proves only `accepted` |
 | import | `requested -> fetched -> validated -> applying -> applied` | `deferred`, `blocked`, `recovering`, or `uncertain` |
-| control | `active <-> paused` | `blocked` requires explicit recovery evidence |
+| control | `active <-> paused` | `blocked` requires explicit recovery evidence; adopted membership mode is a separate durable posture |
 | verification | `planned -> collecting -> finished` | `complete`, `incomplete`, `target_changed`, `blocked`, or `expired` |
 
 The generic transition graph keeps `blocked` terminal. Exact remote evidence
@@ -184,6 +187,10 @@ kind-specific recovery transaction without opening a general blocked-to-active
 edge. A normal membership replacement resolves membership jobs only. An exact
 administrator checkpoint resolves publication, checkpoint, and import jobs;
 each affected job receives its own resolver identifier in the journal.
+Emergency membership posture remains durable while an operator pause or a
+stronger conflict, trust, or recovery reason is visible. Resume and exact
+checkpoint reconciliation consult that posture and produce
+`blocked`/`membership_emergency`; only an adopted normal membership clears it.
 
 `expected_nodes` always fixes the exact two-node target. Verification `nodes`
 contains collected evidence only: it may contain zero, one, or two distinct

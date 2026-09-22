@@ -105,6 +105,9 @@ func TestE21T4OnlyNewestEffectCanAttributeAndDuplicateFailsClosed(t *testing.T) 
 			t.Fatal(err)
 		}
 	}
+	if _, err := s.Exec(`VACUUM`); err != nil {
+		t.Fatal(err)
+	}
 	pending, err := s.LoadPendingImportEffects(ctx, "vault-main")
 	if err != nil || len(pending) != 1 || pending[0].JobID != "import-newest-2" {
 		t.Fatalf("only newest effect may attribute: %+v err=%v", pending, err)
@@ -281,6 +284,47 @@ func TestE21T4ImportAttributionRetainsObservationUntilSyncEvidencePrunes(t *test
 	counts, err := s.ExecutePrune(ctx, longSyncCutoff, "operator", "retention", syncT3)
 	if err != nil || counts.Observations != 1 || counts.SyncJobs != 1 || counts.SyncJournals != 2 {
 		t.Fatalf("joint prune counts=%+v err=%v", counts, err)
+	}
+}
+
+func TestE21T4ImportAttributionRetainsObservationWhenObservationHorizonIsLonger(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if _, err := s.EnsureSyncControl(ctx, "wiki-pair", "revision-1", syncT0); err != nil {
+		t.Fatal(err)
+	}
+	record := validE21T4Import(t, false)
+	payload, _ := syncrecords.CanonicalImport(record)
+	job, _, err := s.AdmitSyncJob(ctx, SyncJobInput{JobID: "import-retention-observation", GroupID: "wiki-pair", Kind: "import", LogicalKey: "import-retention-observation", InitialState: "validated", PayloadJSON: string(payload), ConfigRevision: "revision-1", QueueLimit: 10, Now: syncT0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	job, err = s.ClaimSyncJob(ctx, job.JobID, "owner-retention-observation", "revision-1", syncT0, syncT3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.BeginImportApply(ctx, job.JobID, "owner-retention-observation", "vault-main", job.Fence, record.Paths, SyncJournalEntry{JournalID: "observation-retention-start", JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "started", EvidenceJSON: `{}`, RecordedAt: syncT0}, syncT0); err != nil {
+		t.Fatal(err)
+	}
+	obs := ObservationRecord{ObservationID: "observation-longer-retention", SchemaVersion: "agent-dispatch.source-observation/v1", SourceType: "watchman", SourceID: "source", TriggerName: "trigger", ResourceID: "vault-main", ObservedAt: syncT0, ReceivedAt: syncT0, RawPayloadDigest: record.Paths[0].After, IngestStatus: "accepted", FlagsJSON: `{}`, ImportAttributions: []ImportAttributionRecord{{JobID: job.JobID, Fence: job.Fence, Path: record.Paths[0].Path, AfterValue: record.Paths[0].After}}}
+	if err := s.SaveObservation(nil, obs); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FinishRecoveredImportJob(ctx, job.JobID, "owner-retention-observation", "vault-main", job.Fence, 0, SyncJournalEntry{JournalID: "observation-retention-finish", JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "applied", EvidenceJSON: `{}`, RecordedAt: syncT1}, syncT1); err != nil {
+		t.Fatal(err)
+	}
+	cutoffs := PruneCutoffs{Observations: syncT0, CompletedReceipts: syncT2}
+	counts, err := s.ExecutePrune(ctx, cutoffs, "operator", "retention", syncT2)
+	if err != nil || counts.SyncJobs != 1 || counts.Observations != 0 {
+		t.Fatalf("longer observation horizon prune=%+v err=%v", counts, err)
+	}
+	var remaining int
+	if err := s.QueryRow(`SELECT COUNT(*) FROM source_observations WHERE observation_id=?`, obs.ObservationID).Scan(&remaining); err != nil || remaining != 1 {
+		t.Fatalf("observation remaining=%d err=%v", remaining, err)
+	}
+	counts, err = s.ExecutePrune(ctx, PruneCutoffs{Observations: syncT2, CompletedReceipts: syncT2}, "operator", "retention", syncT3)
+	if err != nil || counts.Observations != 1 {
+		t.Fatalf("elapsed observation horizon prune=%+v err=%v", counts, err)
 	}
 }
 

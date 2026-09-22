@@ -690,7 +690,7 @@ G16 and E20-T5; runtime sync implementation and evidence begin with E21-T1.
 
 G17 was qualified on 2026-09-21 with Go 1.26.6 against disposable repositories
 and state directories only. The focused command below passed on every D-029
-platform. It exercises the restricted Git adapter, schema v21-v23 persistence,
+platform. It exercises the restricted Git adapter, schema v21-v25 persistence,
 publication/import services, canonical sync records, and CLI integration:
 
 ```text
@@ -722,9 +722,9 @@ claimed here.
 | AC-1703 | `TestPushAlreadyAtCandidateIsConfirmed` and the command-level recovery arm of `TestE21T3PublishSignsFrozenSnapshotAndAdmitsDelivery` prove remote confirmation and same-identity settlement without duplicate delivery. |
 | AC-1704 | `TestG17TwoWritersPreserveBothHistoriesAfterFastForwardLoss` and the command-level losing-fast-forward arm of `TestE21T3PublishSignsFrozenSnapshotAndAdmitsDelivery` preserve both commit objects, block the losing publication, and retain its unresolved evidence without merge, rebase, force push, reset, clean, or stash. |
 | AC-1705 | Restricted Git/import inspection, acknowledgement currentness, resource-writer, ignored/untracked alias, fetch classification, and deferred-reopen suites prove conservative deferral without destructive Git operations; `TestE21T5StatusSeparatesDurableSyncOutcomes` keeps publication, delivery, and import visible independently. |
-| AC-1706 | SQLite import-effect tests pin pre-apply effects, fences, applying/recovery attribution, exact one-use consumption, controller-only recovery, atomic completion, and the attribution-linked observation's longer retention horizon. |
-| AC-1707 | `TestApplyPreservesDisjointFilesAndDetectsLateEdit` plus newest-effect/duplicate-attribution tests retain contradictory and late edits as ordinary dirty work. |
-| AC-1708 | Membership domain, CLI, SQLite emergency, the peer-fetch arm of `TestE21T3PublishSignsFrozenSnapshotAndAdmitsDelivery`, and `TestSignedMembershipUsesPinnedEd25519AndClosedTree` cover the closed change vocabulary, administrator signature, expected predecessor, fetched emergency hold, fixed tree, non-force push, pair restoration, and removed-key first-seen refusal. |
+| AC-1706 | SQLite import-effect tests pin pre-apply effects, fences, applying/recovery attribution, exact one-use consumption, controller-only recovery, atomic completion, and both possible longer retention horizons for attributed observations. |
+| AC-1707 | `TestApplyPreservesDisjointFilesAndDetectsLateEdit` plus durable-sequence/VACUUM newest-effect and duplicate-attribution tests retain contradictory and late edits as ordinary dirty work. |
+| AC-1708 | Membership domain, CLI, SQLite emergency, paused-adoption/resume coverage, the peer-fetch arm of `TestE21T3PublishSignsFrozenSnapshotAndAdmitsDelivery`, and `TestSignedMembershipUsesPinnedEd25519AndClosedTree` cover the closed change vocabulary, administrator signature, expected predecessor, fetched emergency posture, fixed tree, non-force push, pair restoration, and removed-key first-seen refusal. |
 | AC-1709 | Checkpoint plan binding, confirmed-candidate recovery, content-history validation, and checkpoint-gated control reconciliation bind the exact target while leaving uncovered history blocked. |
 | AC-1710 | `TestImportIndexPreservesDisjointDirtyPath`, ignored/case-alias collision coverage, and guarded import service tests prove exact target-path application with disjoint bytes preserved and dirty. |
 | AC-1711 | Snapshot resource guards and immutable private-index capture prevent mixed attestations; signed-candidate publication/checkpoint recovery reuses the durable candidate, while only explicit CLI publication resolves the signing key. |

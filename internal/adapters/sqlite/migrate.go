@@ -56,6 +56,7 @@ var Migrations = []Migration{
 	{Version: 22, Name: "sync-import-effects-attribution", SQL: schemaV22SyncImportEffectsAttribution},
 	{Version: 23, Name: "retain-blocked-sync-obligations", SQL: schemaV23RetainBlockedSyncObligations},
 	{Version: 24, Name: "sequence-sync-journals", SQL: schemaV24SequenceSyncJournals},
+	{Version: 25, Name: "sync-membership-posture-and-job-sequence", SQL: schemaV25SyncMembershipPostureAndJobSequence},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
@@ -202,6 +203,26 @@ CREATE INDEX idx_sync_journal_job ON sync_journal_entries(job_id, sequence);
 CREATE TRIGGER sync_journal_entries_no_update BEFORE UPDATE ON sync_journal_entries
 BEGIN
 	SELECT RAISE(ABORT, 'sync journal is append-only');
+END;
+`
+
+// schemaV25SyncMembershipPostureAndJobSequence keeps the adopted membership
+// mode independent from a stronger operator or safety hold and gives sync jobs
+// an explicit creation order for newest-effect attribution. Both facts survive
+// timestamp ties, backup/restore, and VACUUM.
+const schemaV25SyncMembershipPostureAndJobSequence = `
+ALTER TABLE sync_controls ADD COLUMN membership_mode TEXT NOT NULL DEFAULT 'normal'
+	CHECK (membership_mode IN ('normal','blocked_emergency'));
+
+CREATE TABLE sync_job_sequences (
+	sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+	job_id   TEXT NOT NULL UNIQUE REFERENCES sync_jobs(job_id) ON DELETE CASCADE
+);
+INSERT INTO sync_job_sequences(sequence, job_id)
+SELECT rowid, job_id FROM sync_jobs ORDER BY rowid;
+CREATE TRIGGER sync_jobs_assign_sequence AFTER INSERT ON sync_jobs
+BEGIN
+	INSERT INTO sync_job_sequences(job_id) VALUES (NEW.job_id);
 END;
 `
 

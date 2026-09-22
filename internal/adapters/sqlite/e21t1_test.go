@@ -288,12 +288,91 @@ func TestE21MembershipEmergencyPreservesStrongerHold(t *testing.T) {
 		t.Fatal(err)
 	}
 	control, err := s.ReconcileAdoptedMembership(ctx, "wiki-pair", "blocked_emergency", "membership-emergency", "cfg-1", syncT2)
-	if err != nil || control.State != "blocked" || control.Reason != "trust_failure" {
+	if err != nil || control.State != "blocked" || control.Reason != "trust_failure" || control.MembershipMode != "blocked_emergency" {
 		t.Fatalf("emergency overwrote stronger hold: %+v, %v", control, err)
 	}
 	control, err = s.ReconcileAdoptedMembership(ctx, "wiki-pair", "normal", "membership-normal", "cfg-1", "2026-09-21T00:00:03Z")
-	if err != nil || control.State != "blocked" || control.Reason != "trust_failure" {
+	if err != nil || control.State != "blocked" || control.Reason != "trust_failure" || control.MembershipMode != "normal" {
 		t.Fatalf("normal membership cleared stronger hold: %+v, %v", control, err)
+	}
+	control, err = s.ReconcileAdoptedMembership(ctx, "wiki-pair", "blocked_emergency", "membership-emergency-2", "cfg-1", "2026-09-21T00:00:04Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	control, err = s.ReconcileSyncControlCheckpoint(ctx, "wiki-pair", control.Revision, "cfg-1", "checkpoint-1", "2026-09-21T00:00:05Z")
+	if err != nil || control.State != "blocked" || control.Reason != "membership_emergency" || control.MembershipMode != "blocked_emergency" {
+		t.Fatalf("checkpoint exposed active emergency membership: %+v, %v", control, err)
+	}
+	control, err = s.ReconcileAdoptedMembership(ctx, "wiki-pair", "normal", "membership-normal-2", "cfg-1", "2026-09-21T00:00:06Z")
+	if err != nil || control.State != "active" || control.Reason != "none" || control.MembershipMode != "normal" {
+		t.Fatalf("normal replacement did not clear membership emergency: %+v, %v", control, err)
+	}
+}
+
+func TestE21BlockedResolutionIsKindScopedAndJournaled(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if _, err := s.EnsureSyncControl(ctx, "wiki-pair", "cfg-1", syncT0); err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range []string{"membership", "publication", "checkpoint", "import"} {
+		_, _, err := s.AdmitSyncJob(ctx, SyncJobInput{JobID: "blocked-" + kind, GroupID: "wiki-pair", Kind: kind, LogicalKey: "blocked-" + kind, InitialState: "blocked", PayloadJSON: `{}`, ConfigRevision: "cfg-1", QueueLimit: 1000, Now: syncT0})
+		if err != nil {
+			t.Fatalf("admit %s: %v", kind, err)
+		}
+	}
+	if _, err := s.Exec(`UPDATE sync_jobs SET fence=1 WHERE job_id LIKE 'blocked-%'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ReconcileAdoptedMembership(ctx, "wiki-pair", "normal", "membership-replacement", "cfg-1", syncT1); err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range []string{"membership", "publication", "checkpoint", "import"} {
+		var resolved string
+		if err := s.QueryRow(`SELECT COALESCE(resolved_at,'') FROM sync_jobs WHERE job_id=?`, "blocked-"+kind).Scan(&resolved); err != nil {
+			t.Fatal(err)
+		}
+		if (kind == "membership") != (resolved != "") {
+			t.Fatalf("membership replacement resolved %s=%q", kind, resolved)
+		}
+	}
+	control, err := s.HoldSyncControl(ctx, "wiki-pair", "conflict", "cfg-1", syncT1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ReconcileSyncControlCheckpoint(ctx, "wiki-pair", control.Revision, "cfg-1", "checkpoint-resolution", syncT2); err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range []string{"publication", "checkpoint", "import"} {
+		var resolved, resolver string
+		if err := s.QueryRow(`SELECT COALESCE(j.resolved_at,''), json_extract(e.evidence_json,'$.resolver_id') FROM sync_jobs j JOIN sync_journal_entries e ON e.job_id=j.job_id WHERE j.job_id=? AND e.outcome='ok'`, "blocked-"+kind).Scan(&resolved, &resolver); err != nil || resolved == "" || resolver != "checkpoint-resolution" {
+			t.Fatalf("checkpoint resolution %s resolved=%q resolver=%q err=%v", kind, resolved, resolver, err)
+		}
+	}
+	var membershipResolver string
+	if err := s.QueryRow(`SELECT json_extract(evidence_json,'$.resolver_id') FROM sync_journal_entries WHERE job_id='blocked-membership' AND outcome='ok'`).Scan(&membershipResolver); err != nil || membershipResolver != "membership-replacement" {
+		t.Fatalf("membership resolver=%q err=%v", membershipResolver, err)
+	}
+}
+
+func TestE21MembershipEmergencySurvivesPauseAndResume(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	control, err := s.EnsureSyncControl(ctx, "wiki-pair", "cfg-1", syncT0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	control, err = s.SetSyncControl(ctx, "wiki-pair", control.Revision, "paused", "cfg-1", syncT1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	control, err = s.ReconcileAdoptedMembership(ctx, "wiki-pair", "blocked_emergency", "membership-emergency", "cfg-1", syncT2)
+	if err != nil || control.State != "paused" || control.Reason != "operator_pause" || control.MembershipMode != "blocked_emergency" {
+		t.Fatalf("paused emergency posture = %+v, %v", control, err)
+	}
+	control, err = s.SetSyncControl(ctx, "wiki-pair", control.Revision, "active", "cfg-1", syncT3)
+	if err != nil || control.State != "blocked" || control.Reason != "membership_emergency" || control.MembershipMode != "blocked_emergency" {
+		t.Fatalf("resume crossed emergency posture = %+v, %v", control, err)
 	}
 }
 
@@ -458,7 +537,16 @@ func TestE21Migration23ReopensLegacyBlockedObligations(t *testing.T) {
 	if _, err := s.Exec(`UPDATE sync_jobs SET state='published',fence=1,retain_until_resolved=0,resolved_at=? WHERE job_id=?`, syncT0, completed.JobID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Exec(`DELETE FROM schema_migrations WHERE version IN (23,24)`); err != nil {
+	if _, err := s.Exec(`DROP TRIGGER sync_jobs_assign_sequence`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Exec(`DROP TABLE sync_job_sequences`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Exec(`ALTER TABLE sync_controls DROP COLUMN membership_mode`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Exec(`DELETE FROM schema_migrations WHERE version IN (23,24,25)`); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Close(); err != nil {

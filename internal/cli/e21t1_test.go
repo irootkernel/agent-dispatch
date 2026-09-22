@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/gitlocal"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
@@ -141,6 +143,20 @@ func TestE21T5StatusSeparatesDurableSyncOutcomes(t *testing.T) {
 	if got := status["latest_import"].(map[string]any)["reason"]; got != "observation_unavailable" {
 		t.Fatalf("import deferral reason = %v", got)
 	}
+	if _, err := store.Exec(`INSERT INTO sync_journal_entries
+		(journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES
+		('publication-confirmed-evidence','publication-job-g17',2,'publication','published','{"candidate":"2222222222222222222222222222222222222222","remote":"2222222222222222222222222222222222222222","push_state":"confirmed","reason":"none"}','2026-09-21T01:00:06Z');
+		UPDATE sync_jobs SET state='published',updated_at='2026-09-21T01:00:06Z' WHERE job_id='publication-job-g17'`); err != nil {
+		t.Fatal(err)
+	}
+	code, envelope, stderr = syncResult(t, "status", "--group", cfg.Sync.GroupID, "--config", configPath, "--output", "json")
+	if code != 0 {
+		t.Fatalf("published status: %d %s", code, stderr)
+	}
+	publication = envelope["result"].(map[string]any)["latest_publication"].(map[string]any)
+	if publication["state"] != "published" || publication["push_state"] != "confirmed" || publication["reason"] != "none" || publication["remote"] != "2222222222222222222222222222222222222222" {
+		t.Fatalf("terminal publication retained stale retry evidence: %v", publication)
+	}
 }
 
 func TestE21T1EnabledConfigDoesNotActivateStillReservedGitCommands(t *testing.T) {
@@ -162,5 +178,62 @@ func TestE21SameBasePushRejectionIsRetryable(t *testing.T) {
 	}
 	if got := classifySyncPush(gitlocal.PushAmbiguous, candidate, base, candidate); got != syncPushConfirmed {
 		t.Fatalf("remote-confirmed candidate = %v", got)
+	}
+}
+
+func TestE21ControllerNoEffectRetryReportsValidatedIdentity(t *testing.T) {
+	dir := t.TempDir()
+	repo := filepath.Join(dir, "repo")
+	if err := os.Mkdir(repo, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gitTestRun(t, gitPath, repo, "init", "-q", "-b", "main")
+	gitTestRun(t, gitPath, repo, "config", "user.name", "Test")
+	gitTestRun(t, gitPath, repo, "config", "user.email", "test@example.invalid")
+	if err := os.WriteFile(filepath.Join(repo, "note.md"), []byte("base\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitTestRun(t, gitPath, repo, "add", "note.md")
+	gitTestRun(t, gitPath, repo, "commit", "-q", "-m", "base")
+	head := gitTestOutput(t, gitPath, repo, "rev-parse", "HEAD")
+	client, err := gitlocal.New(repo, gitlocal.Limits{Timeout: 30 * time.Second, MaxOutput: 1 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := client.InspectImport(requestCtx(), "refs/heads/main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := sqlite.Open(filepath.Join(dir, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.Migrate(dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.EnsureSyncControl(requestCtx(), "wiki-pair", "cfg-1", "2026-09-21T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	job, _, err := store.AdmitSyncJob(requestCtx(), sqlite.SyncJobInput{JobID: "controller-no-effect", GroupID: "wiki-pair", Kind: "import", LogicalKey: "controller-no-effect", InitialState: "applying", PayloadJSON: `{}`, ConfigRevision: "cfg-1", QueueLimit: 10, Now: "2026-09-21T00:00:00Z"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	job, err = store.ClaimSyncAdministrationJob(requestCtx(), job.JobID, "controller-owner", "cfg-1", "2026-09-21T00:00:00Z", "2099-09-21T00:00:00Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := finishControllerImport(&stdout, &stderr, store, client, job, "controller-owner", "refs/heads/main", head, "2222222222222222222222222222222222222222", state.Digest, os.ErrInvalid)
+	if code != 10 || !bytes.Contains(stdout.Bytes(), []byte(`"state":"validated"`)) || !bytes.Contains(stdout.Bytes(), []byte(`"reason":"effect_not_started"`)) {
+		t.Fatalf("controller retry: code=%d out=%s err=%s", code, stdout.String(), stderr.String())
+	}
+	stored, found, err := store.FindSyncJob(requestCtx(), "wiki-pair", "import", "controller-no-effect")
+	if err != nil || !found || stored.State != "validated" || stored.ResolvedAt != "" {
+		t.Fatalf("controller retry job=%+v found=%v err=%v", stored, found, err)
 	}
 }

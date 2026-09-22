@@ -55,7 +55,7 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 	// either remote history is refused by Git before the live content ref moves.
 	membershipTracking := "refs/agent-dispatch/sync/membership/" + s.GroupID
 	if err := client.Fetch(requestCtx(), s.RemoteName, s.MembershipRef, membershipTracking, s.RemoteRepositoryDigest); err != nil {
-		if errors.Is(err, gitlocal.ErrFetchRewrite) {
+		if errors.Is(err, gitlocal.ErrFetchRewrite) || errors.Is(err, gitlocal.ErrRemoteBinding) {
 			return blockReconcile(stdout, stderr, store, s.GroupID, revision, "trust_failure", "membership_stale", err)
 		}
 		return reconcileEnvelopeCode(stdout, "deferred", "git_unstable", map[string]any{"detail": "membership fetch failed: " + err.Error()}, 10)
@@ -91,7 +91,7 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 			}
 		}
 		if err := client.UpdateRefExpected(requestCtx(), s.MembershipRef, remoteMembership, localMembership); err != nil {
-			return blockReconcile(stdout, stderr, store, s.GroupID, revision, "trust_failure", "membership_stale", err)
+			return syncMembershipError(stderr, command, err, 14)
 		}
 		if remoteMembershipRecord.Mode == "normal" {
 			control, err = store.ReconcileAdoptedMembership(requestCtx(), s.GroupID, remoteMembershipRecord.Mode, remoteMembership, revision, time.Now().UTC().Format(time.RFC3339Nano))
@@ -99,14 +99,15 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 				return syncStoreError(stderr, command, err)
 			}
 		}
-		if control.State == "blocked" {
+		if remoteMembershipRecord.Mode == "blocked_emergency" || control.State == "blocked" {
 			return reconcileEnvelopeCode(stdout, "membership_adopted", control.Reason, map[string]any{
 				"previous_membership_revision": localMembership,
 				"membership_revision":          remoteMembership,
+				"membership_mode":              control.MembershipMode,
 				"control_state":                control.State,
 				"control_reason":               control.Reason,
 				"side_effects":                 []string{"local_membership_ref_updated"},
-			}, 30)
+			}, syncControlHoldExitCode(remoteMembershipRecord.Mode, control.Reason))
 		}
 		return reconcileEnvelope(stdout, "membership_adopted", "none", map[string]any{
 			"previous_membership_revision": localMembership,
@@ -120,13 +121,13 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 			return syncStoreError(stderr, command, err)
 		}
 	}
-	if control.State == "blocked" && control.Reason == "membership_emergency" {
-		return reconcileEnvelopeCode(stdout, "blocked", "membership_emergency", map[string]any{"membership_revision": remoteMembership, "detail": "the verified membership revision blocks protected effects"}, 30)
+	if remoteMembershipRecord.Mode == "blocked_emergency" {
+		return reconcileEnvelopeCode(stdout, "blocked", control.Reason, map[string]any{"membership_revision": remoteMembership, "membership_mode": control.MembershipMode, "control_state": control.State, "control_reason": control.Reason, "detail": "the verified membership revision blocks protected effects"}, 30)
 	}
 
 	contentTracking := "refs/agent-dispatch/sync/content/" + s.GroupID
 	if err := client.Fetch(requestCtx(), s.RemoteName, s.ContentRef, contentTracking, s.RemoteRepositoryDigest); err != nil {
-		if errors.Is(err, gitlocal.ErrFetchRewrite) {
+		if errors.Is(err, gitlocal.ErrFetchRewrite) || errors.Is(err, gitlocal.ErrRemoteBinding) {
 			return blockReconcile(stdout, stderr, store, s.GroupID, revision, "trust_failure", "trust_failed", err)
 		}
 		return reconcileEnvelopeCode(stdout, "deferred", "git_unstable", map[string]any{"detail": "content fetch failed: " + err.Error()}, 10)
@@ -154,8 +155,12 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 			if err := verifyContentHead(client, remoteHistory, cfg, s, target); err != nil || !contentHeadAddsCheckpoint(client, target) {
 				return reconcileEnvelopeCode(stdout, "blocked", "history_uncovered", map[string]any{"target_commit": target, "detail": "the equal head is not the exact verified administrator checkpoint required to clear the hold"}, 14)
 			}
-			if _, err := store.ReconcileSyncControlCheckpoint(requestCtx(), s.GroupID, control.Revision, revision, target, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+			reconciled, err := store.ReconcileSyncControlCheckpoint(requestCtx(), s.GroupID, control.Revision, revision, target, time.Now().UTC().Format(time.RFC3339Nano))
+			if err != nil {
 				return syncStoreError(stderr, command, err)
+			}
+			if reconciled.State == "blocked" && reconciled.Reason == "membership_emergency" {
+				return reconcileEnvelopeCode(stdout, "blocked", reconciled.Reason, map[string]any{"target_commit": target, "checkpoint_reconciled": true, "membership_mode": reconciled.MembershipMode}, 30)
 			}
 			return reconcileEnvelope(stdout, "no_change", "none", map[string]any{"target_commit": target, "checkpoint_reconciled": true})
 		}
@@ -323,10 +328,14 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 		}
 		checkpointReconciled := false
 		if control.State == "blocked" {
-			if _, err := store.ReconcileSyncControlCheckpoint(requestCtx(), s.GroupID, control.Revision, revision, target, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+			reconciled, err := store.ReconcileSyncControlCheckpoint(requestCtx(), s.GroupID, control.Revision, revision, target, time.Now().UTC().Format(time.RFC3339Nano))
+			if err != nil {
 				return syncStoreError(stderr, command, err)
 			}
 			checkpointReconciled = true
+			if reconciled.State == "blocked" && reconciled.Reason == "membership_emergency" {
+				return reconcileEnvelopeCode(stdout, "applied", reconciled.Reason, map[string]any{"import_id": record.ImportID, "from_commit": from, "target_commit": target, "paths": 0, "controller_only": true, "checkpoint_reconciled": true, "membership_mode": reconciled.MembershipMode, "side_effects": []string{"controller_records_updated", "index_updated", "local_content_ref_updated", "state_committed"}}, 30)
+			}
 		}
 		return reconcileEnvelope(stdout, "applied", "none", map[string]any{"import_id": record.ImportID, "from_commit": from, "target_commit": target, "paths": 0, "controller_only": true, "checkpoint_reconciled": checkpointReconciled, "idempotent": reused, "side_effects": []string{"controller_records_updated", "index_updated", "local_content_ref_updated", "state_committed"}})
 	}
@@ -478,10 +487,14 @@ func recoverPendingImport(stdout, stderr io.Writer, cfg *config.Config, s *confi
 				}
 				checkpointReconciled := false
 				if control, loadErr := store.LoadSyncControl(requestCtx(), s.GroupID); loadErr == nil && control.State == "blocked" && contentHeadAddsCheckpoint(client, record.TargetCommit) {
-					if _, reconcileErr := store.ReconcileSyncControlCheckpoint(requestCtx(), s.GroupID, control.Revision, revision, record.TargetCommit, now); reconcileErr != nil {
+					reconciled, reconcileErr := store.ReconcileSyncControlCheckpoint(requestCtx(), s.GroupID, control.Revision, revision, record.TargetCommit, now)
+					if reconcileErr != nil {
 						return true, syncStoreError(stderr, "sync reconcile", reconcileErr)
 					}
 					checkpointReconciled = true
+					if reconciled.State == "blocked" && reconciled.Reason == "membership_emergency" {
+						return true, reconcileEnvelopeCode(stdout, "recovered", reconciled.Reason, map[string]any{"import_id": record.ImportID, "target_commit": record.TargetCommit, "controller_only": true, "checkpoint_reconciled": true, "membership_mode": reconciled.MembershipMode, "side_effects": []string{"controller_state_confirmed", "state_committed"}}, 30)
+					}
 				}
 				return true, reconcileEnvelope(stdout, "recovered", "none", map[string]any{"import_id": record.ImportID, "target_commit": record.TargetCommit, "controller_only": true, "checkpoint_reconciled": checkpointReconciled, "side_effects": []string{"controller_state_confirmed", "state_committed"}})
 			}
@@ -662,6 +675,13 @@ func blockReconcile(stdout, stderr io.Writer, store *sqlite.Store, group, revisi
 	return reconcileEnvelopeCode(stdout, "blocked", resultReason, map[string]any{"detail": cause.Error()}, exit)
 }
 
+func syncControlHoldExitCode(membershipMode, reason string) int {
+	if membershipMode == "blocked_emergency" || reason != "conflict" {
+		return 30
+	}
+	return 14
+}
+
 func finishImportDisposition(stdout, stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, owner, state, outcome, detail, reason string) int {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	disposition := sqlite.SyncJobKeepUnresolved
@@ -686,10 +706,10 @@ func finishControllerImport(stdout, stderr io.Writer, store *sqlite.Store, clien
 	}
 	if inspectErr == nil && refErr == nil && state.ActiveOperation == "" && state.Digest == expectedDigest && ref == from {
 		now := time.Now().UTC().Format(time.RFC3339Nano)
-		if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "validated", sqlite.SyncJobKeepUnresolved, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "effect_not_started", EvidenceJSON: mustJSON(map[string]any{"controller_only": true, "detail": cause.Error(), "ref": ref}), RecordedAt: now}, now); err != nil {
+		if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "validated", sqlite.SyncJobKeepUnresolved, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "effect_not_started", EvidenceJSON: mustJSON(map[string]any{"controller_only": true, "detail": cause.Error(), "ref": ref, "reason": "effect_not_started"}), RecordedAt: now}, now); err != nil {
 			return syncStoreError(stderr, "sync reconcile", err)
 		}
-		return reconcileEnvelopeCode(stdout, "deferred", "git_unstable", map[string]any{"import_job_id": job.JobID, "detail": cause.Error(), "ref": ref, "effect_not_started": true}, 10)
+		return reconcileEnvelopeCode(stdout, "validated", "effect_not_started", map[string]any{"import_job_id": job.JobID, "detail": cause.Error(), "ref": ref, "effect_not_started": true}, 10)
 	}
 	return finishImportUncertain(stdout, stderr, store, job, owner, cause)
 }

@@ -284,6 +284,25 @@ func TestRemoteBindingRejectsWorktreePushURLRewrite(t *testing.T) {
 	}
 }
 
+func TestPushPreservesRemoteBindingFailure(t *testing.T) {
+	repo := initRepository(t)
+	gitRun(t, repo, "remote", "add", "origin", "ssh://git@example.com/repo")
+	gitRun(t, repo, "config", "url.ssh://git@evil.example/.insteadOf", "ssh://git@example.com/")
+	digest, _, err := config.RemoteRepositoryDigest("ssh://git@example.com/repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := New(repo, Limits{Timeout: 2 * time.Second, MaxOutput: 64 << 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	head := gitOutput(t, repo, "rev-parse", "HEAD")
+	result := client.PushFastForward(context.Background(), "origin", "refs/agent-dispatch/content/wiki-pair", head, head, digest)
+	if !errors.Is(result.Underlying, ErrRemoteBinding) {
+		t.Fatalf("push binding error = %+v", result)
+	}
+}
+
 func TestUpdateRefExpectedRejectsSymbolicRef(t *testing.T) {
 	repo := initRepository(t)
 	head := gitOutput(t, repo, "rev-parse", "HEAD")
@@ -294,6 +313,22 @@ func TestUpdateRefExpectedRejectsSymbolicRef(t *testing.T) {
 	}
 	if err := client.UpdateRefExpected(context.Background(), "refs/heads/sync", head, head); err == nil || !strings.Contains(err.Error(), "symbolic ref") {
 		t.Fatalf("symbolic expected-old ref was accepted: %v", err)
+	}
+}
+
+func TestUpdateRefExpectedCreatesMissingRef(t *testing.T) {
+	repo := initRepository(t)
+	head := gitOutput(t, repo, "rev-parse", "HEAD")
+	client, err := New(repo, Limits{Timeout: 2 * time.Second, MaxOutput: 64 << 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const ref = "refs/agent-dispatch/membership/wiki-pair"
+	if err := client.UpdateRefExpected(context.Background(), ref, head, ""); err != nil {
+		t.Fatalf("create missing ref: %v", err)
+	}
+	if got := gitOutput(t, repo, "rev-parse", "--verify", ref); got != head {
+		t.Fatalf("created ref = %s, want %s", got, head)
 	}
 }
 

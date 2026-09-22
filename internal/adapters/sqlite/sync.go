@@ -36,6 +36,7 @@ type SyncControlRow struct {
 	Revision       int64  `json:"revision"`
 	State          string `json:"state"`
 	Reason         string `json:"reason"`
+	MembershipMode string `json:"membership_mode"`
 	ConfigRevision string `json:"config_revision"`
 	UpdatedAt      string `json:"updated_at"`
 }
@@ -235,9 +236,9 @@ func (s *Store) EnsureSyncControl(ctx context.Context, groupID, configRevision, 
 		}
 	}
 	var row SyncControlRow
-	if err := tx.QueryRowContext(ctx, `SELECT group_id, revision, state, reason, config_revision, updated_at
+	if err := tx.QueryRowContext(ctx, `SELECT group_id, revision, state, reason, membership_mode, config_revision, updated_at
 		FROM sync_controls WHERE group_id = ?`, groupID).Scan(
-		&row.GroupID, &row.Revision, &row.State, &row.Reason, &row.ConfigRevision, &row.UpdatedAt); err != nil {
+		&row.GroupID, &row.Revision, &row.State, &row.Reason, &row.MembershipMode, &row.ConfigRevision, &row.UpdatedAt); err != nil {
 		return SyncControlRow{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -249,9 +250,9 @@ func (s *Store) EnsureSyncControl(ctx context.Context, groupID, configRevision, 
 // LoadSyncControl returns one group control record.
 func (s *Store) LoadSyncControl(ctx context.Context, groupID string) (SyncControlRow, error) {
 	var row SyncControlRow
-	err := s.QueryRowContext(ctx, `SELECT group_id, revision, state, reason, config_revision, updated_at
+	err := s.QueryRowContext(ctx, `SELECT group_id, revision, state, reason, membership_mode, config_revision, updated_at
 		FROM sync_controls WHERE group_id = ?`, groupID).Scan(
-		&row.GroupID, &row.Revision, &row.State, &row.Reason, &row.ConfigRevision, &row.UpdatedAt)
+		&row.GroupID, &row.Revision, &row.State, &row.Reason, &row.MembershipMode, &row.ConfigRevision, &row.UpdatedAt)
 	return row, err
 }
 
@@ -267,9 +268,9 @@ func (s *Store) SetSyncControl(ctx context.Context, groupID string, expectedRevi
 	}
 	defer tx.Rollback()
 	var current SyncControlRow
-	if err := tx.QueryRowContext(ctx, `SELECT group_id, revision, state, reason, config_revision, updated_at
+	if err := tx.QueryRowContext(ctx, `SELECT group_id, revision, state, reason, membership_mode, config_revision, updated_at
 		FROM sync_controls WHERE group_id = ?`, groupID).Scan(
-		&current.GroupID, &current.Revision, &current.State, &current.Reason, &current.ConfigRevision, &current.UpdatedAt); err != nil {
+		&current.GroupID, &current.Revision, &current.State, &current.Reason, &current.MembershipMode, &current.ConfigRevision, &current.UpdatedAt); err != nil {
 		return SyncControlRow{}, err
 	}
 	if current.Revision != expectedRevision {
@@ -277,6 +278,9 @@ func (s *Store) SetSyncControl(ctx context.Context, groupID string, expectedRevi
 	}
 	if current.State == "blocked" {
 		return SyncControlRow{}, fmt.Errorf("control is blocked for %s and requires its recovery evidence: %w", current.Reason, ErrSyncControlHeld)
+	}
+	if targetState == "active" && current.MembershipMode == "blocked_emergency" {
+		targetState = "blocked"
 	}
 	if current.State == targetState && (targetState != "active" || current.ConfigRevision == configRevision) {
 		return current, nil
@@ -287,6 +291,8 @@ func (s *Store) SetSyncControl(ctx context.Context, groupID string, expectedRevi
 	reason := "none"
 	if targetState == "paused" {
 		reason = "operator_pause"
+	} else if targetState == "blocked" {
+		reason = "membership_emergency"
 	}
 	boundConfigRevision := configRevision
 	if targetState == "paused" {
@@ -329,7 +335,7 @@ func (s *Store) HoldSyncControl(ctx context.Context, groupID, reason, configRevi
 	}
 	defer tx.Rollback()
 	var row SyncControlRow
-	if err := tx.QueryRowContext(ctx, `SELECT group_id,revision,state,reason,config_revision,updated_at FROM sync_controls WHERE group_id=?`, groupID).Scan(&row.GroupID, &row.Revision, &row.State, &row.Reason, &row.ConfigRevision, &row.UpdatedAt); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT group_id,revision,state,reason,membership_mode,config_revision,updated_at FROM sync_controls WHERE group_id=?`, groupID).Scan(&row.GroupID, &row.Revision, &row.State, &row.Reason, &row.MembershipMode, &row.ConfigRevision, &row.UpdatedAt); err != nil {
 		return SyncControlRow{}, err
 	}
 	if row.State == "blocked" && row.Reason == reason && row.ConfigRevision == configRevision {
@@ -365,36 +371,11 @@ func (s *Store) ReconcileAdoptedMembership(ctx context.Context, groupID, mode, m
 	}
 	defer tx.Rollback()
 	var control SyncControlRow
-	if err := tx.QueryRowContext(ctx, `SELECT group_id,revision,state,reason,config_revision,updated_at FROM sync_controls WHERE group_id=?`, groupID).Scan(&control.GroupID, &control.Revision, &control.State, &control.Reason, &control.ConfigRevision, &control.UpdatedAt); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT group_id,revision,state,reason,membership_mode,config_revision,updated_at FROM sync_controls WHERE group_id=?`, groupID).Scan(&control.GroupID, &control.Revision, &control.State, &control.Reason, &control.MembershipMode, &control.ConfigRevision, &control.UpdatedAt); err != nil {
 		return SyncControlRow{}, err
 	}
-	targetState, targetReason := control.State, control.Reason
-	if mode == "blocked_emergency" {
-		// Membership emergency is the weakest safety hold. It can arm an
-		// otherwise-active group, but it must not erase an operator pause or a
-		// stronger conflict, trust, or recovery hold.
-		if control.State == "active" {
-			targetState, targetReason = "blocked", "membership_emergency"
-		}
-	} else if control.State == "blocked" && control.Reason == "membership_emergency" {
-		targetState, targetReason = "active", "none"
-	}
-	changed := targetState != control.State || targetReason != control.Reason || (targetState == "active" && control.ConfigRevision != configRevision)
-	if changed {
-		previous := control.State
-		control.Revision++
-		control.State, control.Reason, control.ConfigRevision, control.UpdatedAt = targetState, targetReason, configRevision, now
-		res, err := tx.ExecContext(ctx, `UPDATE sync_controls SET revision=?,state=?,reason=?,config_revision=?,updated_at=? WHERE group_id=? AND revision=?`, control.Revision, control.State, control.Reason, control.ConfigRevision, control.UpdatedAt, control.GroupID, control.Revision-1)
-		if err != nil {
-			return SyncControlRow{}, err
-		}
-		if n, _ := res.RowsAffected(); n != 1 {
-			return SyncControlRow{}, ErrSyncPrecondition
-		}
-		contextJSON, _ := json.Marshal(map[string]any{"reason": control.Reason, "config_revision": control.ConfigRevision, "revision": control.Revision, "membership_revision": membershipRevision})
-		if _, err := tx.ExecContext(ctx, `INSERT INTO state_transitions(transition_id,entity_type,entity_id,from_state,to_state,recorded_at,context_json) VALUES (?,?,?,?,?,?,?)`, fmt.Sprintf("sync-control:%s:%d", control.GroupID, control.Revision), "sync_control", control.GroupID, previous, control.State, now, string(contextJSON)); err != nil {
-			return SyncControlRow{}, err
-		}
+	if err := applyMembershipPosture(ctx, tx, &control, mode, "membership_revision", membershipRevision, configRevision, now); err != nil {
+		return SyncControlRow{}, err
 	}
 	if mode == "normal" {
 		if err := resolveBlockedSyncJobs(ctx, tx, groupID, map[string]bool{"membership": true}, "membership_replaced", membershipRevision, now); err != nil {
@@ -417,20 +398,28 @@ func (s *Store) ReconcileSyncControlCheckpoint(ctx context.Context, groupID stri
 	}
 	defer tx.Rollback()
 	var row SyncControlRow
-	if err := tx.QueryRowContext(ctx, `SELECT group_id,revision,state,reason,config_revision,updated_at FROM sync_controls WHERE group_id=?`, groupID).Scan(&row.GroupID, &row.Revision, &row.State, &row.Reason, &row.ConfigRevision, &row.UpdatedAt); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT group_id,revision,state,reason,membership_mode,config_revision,updated_at FROM sync_controls WHERE group_id=?`, groupID).Scan(&row.GroupID, &row.Revision, &row.State, &row.Reason, &row.MembershipMode, &row.ConfigRevision, &row.UpdatedAt); err != nil {
 		return SyncControlRow{}, err
 	}
 	if row.Revision != expectedRevision || row.State != "blocked" || (row.Reason != "conflict" && row.Reason != "trust_failure" && row.Reason != "recovery_required") || checkpointCommit == "" {
 		return SyncControlRow{}, ErrSyncPrecondition
 	}
 	previous := row.State
+	targetState, targetReason := "active", "none"
+	if row.MembershipMode == "blocked_emergency" {
+		targetState, targetReason = "blocked", "membership_emergency"
+	}
 	row.Revision++
-	row.State, row.Reason, row.ConfigRevision, row.UpdatedAt = "active", "none", configRevision, now
-	if _, err := tx.ExecContext(ctx, `UPDATE sync_controls SET revision=?,state='active',reason='none',config_revision=?,updated_at=? WHERE group_id=? AND revision=? AND state='blocked'`, row.Revision, configRevision, now, groupID, expectedRevision); err != nil {
+	row.State, row.Reason, row.ConfigRevision, row.UpdatedAt = targetState, targetReason, configRevision, now
+	res, err := tx.ExecContext(ctx, `UPDATE sync_controls SET revision=?,state=?,reason=?,config_revision=?,updated_at=? WHERE group_id=? AND revision=? AND state='blocked'`, row.Revision, targetState, targetReason, configRevision, now, groupID, expectedRevision)
+	if err != nil {
 		return SyncControlRow{}, err
 	}
-	contextJSON, _ := json.Marshal(map[string]any{"reason": "checkpoint_reconciled", "checkpoint_commit": checkpointCommit, "config_revision": configRevision, "revision": row.Revision})
-	if _, err := tx.ExecContext(ctx, `INSERT INTO state_transitions(transition_id,entity_type,entity_id,from_state,to_state,recorded_at,context_json) VALUES (?,?,?,?,?,?,?)`, fmt.Sprintf("sync-control:%s:%d", groupID, row.Revision), "sync_control", groupID, previous, "active", now, string(contextJSON)); err != nil {
+	if n, _ := res.RowsAffected(); n != 1 {
+		return SyncControlRow{}, ErrSyncPrecondition
+	}
+	contextJSON, _ := json.Marshal(map[string]any{"reason": "checkpoint_reconciled", "checkpoint_commit": checkpointCommit, "membership_mode": row.MembershipMode, "result_reason": targetReason, "config_revision": configRevision, "revision": row.Revision})
+	if _, err := tx.ExecContext(ctx, `INSERT INTO state_transitions(transition_id,entity_type,entity_id,from_state,to_state,recorded_at,context_json) VALUES (?,?,?,?,?,?,?)`, fmt.Sprintf("sync-control:%s:%d", groupID, row.Revision), "sync_control", groupID, previous, targetState, now, string(contextJSON)); err != nil {
 		return SyncControlRow{}, err
 	}
 	if err := resolveBlockedSyncJobs(ctx, tx, groupID, map[string]bool{"publication": true, "checkpoint": true, "import": true}, "checkpoint_reconciled", checkpointCommit, now); err != nil {
@@ -734,9 +723,21 @@ func (s *Store) FinishRecoveredMembershipJob(ctx context.Context, jobID string, 
 
 func applyMembershipControl(ctx context.Context, tx *sql.Tx, groupID, resolverID, mode, configRevision, now string) (SyncControlRow, error) {
 	var control SyncControlRow
-	if err := tx.QueryRowContext(ctx, `SELECT group_id, revision, state, reason, config_revision, updated_at FROM sync_controls WHERE group_id = ?`, groupID).Scan(&control.GroupID, &control.Revision, &control.State, &control.Reason, &control.ConfigRevision, &control.UpdatedAt); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT group_id, revision, state, reason, membership_mode, config_revision, updated_at FROM sync_controls WHERE group_id = ?`, groupID).Scan(&control.GroupID, &control.Revision, &control.State, &control.Reason, &control.MembershipMode, &control.ConfigRevision, &control.UpdatedAt); err != nil {
 		return SyncControlRow{}, err
 	}
+	if err := applyMembershipPosture(ctx, tx, &control, mode, "membership_job_id", resolverID, configRevision, now); err != nil {
+		return SyncControlRow{}, err
+	}
+	if mode == "normal" {
+		if err := resolveBlockedSyncJobs(ctx, tx, groupID, map[string]bool{"membership": true}, "membership_replaced", resolverID, now); err != nil {
+			return SyncControlRow{}, err
+		}
+	}
+	return control, nil
+}
+
+func applyMembershipPosture(ctx context.Context, tx *sql.Tx, control *SyncControlRow, mode, resolverKey, resolverID, configRevision, now string) error {
 	targetState, targetReason := control.State, control.Reason
 	if mode == "blocked_emergency" {
 		if control.State == "active" {
@@ -745,24 +746,25 @@ func applyMembershipControl(ctx context.Context, tx *sql.Tx, groupID, resolverID
 	} else if control.State == "blocked" && control.Reason == "membership_emergency" {
 		targetState, targetReason = "active", "none"
 	}
-	if targetState != control.State || targetReason != control.Reason || (targetState == "active" && control.ConfigRevision != configRevision) {
+	if targetState != control.State || targetReason != control.Reason || control.MembershipMode != mode || (targetState == "active" && control.ConfigRevision != configRevision) {
 		previous := control.State
 		control.Revision++
-		control.State, control.Reason, control.ConfigRevision, control.UpdatedAt = targetState, targetReason, configRevision, now
-		if _, err := tx.ExecContext(ctx, `UPDATE sync_controls SET revision=?,state=?,reason=?,config_revision=?,updated_at=? WHERE group_id=?`, control.Revision, control.State, control.Reason, control.ConfigRevision, control.UpdatedAt, control.GroupID); err != nil {
-			return SyncControlRow{}, err
+		previousRevision := control.Revision - 1
+		control.State, control.Reason, control.MembershipMode, control.ConfigRevision, control.UpdatedAt = targetState, targetReason, mode, configRevision, now
+		res, err := tx.ExecContext(ctx, `UPDATE sync_controls SET revision=?,state=?,reason=?,membership_mode=?,config_revision=?,updated_at=? WHERE group_id=? AND revision=?`, control.Revision, control.State, control.Reason, control.MembershipMode, control.ConfigRevision, control.UpdatedAt, control.GroupID, previousRevision)
+		if err != nil {
+			return err
 		}
-		contextJSON, _ := json.Marshal(map[string]any{"reason": control.Reason, "config_revision": control.ConfigRevision, "revision": control.Revision, "membership_job_id": resolverID})
+		if n, _ := res.RowsAffected(); n != 1 {
+			return ErrSyncPrecondition
+		}
+		context := map[string]any{"reason": control.Reason, "membership_mode": mode, "config_revision": control.ConfigRevision, "revision": control.Revision, resolverKey: resolverID}
+		contextJSON, _ := json.Marshal(context)
 		if _, err := tx.ExecContext(ctx, `INSERT INTO state_transitions(transition_id,entity_type,entity_id,from_state,to_state,recorded_at,context_json) VALUES (?,?,?,?,?,?,?)`, fmt.Sprintf("sync-control:%s:%d", control.GroupID, control.Revision), "sync_control", control.GroupID, previous, control.State, now, string(contextJSON)); err != nil {
-			return SyncControlRow{}, err
+			return err
 		}
 	}
-	if mode == "normal" {
-		if err := resolveBlockedSyncJobs(ctx, tx, groupID, map[string]bool{"membership": true}, "membership_replaced", resolverID, now); err != nil {
-			return SyncControlRow{}, err
-		}
-	}
-	return control, nil
+	return nil
 }
 
 // AppendSyncJournal records evidence only for the live owner and fence.
@@ -1173,13 +1175,13 @@ func (s *Store) finishImportJob(ctx context.Context, jobID, owner, resourceID st
 // after process loss; older provenance never resurfaces after a later import.
 func (s *Store) LoadPendingImportEffects(ctx context.Context, resourceID string) ([]ImportEffectRow, error) {
 	rows, err := s.QueryContext(ctx, `SELECT e.job_id,e.fence,e.resource_id,e.path,e.before_value,e.after_value,COALESCE(e.applied_at,'')
-		FROM sync_import_effects e JOIN sync_jobs j ON j.job_id=e.job_id
+		FROM sync_import_effects e JOIN sync_jobs j ON j.job_id=e.job_id JOIN sync_job_sequences js ON js.job_id=j.job_id
 		WHERE e.resource_id=? AND (e.applied_at IS NOT NULL OR (j.state IN ('applying','recovering','uncertain') AND j.resolved_at IS NULL))
 		AND NOT EXISTS (SELECT 1 FROM sync_import_attributions a WHERE a.job_id=e.job_id AND a.fence=e.fence AND a.path=e.path)
-		AND NOT EXISTS (SELECT 1 FROM sync_import_effects newer JOIN sync_jobs newer_job ON newer_job.job_id=newer.job_id
+		AND NOT EXISTS (SELECT 1 FROM sync_import_effects newer JOIN sync_jobs newer_job ON newer_job.job_id=newer.job_id JOIN sync_job_sequences newer_js ON newer_js.job_id=newer_job.job_id
 			WHERE newer.resource_id=e.resource_id AND newer.path=e.path
 			AND (newer.applied_at IS NOT NULL OR (newer_job.state IN ('applying','recovering','uncertain') AND newer_job.resolved_at IS NULL))
-			AND (newer_job.rowid>j.rowid OR (newer_job.rowid=j.rowid AND newer.fence>e.fence)))
+			AND (newer_js.sequence>js.sequence OR (newer_js.sequence=js.sequence AND newer.fence>e.fence)))
 		ORDER BY e.path`, resourceID)
 	if err != nil {
 		return nil, err

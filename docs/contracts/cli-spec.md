@@ -81,6 +81,9 @@ If a non-force publication, checkpoint, or membership push is rejected while
 the approved remote is still at that predecessor, the command preserves the
 signed candidate and returns `sync_retryable` at exit 10. Exit 14 is reserved
 for a changed predecessor or another actual conflict.
+Failure to prove the configured remote binding, including effective URL rewrite
+rules, returns `sync_trust_failed` at exit 30 before predecessor
+classification and never creates a content-conflict hold.
 Non-bootstrap membership plan commands require `--instance`. Pause blocks new protected
 claims while preserving in-flight evidence; resume validates and binds the
 current configuration revision and never clears a conflict, revocation, trust,
@@ -88,7 +91,10 @@ or recovery block. Emergency membership can arm an active group but cannot
 replace an operator pause or a stronger conflict, trust, or recovery hold. A
 confirmed normal replacement clears only the membership emergency block.
 Adopting an emergency membership updates the local membership ref and returns
-exit 30 in the same invocation. Reconcile fetches and validates while unacknowledged but defers
+exit 30 in the same invocation. The adopted membership mode is persisted
+separately from an operator pause or stronger hold; resume or checkpoint
+reconciliation re-arms `membership_emergency` instead of exposing an active
+group. Reconcile fetches and validates while unacknowledged but defers
 live mutation; overlap, untracked collision, Git instability, divergence,
 uncovered history, trust failure, and partial effects stay inspectable. An
 exact administrator checkpoint at both local and approved remote heads is the
@@ -96,7 +102,8 @@ only reconciliation evidence that clears conflict/trust/recovery control.
 Deferred safety fences, including active participating writers, are exit-0
 dispositions with no live mutation. A controller operation that fails after
 the no-effect fence has been re-proven is retryable at exit 10; it leaves the
-same durable identity ready for re-entry. A
+same durable identity in `validated`, reports `effect_not_started`, and is ready
+for re-entry. A
 conflict or protected-claim block exits 14, an unprovable partial effect exits
 13, and membership, signature, or covered-history trust failure exits 30; each
 still emits the versioned reconcile result with its durable state and reason.
@@ -110,7 +117,9 @@ delivery, and local import can never collapse into one claimed outcome. Every
 projection includes the durable job identity, logical key, state, update time,
 resolution, claim, and fence. Resolution evidence is reported separately from
 the historical terminal state, and later resolver journals do not erase the
-latest reason, candidate, remote, or push disposition. Typed publication/import/target/receiver details
+latest reason, candidate, remote, or push disposition. A newer successful
+terminal journal supersedes an earlier retryable push reason and disposition.
+Typed publication/import/target/receiver details
 are included when present. Import additionally reports its reason and target
 paths after strict record decoding. Resolved deferrals remain visible without
 occupying the bounded active queue; `present: false` means no retained job of

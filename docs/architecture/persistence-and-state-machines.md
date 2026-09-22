@@ -42,16 +42,18 @@ The implementation must verify the resulting journal mode and fail `doctor` if t
 | `notification_events` | Durable notification intents of the transactional outbox (E13-T1, ADR-0019): one channel-neutral record per five-component dedup identity (event, optional destination, transition occurrence, sink, notification-policy revision) | unique notification ID (the deterministic dedup derivation); unique idempotency key; indexed route and state |
 | `notification_attempts` | Independent sink delivery attempts whose outcomes never rewrite the intent's source state (E13-T1) | unique attempt ID; unique notification ID + attempt number |
 | `state_transitions` | Append-only audit transitions | unique transition ID |
-| `sync_controls` | Group-scoped protected-effect control and validated configuration binding (schema v21) | primary key group ID; monotonic revision |
-| `sync_jobs` | Stable logical sync obligations, request fingerprints, bounded attempts, ownership, and fencing generations (schema v21; migration v23 restores legacy blocked rows to unresolved retention) | unique job ID; unique group + kind + logical key |
-| `sync_journal_entries` | Immutable per-fence recovery and effect evidence (schema v21) | unique journal ID; indexed job + time |
+| `sync_controls` | Group-scoped protected-effect control and validated configuration binding (schema v21; migration v25 separates adopted membership posture from the visible control reason) | primary key group ID; monotonic revision |
+| `sync_jobs` | Stable logical sync obligations, request fingerprints, bounded attempts, ownership, and fencing generations (schema v21; migration v23 restores legacy blocked rows to unresolved retention; v25 adds durable creation order) | unique job ID; unique group + kind + logical key; explicit creation sequence |
+| `sync_journal_entries` | Immutable per-fence recovery and effect evidence (schema v21; migration v24 adds causal sequence) | unique journal ID; indexed job + sequence |
 | `sync_import_effects` | Immutable pre-apply before/after path evidence for live import and crash attribution (schema v22) | unique job + fence + path; newest active-or-applied effect wins per resource path |
 | `sync_import_attributions` | One-use exact Watchman consumption of an applied import effect, separate from work receipts (schema v22) | unique job + fence + path; indexed observation identity |
 
-Migration v23 is the current schema head. It conservatively reopens any legacy
-`blocked` sync row that older code marked resolved; only a later recorded
-membership replacement or exact checkpoint reconciliation releases that
-obligation for age-based pruning.
+Migration v25 is the current schema head. Migration v23 conservatively reopens
+legacy `blocked` rows that older code marked resolved, v24 makes journal order
+explicit, and v25 persists membership posture separately and assigns every sync
+job a durable creation sequence. Only a later recorded membership replacement
+or exact checkpoint reconciliation releases a blocked obligation for age-based
+pruning.
 
 Since E12-T2 the single-active slot, the dirty generation, and the follow-up
 chain are keyed on the dispatch's destination lane (`destination_lane_state`,
@@ -232,4 +234,6 @@ Control changes use an expected revision. Pausing prevents new claims while an
 existing owner may reach a recorded safe boundary. Resume rebinds the currently
 validated configuration revision and cannot clear a blocked safety reason.
 Resolved rows and their journal children may be pruned after the retention
-cutoff; unresolved, blocked, recovering, or uncertain rows remain roots.
+cutoff. Rows with `resolved_at` unset or `retain_until_resolved` set remain
+roots; a formerly blocked row becomes eligible only after its resolver journal
+is committed.

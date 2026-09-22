@@ -10,7 +10,8 @@ This file records concise shipped outcomes and pending changes.
   side-effect-free `sync capabilities` and disabled `sync status` inspection.
 - Add schema v21 durable sync jobs, append-only recovery journals, fenced
   claims, bounded retention, and revision-fenced `sync pause`/`sync resume`.
-- Add schema v24 explicit sync-journal sequencing for causal recovery order.
+- Add schema v24 explicit sync-journal sequencing and schema v25 durable
+  membership posture and sync-job sequencing for causal recovery order.
 - Add bounded restricted Git operations and reviewed, administrator-signed
   `sync membership plan`/`apply` with emergency revocation holds.
 - Add explicit signed `sync publish`, frozen Markdown snapshots, atomic peer
@@ -28,6 +29,9 @@ This file records concise shipped outcomes and pending changes.
   linked sync evidence horizon without foreign-key prune failures.
 - Preserve signed candidates after same-base push rejection, settle exact
   remote-confirmed terminal jobs, and report retryable rejection at exit 10.
+- Preserve emergency membership through pause and stronger holds, classify
+  unapproved remote bindings as trust failures, and keep confirmed status from
+  inheriting stale retry evidence.
 - Preserve stronger sync holds across emergency membership changes and report
   emergency adoption as a trust-blocked result in the adopting command.
 - Apply one Unicode path identity across policy and sync alias checks, and

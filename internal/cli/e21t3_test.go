@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -89,6 +90,7 @@ func TestE21T3PublishSignsFrozenSnapshotAndAdmitsDelivery(t *testing.T) {
 	}
 	membershipState := filepath.Join(dir, "membership-head")
 	contentState := filepath.Join(dir, "content-head")
+	pushReject := filepath.Join(dir, "push-reject-same-base")
 	pushConflict := filepath.Join(dir, "content-push-conflict")
 	conflictProbe := filepath.Join(dir, "content-push-conflict-probed")
 	if err := os.WriteFile(contentState, []byte(base+"\n"), 0o600); err != nil {
@@ -130,10 +132,11 @@ case " $* " in
       %s) state=%s;;
       *) exit 2;;
     esac
+	if test -e '%s'; then exit 1; fi
     printf '%%s\n' "$oid" > "$state"; exit 0;;
 esac
 exec %s "$@"
-`, remoteURL, remoteURL, cfg.Sync.MembershipRef, membershipState, cfg.Sync.ContentRef, contentState, pushConflict, conflictProbe, cfg.Sync.MembershipRef, membershipState, cfg.Sync.ContentRef, contentState, realGit, repo, cfg.Sync.MembershipRef, membershipState, cfg.Sync.ContentRef, contentState, realGit)
+`, remoteURL, remoteURL, cfg.Sync.MembershipRef, membershipState, cfg.Sync.ContentRef, contentState, pushConflict, conflictProbe, cfg.Sync.MembershipRef, membershipState, cfg.Sync.ContentRef, contentState, realGit, repo, cfg.Sync.MembershipRef, membershipState, cfg.Sync.ContentRef, contentState, pushReject, realGit)
 	if err := os.WriteFile(wrapper, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -156,6 +159,16 @@ exec %s "$@"
 	if err := os.WriteFile(planPath, planRaw, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(pushReject, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var rejectedMembershipOut, rejectedMembershipErr bytes.Buffer
+	if code := Run([]string{"sync", "membership", "apply", "--group", cfg.Sync.GroupID, "--plan", planPath, "--expected-membership-predecessor", "none", "--output", "json"}, &rejectedMembershipOut, &rejectedMembershipErr); code != 10 || !bytes.Contains(rejectedMembershipErr.Bytes(), []byte(`"code":"sync_retryable"`)) {
+		t.Fatalf("same-base membership rejection: %d out=%s err=%s", code, rejectedMembershipOut.String(), rejectedMembershipErr.String())
+	}
+	if err := os.Remove(pushReject); err != nil {
+		t.Fatal(err)
+	}
 	var applyOut, applyErr bytes.Buffer
 	if code := Run([]string{"sync", "membership", "apply", "--group", cfg.Sync.GroupID, "--plan", planPath, "--expected-membership-predecessor", "none", "--output", "json"}, &applyOut, &applyErr); code != 0 {
 		t.Fatalf("membership apply: %d %s", code, applyErr.String())
@@ -175,6 +188,16 @@ exec %s "$@"
 	checkpointRaw, _ := json.Marshal(checkpointEnvelope.Result.Plan)
 	checkpointPath := filepath.Join(dir, "checkpoint-plan.json")
 	if err := os.WriteFile(checkpointPath, checkpointRaw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(pushReject, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var rejectedCheckpointOut, rejectedCheckpointErr bytes.Buffer
+	if code := Run([]string{"sync", "checkpoint", "apply", "--group", cfg.Sync.GroupID, "--plan", checkpointPath, "--output", "json"}, &rejectedCheckpointOut, &rejectedCheckpointErr); code != 10 || !bytes.Contains(rejectedCheckpointErr.Bytes(), []byte(`"code":"sync_retryable"`)) {
+		t.Fatalf("same-base checkpoint rejection: %d out=%s err=%s", code, rejectedCheckpointOut.String(), rejectedCheckpointErr.String())
+	}
+	if err := os.Remove(pushReject); err != nil {
 		t.Fatal(err)
 	}
 	var checkpointOut, checkpointErr bytes.Buffer
@@ -202,6 +225,16 @@ exec %s "$@"
 		t.Fatalf("ineligible publish mutated state: jobs=%d remote=%s", ineligibleJobs, strings.TrimSpace(string(mustRead(t, contentState))))
 	}
 	seedE21T3Eligibility(t, cfg, configPath, []byte("changed\n"))
+	if err := os.WriteFile(pushReject, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var rejectedPublishOut, rejectedPublishErr bytes.Buffer
+	if code := Run([]string{"sync", "publish", "--group", cfg.Sync.GroupID, "--expected-config-revision", revision, "--output", "json"}, &rejectedPublishOut, &rejectedPublishErr); code != 10 || !bytes.Contains(rejectedPublishErr.Bytes(), []byte(`"code":"sync_retryable"`)) {
+		t.Fatalf("same-base publication rejection: %d out=%s err=%s", code, rejectedPublishOut.String(), rejectedPublishErr.String())
+	}
+	if err := os.Remove(pushReject); err != nil {
+		t.Fatal(err)
+	}
 	var publishOut, publishErr bytes.Buffer
 	if code := Run([]string{"sync", "publish", "--group", cfg.Sync.GroupID, "--expected-config-revision", revision, "--output", "json"}, &publishOut, &publishErr); code != 0 {
 		t.Fatalf("publish: %d %s", code, publishErr.String())
@@ -330,21 +363,25 @@ exec %s "$@"
 		t.Fatal(err)
 	}
 	defer store.Close()
-	if _, err := store.Exec(`UPDATE sync_controls SET revision=revision+1,state='active',reason='none' WHERE group_id=?`, cfg.Sync.GroupID); err != nil {
+	if _, err := store.Exec(`UPDATE sync_controls SET revision=revision+1,state='paused',reason='operator_pause' WHERE group_id=?`, cfg.Sync.GroupID); err != nil {
 		t.Fatal(err)
 	}
 	gitTestRun(t, realGit, repo, "update-ref", cfg.Sync.MembershipRef, normalMembership, emergencyMembership)
 	contentBeforeEmergency := gitTestOutput(t, realGit, repo, "rev-parse", cfg.Sync.ContentRef)
 	var adoptOut, adoptErr bytes.Buffer
-	if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &adoptOut, &adoptErr); code != 30 || !bytes.Contains(adoptOut.Bytes(), []byte(`"state":"membership_adopted"`)) || !bytes.Contains(adoptOut.Bytes(), []byte(`"control_reason":"membership_emergency"`)) {
+	if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &adoptOut, &adoptErr); code != 30 || !bytes.Contains(adoptOut.Bytes(), []byte(`"state":"membership_adopted"`)) || !bytes.Contains(adoptOut.Bytes(), []byte(`"control_reason":"operator_pause"`)) || !bytes.Contains(adoptOut.Bytes(), []byte(`"membership_mode":"blocked_emergency"`)) {
 		t.Fatalf("emergency membership adoption: %d out=%s err=%s", code, adoptOut.String(), adoptErr.String())
 	}
 	control, err = store.LoadSyncControl(requestCtx(), cfg.Sync.GroupID)
-	if err != nil || control.State != "blocked" || control.Reason != "membership_emergency" {
-		t.Fatalf("emergency membership did not arm hold: control=%+v err=%v", control, err)
+	if err != nil || control.State != "paused" || control.Reason != "operator_pause" || control.MembershipMode != "blocked_emergency" {
+		t.Fatalf("emergency membership did not preserve pause and latch posture: control=%+v err=%v", control, err)
 	}
 	if got := gitTestOutput(t, realGit, repo, "rev-parse", cfg.Sync.ContentRef); got != contentBeforeEmergency {
 		t.Fatalf("emergency adoption moved content: before=%s after=%s", contentBeforeEmergency, got)
+	}
+	var resumeOut, resumeErr bytes.Buffer
+	if code := Run([]string{"sync", "resume", "--group", cfg.Sync.GroupID, "--expected-control-revision", strconv.FormatInt(control.Revision, 10), "--output", "json"}, &resumeOut, &resumeErr); code != 30 || !bytes.Contains(resumeOut.Bytes(), []byte(`"state":"blocked"`)) || !bytes.Contains(resumeOut.Bytes(), []byte(`"reason":"membership_emergency"`)) {
+		t.Fatalf("resume crossed emergency membership: %d out=%s err=%s", code, resumeOut.String(), resumeErr.String())
 	}
 	var blockedOut, blockedErr bytes.Buffer
 	if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &blockedOut, &blockedErr); code != 30 || !bytes.Contains(blockedOut.Bytes(), []byte(`"reason":"membership_emergency"`)) {

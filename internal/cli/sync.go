@@ -54,7 +54,7 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		defer concrete.Close()
 		control, err := store.LoadSyncControl(requestCtx(), group)
 		if errors.Is(err, sql.ErrNoRows) {
-			control = sqlite.SyncControlRow{GroupID: group, Revision: 1, State: "active", Reason: "none", ConfigRevision: revision}
+			control = sqlite.SyncControlRow{GroupID: group, Revision: 1, State: "active", Reason: "none", MembershipMode: "normal", ConfigRevision: revision}
 			err = nil
 		}
 		if err != nil {
@@ -75,7 +75,7 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		}
 		return writeEnvelope(stdout, command, map[string]any{
 			"schema_version": "agent-dispatch.sync-status/v1", "group_id": group,
-			"state": control.State, "reason": control.Reason, "control_revision": control.Revision,
+			"state": control.State, "reason": control.Reason, "membership_mode": control.MembershipMode, "control_revision": control.Revision,
 			"config_revision": revision, "control_config_current": control.ConfigRevision == revision,
 			"import_acknowledgement_current": config.SyncAcknowledgementCurrent(cfg, incarnation),
 			"latest_publication":             latestPublication,
@@ -115,10 +115,14 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		if err != nil {
 			return syncStoreError(stderr, command, err)
 		}
-		return writeEnvelope(stdout, command, map[string]any{
+		resultCode := writeEnvelope(stdout, command, map[string]any{
 			"schema_version": "agent-dispatch.sync-control/v1", "group_id": control.GroupID,
 			"revision": control.Revision, "state": control.State, "reason": control.Reason,
 		})
+		if control.State == "blocked" && control.Reason == "membership_emergency" {
+			return 30
+		}
+		return resultCode
 	case "membership":
 		return runSyncMembership(args[1:], stdout, stderr)
 	case "publish":

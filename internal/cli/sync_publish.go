@@ -59,7 +59,10 @@ func runSyncPublish(args []string, stdout, stderr io.Writer) int {
 		return syncMembershipError(stderr, command, err, 30)
 	}
 	remoteMembership, err := client.RemoteRef(requestCtx(), syncCfg.RemoteName, syncCfg.MembershipRef, syncCfg.RemoteRepositoryDigest)
-	if err != nil || remoteMembership != membershipHead {
+	if err != nil {
+		return syncMembershipError(stderr, command, fmt.Errorf("membership ref could not be measured on the approved remote: %w", err), 30)
+	}
+	if remoteMembership != membershipHead {
 		return syncMembershipError(stderr, command, fmt.Errorf("membership ref is not current on the approved remote"), 30)
 	}
 	history, err := syncmembership.LoadHistory(requestCtx(), client, membershipHead, membershipBinding(cfg, syncCfg), syncCfg.Bounds.HistoryCommits)
@@ -88,7 +91,10 @@ func runSyncPublish(args []string, stdout, stderr io.Writer) int {
 		return syncMembershipError(stderr, command, fmt.Errorf("content ref requires an administrator checkpoint before publication: %w", err), 14)
 	}
 	remoteBase, err := client.RemoteRef(requestCtx(), syncCfg.RemoteName, syncCfg.ContentRef, syncCfg.RemoteRepositoryDigest)
-	if err != nil || remoteBase != base {
+	if err != nil {
+		return syncMembershipError(stderr, command, fmt.Errorf("content predecessor could not be measured on the approved remote: %w", err), 14)
+	}
+	if remoteBase != base {
 		return syncMembershipError(stderr, command, fmt.Errorf("content predecessor is not current on the approved remote"), 14)
 	}
 	needsCheckpoint, err := contentHeadNeedsInitialCheckpoint(client, base)
@@ -203,6 +209,9 @@ func runSyncPublish(args []string, stdout, stderr io.Writer) int {
 	confirmed := remoteErr == nil && remoteNow == candidate
 	if !confirmed {
 		push := client.PushFastForward(requestCtx(), syncCfg.RemoteName, syncCfg.ContentRef, candidate, base, syncCfg.RemoteRepositoryDigest)
+		if errors.Is(push.Underlying, gitlocal.ErrRemoteBinding) {
+			return syncMembershipError(stderr, command, push.Underlying, 30)
+		}
 		switch classifySyncPush(push.State, push.RemoteOID, base, candidate) {
 		case syncPushRetryable:
 			evidence := map[string]any{"candidate": candidate, "remote": push.RemoteOID, "push_state": push.State}
@@ -230,7 +239,7 @@ func runSyncPublish(args []string, stdout, stderr io.Writer) int {
 		return finishPublicationFailure(stderr, store, job, owner, "blocked", "blocked", err.Error())
 	}
 	terminal := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err = store.FinishPublicationJob(requestCtx(), job.JobID, owner, job.Fence, sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "publication", Outcome: "published", EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": candidate, "publication_id": publication.PublicationID}), RecordedAt: terminal}, sqlite.SyncJobInput{JobID: randomSyncID("delivery-job"), GroupID: syncCfg.GroupID, Kind: "delivery", LogicalKey: publication.PublicationID, InitialState: "pending", PayloadJSON: string(nudgeRaw), QueueLimit: syncCfg.Bounds.Queue, Now: terminal}, terminal)
+	_, err = store.FinishPublicationJob(requestCtx(), job.JobID, owner, job.Fence, sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "publication", Outcome: "published", EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": candidate, "push_state": gitlocal.PushConfirmed, "reason": "none", "publication_id": publication.PublicationID}), RecordedAt: terminal}, sqlite.SyncJobInput{JobID: randomSyncID("delivery-job"), GroupID: syncCfg.GroupID, Kind: "delivery", LogicalKey: publication.PublicationID, InitialState: "pending", PayloadJSON: string(nudgeRaw), QueueLimit: syncCfg.Bounds.Queue, Now: terminal}, terminal)
 	if err != nil {
 		return syncStoreError(stderr, command, err)
 	}
@@ -270,7 +279,7 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 		if errors.Is(remoteErr, gitlocal.ErrMissingRef) {
 			return true, syncMembershipError(stderr, "sync publish", errors.New("content ref requires an administrator checkpoint before publication recovery"), 14)
 		}
-		return true, syncMembershipError(stderr, "sync publish", errors.New("publication recovery could not measure the approved remote content ref"), 13)
+		return true, syncMembershipError(stderr, "sync publish", fmt.Errorf("publication recovery could not measure the approved remote content ref: %w", remoteErr), 13)
 	}
 	for _, job := range jobs {
 		journals, loadErr := store.LoadSyncJournals(requestCtx(), job.JobID)
@@ -319,6 +328,9 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 				return true, syncStoreError(stderr, "sync publish", claimErr)
 			}
 			push := client.PushFastForward(requestCtx(), s.RemoteName, s.ContentRef, candidate, publication.BaseCommit, s.RemoteRepositoryDigest)
+			if errors.Is(push.Underlying, gitlocal.ErrRemoteBinding) {
+				return true, syncMembershipError(stderr, "sync publish", push.Underlying, 30)
+			}
 			switch classifySyncPush(push.State, push.RemoteOID, publication.BaseCommit, candidate) {
 			case syncPushRetryable:
 				evidence := map[string]any{"candidate": candidate, "remote": push.RemoteOID, "push_state": push.State, "recovered": true}
@@ -341,7 +353,7 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 			return true, syncMembershipError(stderr, "sync publish", verifyErr, 30)
 		}
 		now := time.Now().UTC()
-		if job.ClaimOwner != "" {
+		if recoveryOwner == "" && job.ClaimOwner != "" {
 			expires, _ := time.Parse(time.RFC3339Nano, job.ClaimExpiresAt)
 			if expires.After(now) {
 				return true, syncMembershipError(stderr, "sync publish", errors.New("confirmed publication still has an unexpired claim"), 14)
@@ -366,7 +378,7 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 		}
 		nowText := now.Format(time.RFC3339Nano)
 		delivery := sqlite.SyncJobInput{JobID: randomSyncID("delivery-job"), GroupID: s.GroupID, Kind: "delivery", LogicalKey: publication.PublicationID, InitialState: "pending", PayloadJSON: string(raw), QueueLimit: s.Bounds.Queue, Now: nowText}
-		journal := sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "publication", Outcome: "published", EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": candidate, "publication_id": publication.PublicationID, "recovered": true}), RecordedAt: nowText}
+		journal := sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "publication", Outcome: "published", EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": candidate, "push_state": gitlocal.PushConfirmed, "reason": "none", "publication_id": publication.PublicationID, "recovered": true}), RecordedAt: nowText}
 		if recoveryOwner == "" {
 			_, err = store.FinishRecoveredPublicationJob(requestCtx(), job.JobID, job.Fence, journal, delivery, nowText)
 		} else {

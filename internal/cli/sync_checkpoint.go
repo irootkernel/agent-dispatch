@@ -198,6 +198,9 @@ func runSyncCheckpointApply(args []string, stdout, stderr io.Writer) int {
 	remoteNow, remoteErr := client.RemoteRef(requestCtx(), s.RemoteName, s.ContentRef, s.RemoteRepositoryDigest)
 	if remoteErr != nil || remoteNow != candidate {
 		push := client.PushFastForward(requestCtx(), s.RemoteName, s.ContentRef, candidate, predecessor, s.RemoteRepositoryDigest)
+		if errors.Is(push.Underlying, gitlocal.ErrRemoteBinding) {
+			return syncMembershipError(stderr, command, push.Underlying, 30)
+		}
 		switch classifySyncPush(push.State, push.RemoteOID, predecessor, candidate) {
 		case syncPushRetryable:
 			return finishCheckpointRetryable(stderr, store, job, owner, candidate, push.RemoteOID)
@@ -216,7 +219,7 @@ func runSyncCheckpointApply(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	terminal := time.Now().UTC().Format(time.RFC3339Nano)
-	if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "applied", sqlite.SyncJobResolve, sqlite.SyncJournalEntry{JournalID: randomSyncID("checkpoint-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "checkpoint", Outcome: "applied", EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": candidate, "plan_id": plan.PlanID}), RecordedAt: terminal}, terminal); err != nil {
+	if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "applied", sqlite.SyncJobResolve, sqlite.SyncJournalEntry{JournalID: randomSyncID("checkpoint-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "checkpoint", Outcome: "applied", EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": candidate, "push_state": gitlocal.PushConfirmed, "reason": "none", "plan_id": plan.PlanID}), RecordedAt: terminal}, terminal); err != nil {
 		return syncStoreError(stderr, command, err)
 	}
 	return checkpointResult(stdout, plan, candidate, false)
@@ -244,7 +247,7 @@ func recoverCheckpointApply(stdout, stderr io.Writer, store *sqlite.Store, clien
 	candidate := journalCandidate(journals)
 	remote, err := client.RemoteRef(requestCtx(), s.RemoteName, s.ContentRef, s.RemoteRepositoryDigest)
 	if err != nil {
-		return true, syncMembershipError(stderr, "sync checkpoint apply", errors.New("checkpoint recovery could not measure the approved remote content ref"), 13)
+		return true, syncMembershipError(stderr, "sync checkpoint apply", fmt.Errorf("checkpoint recovery could not measure the approved remote content ref: %w", err), 13)
 	}
 	now := time.Now().UTC()
 	if job.State == "applied" {
@@ -271,7 +274,10 @@ func recoverCheckpointApply(stdout, stderr io.Writer, store *sqlite.Store, clien
 			return true, syncMembershipError(stderr, "sync checkpoint apply", errors.New("checkpoint recovery membership revision is no longer current"), 30)
 		}
 		remoteMembership, remoteErr := client.RemoteRef(requestCtx(), s.RemoteName, s.MembershipRef, s.RemoteRepositoryDigest)
-		if remoteErr != nil || remoteMembership != membership {
+		if remoteErr != nil {
+			return true, syncMembershipError(stderr, "sync checkpoint apply", fmt.Errorf("membership ref could not be measured on the approved remote: %w", remoteErr), 30)
+		}
+		if remoteMembership != membership {
 			return true, syncMembershipError(stderr, "sync checkpoint apply", errors.New("membership ref is not current on the approved remote"), 30)
 		}
 		history, historyErr := syncmembership.LoadHistory(requestCtx(), client, membership, membershipBinding(cfg, s), s.Bounds.HistoryCommits)
@@ -294,7 +300,7 @@ func recoverCheckpointApply(stdout, stderr io.Writer, store *sqlite.Store, clien
 			}
 		}
 		nowText := now.Format(time.RFC3339Nano)
-		if finishErr := store.FinishRecoveredCheckpointJob(requestCtx(), job.JobID, job.Fence, sqlite.SyncJournalEntry{JournalID: randomSyncID("checkpoint-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "checkpoint", Outcome: "applied", EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": candidate, "plan_id": plan.PlanID, "recovered": true}), RecordedAt: nowText}, nowText); finishErr != nil {
+		if finishErr := store.FinishRecoveredCheckpointJob(requestCtx(), job.JobID, job.Fence, sqlite.SyncJournalEntry{JournalID: randomSyncID("checkpoint-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "checkpoint", Outcome: "applied", EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": candidate, "push_state": gitlocal.PushConfirmed, "reason": "none", "plan_id": plan.PlanID, "recovered": true}), RecordedAt: nowText}, nowText); finishErr != nil {
 			return true, syncStoreError(stderr, "sync checkpoint apply", finishErr)
 		}
 		return true, writeEnvelope(stdout, "sync checkpoint apply", map[string]any{"schema_version": "agent-dispatch.sync-checkpoint-apply-result/v1", "state": "applied", "plan_id": plan.PlanID, "checkpoint_id": plan.ProposedCheckpoint.CheckpointID, "content_revision": candidate, "recovered": true, "idempotent": true, "side_effects": []string{"local_content_ref_reconciled", "state_committed"}})
@@ -333,7 +339,10 @@ func checkpointBindings(client *gitlocal.Client, cfg *config.Config, s *config.S
 		return "", "", "", err
 	}
 	remoteMembership, err := client.RemoteRef(ctx, s.RemoteName, s.MembershipRef, s.RemoteRepositoryDigest)
-	if err != nil || remoteMembership != membership {
+	if err != nil {
+		return "", "", "", fmt.Errorf("membership ref could not be measured on the approved remote: %w", err)
+	}
+	if remoteMembership != membership {
 		return "", "", "", fmt.Errorf("membership ref is not current on the approved remote")
 	}
 	if _, err := syncmembership.LoadHistory(ctx, client, membership, membershipBinding(cfg, s), s.Bounds.HistoryCommits); err != nil {
@@ -344,7 +353,10 @@ func checkpointBindings(client *gitlocal.Client, cfg *config.Config, s *config.S
 		return "", "", "", fmt.Errorf("checkpoint requires an existing content predecessor: %w", err)
 	}
 	remotePredecessor, err := client.RemoteRef(ctx, s.RemoteName, s.ContentRef, s.RemoteRepositoryDigest)
-	if err != nil || remotePredecessor != predecessor {
+	if err != nil {
+		return "", "", "", fmt.Errorf("content predecessor could not be measured on the approved remote: %w", err)
+	}
+	if remotePredecessor != predecessor {
 		return "", "", "", fmt.Errorf("content predecessor is not current on the approved remote")
 	}
 	files, err := client.ReadContentFiles(ctx, target)

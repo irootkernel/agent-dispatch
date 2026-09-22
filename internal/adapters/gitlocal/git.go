@@ -759,10 +759,20 @@ func (c *Client) UpdateRefExpected(ctx context.Context, ref, candidate, expected
 	if !validRef(ref) || !validOID(candidate) || (expected != "" && !validOID(expected)) {
 		return fmt.Errorf("invalid expected-ref update")
 	}
-	if _, _, err := c.run(ctx, nil, nil, "symbolic-ref", "--quiet", ref); err == nil {
-		return fmt.Errorf("expected-old ref update refuses symbolic ref %q", ref)
-	} else if exitCode(err) != 1 {
-		return err
+	current, resolveErr := c.ResolveRef(ctx, ref)
+	if resolveErr == nil {
+		if _, _, err := c.run(ctx, nil, nil, "symbolic-ref", "--quiet", ref); err == nil {
+			return fmt.Errorf("expected-old ref update refuses symbolic ref %q", ref)
+		} else if exitCode(err) != 1 {
+			return err
+		}
+		if expected == "" || current != expected {
+			return fmt.Errorf("expected-old ref does not match: %w", ErrPushRejected)
+		}
+	} else if !errors.Is(resolveErr, ErrMissingRef) {
+		return resolveErr
+	} else if expected != "" {
+		return fmt.Errorf("expected-old ref is missing: %w", ErrPushRejected)
 	}
 	old := expected
 	if old == "" {
@@ -799,6 +809,9 @@ func (c *Client) PushFastForward(ctx context.Context, remote, ref, candidate, ex
 	}
 	_, _, pushErr := c.run(ctx, nil, nil, "push", "--receive-pack=git-receive-pack", "--porcelain", "--no-force", "--no-verify", "--recurse-submodules=no", remoteURL, candidate+":"+ref)
 	remoteAfter, inspectErr := c.remoteRefURL(ctx, remoteURL, ref)
+	if errors.Is(inspectErr, ErrMissingRef) {
+		remoteAfter, inspectErr = "", nil
+	}
 	result.RemoteOID = remoteAfter
 	if inspectErr == nil && remoteAfter == candidate {
 		result.State = PushConfirmed

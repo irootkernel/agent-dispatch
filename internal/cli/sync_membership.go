@@ -144,6 +144,9 @@ func runSyncMembershipApply(args []string, stdout, stderr io.Writer) int {
 			}
 			candidate := journalCandidate(journals)
 			remote, remoteErr := client.RemoteRef(requestCtx(), syncCfg.RemoteName, syncCfg.MembershipRef, syncCfg.RemoteRepositoryDigest)
+			if errors.Is(remoteErr, gitlocal.ErrRemoteBinding) {
+				return syncMembershipError(stderr, command, remoteErr, 30)
+			}
 			remoteUnchanged := plan.ExpectedPredecessor == nil && errors.Is(remoteErr, gitlocal.ErrMissingRef)
 			if plan.ExpectedPredecessor != nil {
 				remoteUnchanged = remoteErr == nil && remote == *plan.ExpectedPredecessor
@@ -174,6 +177,9 @@ func runSyncMembershipApply(args []string, stdout, stderr io.Writer) int {
 			}
 			candidate := journalCandidate(journals)
 			remote, remoteErr := client.RemoteRef(requestCtx(), syncCfg.RemoteName, syncCfg.MembershipRef, syncCfg.RemoteRepositoryDigest)
+			if errors.Is(remoteErr, gitlocal.ErrRemoteBinding) {
+				return syncMembershipError(stderr, command, remoteErr, 30)
+			}
 			remoteUnchanged := plan.ExpectedPredecessor == nil && errors.Is(remoteErr, gitlocal.ErrMissingRef)
 			if plan.ExpectedPredecessor != nil {
 				remoteUnchanged = remoteErr == nil && remote == *plan.ExpectedPredecessor
@@ -216,6 +222,9 @@ func runSyncMembershipApply(args []string, stdout, stderr io.Writer) int {
 		return finishMembershipBeforeEffect(stderr, concrete, job, "plan no longer matches current configuration and membership", false)
 	}
 	remoteHead, remoteErr := client.RemoteRef(requestCtx(), syncCfg.RemoteName, syncCfg.MembershipRef, syncCfg.RemoteRepositoryDigest)
+	if errors.Is(remoteErr, gitlocal.ErrRemoteBinding) {
+		return syncMembershipError(stderr, command, remoteErr, 30)
+	}
 	if plan.ExpectedPredecessor == nil {
 		if remoteErr != nil && !errors.Is(remoteErr, gitlocal.ErrMissingRef) {
 			return finishMembershipBeforeEffect(stderr, concrete, job, "remote membership absence could not be proven", true)
@@ -273,25 +282,33 @@ func runSyncMembershipApply(args []string, stdout, stderr io.Writer) int {
 	}
 	push := client.PushFastForward(requestCtx(), syncCfg.RemoteName, syncCfg.MembershipRef, candidate, predecessor, syncCfg.RemoteRepositoryDigest)
 	terminalNow := time.Now().UTC()
+	if errors.Is(push.Underlying, gitlocal.ErrRemoteBinding) {
+		return syncMembershipError(stderr, command, push.Underlying, 30)
+	}
 	switch classifySyncPush(push.State, push.RemoteOID, predecessor, candidate) {
 	case syncPushConfirmed:
+		if plan.ProposedMembership.Mode == "blocked_emergency" {
+			if _, err := concrete.ReconcileAdoptedMembership(requestCtx(), syncCfg.GroupID, plan.ProposedMembership.Mode, candidate, configRevision, terminalNow.Format(time.RFC3339Nano)); err != nil {
+				return syncStoreError(stderr, command, err)
+			}
+		}
 		if err := client.UpdateRefExpected(requestCtx(), syncCfg.MembershipRef, candidate, predecessor); err != nil {
 			return finishClaimedMembership(stderr, concrete, job, owner, "uncertain", "effect_unknown", map[string]any{"candidate": candidate, "remote": push.RemoteOID, "reason": "remote confirmed but local ref update failed"}, terminalNow)
 		}
 		terminalText := terminalNow.Format(time.RFC3339Nano)
 		control, err := concrete.FinishMembershipJob(requestCtx(), job.JobID, owner, job.Fence, plan.ProposedMembership.Mode, sqlite.SyncJournalEntry{
 			JournalID: randomSyncID("membership-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "membership", Outcome: "applied",
-			EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": push.RemoteOID, "plan_id": plan.PlanID}), RecordedAt: terminalText,
+			EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": push.RemoteOID, "push_state": gitlocal.PushConfirmed, "reason": "none", "plan_id": plan.PlanID}), RecordedAt: terminalText,
 		}, configRevision, terminalText)
 		if err != nil {
 			return syncStoreError(stderr, command, err)
 		}
 		resultCode := writeEnvelope(stdout, command, map[string]any{
 			"schema_version": "agent-dispatch.sync-membership-apply-result/v1", "state": "applied", "plan_id": plan.PlanID,
-			"membership_revision": candidate, "control_state": control.State, "control_reason": control.Reason,
+			"membership_revision": candidate, "membership_mode": control.MembershipMode, "control_state": control.State, "control_reason": control.Reason,
 			"idempotent": false, "side_effects": []string{"git_objects_written", "remote_membership_ref_updated", "local_membership_ref_updated", "state_committed"},
 		})
-		if control.State == "blocked" {
+		if plan.ProposedMembership.Mode == "blocked_emergency" || control.State == "blocked" {
 			return 30
 		}
 		return resultCode
@@ -318,6 +335,9 @@ func recoverConfirmedMembership(stdout, stderr io.Writer, store *sqlite.Store, c
 		return false, 0
 	}
 	remote, remoteErr := client.RemoteRef(requestCtx(), syncCfg.RemoteName, syncCfg.MembershipRef, syncCfg.RemoteRepositoryDigest)
+	if errors.Is(remoteErr, gitlocal.ErrRemoteBinding) {
+		return true, syncMembershipError(stderr, "sync membership apply", remoteErr, 30)
+	}
 	if remoteErr != nil || remote != candidate {
 		return false, 0
 	}
@@ -336,6 +356,11 @@ func recoverConfirmedMembership(stdout, stderr io.Writer, store *sqlite.Store, c
 		if local != predecessor {
 			return true, syncMembershipError(stderr, "sync membership apply", errors.New("local membership ref moved during recovery"), 14)
 		}
+		if plan.ProposedMembership.Mode == "blocked_emergency" {
+			if _, err := store.ReconcileAdoptedMembership(requestCtx(), syncCfg.GroupID, plan.ProposedMembership.Mode, candidate, configRevision, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+				return true, syncStoreError(stderr, "sync membership apply", err)
+			}
+		}
 		if err := client.UpdateRefExpected(requestCtx(), syncCfg.MembershipRef, candidate, predecessor); err != nil {
 			return true, syncMembershipError(stderr, "sync membership apply", err, 14)
 		}
@@ -343,17 +368,17 @@ func recoverConfirmedMembership(stdout, stderr io.Writer, store *sqlite.Store, c
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	control, err := store.FinishRecoveredMembershipJob(requestCtx(), job.JobID, job.Fence, plan.ProposedMembership.Mode, sqlite.SyncJournalEntry{
 		JournalID: randomSyncID("membership-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "membership", Outcome: "applied",
-		EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": candidate, "plan_id": plan.PlanID, "recovered": true}), RecordedAt: now,
+		EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": candidate, "push_state": gitlocal.PushConfirmed, "reason": "none", "plan_id": plan.PlanID, "recovered": true}), RecordedAt: now,
 	}, configRevision, now)
 	if err != nil {
 		return true, syncStoreError(stderr, "sync membership apply", err)
 	}
 	code := writeEnvelope(stdout, "sync membership apply", map[string]any{
 		"schema_version": "agent-dispatch.sync-membership-apply-result/v1", "state": "applied", "plan_id": plan.PlanID,
-		"membership_revision": candidate, "control_state": control.State, "control_reason": control.Reason,
+		"membership_revision": candidate, "membership_mode": control.MembershipMode, "control_state": control.State, "control_reason": control.Reason,
 		"recovered": true, "idempotent": true, "side_effects": []string{"local_membership_ref_reconciled", "state_committed"},
 	})
-	if control.State == "blocked" {
+	if plan.ProposedMembership.Mode == "blocked_emergency" || control.State == "blocked" {
 		return true, 30
 	}
 	return true, code

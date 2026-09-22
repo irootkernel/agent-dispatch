@@ -138,6 +138,9 @@ func runSyncMembershipApply(args []string, stdout, stderr io.Writer) int {
 			return result
 		}
 		if job.State == "blocked" || job.State == "uncertain" {
+			if job.ResolvedAt != "" {
+				return syncMembershipError(stderr, command, errors.New("membership job was already discharged by newer recovery evidence"), 14)
+			}
 			journals, loadErr := concrete.LoadSyncJournals(requestCtx(), job.JobID)
 			if loadErr != nil {
 				return syncStoreError(stderr, command, loadErr)
@@ -146,6 +149,9 @@ func runSyncMembershipApply(args []string, stdout, stderr io.Writer) int {
 			remote, remoteErr := client.RemoteRef(requestCtx(), syncCfg.RemoteName, syncCfg.MembershipRef, syncCfg.RemoteRepositoryDigest)
 			if errors.Is(remoteErr, gitlocal.ErrRemoteBinding) {
 				return syncMembershipError(stderr, command, remoteErr, 30)
+			}
+			if remoteErr != nil && !errors.Is(remoteErr, gitlocal.ErrMissingRef) {
+				return syncRetryableError(stderr, command, fmt.Errorf("membership recovery could not measure the approved remote ref: %w", remoteErr))
 			}
 			remoteUnchanged := plan.ExpectedPredecessor == nil && errors.Is(remoteErr, gitlocal.ErrMissingRef)
 			if plan.ExpectedPredecessor != nil {
@@ -179,6 +185,9 @@ func runSyncMembershipApply(args []string, stdout, stderr io.Writer) int {
 			remote, remoteErr := client.RemoteRef(requestCtx(), syncCfg.RemoteName, syncCfg.MembershipRef, syncCfg.RemoteRepositoryDigest)
 			if errors.Is(remoteErr, gitlocal.ErrRemoteBinding) {
 				return syncMembershipError(stderr, command, remoteErr, 30)
+			}
+			if remoteErr != nil && !errors.Is(remoteErr, gitlocal.ErrMissingRef) {
+				return syncRetryableError(stderr, command, fmt.Errorf("expired membership recovery could not measure the approved remote ref: %w", remoteErr))
 			}
 			remoteUnchanged := plan.ExpectedPredecessor == nil && errors.Is(remoteErr, gitlocal.ErrMissingRef)
 			if plan.ExpectedPredecessor != nil {
@@ -337,6 +346,9 @@ func recoverConfirmedMembership(stdout, stderr io.Writer, store *sqlite.Store, c
 	remote, remoteErr := client.RemoteRef(requestCtx(), syncCfg.RemoteName, syncCfg.MembershipRef, syncCfg.RemoteRepositoryDigest)
 	if errors.Is(remoteErr, gitlocal.ErrRemoteBinding) {
 		return true, syncMembershipError(stderr, "sync membership apply", remoteErr, 30)
+	}
+	if remoteErr != nil && !errors.Is(remoteErr, gitlocal.ErrMissingRef) {
+		return true, syncRetryableError(stderr, "sync membership apply", fmt.Errorf("membership recovery could not measure the approved remote ref: %w", remoteErr))
 	}
 	if remoteErr != nil || remote != candidate {
 		return false, 0

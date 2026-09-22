@@ -884,17 +884,21 @@ func (c *Client) verifyRemote(ctx context.Context, remote, expectedDigest string
 }
 
 func (c *Client) rejectURLRewrites(ctx context.Context) error {
-	out, _, err := c.run(ctx, nil, nil, "config", "--name-only", "--get-regexp", `^url\..*\.`)
+	out, _, err := c.run(ctx, nil, nil, "config", "--name-only", "--show-scope", "--get-regexp", `^url\..*\.`)
 	if err != nil {
 		if exitCode(err) == 1 {
 			return nil
 		}
 		return err
 	}
-	for _, name := range strings.Fields(string(out)) {
-		lower := strings.ToLower(name)
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 || (fields[0] != "local" && fields[0] != "worktree") {
+			continue
+		}
+		name, lower := fields[1], strings.ToLower(fields[1])
 		if strings.HasSuffix(lower, ".insteadof") || strings.HasSuffix(lower, ".pushinsteadof") {
-			return fmt.Errorf("configured remote refuses repository URL rewrite rules: %w", ErrRemoteBinding)
+			return fmt.Errorf("configured remote refuses %s URL rewrite rule %q: %w", fields[0], name, ErrRemoteBinding)
 		}
 	}
 	return nil

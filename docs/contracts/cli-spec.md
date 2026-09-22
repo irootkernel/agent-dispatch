@@ -427,8 +427,10 @@ Returns findings with `code`, `severity`, `summary`, `details`, and `remediation
 - `maintenance backup --output <path>`
 
 Prune is dry-run by default. The configured completed-receipt horizon also
-governs resolved sync jobs and journals; it defaults to 180 days and may be
-narrowed explicitly, while unresolved sync obligations are never age-pruned.
+governs resolved publication, delivery, import, and verification jobs and
+journals; it defaults to 180 days and may be narrowed explicitly. Membership
+and checkpoint evidence lasts for the life of the group, while unresolved sync
+obligations are never age-pruned.
 Vacuum refuses while active attempts exist. Backup writes a verified owner-only snapshot of the durable store through the built-in `VACUUM INTO` path (runbook §8) and refuses to overwrite an existing file.
 
 ## 12. JSON Envelope

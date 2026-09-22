@@ -248,11 +248,13 @@ func (s *Store) planRemaining(ctx context.Context, plan *PrunePlan, terminal str
 		return fmt.Errorf("planning notification prune: %w", err)
 	}
 	if err := s.QueryRowContext(ctx, `SELECT COUNT(*) FROM sync_journal_entries WHERE job_id IN (
-		SELECT job_id FROM sync_jobs WHERE retain_until_resolved = 0 AND resolved_at IS NOT NULL AND resolved_at < ?)`, c.CompletedReceipts).Scan(&plan.Counts.SyncJournals); err != nil {
+		SELECT job_id FROM sync_jobs WHERE kind NOT IN ('membership','checkpoint')
+		AND retain_until_resolved = 0 AND resolved_at IS NOT NULL AND resolved_at < ?)`, c.CompletedReceipts).Scan(&plan.Counts.SyncJournals); err != nil {
 		return fmt.Errorf("planning sync journal prune: %w", err)
 	}
 	if err := s.QueryRowContext(ctx, `SELECT COUNT(*) FROM sync_jobs
-		WHERE retain_until_resolved = 0 AND resolved_at IS NOT NULL AND resolved_at < ?`, c.CompletedReceipts).Scan(&plan.Counts.SyncJobs); err != nil {
+		WHERE kind NOT IN ('membership','checkpoint')
+		AND retain_until_resolved = 0 AND resolved_at IS NOT NULL AND resolved_at < ?`, c.CompletedReceipts).Scan(&plan.Counts.SyncJobs); err != nil {
 		return fmt.Errorf("planning sync job prune: %w", err)
 	}
 	return nil
@@ -346,11 +348,13 @@ func (s *Store) ExecutePrune(ctx context.Context, cutoffs PruneCutoffs, actor, r
 	// the same transaction once the completed sync evidence reaches its longer
 	// retention horizon.
 	if counts.SyncJournals, err = exec("sync journals", `DELETE FROM sync_journal_entries WHERE job_id IN (
-		SELECT job_id FROM sync_jobs WHERE retain_until_resolved = 0 AND resolved_at IS NOT NULL AND resolved_at < ?)`, c.CompletedReceipts); err != nil {
+		SELECT job_id FROM sync_jobs WHERE kind NOT IN ('membership','checkpoint')
+		AND retain_until_resolved = 0 AND resolved_at IS NOT NULL AND resolved_at < ?)`, c.CompletedReceipts); err != nil {
 		return counts, err
 	}
 	if counts.SyncJobs, err = exec("sync jobs", `DELETE FROM sync_jobs
-		WHERE retain_until_resolved = 0 AND resolved_at IS NOT NULL AND resolved_at < ?`, c.CompletedReceipts); err != nil {
+		WHERE kind NOT IN ('membership','checkpoint')
+		AND retain_until_resolved = 0 AND resolved_at IS NOT NULL AND resolved_at < ?`, c.CompletedReceipts); err != nil {
 		return counts, err
 	}
 	if counts.Observations, err = exec("observations",

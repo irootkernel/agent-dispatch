@@ -40,7 +40,8 @@ Not stored by default:
 | Completed/rejected attempts | 30 days |
 | Completed acceptance and work receipts | 180 days |
 | Resolved quarantine | 180 days |
-| Resolved sync jobs and journals | 180 days (the configurable completed-receipt horizon) |
+| Resolved publication, delivery, import, and verification jobs and journals | 180 days (the configurable completed-receipt horizon) |
+| Membership and checkpoint jobs and journals | Life of the sync group |
 | Observations attributed to an imported sync effect | Until both the linked job horizon and ordinary observation horizon have elapsed |
 | Blocked, recovering, uncertain, or unresolved sync obligations | Until explicitly resolved |
 | Unknown, ready, retrying, active, quarantined, dead-lettered | Until resolved |
@@ -53,9 +54,10 @@ Not stored by default:
 - never orphan a dispatch, receipt, quarantine, or state transition;
 - never delete the only evidence needed to reconcile unknown acceptance;
 - keep an attributed observation until both its linked sync job horizon and its
-  own observation horizon have elapsed; remove sync journals, effects, and
-  attribution children before the job, and remove the observation in that
-  transaction only when its own cutoff has also elapsed;
+  own observation horizon have elapsed; remove sync journals before the job,
+  let the job deletion cascade through effects and attribution children, and
+  remove the observation in that transaction only when its own cutoff has also
+  elapsed;
 - preserve summary audit rows if detailed resolved payload is compacted;
 - record prune actor, policy revision, counts, and time;
 - support a configured legal/operational hold in future without changing ordinary retention semantics.

@@ -135,6 +135,9 @@ func runSyncPublish(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return syncMembershipError(stderr, command, err, 14)
 	}
+	if err := syncpublication.ValidateTransition(cfg, syncCfg.Resource, baseFiles, snapshot.Files); err != nil {
+		return syncMembershipError(stderr, command, err, 14)
+	}
 	if contentEqual(baseFiles, snapshot.Files) {
 		return writeEnvelope(stdout, command, map[string]any{"schema_version": "agent-dispatch.sync-publish-result/v1", "state": "no_content_change", "base_commit": base, "side_effects": []string{}})
 	}
@@ -288,10 +291,13 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 	revision, _ := config.SyncRevision(cfg)
 	remote, remoteErr := client.RemoteRef(requestCtx(), s.RemoteName, s.ContentRef, s.RemoteRepositoryDigest)
 	if remoteErr != nil {
+		if errors.Is(remoteErr, gitlocal.ErrRemoteBinding) {
+			return true, syncMembershipError(stderr, "sync publish", remoteErr, 30)
+		}
 		if errors.Is(remoteErr, gitlocal.ErrMissingRef) {
 			return true, syncMembershipError(stderr, "sync publish", errors.New("content ref requires an administrator checkpoint before publication recovery"), 14)
 		}
-		return true, syncMembershipError(stderr, "sync publish", fmt.Errorf("publication recovery could not measure the approved remote content ref: %w", remoteErr), 13)
+		return true, syncRetryableError(stderr, "sync publish", fmt.Errorf("publication recovery could not measure the approved remote content ref: %w", remoteErr))
 	}
 	for _, job := range jobs {
 		journals, loadErr := store.LoadSyncJournals(requestCtx(), job.JobID)

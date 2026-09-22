@@ -25,7 +25,11 @@ type Snapshot struct {
 	Records []syncrecords.SnapshotFile
 }
 
-type routeEngines struct{ scope, guard *policy.Engine }
+type routeEngines struct {
+	scope      *policy.Engine
+	exclusions *policy.Engine
+	protected  *policy.Engine
+}
 
 // Capture performs two stable, bounded enumerations. A participating writer
 // is serialized by the caller's resource guard; an uncooperative writer is
@@ -125,6 +129,28 @@ func ValidateFiles(cfg *config.Config, resourceID string, files map[string][]byt
 	return nil
 }
 
+// ValidateTransition applies local path safety to both the target tree and
+// removals from its predecessor. A trusted signer may propose a deletion, but
+// cannot override this node's protected or immutable policy.
+func ValidateTransition(cfg *config.Config, resourceID string, before, after map[string][]byte) error {
+	if err := ValidateFiles(cfg, resourceID, after); err != nil {
+		return err
+	}
+	engines, _, err := buildRouteEngines(cfg, resourceID)
+	if err != nil {
+		return err
+	}
+	for path := range before {
+		if _, present := after[path]; present {
+			continue
+		}
+		if err := rejectProtectedPath(path, engines); err != nil {
+			return fmt.Errorf("remote content deletion is not allowed: %w", err)
+		}
+	}
+	return nil
+}
+
 func buildRouteEngines(cfg *config.Config, resourceID string) ([]routeEngines, policy.CaseMode, error) {
 	engines := make([]routeEngines, 0)
 	mode := policy.CaseSensitive
@@ -141,13 +167,17 @@ func buildRouteEngines(cfg *config.Config, resourceID string) ([]routeEngines, p
 			return nil, mode, err
 		}
 		// Excluded, protected, and immutable names are cross-node safety
-		// identities. Match them with Unicode folding on every host while
-		// leaving include matching in the configured filesystem case mode.
-		guard, err := policy.NewEngine([]string{"**"}, route.Source.Exclude, route.Policy.Protected, route.Policy.Immutable, policy.CaseInsensitive)
+		// identities. Keep exclusions separate so they can never take
+		// precedence over a protected or immutable alias.
+		exclusions, err := policy.NewEngine([]string{"**"}, route.Source.Exclude, nil, nil, policy.CaseInsensitive)
 		if err != nil {
 			return nil, mode, err
 		}
-		engines = append(engines, routeEngines{scope: e, guard: guard})
+		protected, err := policy.NewEngine([]string{"**"}, nil, route.Policy.Protected, route.Policy.Immutable, policy.CaseInsensitive)
+		if err != nil {
+			return nil, mode, err
+		}
+		engines = append(engines, routeEngines{scope: e, exclusions: exclusions, protected: protected})
 	}
 	if len(engines) == 0 {
 		return nil, mode, fmt.Errorf("sync resource has no governing routes")
@@ -160,18 +190,20 @@ func governedMarkdown(path string, engines []routeEngines) (bool, error) {
 	if !strings.HasSuffix(lower, ".md") && !strings.HasSuffix(lower, ".markdown") {
 		return false, nil
 	}
-	included := false
+	if err := rejectProtectedPath(path, engines); err != nil {
+		return false, err
+	}
 	for _, engine := range engines {
-		guardStatus, err := engine.guard.Classify(path)
+		status, err := engine.exclusions.Classify(path)
 		if err != nil {
 			return false, err
 		}
-		if guardStatus == policy.StatusProtected || guardStatus == policy.StatusImmutable {
-			return false, fmt.Errorf("governed path %q is protected or immutable", path)
-		}
-		if guardStatus == policy.StatusExcluded {
+		if status == policy.StatusExcluded {
 			return false, nil
 		}
+	}
+	included := false
+	for _, engine := range engines {
 		status, err := engine.scope.Classify(path)
 		if err != nil {
 			return false, err
@@ -184,6 +216,19 @@ func governedMarkdown(path string, engines []routeEngines) (bool, error) {
 		}
 	}
 	return included, nil
+}
+
+func rejectProtectedPath(path string, engines []routeEngines) error {
+	for _, engine := range engines {
+		status, err := engine.protected.Classify(path)
+		if err != nil {
+			return err
+		}
+		if status == policy.StatusProtected || status == policy.StatusImmutable {
+			return fmt.Errorf("governed path %q is protected or immutable", path)
+		}
+	}
+	return nil
 }
 
 func captureOnce(resolver *localfs.Resolver, engines []routeEngines, max int64) (map[string][]byte, error) {
@@ -212,28 +257,9 @@ func captureOnce(resolver *localfs.Resolver, engines []routeEngines, max int64) 
 		if !strings.HasSuffix(lower, ".md") && !strings.HasSuffix(lower, ".markdown") {
 			return nil
 		}
-		included := false
-		for _, engines := range engines {
-			guardStatus, guardErr := engines.guard.Classify(policyPath)
-			if guardErr != nil {
-				return guardErr
-			}
-			if guardStatus == policy.StatusProtected || guardStatus == policy.StatusImmutable {
-				return fmt.Errorf("governed path %q is protected or immutable", rel)
-			}
-			if guardStatus == policy.StatusExcluded {
-				return nil
-			}
-			status, classErr := engines.scope.Classify(policyPath)
-			if classErr != nil {
-				return classErr
-			}
-			switch status {
-			case policy.StatusProtected, policy.StatusImmutable:
-				return fmt.Errorf("governed path %q is protected or immutable", rel)
-			case policy.StatusNormal:
-				included = true
-			}
+		included, classifyErr := governedMarkdown(policyPath, engines)
+		if classifyErr != nil {
+			return classifyErr
 		}
 		if !included {
 			return nil

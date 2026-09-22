@@ -353,6 +353,22 @@ func TestE21BlockedResolutionIsKindScopedAndJournaled(t *testing.T) {
 	if err := s.QueryRow(`SELECT json_extract(evidence_json,'$.resolver_id') FROM sync_journal_entries WHERE job_id='blocked-membership' AND outcome='ok'`).Scan(&membershipResolver); err != nil || membershipResolver != "membership-replacement" {
 		t.Fatalf("membership resolver=%q err=%v", membershipResolver, err)
 	}
+	for _, tc := range []struct {
+		kind string
+		call func(SyncJournalEntry) error
+	}{
+		{kind: "membership", call: func(j SyncJournalEntry) error {
+			return s.ReopenRejectedMembership(ctx, "blocked-membership", 1, j, syncT3)
+		}},
+		{kind: "checkpoint", call: func(j SyncJournalEntry) error {
+			return s.ReopenRejectedCheckpoint(ctx, "blocked-checkpoint", 1, j, syncT3)
+		}},
+	} {
+		journal := SyncJournalEntry{JournalID: "reopen-resolved-" + tc.kind, JobID: "blocked-" + tc.kind, Fence: 1, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: `{}`, RecordedAt: syncT3}
+		if err := tc.call(journal); !errors.Is(err, ErrSyncPrecondition) {
+			t.Fatalf("resolved %s job reopened: %v", tc.kind, err)
+		}
+	}
 }
 
 func TestE21MembershipEmergencySurvivesPauseAndResume(t *testing.T) {
@@ -366,13 +382,37 @@ func TestE21MembershipEmergencySurvivesPauseAndResume(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	control, err = s.ReconcileAdoptedMembership(ctx, "wiki-pair", "blocked_emergency", "membership-emergency", "cfg-1", syncT2)
-	if err != nil || control.State != "paused" || control.Reason != "operator_pause" || control.MembershipMode != "blocked_emergency" {
+	control, err = s.ReconcileAdoptedMembership(ctx, "wiki-pair", "blocked_emergency", "membership-emergency", "cfg-2", syncT2)
+	if err != nil || control.State != "paused" || control.Reason != "operator_pause" || control.MembershipMode != "blocked_emergency" || control.ConfigRevision != "cfg-1" {
 		t.Fatalf("paused emergency posture = %+v, %v", control, err)
 	}
 	control, err = s.SetSyncControl(ctx, "wiki-pair", control.Revision, "active", "cfg-1", syncT3)
 	if err != nil || control.State != "blocked" || control.Reason != "membership_emergency" || control.MembershipMode != "blocked_emergency" {
 		t.Fatalf("resume crossed emergency posture = %+v, %v", control, err)
+	}
+}
+
+func TestE21MembershipAndCheckpointEvidenceAreNotAgePruned(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if _, err := s.EnsureSyncControl(ctx, "wiki-pair", "cfg-1", syncT0); err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range []string{"membership", "checkpoint"} {
+		job, _, err := s.AdmitSyncJob(ctx, SyncJobInput{JobID: "retained-" + kind, GroupID: "wiki-pair", Kind: kind, LogicalKey: "retained-" + kind, InitialState: "planned", PayloadJSON: `{}`, ConfigRevision: "cfg-1", QueueLimit: 10, Now: syncT0})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.Exec(`UPDATE sync_jobs SET state='applied',fence=1,retain_until_resolved=0,resolved_at=?,updated_at=? WHERE job_id=?`, syncT1, syncT1, job.JobID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.Exec(`INSERT INTO sync_journal_entries(journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES(?,?,?,?,?,?,?)`, "retained-journal-"+kind, job.JobID, 1, kind, "applied", `{}`, syncT1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	plan, err := s.PlanPrune(ctx, PruneCutoffs{CompletedReceipts: syncT2})
+	if err != nil || plan.Counts.SyncJobs != 0 || plan.Counts.SyncJournals != 0 {
+		t.Fatalf("group-lifetime evidence was selected for pruning: %+v err=%v", plan.Counts, err)
 	}
 }
 

@@ -142,6 +142,7 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 
 type syncStatusEvidence struct {
 	Reason     string `json:"reason"`
+	Detail     string `json:"detail"`
 	Candidate  string `json:"candidate"`
 	Remote     string `json:"remote"`
 	PushState  string `json:"push_state"`
@@ -183,27 +184,18 @@ func latestSyncJobStatus(store *sqlite.Store, groupID, kind string) (map[string]
 	}
 	journals, journalErr := store.LoadSyncJournals(requestCtx(), row.JobID)
 	if journalErr == nil {
-		attemptFound, resolutionFound := false, false
 		for i := len(journals) - 1; i >= 0; i-- {
 			var evidence syncStatusEvidence
 			if json.Unmarshal([]byte(journals[i].EvidenceJSON), &evidence) != nil {
 				continue
 			}
-			if !attemptFound && (evidence.Reason != "" || evidence.Candidate != "" || evidence.Remote != "" || evidence.PushState != "") {
-				copySyncStatusField(result, "reason", evidence.Reason)
-				copySyncStatusField(result, "candidate", evidence.Candidate)
-				copySyncStatusField(result, "remote", evidence.Remote)
-				copySyncStatusField(result, "push_state", evidence.PushState)
-				attemptFound = true
-			}
-			if !resolutionFound && (evidence.Resolution != "" || evidence.ResolverID != "") {
-				copySyncStatusField(result, "resolution", evidence.Resolution)
-				copySyncStatusField(result, "resolver_id", evidence.ResolverID)
-				resolutionFound = true
-			}
-			if attemptFound && resolutionFound {
-				break
-			}
+			copySyncStatusField(result, "reason", evidence.Reason)
+			copySyncStatusField(result, "detail", evidence.Detail)
+			copySyncStatusField(result, "candidate", evidence.Candidate)
+			copySyncStatusField(result, "remote", evidence.Remote)
+			copySyncStatusField(result, "push_state", evidence.PushState)
+			copySyncStatusField(result, "resolution", evidence.Resolution)
+			copySyncStatusField(result, "resolver_id", evidence.ResolverID)
 		}
 	}
 	if kind != "import" {
@@ -227,6 +219,12 @@ func latestSyncJobStatus(store *sqlite.Store, groupID, kind string) (map[string]
 				reason = journalReason
 			}
 		}
+	default:
+		if row.State != "applied" && reason == "none" {
+			if journalReason, ok := result["reason"].(string); ok && journalReason != "" {
+				reason = journalReason
+			}
+		}
 	}
 	result["reason"] = reason
 	result["target_paths"] = paths
@@ -234,7 +232,7 @@ func latestSyncJobStatus(store *sqlite.Store, groupID, kind string) (map[string]
 }
 
 func copySyncStatusField(result map[string]any, key, value string) {
-	if value != "" {
+	if _, exists := result[key]; !exists && value != "" {
 		result[key] = value
 	}
 }

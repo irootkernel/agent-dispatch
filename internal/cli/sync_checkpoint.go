@@ -14,6 +14,7 @@ import (
 	"github.com/irootkernel/agent-dispatch/internal/adapters/secretresolver"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/app/syncmembership"
+	"github.com/irootkernel/agent-dispatch/internal/app/syncpublication"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/domain/syncrecords"
 )
@@ -165,6 +166,9 @@ func runSyncCheckpointApply(args []string, stdout, stderr io.Writer) int {
 		if readErr != nil {
 			return finishCheckpointFailure(stderr, store, job, owner, "planned", "effect_not_started", readErr.Error())
 		}
+		if policyErr := syncpublication.ValidateTransition(cfg, s.Resource, predecessorFiles, targetFiles); policyErr != nil {
+			return finishCheckpointFailure(stderr, store, job, owner, "blocked", "blocked", policyErr.Error())
+		}
 		files := cloneFiles(targetFiles)
 		files[".agent-dispatch-sync/checkpoints/"+plan.ProposedCheckpoint.CheckpointID+".json"] = cpRaw
 		files[".agent-dispatch-sync/checkpoint-plans/"+plan.PlanID+".json"] = canonical
@@ -240,6 +244,9 @@ func recoverCheckpointApply(stdout, stderr io.Writer, store *sqlite.Store, clien
 	if err != nil || !reflect.DeepEqual(stored, plan) {
 		return true, syncMembershipError(stderr, "sync checkpoint apply", errors.New("stored checkpoint plan does not match the reviewed plan"), 14)
 	}
+	if job.State == "blocked" && job.ResolvedAt != "" {
+		return true, syncMembershipError(stderr, "sync checkpoint apply", errors.New("checkpoint job was already discharged by newer recovery evidence"), 14)
+	}
 	journals, err := store.LoadSyncJournals(requestCtx(), job.JobID)
 	if err != nil {
 		return true, syncStoreError(stderr, "sync checkpoint apply", err)
@@ -247,7 +254,10 @@ func recoverCheckpointApply(stdout, stderr io.Writer, store *sqlite.Store, clien
 	candidate := journalCandidate(journals)
 	remote, err := client.RemoteRef(requestCtx(), s.RemoteName, s.ContentRef, s.RemoteRepositoryDigest)
 	if err != nil {
-		return true, syncMembershipError(stderr, "sync checkpoint apply", fmt.Errorf("checkpoint recovery could not measure the approved remote content ref: %w", err), 13)
+		if errors.Is(err, gitlocal.ErrRemoteBinding) {
+			return true, syncMembershipError(stderr, "sync checkpoint apply", err, 30)
+		}
+		return true, syncRetryableError(stderr, "sync checkpoint apply", fmt.Errorf("checkpoint recovery could not measure the approved remote content ref: %w", err))
 	}
 	now := time.Now().UTC()
 	if job.State == "applied" {
@@ -275,7 +285,10 @@ func recoverCheckpointApply(stdout, stderr io.Writer, store *sqlite.Store, clien
 		}
 		remoteMembership, remoteErr := client.RemoteRef(requestCtx(), s.RemoteName, s.MembershipRef, s.RemoteRepositoryDigest)
 		if remoteErr != nil {
-			return true, syncMembershipError(stderr, "sync checkpoint apply", fmt.Errorf("membership ref could not be measured on the approved remote: %w", remoteErr), 30)
+			if errors.Is(remoteErr, gitlocal.ErrRemoteBinding) {
+				return true, syncMembershipError(stderr, "sync checkpoint apply", remoteErr, 30)
+			}
+			return true, syncRetryableError(stderr, "sync checkpoint apply", fmt.Errorf("membership ref could not be measured on the approved remote: %w", remoteErr))
 		}
 		if remoteMembership != membership {
 			return true, syncMembershipError(stderr, "sync checkpoint apply", errors.New("membership ref is not current on the approved remote"), 30)

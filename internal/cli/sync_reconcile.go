@@ -55,7 +55,10 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 	// either remote history is refused by Git before the live content ref moves.
 	membershipTracking := "refs/agent-dispatch/sync/membership/" + s.GroupID
 	if err := client.Fetch(requestCtx(), s.RemoteName, s.MembershipRef, membershipTracking, s.RemoteRepositoryDigest); err != nil {
-		if errors.Is(err, gitlocal.ErrFetchRewrite) || errors.Is(err, gitlocal.ErrRemoteBinding) {
+		if errors.Is(err, gitlocal.ErrRemoteBinding) {
+			return syncMembershipError(stderr, command, err, 30)
+		}
+		if errors.Is(err, gitlocal.ErrFetchRewrite) {
 			return blockReconcile(stdout, stderr, store, s.GroupID, revision, "trust_failure", "membership_stale", err)
 		}
 		return reconcileEnvelopeCode(stdout, "deferred", "git_unstable", map[string]any{"detail": "membership fetch failed: " + err.Error()}, 10)
@@ -91,6 +94,14 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 			}
 		}
 		if err := client.UpdateRefExpected(requestCtx(), s.MembershipRef, remoteMembership, localMembership); err != nil {
+			if remoteMembershipRecord.Mode == "blocked_emergency" {
+				return reconcileEnvelopeCode(stdout, "membership_adoption_incomplete", "membership_emergency", map[string]any{
+					"membership_mode": "blocked_emergency", "remote_membership_revision": remoteMembership,
+					"local_membership_revision": localMembership, "control_state": control.State,
+					"control_reason": control.Reason, "detail": "emergency posture was armed but the local membership ref did not move; repair the local ref precondition and rerun sync reconcile",
+					"side_effects": []string{"membership_posture_committed"},
+				}, 30)
+			}
 			return syncMembershipError(stderr, command, err, 14)
 		}
 		if remoteMembershipRecord.Mode == "normal" {
@@ -127,7 +138,10 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 
 	contentTracking := "refs/agent-dispatch/sync/content/" + s.GroupID
 	if err := client.Fetch(requestCtx(), s.RemoteName, s.ContentRef, contentTracking, s.RemoteRepositoryDigest); err != nil {
-		if errors.Is(err, gitlocal.ErrFetchRewrite) || errors.Is(err, gitlocal.ErrRemoteBinding) {
+		if errors.Is(err, gitlocal.ErrRemoteBinding) {
+			return syncMembershipError(stderr, command, err, 30)
+		}
+		if errors.Is(err, gitlocal.ErrFetchRewrite) {
 			return blockReconcile(stdout, stderr, store, s.GroupID, revision, "trust_failure", "trust_failed", err)
 		}
 		return reconcileEnvelopeCode(stdout, "deferred", "git_unstable", map[string]any{"detail": "content fetch failed: " + err.Error()}, 10)
@@ -204,7 +218,7 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return syncMembershipError(stderr, command, err, 30)
 	}
-	if err := syncpublication.ValidateFiles(cfg, s.Resource, afterFiles); err != nil {
+	if err := syncpublication.ValidateTransition(cfg, s.Resource, beforeFiles, afterFiles); err != nil {
 		return blockReconcile(stdout, stderr, store, s.GroupID, revision, "trust_failure", "trust_failed", err)
 	}
 	effects, writes, deletions := syncimport.Diff(beforeFiles, afterFiles)
@@ -343,7 +357,7 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 			}
 			checkpointReconciled = true
 			if reconciled.State == "blocked" && reconciled.Reason == "membership_emergency" {
-				return reconcileEnvelopeCode(stdout, "applied", reconciled.Reason, map[string]any{"import_id": record.ImportID, "from_commit": from, "target_commit": target, "paths": 0, "controller_only": true, "checkpoint_reconciled": true, "membership_mode": reconciled.MembershipMode, "side_effects": []string{"controller_records_updated", "index_updated", "local_content_ref_updated", "state_committed"}}, 30)
+				return reconcileEnvelopeCode(stdout, "blocked", reconciled.Reason, map[string]any{"import_state": "applied", "import_id": record.ImportID, "from_commit": from, "target_commit": target, "paths": 0, "controller_only": true, "checkpoint_reconciled": true, "membership_mode": reconciled.MembershipMode, "side_effects": []string{"controller_records_updated", "index_updated", "local_content_ref_updated", "state_committed"}}, 30)
 			}
 		}
 		return reconcileEnvelope(stdout, "applied", "none", map[string]any{"import_id": record.ImportID, "from_commit": from, "target_commit": target, "paths": 0, "controller_only": true, "checkpoint_reconciled": checkpointReconciled, "idempotent": reused, "side_effects": []string{"controller_records_updated", "index_updated", "local_content_ref_updated", "state_committed"}})
@@ -502,7 +516,7 @@ func recoverPendingImport(stdout, stderr io.Writer, cfg *config.Config, s *confi
 					}
 					checkpointReconciled = true
 					if reconciled.State == "blocked" && reconciled.Reason == "membership_emergency" {
-						return true, reconcileEnvelopeCode(stdout, "recovered", reconciled.Reason, map[string]any{"import_id": record.ImportID, "target_commit": record.TargetCommit, "controller_only": true, "checkpoint_reconciled": true, "membership_mode": reconciled.MembershipMode, "side_effects": []string{"controller_state_confirmed", "state_committed"}}, 30)
+						return true, reconcileEnvelopeCode(stdout, "blocked", reconciled.Reason, map[string]any{"import_state": "recovered", "import_id": record.ImportID, "target_commit": record.TargetCommit, "controller_only": true, "checkpoint_reconciled": true, "membership_mode": reconciled.MembershipMode, "side_effects": []string{"controller_state_confirmed", "state_committed"}}, 30)
 					}
 				}
 				return true, reconcileEnvelope(stdout, "recovered", "none", map[string]any{"import_id": record.ImportID, "target_commit": record.TargetCommit, "controller_only": true, "checkpoint_reconciled": checkpointReconciled, "side_effects": []string{"controller_state_confirmed", "state_committed"}})

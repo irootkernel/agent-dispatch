@@ -360,7 +360,7 @@ func TestPushTimeoutWithUnprovableRemoteHeadIsAmbiguous(t *testing.T) {
 	expected := "1111111111111111111111111111111111111111"
 	candidate := "2222222222222222222222222222222222222222"
 	body := "#!/bin/sh\ncase \"$*\" in\n" +
-		"  *\"config --name-only --get-regexp\"*) exit 1;;\n" +
+		"  *config*--name-only*--get-regexp*) exit 1;;\n" +
 		"  *\"remote get-url --all origin\"*) echo ssh://git@example.com/repo;;\n" +
 		"  *\"remote get-url --push --all origin\"*) echo ssh://git@example.com/repo;;\n" +
 		"  *ls-remote*\"refs/agent-dispatch/membership/wiki-pair\"*) if test -f " + count + "; then exit 1; else : > " + count + "; echo '" + expected + " refs/agent-dispatch/membership/wiki-pair'; fi;;\n" +
@@ -387,7 +387,7 @@ func TestPushRemoteMeasurementFailureDoesNotStartPush(t *testing.T) {
 	expected := "1111111111111111111111111111111111111111"
 	candidate := "2222222222222222222222222222222222222222"
 	body := "#!/bin/sh\ncase \"$*\" in\n" +
-		"  *\"config --name-only --get-regexp\"*) exit 1;;\n" +
+		"  *config*--name-only*--get-regexp*) exit 1;;\n" +
 		"  *\"remote get-url --all origin\"*) echo ssh://git@example.com/repo;;\n" +
 		"  *\"remote get-url --push --all origin\"*) echo ssh://git@example.com/repo;;\n" +
 		"  *ls-remote*) exit 2;;\n" +
@@ -414,7 +414,7 @@ func TestPushAlreadyAtCandidateIsConfirmed(t *testing.T) {
 	expected := "1111111111111111111111111111111111111111"
 	candidate := "2222222222222222222222222222222222222222"
 	body := "#!/bin/sh\ncase \"$*\" in\n" +
-		"  *\"config --name-only --get-regexp\"*) exit 1;;\n" +
+		"  *config*--name-only*--get-regexp*) exit 1;;\n" +
 		"  *\"remote get-url --all origin\"*) echo ssh://git@example.com/repo;;\n" +
 		"  *\"remote get-url --push --all origin\"*) echo ssh://git@example.com/repo;;\n" +
 		"  *ls-remote*) echo '" + candidate + " refs/agent-dispatch/content/wiki-pair';;\n" +
@@ -480,7 +480,7 @@ func TestG17TwoWritersPreserveBothHistoriesAfterFastForwardLoss(t *testing.T) {
 	script := filepath.Join(dir, "git")
 	body := fmt.Sprintf(`#!/bin/sh
 case " $* " in
-  *" config --name-only --get-regexp "*) exit 1;;
+  *config*--name-only*--get-regexp*) exit 1;;
   *" remote get-url --all origin "*) echo %s; exit 0;;
   *" remote get-url --push --all origin "*) echo %s; exit 0;;
   *" ls-remote "*) oid=$(sed -n '1p' %s); printf '%%s\t%s\n' "$oid"; exit 0;;

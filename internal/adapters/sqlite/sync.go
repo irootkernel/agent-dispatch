@@ -753,7 +753,11 @@ func applyMembershipPosture(ctx context.Context, tx *sql.Tx, control *SyncContro
 		previous := control.State
 		control.Revision++
 		previousRevision := control.Revision - 1
-		control.State, control.Reason, control.MembershipMode, control.ConfigRevision, control.UpdatedAt = targetState, targetReason, mode, configRevision, now
+		boundConfigRevision := configRevision
+		if targetState == "paused" {
+			boundConfigRevision = control.ConfigRevision
+		}
+		control.State, control.Reason, control.MembershipMode, control.ConfigRevision, control.UpdatedAt = targetState, targetReason, mode, boundConfigRevision, now
 		res, err := tx.ExecContext(ctx, `UPDATE sync_controls SET revision=?,state=?,reason=?,membership_mode=?,config_revision=?,updated_at=? WHERE group_id=? AND revision=?`, control.Revision, control.State, control.Reason, control.MembershipMode, control.ConfigRevision, control.UpdatedAt, control.GroupID, previousRevision)
 		if err != nil {
 			return err
@@ -1473,7 +1477,7 @@ func (s *Store) reopenRejectedAdministrationJob(ctx context.Context, jobID strin
 	if err != nil {
 		return err
 	}
-	if job.Kind != kind || job.Fence != expectedFence || (job.State != "blocked" && job.State != "uncertain") || (job.ClaimOwner != "" && !timeBefore(job.ClaimExpiresAt, now)) {
+	if job.Kind != kind || job.Fence != expectedFence || job.ResolvedAt != "" || (job.State != "blocked" && job.State != "uncertain") || (job.ClaimOwner != "" && !timeBefore(job.ClaimExpiresAt, now)) {
 		return ErrSyncPrecondition
 	}
 	if journal.JobID != jobID || journal.Fence != expectedFence || journal.Phase != "claim_recovery" || journal.Outcome != "effect_not_started" || journal.RecordedAt != now || journal.JournalID == "" {
@@ -1835,23 +1839,28 @@ func requireSyncTransition(kind, from, to string) error {
 func validSyncRecoveryTransition(kind, from, to string) bool {
 	edges := map[string]map[string]map[string]bool{
 		"publication": {
-			"blocked": {"published": true},
+			"signed":       {"published": true},
+			"push_pending": {"published": true},
+			"uncertain":    {"published": true},
+			"blocked":      {"published": true},
 		},
 		"membership": {
 			"planned":   {"applied": true},
+			"applying":  {"applied": true},
 			"uncertain": {"applied": true, "planned": true},
 			"blocked":   {"applied": true, "planned": true},
 		},
 		"checkpoint": {
+			"applying":  {"applied": true},
+			"uncertain": {"applied": true, "applying": true},
 			"blocked":   {"applied": true, "applying": true},
-			"uncertain": {"applying": true},
 		},
 	}
 	return edges[kind][from][to]
 }
 
 func requireSyncRecoveryTransition(kind, from, to string) error {
-	if !validSyncTransition(kind, from, to) && !validSyncRecoveryTransition(kind, from, to) {
+	if !validSyncRecoveryTransition(kind, from, to) {
 		return fmt.Errorf("recovery state transition %q -> %q is invalid for sync job kind %q", from, to, kind)
 	}
 	return nil
@@ -1900,8 +1909,8 @@ func resolveBlockedSyncJobs(ctx context.Context, tx *sql.Tx, groupID, resolution
 			journalID, job.id, job.fence, "claim_recovery", "ok", string(evidence), now); err != nil {
 			return err
 		}
-		res, err := tx.ExecContext(ctx, `UPDATE sync_jobs SET retain_until_resolved=0,resolved_at=?,updated_at=?
-			WHERE job_id=? AND state='blocked' AND resolved_at IS NULL`, now, now, job.id)
+		res, err := tx.ExecContext(ctx, `UPDATE sync_jobs SET retain_until_resolved=0,resolved_at=?
+			WHERE job_id=? AND state='blocked' AND resolved_at IS NULL`, now, job.id)
 		if err != nil {
 			return err
 		}

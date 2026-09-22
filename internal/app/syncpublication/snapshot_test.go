@@ -162,6 +162,35 @@ func TestCaptureOmitsUnicodeFoldAliasesOfExcludedPaths(t *testing.T) {
 	}
 }
 
+func TestProtectedAliasTakesPrecedenceOverFoldedExclude(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(root+"/Archive", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(root+"/Archive/Legal.md", []byte("protected"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := snapshotConfig(root)
+	route := cfg.Routes["route-main"]
+	route.Source.Exclude = []string{"archive/**"}
+	route.Policy.Protected = []string{"Archive/Legal.md"}
+	cfg.Routes["route-main"] = route
+	if _, err := Capture(cfg, "vault-main"); err == nil {
+		t.Fatal("folded exclude suppressed a protected path")
+	}
+}
+
+func TestValidateTransitionRejectsProtectedDeletion(t *testing.T) {
+	cfg := snapshotConfig(t.TempDir())
+	route := cfg.Routes["route-main"]
+	route.Policy.Protected = []string{"Secret.md"}
+	cfg.Routes["route-main"] = route
+	before := map[string][]byte{"secret.md": []byte("protected")}
+	if err := ValidateTransition(cfg, "vault-main", before, map[string][]byte{}); err == nil {
+		t.Fatal("protected deletion was accepted")
+	}
+}
+
 func snapshotConfig(root string) *config.Config {
 	return &config.Config{Resources: map[string]config.Resource{"vault-main": {Type: "directory", Root: root, FileScope: "markdown"}}, Routes: map[string]config.Route{"route-main": {Source: config.Source{Resource: "vault-main", Include: []string{"**/*.md", "*.md"}, Exclude: []string{"private.md"}}, Policy: config.Policy{Protected: []string{}, Immutable: []string{}}}}}
 }

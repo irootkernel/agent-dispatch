@@ -15,8 +15,9 @@ Run `make schema-validation` from the repository root. It compiles schemas with
 format assertions and validates the covered examples and capability report.
 Runtime semantic checks and migration compatibility require their owning Go tests.
 
-The `sync-*.schema.json` documents freeze the E20 v1 membership and checkpoint
-plans/records, cooperative-import acknowledgement, publication, peer-delivery,
-import, control, and pair-verification records.
+The `sync-*.schema.json` documents freeze the current v1 membership and
+checkpoint plans/records, cooperative-import acknowledgement, immutable E21
+publication manifest, peer-delivery, import, control, and pair-verification
+records.
 They are contract artifacts only; schema presence does not advertise a runtime
 capability.

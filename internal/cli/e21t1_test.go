@@ -115,7 +115,8 @@ func TestE21T5StatusSeparatesDurableSyncOutcomes(t *testing.T) {
 		(journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES
 		('publication-status-evidence','publication-job-g17',1,'publication','effect_unknown','{"candidate":"2222222222222222222222222222222222222222","remote":"1111111111111111111111111111111111111111","push_state":"ambiguous","reason":"push outcome unknown"}','2026-09-21T01:00:04Z'),
 		('import-status-evidence','import-job-g17',1,'import','deferred','{"reason":"observation_unavailable"}','2026-09-21T01:00:05Z'),
-		('publication-resolution-evidence','publication-job-g17',1,'publication','ok','{"resolution":"checkpoint_reconciled","resolver_id":"checkpoint-1"}','2026-09-21T01:00:03Z')`); err != nil {
+		('publication-resolution-evidence','publication-job-g17',1,'publication','ok','{"resolution":"checkpoint_reconciled","resolver_id":"checkpoint-1"}','2026-09-21T01:00:03Z'),
+		('publication-reopen-evidence','publication-job-g17',1,'claim_recovery','effect_not_started','{"candidate":"2222222222222222222222222222222222222222","remote":"1111111111111111111111111111111111111111"}','2026-09-21T01:00:05Z')`); err != nil {
 		t.Fatal(err)
 	}
 	code, envelope, stderr := syncResult(t, "status", "--group", cfg.Sync.GroupID, "--config", configPath, "--output", "json")

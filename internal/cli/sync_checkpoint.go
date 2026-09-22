@@ -208,8 +208,12 @@ func runSyncCheckpointApply(args []string, stdout, stderr io.Writer) int {
 		case syncPushRetryable:
 			return finishCheckpointRetryable(stderr, store, job, owner, candidate, push.RemoteOID, push.State)
 		case syncPushConflict:
-			if _, err := store.HoldSyncControl(requestCtx(), s.GroupID, "conflict", configRevision, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+			held, err := store.HoldSyncControl(requestCtx(), s.GroupID, "conflict", configRevision, time.Now().UTC().Format(time.RFC3339Nano))
+			if err != nil {
 				return syncStoreError(stderr, command, err)
+			}
+			if held.Reason != "conflict" {
+				return finishCheckpointBlockedByHold(stdout, stderr, store, job, owner, plan, candidate, held, push.State)
 			}
 			return finishCheckpointFailure(stderr, store, job, owner, "blocked", "blocked", fmt.Sprintf("checkpoint push %s; review history and create a conflict-resolution checkpoint plan", push.State))
 		case syncPushUnknown:
@@ -227,6 +231,14 @@ func runSyncCheckpointApply(args []string, stdout, stderr io.Writer) int {
 		return syncStoreError(stderr, command, err)
 	}
 	return checkpointResult(stdout, plan, candidate, false)
+}
+
+func finishCheckpointBlockedByHold(stdout, stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, owner string, plan syncrecords.CheckpointPlan, candidate string, control sqlite.SyncControlRow, pushState gitlocal.PushState) int {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "blocked", sqlite.SyncJobKeepUnresolved, sqlite.SyncJournalEntry{JournalID: randomSyncID("checkpoint-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "checkpoint", Outcome: "blocked", EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "push_state": pushState, "reason": control.Reason}), RecordedAt: now}, now); err != nil {
+		return syncStoreError(stderr, "sync checkpoint apply", err)
+	}
+	return checkpointBlockedResult(stdout, plan, candidate, control)
 }
 
 // recoverCheckpointApply converges an already signed checkpoint after process
@@ -325,8 +337,12 @@ func recoverCheckpointApply(stdout, stderr io.Writer, store *sqlite.Store, clien
 			return true, syncStoreError(stderr, "sync checkpoint apply", err)
 		}
 		revision, _ := config.SyncRevision(cfg)
-		if _, holdErr := store.HoldSyncControl(requestCtx(), s.GroupID, "conflict", revision, nowText); holdErr != nil {
+		held, holdErr := store.HoldSyncControl(requestCtx(), s.GroupID, "conflict", revision, nowText)
+		if holdErr != nil {
 			return true, syncStoreError(stderr, "sync checkpoint apply", holdErr)
+		}
+		if held.Reason != "conflict" {
+			return true, checkpointBlockedResult(stdout, plan, candidate, held)
 		}
 		return true, syncMembershipError(stderr, "sync checkpoint apply", errors.New("checkpoint recovery found a moved remote content revision; review history and create a new conflict-resolution checkpoint plan"), 14)
 	}
@@ -352,6 +368,17 @@ func recoverCheckpointApply(stdout, stderr io.Writer, store *sqlite.Store, clien
 		}
 	}
 	return false, 0
+}
+
+func checkpointBlockedResult(stdout io.Writer, plan syncrecords.CheckpointPlan, candidate string, control sqlite.SyncControlRow) int {
+	if code := writeEnvelope(stdout, "sync checkpoint apply", map[string]any{
+		"schema_version": "agent-dispatch.sync-checkpoint-apply-result/v1", "state": "blocked", "reason": control.Reason,
+		"plan_id": plan.PlanID, "candidate_commit": candidate, "membership_mode": control.MembershipMode,
+		"detail": "the remote move was recorded without replacing the existing stronger sync safety hold", "side_effects": []string{"state_committed"},
+	}); code != 0 {
+		return code
+	}
+	return syncControlHoldExitCode(control.MembershipMode, control.Reason)
 }
 
 func checkpointBindings(client *gitlocal.Client, cfg *config.Config, s *config.Sync, target string) (string, string, string, error) {

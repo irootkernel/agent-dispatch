@@ -8,11 +8,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/gitlocal"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/app/syncimport"
+	"github.com/irootkernel/agent-dispatch/internal/app/syncmembership"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/domain/syncrecords"
 )
@@ -265,5 +268,290 @@ func TestE21ControllerNoEffectRetryReportsValidatedIdentity(t *testing.T) {
 	stored, found, err := store.FindSyncJob(requestCtx(), "wiki-pair", "import", "controller-no-effect")
 	if err != nil || !found || stored.State != "validated" || stored.ResolvedAt != "" {
 		t.Fatalf("controller retry job=%+v found=%v err=%v", stored, found, err)
+	}
+}
+
+func TestE21PublicationBlockedResultPreservesRecoveryReason(t *testing.T) {
+	var stdout bytes.Buffer
+	code := publicationBlockedResult(&stdout, syncrecords.Publication{PublicationID: "publication-1"}, "candidate-1", sqlite.SyncControlRow{State: "blocked", Reason: "recovery_required", MembershipMode: "normal"}, false)
+	if code != 30 {
+		t.Fatalf("code=%d output=%s", code, stdout.String())
+	}
+	for _, want := range []string{`"state":"blocked"`, `"reason":"recovery_required"`, `"candidate_commit":"candidate-1"`} {
+		if !bytes.Contains(stdout.Bytes(), []byte(want)) {
+			t.Fatalf("output missing %s: %s", want, stdout.String())
+		}
+	}
+}
+
+func TestE21PublicationBlockedBeforeCandidateDoesNotClaimOneWasPreserved(t *testing.T) {
+	var stdout bytes.Buffer
+	code := publicationBlockedResult(&stdout, syncrecords.Publication{}, "", sqlite.SyncControlRow{State: "blocked", Reason: "recovery_required", MembershipMode: "normal"}, false)
+	if code != 30 {
+		t.Fatalf("code=%d output=%s", code, stdout.String())
+	}
+	for _, unwanted := range []string{`"publication_id"`, `"candidate_commit"`, `preserved publication candidate`} {
+		if bytes.Contains(stdout.Bytes(), []byte(unwanted)) {
+			t.Fatalf("output unexpectedly contains %s: %s", unwanted, stdout.String())
+		}
+	}
+}
+
+func TestE21CheckpointBlockedResultPreservesRecoveryReason(t *testing.T) {
+	var stdout bytes.Buffer
+	code := checkpointBlockedResult(&stdout, syncrecords.CheckpointPlan{PlanID: "checkpoint-1"}, "candidate-1", sqlite.SyncControlRow{State: "blocked", Reason: "trust_failure", MembershipMode: "normal"})
+	if code != 30 {
+		t.Fatalf("code=%d output=%s", code, stdout.String())
+	}
+	for _, want := range []string{`"state":"blocked"`, `"reason":"trust_failure"`, `"plan_id":"checkpoint-1"`, `"candidate_commit":"candidate-1"`} {
+		if !bytes.Contains(stdout.Bytes(), []byte(want)) {
+			t.Fatalf("output missing %s: %s", want, stdout.String())
+		}
+	}
+}
+
+func TestE21LiveImportClaimResultIncludesDurableControlContext(t *testing.T) {
+	store, err := sqlite.Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.Migrate(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.EnsureSyncControl(requestCtx(), "wiki-pair", "cfg-1", "2026-09-21T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.HoldSyncControl(requestCtx(), "wiki-pair", "trust_failure", "cfg-1", "2026-09-21T00:00:01Z"); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := liveImportClaimResult(&stdout, &stderr, store, sqlite.SyncJobRow{JobID: "import-live", GroupID: "wiki-pair", State: "applying"}, "still claimed")
+	if code != 14 {
+		t.Fatalf("code=%d output=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	for _, want := range []string{`"import_state":"applying"`, `"control_reason":"trust_failure"`, `"membership_mode":"normal"`} {
+		if !bytes.Contains(stdout.Bytes(), []byte(want)) {
+			t.Fatalf("output missing %s: %s", want, stdout.String())
+		}
+	}
+}
+
+func TestE21PartialEffectResultPreservesStrongerHoldWithoutChangingIt(t *testing.T) {
+	var stdout bytes.Buffer
+	control := sqlite.SyncControlRow{State: "blocked", Reason: "trust_failure", MembershipMode: "normal"}
+	code := importPartialEffectResult(&stdout, sqlite.SyncJobRow{JobID: "import-partial", State: "recovering"}, control, "coherent partial state")
+	if code != 13 {
+		t.Fatalf("code=%d output=%s", code, stdout.String())
+	}
+	for _, want := range []string{`"state":"uncertain"`, `"reason":"partial_effect"`, `"import_state":"recovering"`, `"control_reason":"trust_failure"`} {
+		if !bytes.Contains(stdout.Bytes(), []byte(want)) {
+			t.Fatalf("output missing %s: %s", want, stdout.String())
+		}
+	}
+}
+
+func TestE21BlockReconcileUsesEmergencyMembershipExitClass(t *testing.T) {
+	store, err := sqlite.Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.Migrate(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.EnsureSyncControl(requestCtx(), "wiki-pair", "cfg-1", "2026-09-21T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ReconcileAdoptedMembership(requestCtx(), "wiki-pair", "blocked_emergency", "membership-emergency", "cfg-1", "2026-09-21T00:00:01Z"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.HoldSyncControl(requestCtx(), "wiki-pair", "conflict", "cfg-1", "2026-09-21T00:00:02Z"); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := blockReconcile(&stdout, &stderr, store, "wiki-pair", "cfg-1", "conflict", "history_diverged", errors.New("diverged history"))
+	if code != 30 || stderr.Len() != 0 {
+		t.Fatalf("code=%d out=%s err=%s", code, stdout.String(), stderr.String())
+	}
+	for _, want := range []string{`"reason":"history_diverged"`, `"control_reason":"conflict"`, `"membership_mode":"blocked_emergency"`} {
+		if !bytes.Contains(stdout.Bytes(), []byte(want)) {
+			t.Fatalf("output missing %s: %s", want, stdout.String())
+		}
+	}
+}
+
+func TestE21PartialEffectGateExcludesValidatedNoEffectFence(t *testing.T) {
+	for _, state := range []string{"applying", "recovering", "uncertain"} {
+		if !importStateMayHavePartialEffect(state) {
+			t.Fatalf("state %s must stop at the partial-effect gate", state)
+		}
+	}
+	for _, state := range []string{"requested", "fetched", "validated", "applied", "blocked", "deferred"} {
+		if importStateMayHavePartialEffect(state) {
+			t.Fatalf("state %s must retain its own recovery path", state)
+		}
+	}
+}
+
+func TestE21RecoverPendingImportConvergesCoherentPartialState(t *testing.T) {
+	dir := t.TempDir()
+	repo := filepath.Join(dir, "repo")
+	if err := os.Mkdir(repo, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gitTestRun(t, gitPath, repo, "init", "-q", "-b", "main")
+	gitTestRun(t, gitPath, repo, "config", "user.name", "Test")
+	gitTestRun(t, gitPath, repo, "config", "user.email", "test@example.invalid")
+	beforeBytes := []byte("before\n")
+	afterBytes := []byte("after\n")
+	if err := os.WriteFile(filepath.Join(repo, "note.md"), beforeBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitTestRun(t, gitPath, repo, "add", "note.md")
+	gitTestRun(t, gitPath, repo, "commit", "-q", "-m", "before")
+	from := gitTestOutput(t, gitPath, repo, "rev-parse", "HEAD")
+	client, err := gitlocal.New(repo, gitlocal.Limits{Timeout: 30 * time.Second, MaxOutput: 1 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseState, err := client.InspectImport(requestCtx(), "refs/heads/main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "note.md"), afterBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitTestRun(t, gitPath, repo, "add", "note.md")
+	gitTestRun(t, gitPath, repo, "commit", "-q", "-m", "after")
+	target := gitTestOutput(t, gitPath, repo, "rev-parse", "HEAD")
+	gitTestRun(t, gitPath, repo, "reset", "--hard", from)
+	if err := os.WriteFile(filepath.Join(repo, "note.md"), afterBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.Load("../../docs/examples/config.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Sync.ContentRef = "refs/heads/main"
+	resource := cfg.Resources[cfg.Sync.Resource]
+	resource.Root = repo
+	cfg.Resources[cfg.Sync.Resource] = resource
+	revision, ok := config.SyncRevision(cfg)
+	if !ok {
+		t.Fatal("sync revision unavailable")
+	}
+	incarnation := localSyncIncarnation(cfg)
+	cfg.Sync.ImportAcknowledgement = &config.SyncImportAcknowledgement{
+		SchemaVersion: "agent-dispatch.sync-import-acknowledgement/v1", AcknowledgementID: "acknowledgement-test",
+		GroupID: cfg.Sync.GroupID, ResourceID: cfg.Sync.Resource, RemoteName: cfg.Sync.RemoteName,
+		RemoteRepositoryDigest: cfg.Sync.RemoteRepositoryDigest, ContentRef: cfg.Sync.ContentRef, MembershipRef: cfg.Sync.MembershipRef,
+		ScopeDigest: config.SyncScopeDigest(cfg, cfg.Sync.Resource), LocalInstanceID: cfg.Sync.LocalInstanceID,
+		StateIncarnationID: incarnation, AdministratorKey: cfg.Sync.AdministratorKey,
+		SafetyPolicyDigest: config.SyncSafetyPolicyDigest(), ImportBoundsDigest: config.SyncImportBoundsDigest(cfg.Sync.Bounds), ConfigRevision: revision,
+	}
+	if !config.SyncAcknowledgementCurrent(cfg, incarnation) {
+		t.Fatal("test acknowledgement is stale")
+	}
+	membership := strings.Repeat("3", 40)
+	record, err := syncrecords.NewImport(syncrecords.ImportBinding{
+		GroupID: cfg.Sync.GroupID, FromCommit: from, TargetCommit: target, MembershipRevision: membership,
+		AcknowledgementID: cfg.Sync.ImportAcknowledgement.AcknowledgementID, ResourceObservationRevision: 1,
+		ExpectedGitStateDigest: baseState.Digest, HistoryEvidenceID: "history-evidence-test", CaseMode: config.CaseMode(), State: "validated", Reason: "none",
+	}, []syncrecords.ImportPath{{Path: "note.md", Before: syncimport.Digest(beforeBytes), After: syncimport.Digest(afterBytes)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := syncrecords.CanonicalImport(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := sqlite.Open(filepath.Join(dir, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.Migrate(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RegisterResource(nil, cfg.Sync.Resource, "resource-revision", repo, repo, "markdown", "enabled"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Exec(`UPDATE resources SET observation_revision=1 WHERE resource_id=?`, cfg.Sync.Resource); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.EnsureSyncControl(requestCtx(), cfg.Sync.GroupID, revision, "2026-09-21T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	job, _, err := store.AdmitSyncJob(requestCtx(), sqlite.SyncJobInput{JobID: "recover-coherent-partial", GroupID: cfg.Sync.GroupID, Kind: "import", LogicalKey: record.ImportID, InitialState: "recovering", PayloadJSON: string(payload), ConfigRevision: revision, QueueLimit: 10, Now: "2026-09-21T00:00:01Z"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	handled, code := recoverPendingImport(&stdout, &stderr, cfg, cfg.Sync, revision, store, client, syncmembership.History{}, membership, target)
+	if !handled || code != 0 || !bytes.Contains(stdout.Bytes(), []byte(`"state":"recovered"`)) {
+		t.Fatalf("recovery handled=%v code=%d out=%s err=%s", handled, code, stdout.String(), stderr.String())
+	}
+	stored, found, err := store.FindSyncJob(requestCtx(), cfg.Sync.GroupID, "import", record.ImportID)
+	if err != nil || !found || stored.JobID != job.JobID || stored.State != "applied" || stored.ResolvedAt == "" {
+		t.Fatalf("stored recovery=%+v found=%v err=%v", stored, found, err)
+	}
+	if got := gitTestOutput(t, gitPath, repo, "rev-parse", cfg.Sync.ContentRef); got != target {
+		t.Fatalf("content ref=%s want=%s", got, target)
+	}
+
+	gitTestRun(t, gitPath, repo, "reset", "--hard", from)
+	if err := os.WriteFile(filepath.Join(repo, "unrelated.tmp"), []byte("local-only\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	unclaimedRecord, err := syncrecords.NewImport(syncrecords.ImportBinding{
+		GroupID: cfg.Sync.GroupID, FromCommit: from, TargetCommit: target, MembershipRevision: membership,
+		AcknowledgementID: cfg.Sync.ImportAcknowledgement.AcknowledgementID, ResourceObservationRevision: 2,
+		ExpectedGitStateDigest: baseState.Digest, HistoryEvidenceID: "history-evidence-unclaimed", CaseMode: config.CaseMode(), State: "validated", Reason: "none",
+	}, []syncrecords.ImportPath{{Path: "note.md", Before: syncimport.Digest(beforeBytes), After: syncimport.Digest(afterBytes)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	unclaimedPayload, err := syncrecords.CanonicalImport(unclaimedRecord)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unclaimedJob, _, err := store.AdmitSyncJob(requestCtx(), sqlite.SyncJobInput{JobID: "validated-unclaimed", GroupID: cfg.Sync.GroupID, Kind: "import", LogicalKey: unclaimedRecord.ImportID, InitialState: "validated", PayloadJSON: string(unclaimedPayload), ConfigRevision: revision, QueueLimit: 10, Now: "2026-09-21T00:00:02Z"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	handled, code = recoverPendingImport(&stdout, &stderr, cfg, cfg.Sync, revision, store, client, syncmembership.History{}, membership, target)
+	if handled || code != 0 || stdout.Len() != 0 || stderr.Len() != 0 {
+		t.Fatalf("unclaimed current plan handled=%v code=%d out=%s err=%s", handled, code, stdout.String(), stderr.String())
+	}
+	stored, found, err = store.FindSyncJob(requestCtx(), cfg.Sync.GroupID, "import", unclaimedRecord.ImportID)
+	if err != nil || !found || stored.JobID != unclaimedJob.JobID || stored.State != "validated" || stored.Fence != 0 {
+		t.Fatalf("unclaimed current plan=%+v found=%v err=%v", stored, found, err)
+	}
+	journals, err := store.LoadSyncJournals(requestCtx(), unclaimedJob.JobID)
+	if err != nil || len(journals) != 0 {
+		t.Fatalf("current-plan journals=%+v err=%v", journals, err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	handled, code = recoverPendingImport(&stdout, &stderr, cfg, cfg.Sync, revision, store, client, syncmembership.History{}, membership, strings.Repeat("4", 40))
+	if handled || code != 0 || stdout.Len() != 0 || stderr.Len() != 0 {
+		t.Fatalf("unclaimed obsolete plan handled=%v code=%d out=%s err=%s", handled, code, stdout.String(), stderr.String())
+	}
+	stored, found, err = store.FindSyncJob(requestCtx(), cfg.Sync.GroupID, "import", unclaimedRecord.ImportID)
+	if err != nil || !found || stored.State != "deferred" || stored.Fence != 1 || stored.ResolvedAt == "" {
+		t.Fatalf("unclaimed obsolete plan=%+v found=%v err=%v", stored, found, err)
+	}
+	journals, err = store.LoadSyncJournals(requestCtx(), unclaimedJob.JobID)
+	if err != nil || len(journals) != 1 || journals[0].Outcome != "effect_not_started" || !strings.Contains(journals[0].EvidenceJSON, `"basis":"durable_state_invariant"`) {
+		t.Fatalf("obsolete-plan journals=%+v err=%v", journals, err)
 	}
 }

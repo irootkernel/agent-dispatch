@@ -87,6 +87,13 @@ func runSyncPublish(args []string, stdout, stderr io.Writer) int {
 	if recovered, result := recoverConfirmedPublication(stdout, stderr, store, client, cfg, syncCfg, history, membershipHead, member, peer); recovered {
 		return result
 	}
+	control, err = store.LoadSyncControl(requestCtx(), syncCfg.GroupID)
+	if err != nil {
+		return syncStoreError(stderr, command, err)
+	}
+	if control.State == "blocked" && control.Reason != "conflict" {
+		return publicationBlockedResult(stdout, syncrecords.Publication{}, "", control, false)
+	}
 	eligible, err := store.LoadPublicationEligibility(requestCtx(), syncCfg.Resource)
 	if err != nil {
 		if errors.Is(err, sqlite.ErrSyncPrecondition) {
@@ -232,8 +239,12 @@ func runSyncPublish(args []string, stdout, stderr io.Writer) int {
 			return finishPublicationRetryable(stderr, store, job, owner, evidence, "content push was rejected before the approved remote moved; rerun sync publish")
 		case syncPushConflict:
 			evidence := map[string]any{"candidate": candidate, "remote": push.RemoteOID, "push_state": push.State}
-			if _, err := store.HoldSyncControl(requestCtx(), syncCfg.GroupID, "conflict", revision, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+			held, err := store.HoldSyncControl(requestCtx(), syncCfg.GroupID, "conflict", revision, time.Now().UTC().Format(time.RFC3339Nano))
+			if err != nil {
 				return syncStoreError(stderr, command, err)
+			}
+			if held.Reason != "conflict" {
+				return finishPublicationBlockedByHold(stdout, stderr, store, job, owner, publication, candidate, held, evidence)
 			}
 			return finishPublicationFailureWithEvidence(stderr, store, job, owner, "blocked", "blocked", "content fast-forward lost; resolve ordinary Git history, then run sync checkpoint plan --kind conflict_resolution", evidence)
 		case syncPushUnknown:
@@ -327,18 +338,28 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 				if err := store.BlockSyncJobAfterRemoteMove(requestCtx(), job.JobID, job.Fence, sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "blocked", EvidenceJSON: mustJSON(evidence), RecordedAt: nowText}, nowText); err != nil {
 					return true, syncStoreError(stderr, "sync publish", err)
 				}
-				if _, err := store.HoldSyncControl(requestCtx(), s.GroupID, "conflict", revision, nowText); err != nil {
+				held, err := store.HoldSyncControl(requestCtx(), s.GroupID, "conflict", revision, nowText)
+				if err != nil {
 					return true, syncStoreError(stderr, "sync publish", err)
+				}
+				if held.Reason != "conflict" {
+					return true, publicationBlockedResult(stdout, publication, candidate, held, true)
 				}
 				return true, syncMembershipError(stderr, "sync publish", errors.New("publication recovery found a moved remote content revision; review history and create a conflict-resolution checkpoint plan"), 14)
 			}
+			control, loadErr := store.LoadSyncControl(requestCtx(), s.GroupID)
+			if loadErr != nil {
+				return true, syncStoreError(stderr, "sync publish", loadErr)
+			}
+			if control.State == "blocked" && control.Reason != "conflict" {
+				return true, publicationBlockedResult(stdout, publication, candidate, control, false)
+			}
+			if control.State == "blocked" && control.Reason == "conflict" {
+				administrationRetry = true
+			}
 			if job.State == "blocked" {
-				control, loadErr := store.LoadSyncControl(requestCtx(), s.GroupID)
-				if loadErr != nil {
-					return true, syncStoreError(stderr, "sync publish", loadErr)
-				}
 				if control.State != "blocked" || control.Reason != "conflict" {
-					return true, syncMembershipError(stderr, "sync publish", fmt.Errorf("publication remains blocked by %s", control.Reason), syncControlHoldExitCode(control.MembershipMode, control.Reason))
+					return true, publicationBlockedResult(stdout, publication, candidate, control, false)
 				}
 				if verifyErr := verifyContentHead(client, history, cfg, s, candidate); verifyErr != nil {
 					return true, syncMembershipError(stderr, "sync publish", verifyErr, 30)
@@ -398,8 +419,12 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 				return true, finishPublicationRetryable(stderr, store, claimed, owner, evidence, "content push was rejected before the approved remote moved; rerun sync publish")
 			case syncPushConflict:
 				evidence := map[string]any{"candidate": candidate, "remote": push.RemoteOID, "push_state": push.State, "recovered": true}
-				if _, err := store.HoldSyncControl(requestCtx(), s.GroupID, "conflict", revision, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+				held, err := store.HoldSyncControl(requestCtx(), s.GroupID, "conflict", revision, time.Now().UTC().Format(time.RFC3339Nano))
+				if err != nil {
 					return true, syncStoreError(stderr, "sync publish", err)
+				}
+				if held.Reason != "conflict" {
+					return true, finishPublicationBlockedByHold(stdout, stderr, store, claimed, owner, publication, candidate, held, evidence)
 				}
 				return true, finishPublicationFailureWithEvidence(stderr, store, claimed, owner, "blocked", "blocked", "content fast-forward lost during publication recovery", evidence)
 			case syncPushUnknown:
@@ -739,4 +764,34 @@ func publicationResult(stdout io.Writer, p syncrecords.Publication, candidate st
 		}
 		return []string{"git_objects_written", "remote_content_ref_updated", "local_content_ref_updated", "peer_delivery_admitted", "state_committed"}
 	}()})
+}
+
+func publicationBlockedResult(stdout io.Writer, p syncrecords.Publication, candidate string, control sqlite.SyncControlRow, stateCommitted bool) int {
+	sideEffects := []string{}
+	if stateCommitted {
+		sideEffects = []string{"state_committed"}
+	}
+	detail := "publication did not start because the existing sync safety hold remains"
+	result := map[string]any{
+		"schema_version": "agent-dispatch.sync-publish-result/v1", "state": "blocked", "reason": control.Reason,
+		"membership_mode": control.MembershipMode, "detail": detail, "side_effects": sideEffects,
+	}
+	if p.PublicationID != "" || candidate != "" {
+		result["publication_id"] = p.PublicationID
+		result["candidate_commit"] = candidate
+		result["detail"] = "the preserved publication candidate remains blocked by the existing sync safety hold"
+	}
+	if code := writeEnvelope(stdout, "sync publish", result); code != 0 {
+		return code
+	}
+	return syncControlHoldExitCode(control.MembershipMode, control.Reason)
+}
+
+func finishPublicationBlockedByHold(stdout, stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, owner string, p syncrecords.Publication, candidate string, control sqlite.SyncControlRow, evidence map[string]any) int {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	evidence["reason"] = control.Reason
+	if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "blocked", sqlite.SyncJobKeepUnresolved, sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "publication", Outcome: "blocked", EvidenceJSON: mustJSON(evidence), RecordedAt: now}, now); err != nil {
+		return syncStoreError(stderr, "sync publish", err)
+	}
+	return publicationBlockedResult(stdout, p, candidate, control, true)
 }

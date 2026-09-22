@@ -316,7 +316,7 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 				return reconcileEnvelope(stdout, "applied", "none", map[string]any{"import_id": record.ImportID, "target_commit": target, "controller_only": true, "idempotent": true})
 			}
 			if job.ClaimOwner != "" {
-				return reconcileEnvelopeCode(stdout, "blocked", "partial_effect", map[string]any{"import_id": record.ImportID, "detail": "an earlier controller-only import still owns or requires recovery"}, 14)
+				return liveImportClaimResult(stdout, stderr, store, job, "an earlier controller-only import still owns or requires recovery")
 			}
 			if job.State == "deferred" {
 				reopenedAt := time.Now().UTC().Format(time.RFC3339Nano)
@@ -431,7 +431,7 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 			}
 		}
 		if job.ClaimOwner != "" {
-			return reconcileEnvelopeCode(stdout, "blocked", "partial_effect", map[string]any{"import_id": record.ImportID, "detail": "an earlier import attempt still owns or requires recovery"}, 14)
+			return liveImportClaimResult(stdout, stderr, store, job, "an earlier import attempt still owns or requires recovery")
 		}
 	}
 	owner := randomSyncID("import-owner")
@@ -516,24 +516,65 @@ func recoverPendingImport(stdout, stderr io.Writer, cfg *config.Config, s *confi
 		return true, syncStoreError(stderr, "sync reconcile", err)
 	}
 	strongerHold := control.State == "blocked" && (control.Reason == "conflict" || control.Reason == "trust_failure" || control.Reason == "recovery_required")
-	administratorCheckpointRecovery := strongerHold && contentHeadAddsCheckpoint(client, remoteTarget) && verifyContentHead(client, history, cfg, s, remoteTarget) == nil
 	for _, job := range jobs {
-		if job.State == "deferred" || job.State == "blocked" || job.State == "requested" || job.State == "fetched" || (job.State == "validated" && job.ClaimOwner == "") {
+		if job.State == "deferred" || job.State == "blocked" || job.State == "requested" || job.State == "fetched" {
 			continue
 		}
 		if job.State != "validated" && job.State != "applying" && job.State != "recovering" && job.State != "uncertain" {
 			continue
 		}
 		record, decodeErr := syncrecords.DecodeImport([]byte(job.PayloadJSON))
-		if decodeErr != nil || record.MembershipRevision != membership || (record.TargetCommit != remoteTarget && !administratorCheckpointRecovery) {
-			_, _ = store.HoldSyncControl(requestCtx(), s.GroupID, "recovery_required", revision, time.Now().UTC().Format(time.RFC3339Nano))
-			return true, reconcileEnvelopeCode(stdout, "uncertain", "partial_effect", map[string]any{"import_job_id": job.JobID, "detail": "stored recovery plan no longer matches the approved remote"}, 13)
+		if decodeErr != nil {
+			return true, pendingImportPartialEffect(stdout, stderr, store, s.GroupID, revision, job, "stored recovery plan no longer matches the approved remote")
 		}
 		if job.ClaimOwner != "" {
 			expires, _ := time.Parse(time.RFC3339Nano, job.ClaimExpiresAt)
 			if expires.After(time.Now().UTC()) {
-				return true, reconcileEnvelopeCode(stdout, "blocked", "partial_effect", map[string]any{"import_job_id": job.JobID, "detail": "an earlier import attempt still has a live claim"}, 14)
+				return true, liveImportClaimResult(stdout, stderr, store, job, "an earlier import attempt still has a live claim")
 			}
+		}
+		planMatchesRemote := record.MembershipRevision == membership && record.TargetCommit == remoteTarget
+		if job.State == "validated" {
+			now := time.Now().UTC().Format(time.RFC3339Nano)
+			recoveryFence := job.Fence
+			if recoveryFence < 1 {
+				recoveryFence = 1
+			}
+			if job.ClaimOwner == "" {
+				if !planMatchesRemote {
+					journal := sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: recoveryFence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: mustJSON(map[string]any{"durable_state": "validated", "claim_owner": "", "basis": "durable_state_invariant"}), RecordedAt: now}
+					if err := store.ResolveObsoleteImport(requestCtx(), job.JobID, job.Fence, journal, now); err != nil {
+						return true, syncStoreError(stderr, "sync reconcile", err)
+					}
+				}
+				continue
+			}
+			noEffect, evidence := validatedImportNoEffect(client, cfg, s, record)
+			journal := sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: recoveryFence, Phase: "claim_recovery", Outcome: map[bool]string{true: "effect_not_started", false: "effect_unknown"}[noEffect], EvidenceJSON: mustJSON(evidence), RecordedAt: now}
+			if noEffect && !planMatchesRemote {
+				if err := store.ResolveObsoleteImport(requestCtx(), job.JobID, job.Fence, journal, now); err != nil {
+					return true, syncStoreError(stderr, "sync reconcile", err)
+				}
+				continue
+			}
+			if err := store.ReconcileExpiredSyncClaim(requestCtx(), job.JobID, job.Fence, journal.Outcome, journal, now); err != nil {
+				return true, syncStoreError(stderr, "sync reconcile", err)
+			}
+			if noEffect {
+				continue
+			}
+			job.State = "uncertain"
+			job.ClaimOwner = ""
+			return true, pendingImportPartialEffect(stdout, stderr, store, s.GroupID, revision, job, "an expired pre-apply claim no longer matches its no-effect fence")
+		}
+		administratorCheckpointRecovery := strongerHold && contentHeadAddsCheckpoint(client, remoteTarget) && verifyContentHead(client, history, cfg, s, remoteTarget) == nil
+		checkpointCoversPlan := false
+		if administratorCheckpointRecovery {
+			relation, relationErr := client.Compare(requestCtx(), record.TargetCommit, remoteTarget)
+			checkpointCoversPlan = relationErr == nil && (relation == gitlocal.RelationBehind || relation == gitlocal.RelationEqual)
+		}
+		if !planMatchesRemote && !checkpointCoversPlan {
+			return true, pendingImportPartialEffect(stdout, stderr, store, s.GroupID, revision, job, "stored recovery plan no longer matches the approved remote")
 		}
 		if record.ControllerOnly {
 			stateNow, stateErr := client.InspectImport(requestCtx(), s.ContentRef)
@@ -548,8 +589,8 @@ func recoverPendingImport(stdout, stderr io.Writer, cfg *config.Config, s *confi
 				if loadErr != nil {
 					return true, syncStoreError(stderr, "sync reconcile", loadErr)
 				}
-				if control.State == "blocked" && contentHeadAddsCheckpoint(client, record.TargetCommit) {
-					reconciled, reconcileErr := store.ReconcileSyncControlCheckpoint(requestCtx(), s.GroupID, control.Revision, revision, record.TargetCommit, now)
+				if administratorCheckpointRecovery && planMatchesRemote {
+					reconciled, reconcileErr := store.ReconcileSyncControlCheckpoint(requestCtx(), s.GroupID, control.Revision, revision, remoteTarget, now)
 					if reconcileErr != nil {
 						return true, syncStoreError(stderr, "sync reconcile", reconcileErr)
 					}
@@ -574,22 +615,31 @@ func recoverPendingImport(stdout, stderr io.Writer, cfg *config.Config, s *confi
 			}
 			now := time.Now().UTC().Format(time.RFC3339Nano)
 			if stateErr == nil && refErr == nil && stateNow.ActiveOperation == "" && stateNow.Digest == record.ExpectedGitStateDigest && refNow == record.FromCommit {
+				if checkpointCoversPlan && !planMatchesRemote {
+					if err := store.ResolveSupersededImport(requestCtx(), job.JobID, job.Fence, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: mustJSON(map[string]any{"controller_only": true, "ref": refNow, "checkpoint": remoteTarget, "superseded_target": record.TargetCommit}), RecordedAt: now}, now); err != nil {
+						return true, syncStoreError(stderr, "sync reconcile", err)
+					}
+					continue
+				}
 				if err := store.PrepareControllerImportRecovery(requestCtx(), job.JobID, job.Fence, "validated", sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: mustJSON(map[string]any{"controller_only": true, "ref": refNow, "git_state": stateNow.Digest}), RecordedAt: now}, now); err != nil {
 					return true, syncStoreError(stderr, "sync reconcile", err)
 				}
-				return false, 0
+				continue
 			}
 			if job.State != "uncertain" {
 				if err := store.PrepareControllerImportRecovery(requestCtx(), job.JobID, job.Fence, "uncertain", sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_unknown", EvidenceJSON: mustJSON(map[string]any{"controller_only": true, "ref": refNow, "active_operation": stateNow.ActiveOperation}), RecordedAt: now}, now); err != nil {
 					return true, syncStoreError(stderr, "sync reconcile", err)
 				}
 			}
-			_, _ = store.HoldSyncControl(requestCtx(), s.GroupID, "recovery_required", revision, now)
-			return true, reconcileEnvelopeCode(stdout, "uncertain", "partial_effect", map[string]any{"import_job_id": job.JobID, "detail": "controller-only recovery found an unexplained index, worktree, or ref state"}, 13)
+			job.State = "uncertain"
+			job.ClaimOwner = ""
+			return true, pendingImportPartialEffect(stdout, stderr, store, s.GroupID, revision, job, "controller-only recovery found an unexplained index, worktree, or ref state")
 		}
 		if job.State == "uncertain" && !administratorCheckpointRecovery {
-			_, _ = store.HoldSyncControl(requestCtx(), s.GroupID, "recovery_required", revision, time.Now().UTC().Format(time.RFC3339Nano))
-			return true, reconcileEnvelopeCode(stdout, "uncertain", "partial_effect", map[string]any{"import_job_id": job.JobID, "detail": "an earlier import has unresolved partial effects"}, 13)
+			return true, pendingImportPartialEffect(stdout, stderr, store, s.GroupID, revision, job, "an earlier import has unresolved partial effects")
+		}
+		if strongerHold && !administratorCheckpointRecovery && importStateMayHavePartialEffect(job.State) {
+			return true, pendingImportPartialEffect(stdout, stderr, store, s.GroupID, revision, job, "an earlier import has unresolved partial effects")
 		}
 		root := cfg.Resources[s.Resource].Root
 		effectState, inspectErr := syncimport.Inspect(root, record.Paths)
@@ -597,45 +647,42 @@ func recoverPendingImport(stdout, stderr io.Writer, cfg *config.Config, s *confi
 		if inspectErr != nil || refErr != nil || (refNow != record.FromCommit && refNow != record.TargetCommit) {
 			effectState = syncimport.Unexpected
 		}
-		if job.State == "validated" {
-			now := time.Now().UTC().Format(time.RFC3339Nano)
-			outcome := "effect_unknown"
-			if effectState == syncimport.AllBefore && refNow == record.FromCommit {
-				stateNow, stateErr := client.InspectImport(requestCtx(), s.ContentRef)
-				if stateErr == nil && stateNow.Digest == record.ExpectedGitStateDigest {
-					outcome = "effect_not_started"
-				}
-			}
-			if err := store.ReconcileExpiredSyncClaim(requestCtx(), job.JobID, job.Fence, outcome, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: outcome, EvidenceJSON: mustJSON(map[string]any{"path_state": effectState, "ref": refNow}), RecordedAt: now}, now); err != nil {
-				return true, syncStoreError(stderr, "sync reconcile", err)
-			}
-			if outcome == "effect_not_started" {
-				return false, 0
-			}
-			_, _ = store.HoldSyncControl(requestCtx(), s.GroupID, "recovery_required", revision, now)
-			return true, reconcileEnvelopeCode(stdout, "uncertain", "partial_effect", map[string]any{"import_job_id": job.JobID, "detail": "an expired pre-apply claim no longer matches its no-effect fence"}, 13)
-		}
 		if effectState == syncimport.Unexpected {
 			if job.ClaimOwner != "" {
 				now := time.Now().UTC().Format(time.RFC3339Nano)
 				if err := store.PrepareImportRecovery(requestCtx(), job.JobID, job.Fence, "uncertain", sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_unknown", EvidenceJSON: mustJSON(map[string]any{"path_state": effectState, "ref": refNow}), RecordedAt: now}, now); err != nil {
 					return true, syncStoreError(stderr, "sync reconcile", err)
 				}
+				job.State = "uncertain"
+				job.ClaimOwner = ""
 			}
-			_, _ = store.HoldSyncControl(requestCtx(), s.GroupID, "recovery_required", revision, time.Now().UTC().Format(time.RFC3339Nano))
-			return true, reconcileEnvelopeCode(stdout, "uncertain", "partial_effect", map[string]any{"import_job_id": job.JobID, "detail": "import recovery found independent or unexplained path state"}, 13)
+			return true, pendingImportPartialEffect(stdout, stderr, store, s.GroupID, revision, job, "import recovery found independent or unexplained path state")
 		}
 		stateNow, stateErr := client.InspectImport(requestCtx(), s.ContentRef)
 		if effectState == syncimport.AllBefore && refNow == record.FromCommit && stateErr == nil && stateNow.Digest == record.ExpectedGitStateDigest {
-			if job.ClaimOwner != "" {
-				now := time.Now().UTC().Format(time.RFC3339Nano)
+			now := time.Now().UTC().Format(time.RFC3339Nano)
+			if checkpointCoversPlan && !planMatchesRemote {
+				if err := store.ResolveSupersededImport(requestCtx(), job.JobID, job.Fence, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: mustJSON(map[string]any{"path_state": effectState, "ref": refNow, "checkpoint": remoteTarget, "superseded_target": record.TargetCommit}), RecordedAt: now}, now); err != nil {
+					return true, syncStoreError(stderr, "sync reconcile", err)
+				}
+			} else if job.State == "uncertain" {
+				if err := store.PrepareUncertainImportRecovery(requestCtx(), job.JobID, job.Fence, "validated", sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: mustJSON(map[string]any{"path_state": effectState, "ref": refNow}), RecordedAt: now}, now); err != nil {
+					return true, syncStoreError(stderr, "sync reconcile", err)
+				}
+			} else if job.ClaimOwner != "" {
 				if err := store.PrepareImportRecovery(requestCtx(), job.JobID, job.Fence, "validated", sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: mustJSON(map[string]any{"path_state": effectState, "ref": refNow}), RecordedAt: now}, now); err != nil {
 					return true, syncStoreError(stderr, "sync reconcile", err)
 				}
 			}
-			return false, 0
+			continue
 		}
-		if job.ClaimOwner != "" {
+		if job.State == "uncertain" {
+			now := time.Now().UTC().Format(time.RFC3339Nano)
+			if err := store.PrepareUncertainImportRecovery(requestCtx(), job.JobID, job.Fence, "recovering", sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_unknown", EvidenceJSON: mustJSON(map[string]any{"path_state": effectState, "ref": refNow, "recoverable": true}), RecordedAt: now}, now); err != nil {
+				return true, syncStoreError(stderr, "sync reconcile", err)
+			}
+			job.State = "recovering"
+		} else if job.ClaimOwner != "" {
 			now := time.Now().UTC().Format(time.RFC3339Nano)
 			if err := store.PrepareImportRecovery(requestCtx(), job.JobID, job.Fence, "recovering", sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_unknown", EvidenceJSON: mustJSON(map[string]any{"path_state": effectState, "ref": refNow, "recoverable": true}), RecordedAt: now}, now); err != nil {
 				return true, syncStoreError(stderr, "sync reconcile", err)
@@ -708,9 +755,60 @@ func recoverPendingImport(stdout, stderr io.Writer, cfg *config.Config, s *confi
 		if err := store.FinishRecoveredImportJob(requestCtx(), claimed.JobID, owner, s.Resource, claimed.Fence, record.ResourceObservationRevision, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: claimed.JobID, Fence: claimed.Fence, Phase: "import", Outcome: "applied", EvidenceJSON: mustJSON(map[string]any{"recovered": true, "target_commit": record.TargetCommit}), RecordedAt: terminal}, terminal); err != nil {
 			return true, finishImportUncertain(stdout, stderr, store, claimed, owner, err)
 		}
+		if strongerHold {
+			latestControl, loadErr := store.LoadSyncControl(requestCtx(), s.GroupID)
+			if loadErr != nil {
+				return true, syncStoreError(stderr, "sync reconcile", loadErr)
+			}
+			if latestControl.State == "blocked" {
+				return true, reconcileEnvelopeCode(stdout, "blocked", latestControl.Reason, map[string]any{
+					"import_state": "recovered", "import_id": record.ImportID, "target_commit": record.TargetCommit,
+					"control_state": latestControl.State, "control_reason": latestControl.Reason, "membership_mode": latestControl.MembershipMode,
+					"detail":       "the import was recovered; rerun reconcile to confirm equal checkpoint heads and settle the safety hold",
+					"side_effects": []string{"partial_import_reconciled", "import_effects_published", "path_facts_updated", "state_committed"},
+				}, syncControlHoldExitCode(latestControl.MembershipMode, latestControl.Reason))
+			}
+			if latestControl.State == "paused" {
+				return true, reconcileEnvelope(stdout, "deferred", "operator_pause", map[string]any{
+					"import_state": "recovered", "import_id": record.ImportID, "target_commit": record.TargetCommit,
+					"membership_mode": latestControl.MembershipMode, "detail": "the import was recovered while the operator pause remains",
+				})
+			}
+			return true, reconcileEnvelope(stdout, "recovered", "none", map[string]any{
+				"import_id": record.ImportID, "target_commit": record.TargetCommit, "control_state": latestControl.State,
+				"control_reason": latestControl.Reason, "membership_mode": latestControl.MembershipMode,
+				"side_effects": []string{"partial_import_reconciled", "import_effects_published", "path_facts_updated", "state_committed"},
+			})
+		}
 		return true, reconcileEnvelope(stdout, "recovered", "none", map[string]any{"import_id": record.ImportID, "target_commit": record.TargetCommit, "side_effects": []string{"partial_import_reconciled", "import_effects_published", "path_facts_updated", "state_committed"}})
 	}
 	return false, 0
+}
+
+func validatedImportNoEffect(client *gitlocal.Client, cfg *config.Config, s *config.Sync, record syncrecords.Import) (bool, map[string]any) {
+	gitState, gitErr := client.InspectImport(requestCtx(), s.ContentRef)
+	ref, refErr := client.ResolveRef(requestCtx(), s.ContentRef)
+	evidence := map[string]any{"ref": ref, "controller_only": record.ControllerOnly}
+	if gitErr != nil || refErr != nil || gitState.ActiveOperation != "" || ref != record.FromCommit || gitState.Digest != record.ExpectedGitStateDigest {
+		evidence["effect"] = "unknown"
+		return false, evidence
+	}
+	if record.ControllerOnly {
+		evidence["effect"] = "not_started"
+		return true, evidence
+	}
+	pathState, err := syncimport.Inspect(cfg.Resources[s.Resource].Root, record.Paths)
+	evidence["path_state"] = pathState
+	if err != nil || pathState != syncimport.AllBefore {
+		evidence["effect"] = "unknown"
+		return false, evidence
+	}
+	evidence["effect"] = "not_started"
+	return true, evidence
+}
+
+func importStateMayHavePartialEffect(state string) bool {
+	return state == "applying" || state == "recovering" || state == "uncertain"
 }
 
 func contentHeadAddsCheckpoint(client *gitlocal.Client, head string) bool {
@@ -748,15 +846,45 @@ func verifyImportBase(client *gitlocal.Client, history syncmembership.History, c
 }
 
 func blockReconcile(stdout, stderr io.Writer, store *sqlite.Store, group, revision, controlReason, resultReason string, cause error) int {
-	_, err := store.HoldSyncControl(requestCtx(), group, controlReason, revision, time.Now().UTC().Format(time.RFC3339Nano))
+	held, err := store.HoldSyncControl(requestCtx(), group, controlReason, revision, time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return syncStoreError(stderr, "sync reconcile", err)
 	}
-	exit := 30
-	if controlReason == "conflict" {
-		exit = 14
+	if held.Reason != controlReason {
+		return reconcileEnvelopeCode(stdout, "blocked", held.Reason, map[string]any{
+			"trigger_reason": resultReason, "control_state": held.State, "control_reason": held.Reason,
+			"membership_mode": held.MembershipMode, "detail": cause.Error(),
+		}, syncControlHoldExitCode(held.MembershipMode, held.Reason))
 	}
-	return reconcileEnvelopeCode(stdout, "blocked", resultReason, map[string]any{"detail": cause.Error()}, exit)
+	return reconcileEnvelopeCode(stdout, "blocked", resultReason, map[string]any{
+		"control_state": held.State, "control_reason": held.Reason, "membership_mode": held.MembershipMode, "detail": cause.Error(),
+	}, syncControlHoldExitCode(held.MembershipMode, held.Reason))
+}
+
+func pendingImportPartialEffect(stdout, stderr io.Writer, store *sqlite.Store, group, revision string, job sqlite.SyncJobRow, detail string) int {
+	held, err := store.HoldSyncControl(requestCtx(), group, "recovery_required", revision, time.Now().UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return syncStoreError(stderr, "sync reconcile", err)
+	}
+	return importPartialEffectResult(stdout, job, held, detail)
+}
+
+func importPartialEffectResult(stdout io.Writer, job sqlite.SyncJobRow, control sqlite.SyncControlRow, detail string) int {
+	return reconcileEnvelopeCode(stdout, "uncertain", "partial_effect", map[string]any{
+		"import_job_id": job.JobID, "import_state": job.State, "control_state": control.State,
+		"control_reason": control.Reason, "membership_mode": control.MembershipMode, "detail": detail,
+	}, 13)
+}
+
+func liveImportClaimResult(stdout, stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, detail string) int {
+	control, err := store.LoadSyncControl(requestCtx(), job.GroupID)
+	if err != nil {
+		return syncStoreError(stderr, "sync reconcile", err)
+	}
+	return reconcileEnvelopeCode(stdout, "blocked", "partial_effect", map[string]any{
+		"import_job_id": job.JobID, "import_state": job.State, "control_state": control.State,
+		"control_reason": control.Reason, "membership_mode": control.MembershipMode, "detail": detail,
+	}, 14)
 }
 
 func syncControlHoldExitCode(membershipMode, reason string) int {
@@ -807,10 +935,9 @@ func finishImportUncertain(stdout, stderr io.Writer, store *sqlite.Store, job sq
 	if loadErr != nil {
 		return syncStoreError(stderr, "sync reconcile", loadErr)
 	}
-	if _, err := store.HoldSyncControl(requestCtx(), job.GroupID, "recovery_required", control.ConfigRevision, now); err != nil {
-		return syncStoreError(stderr, "sync reconcile", err)
-	}
-	return reconcileEnvelopeCode(stdout, "uncertain", "partial_effect", map[string]any{"detail": cause.Error()}, 13)
+	job.State = "uncertain"
+	job.ClaimOwner = ""
+	return pendingImportPartialEffect(stdout, stderr, store, job.GroupID, control.ConfigRevision, job, cause.Error())
 }
 
 func finishImportRecovering(stdout, stderr io.Writer, store *sqlite.Store, client *gitlocal.Client, job sqlite.SyncJobRow, owner, root, contentRef, from, target string, effects []syncrecords.ImportPath, cause error) int {
@@ -823,7 +950,13 @@ func finishImportRecovering(stdout, stderr io.Writer, store *sqlite.Store, clien
 	if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "recovering", sqlite.SyncJobKeepUnresolved, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "effect_unknown", EvidenceJSON: mustJSON(map[string]any{"detail": cause.Error(), "path_state": effectState, "ref": refNow}), RecordedAt: now}, now); err != nil {
 		return syncStoreError(stderr, "sync reconcile", err)
 	}
-	return reconcileEnvelopeCode(stdout, "recovering", "partial_effect", map[string]any{"import_job_id": job.JobID, "detail": cause.Error(), "path_state": effectState, "ref": refNow}, 13)
+	control, loadErr := store.LoadSyncControl(requestCtx(), job.GroupID)
+	if loadErr != nil {
+		return syncStoreError(stderr, "sync reconcile", loadErr)
+	}
+	job.State = "recovering"
+	job.ClaimOwner = ""
+	return importPartialEffectResult(stdout, job, control, cause.Error())
 }
 
 func reconcileEnvelope(stdout io.Writer, state, reason string, extra map[string]any) int {

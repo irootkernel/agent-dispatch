@@ -191,6 +191,14 @@ Emergency membership posture remains durable while an operator pause or a
 stronger conflict, trust, or recovery reason is visible. Resume and exact
 checkpoint reconciliation consult that posture and produce
 `blocked`/`membership_emergency`; only an adopted normal membership clears it.
+Safety reasons escalate from `conflict` to `recovery_required` to
+`trust_failure`; a later lower-priority symptom never replaces the established
+reason. Partial-import recovery through one of those holds requires either the
+stored target to equal a fully verified administrator-checkpoint remote head,
+or that verified remote checkpoint to linearly cover the stored target. A
+covered import that provably never started is retired; a coherent partial
+import may finish only its immutable stored plan before the checkpoint is
+imported and reconciled.
 
 `expected_nodes` always fixes the exact two-node target. Verification `nodes`
 contains collected evidence only: it may contain zero, one, or two distinct

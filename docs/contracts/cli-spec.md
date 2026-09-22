@@ -113,8 +113,13 @@ the no-effect fence has been re-proven is retryable at exit 10; it leaves the
 same durable identity in `validated`, reports `effect_not_started`, and is ready
 for re-entry. A
 conflict or protected-claim block exits 14, an unprovable partial effect exits
-13, and membership, signature, or covered-history trust failure exits 30; each
+13, and membership, signature, covered-history trust failure, or a standing
+`recovery_required` hold exits 30; each
 still emits the versioned reconcile result with its durable state and reason.
+For an in-progress import, the result also names the durable `import_state`,
+the preserved control reason, and membership posture; command state
+`uncertain` is the partial-effect disposition and does not imply that an
+`applying` or `recovering` job row was rewritten.
 Every `agent-dispatch.sync-control/v1` result includes `membership_mode` so the
 posture remains visible while pause or a stronger hold owns `state` and
 `reason`.

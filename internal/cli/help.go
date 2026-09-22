@@ -108,8 +108,8 @@ preserved-candidate push retry while the remote is still at the reviewed
 predecessor, or a controller retry after proven no effect; 13 protected effect
 outcome unknown; 14 stale revision, missing checkpoint, moved-predecessor
 conflict, or protected-claim block; 20 storage failure; 21 migration failure;
-30 signature, membership, content-history, emergency-membership hold, or
-unproved remote binding. Sync
+30 signature, membership, content-history, recovery-required or
+emergency-membership hold, or unproved remote binding. Sync
 disposition commands may pair exits 10/13/14/30 with a versioned result on
 stdout after recording the reported state.
 

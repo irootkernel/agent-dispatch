@@ -341,6 +341,12 @@ func (s *Store) HoldSyncControl(ctx context.Context, groupID, reason, configRevi
 	if row.State == "blocked" && row.Reason == reason && row.ConfigRevision == configRevision {
 		return row, nil
 	}
+	// Preserve the strongest established safety reason. New evidence may
+	// escalate conflict -> recovery -> trust, but a later secondary symptom
+	// must not hide the reason that already closed the gate.
+	if row.State == "blocked" && syncHoldPriority(reason) < syncHoldPriority(row.Reason) {
+		reason = row.Reason
+	}
 	previous := row.State
 	row.Revision++
 	row.State, row.Reason, row.ConfigRevision, row.UpdatedAt = "blocked", reason, configRevision, now
@@ -355,6 +361,19 @@ func (s *Store) HoldSyncControl(ctx context.Context, groupID, reason, configRevi
 		return SyncControlRow{}, err
 	}
 	return row, nil
+}
+
+func syncHoldPriority(reason string) int {
+	switch reason {
+	case "trust_failure":
+		return 3
+	case "recovery_required":
+		return 2
+	case "conflict":
+		return 1
+	default:
+		return 0
+	}
 }
 
 // ReconcileAdoptedMembership applies the protected-effect posture of a
@@ -550,10 +569,12 @@ func (s *Store) ClaimSyncJob(ctx context.Context, jobID, owner, expectedConfigRe
 	return s.claimSyncJob(ctx, jobID, owner, expectedConfigRevision, now, expiresAt, false)
 }
 
-// ClaimSyncAdministrationJob permits a matching signed administration repair
-// or a controller-only checkpoint import to proceed through its safety hold.
-// It never permits ordinary content publication, Markdown import, or delivery
-// work through a block.
+// ClaimSyncAdministrationJob permits the administration matrix implemented by
+// administrationRepairAllowed: emergency membership replacement, publication
+// recovery through conflict, and checkpoint or import work through conflict,
+// trust, or recovery holds. Publication and import recovery callers prove their
+// exact candidate before claiming; checkpoint apply creates its signed
+// candidate after claiming. Delivery is never admitted here.
 func (s *Store) ClaimSyncAdministrationJob(ctx context.Context, jobID, owner, expectedConfigRevision, now, expiresAt string) (SyncJobRow, error) {
 	return s.claimSyncJob(ctx, jobID, owner, expectedConfigRevision, now, expiresAt, true)
 }
@@ -1674,6 +1695,48 @@ func (s *Store) ReconcileExpiredSyncClaim(ctx context.Context, jobID string, exp
 	return tx.Commit()
 }
 
+// ResolveObsoleteImport retires a validated import that is unclaimed, or whose
+// expired claim is proven not to have started, after the approved plan moved.
+func (s *Store) ResolveObsoleteImport(ctx context.Context, jobID string, expectedFence int64, journal SyncJournalEntry, now string) error {
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	row, err := loadSyncJob(ctx, tx, jobID)
+	if err != nil {
+		return err
+	}
+	if row.Kind != "import" || row.State != "validated" || row.Fence != expectedFence || (row.ClaimOwner != "" && !timeBefore(row.ClaimExpiresAt, now)) {
+		return ErrSyncPrecondition
+	}
+	recoveryFence := expectedFence
+	if recoveryFence < 1 {
+		recoveryFence = 1
+	}
+	if journal.JobID != jobID || journal.Fence != recoveryFence || journal.JournalID == "" || journal.RecordedAt != now || journal.Phase != "claim_recovery" || journal.Outcome != "effect_not_started" {
+		return fmt.Errorf("obsolete import recovery journal does not bind the expired claim")
+	}
+	if err := requireSyncTransition(row.Kind, row.State, "deferred"); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO sync_journal_entries
+		(journal_id, job_id, fence, phase, outcome, evidence_json, recorded_at)
+		VALUES (?,?,?,?,?,?,?)`, journal.JournalID, journal.JobID, journal.Fence, journal.Phase, journal.Outcome, journal.EvidenceJSON, journal.RecordedAt); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE sync_jobs SET state='deferred',fence=?,claim_owner=NULL,
+		claim_expires_at=NULL,retain_until_resolved=0,resolved_at=?,updated_at=?
+		WHERE job_id=? AND fence=?`, recoveryFence, now, now, jobID, expectedFence)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return ErrSyncPrecondition
+	}
+	return tx.Commit()
+}
+
 // PrepareImportRecovery classifies an expired applying attempt from measured
 // file/index/ref evidence. Recoverable before/after combinations retain the old
 // immutable effect rows and become claimable under a new fence; unexplained
@@ -1712,6 +1775,83 @@ func (s *Store) PrepareImportRecovery(ctx context.Context, jobID string, expecte
 		retain = 1
 	}
 	res, err := tx.ExecContext(ctx, `UPDATE sync_jobs SET state=?,claim_owner=NULL,claim_expires_at=NULL,retain_until_resolved=?,resolved_at=?,updated_at=? WHERE job_id=? AND fence=?`, state, retain, resolved, now, jobID, expectedFence)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return ErrSyncPrecondition
+	}
+	return tx.Commit()
+}
+
+// PrepareUncertainImportRecovery records new inspection that either proves an
+// uncertain import never started or makes its coherent partial effects
+// claimable for exact-plan recovery. Unexplained bytes remain uncertain.
+func (s *Store) PrepareUncertainImportRecovery(ctx context.Context, jobID string, expectedFence int64, state string, journal SyncJournalEntry, now string) error {
+	if state != "validated" && state != "recovering" {
+		return fmt.Errorf("unsupported uncertain import recovery state %q", state)
+	}
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	row, err := loadSyncJob(ctx, tx, jobID)
+	if err != nil {
+		return err
+	}
+	if row.Kind != "import" || row.State != "uncertain" || row.Fence != expectedFence || row.ClaimOwner != "" {
+		return ErrSyncPrecondition
+	}
+	if err := requireSyncRecoveryTransition(row.Kind, row.State, state); err != nil {
+		return err
+	}
+	wantOutcome := "effect_unknown"
+	if state == "validated" {
+		wantOutcome = "effect_not_started"
+	}
+	if journal.JobID != jobID || journal.Fence != expectedFence || journal.Phase != "claim_recovery" || journal.Outcome != wantOutcome || journal.RecordedAt != now || journal.JournalID == "" {
+		return fmt.Errorf("uncertain import recovery journal does not bind inspection")
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO sync_journal_entries(job_id,journal_id,fence,phase,outcome,evidence_json,recorded_at) VALUES (?,?,?,?,?,?,?)`, journal.JobID, journal.JournalID, journal.Fence, journal.Phase, journal.Outcome, journal.EvidenceJSON, journal.RecordedAt); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE sync_jobs SET state=?,claim_owner=NULL,claim_expires_at=NULL,updated_at=? WHERE job_id=? AND fence=?`, state, now, jobID, expectedFence)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return ErrSyncPrecondition
+	}
+	return tx.Commit()
+}
+
+// ResolveSupersededImport retires a no-effect in-progress import after a fully
+// verified administrator checkpoint has advanced the approved remote beyond
+// the stored target. The caller binds that checkpoint in the recovery journal.
+func (s *Store) ResolveSupersededImport(ctx context.Context, jobID string, expectedFence int64, journal SyncJournalEntry, now string) error {
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	row, err := loadSyncJob(ctx, tx, jobID)
+	if err != nil {
+		return err
+	}
+	if row.Kind != "import" || row.Fence != expectedFence || (row.State != "applying" && row.State != "recovering" && row.State != "uncertain") || (row.ClaimOwner != "" && !timeBefore(row.ClaimExpiresAt, now)) {
+		return ErrSyncPrecondition
+	}
+	if err := requireSyncRecoveryTransition(row.Kind, row.State, "deferred"); err != nil {
+		return err
+	}
+	if journal.JobID != jobID || journal.Fence != expectedFence || journal.Phase != "claim_recovery" || journal.Outcome != "effect_not_started" || journal.RecordedAt != now || journal.JournalID == "" {
+		return fmt.Errorf("superseded import recovery journal does not bind checkpoint evidence")
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO sync_journal_entries(job_id,journal_id,fence,phase,outcome,evidence_json,recorded_at) VALUES (?,?,?,?,?,?,?)`, journal.JobID, journal.JournalID, journal.Fence, journal.Phase, journal.Outcome, journal.EvidenceJSON, journal.RecordedAt); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE sync_jobs SET state='deferred',claim_owner=NULL,claim_expires_at=NULL,retain_until_resolved=0,resolved_at=?,updated_at=? WHERE job_id=? AND fence=?`, now, now, jobID, expectedFence)
 	if err != nil {
 		return err
 	}
@@ -1898,6 +2038,11 @@ func requireSyncTransition(kind, from, to string) error {
 // path is allowed to settle or reopen it.
 func validSyncRecoveryTransition(kind, from, to string) bool {
 	edges := map[string]map[string]map[string]bool{
+		"import": {
+			"applying":   {"deferred": true},
+			"recovering": {"deferred": true},
+			"uncertain":  {"validated": true, "recovering": true, "deferred": true},
+		},
 		"publication": {
 			"signed":       {"published": true},
 			"push_pending": {"published": true},

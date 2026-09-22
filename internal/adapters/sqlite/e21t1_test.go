@@ -524,6 +524,7 @@ func TestE21RecoveryEdgesAreExplicitAndNotGenerallyClaimable(t *testing.T) {
 		{kind: "membership", from: "uncertain", to: "planned"},
 		{kind: "checkpoint", from: "blocked", to: "applied"},
 		{kind: "checkpoint", from: "blocked", to: "applying"},
+		{kind: "import", from: "uncertain", to: "recovering"},
 	} {
 		if validSyncTransition(edge.kind, edge.from, edge.to) {
 			t.Fatalf("recovery edge became ordinary: %#v", edge)
@@ -531,6 +532,74 @@ func TestE21RecoveryEdgesAreExplicitAndNotGenerallyClaimable(t *testing.T) {
 		if !validSyncRecoveryTransition(edge.kind, edge.from, edge.to) {
 			t.Fatalf("recovery edge is undeclared: %#v", edge)
 		}
+	}
+}
+
+func TestE21UncertainImportRequiresEvidenceBeforeItBecomesClaimable(t *testing.T) {
+	for _, target := range []struct {
+		state   string
+		outcome string
+	}{
+		{state: "validated", outcome: "effect_not_started"},
+		{state: "recovering", outcome: "effect_unknown"},
+	} {
+		t.Run(target.state, func(t *testing.T) {
+			s := openTestStore(t)
+			ctx := context.Background()
+			if _, err := s.EnsureSyncControl(ctx, "wiki-pair", "cfg-1", syncT0); err != nil {
+				t.Fatal(err)
+			}
+			job, _, err := s.AdmitSyncJob(ctx, SyncJobInput{JobID: "uncertain-import-" + target.state, GroupID: "wiki-pair", Kind: "import", LogicalKey: "uncertain-import-" + target.state, InitialState: "validated", PayloadJSON: `{}`, ConfigRevision: "cfg-1", QueueLimit: 10, Now: syncT0})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.Exec(`UPDATE sync_jobs SET state='uncertain',fence=1,retain_until_resolved=1,resolved_at=NULL WHERE job_id=?`, job.JobID); err != nil {
+				t.Fatal(err)
+			}
+			job.Fence = 1
+			if _, err := s.ClaimSyncJob(ctx, job.JobID, "ordinary-owner", "cfg-1", syncT1, syncT2); !errors.Is(err, ErrSyncPrecondition) {
+				t.Fatalf("uncertain import became claimable without recovery evidence: %v", err)
+			}
+			journal := SyncJournalEntry{JournalID: "uncertain-evidence-" + target.state, JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: target.outcome, EvidenceJSON: `{"measured":true}`, RecordedAt: syncT1}
+			if err := s.PrepareUncertainImportRecovery(ctx, job.JobID, job.Fence, target.state, journal, syncT1); err != nil {
+				t.Fatal(err)
+			}
+			stored, found, err := s.FindSyncJob(ctx, "wiki-pair", "import", job.LogicalKey)
+			if err != nil || !found || stored.State != target.state || stored.ClaimOwner != "" {
+				t.Fatalf("recovered import=%+v found=%v err=%v", stored, found, err)
+			}
+			if _, err := s.ClaimSyncJob(ctx, job.JobID, "recovery-owner", "cfg-1", syncT2, syncT3); err != nil {
+				t.Fatalf("evidence-qualified state is not claimable: %v", err)
+			}
+		})
+	}
+}
+
+func TestE21VerifiedCheckpointCanRetireNoEffectSupersededImport(t *testing.T) {
+	for _, state := range []string{"applying", "recovering", "uncertain"} {
+		t.Run(state, func(t *testing.T) {
+			s := openTestStore(t)
+			ctx := context.Background()
+			if _, err := s.EnsureSyncControl(ctx, "wiki-pair", "cfg-1", syncT0); err != nil {
+				t.Fatal(err)
+			}
+			job, _, err := s.AdmitSyncJob(ctx, SyncJobInput{JobID: "superseded-import-" + state, GroupID: "wiki-pair", Kind: "import", LogicalKey: "superseded-import-" + state, InitialState: "validated", PayloadJSON: `{}`, ConfigRevision: "cfg-1", QueueLimit: 10, Now: syncT0})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.Exec(`UPDATE sync_jobs SET state=?,fence=1,retain_until_resolved=1,resolved_at=NULL WHERE job_id=?`, state, job.JobID); err != nil {
+				t.Fatal(err)
+			}
+			job.Fence = 1
+			journal := SyncJournalEntry{JournalID: "superseded-evidence-" + state, JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: `{"checkpoint":"verified"}`, RecordedAt: syncT1}
+			if err := s.ResolveSupersededImport(ctx, job.JobID, job.Fence, journal, syncT1); err != nil {
+				t.Fatal(err)
+			}
+			stored, found, err := s.FindSyncJob(ctx, "wiki-pair", "import", job.LogicalKey)
+			if err != nil || !found || stored.State != "deferred" || stored.ResolvedAt != syncT1 || stored.RetainUntilResolved {
+				t.Fatalf("resolved import=%+v found=%v err=%v", stored, found, err)
+			}
+		})
 	}
 }
 
@@ -902,5 +971,100 @@ func TestE21T3CheckpointRecoverySettlesConfirmedCandidate(t *testing.T) {
 	var state string
 	if err := s.QueryRow(`SELECT state FROM sync_jobs WHERE job_id='checkpoint-recovery'`).Scan(&state); err != nil || state != "applied" {
 		t.Fatalf("state=%s err=%v", state, err)
+	}
+}
+
+func TestE21ConflictHoldDoesNotDowngradeStrongerHold(t *testing.T) {
+	for _, reason := range []string{"trust_failure", "recovery_required"} {
+		t.Run(reason, func(t *testing.T) {
+			s := openTestStore(t)
+			ctx := context.Background()
+			if _, err := s.EnsureSyncControl(ctx, "wiki-pair", "cfg-1", syncT0); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.HoldSyncControl(ctx, "wiki-pair", reason, "cfg-1", syncT1); err != nil {
+				t.Fatal(err)
+			}
+			control, err := s.HoldSyncControl(ctx, "wiki-pair", "conflict", "cfg-2", syncT2)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if control.State != "blocked" || control.Reason != reason || control.ConfigRevision != "cfg-2" {
+				t.Fatalf("conflict downgraded stronger hold: %+v", control)
+			}
+		})
+	}
+	s := openTestStore(t)
+	ctx := context.Background()
+	if _, err := s.EnsureSyncControl(ctx, "wiki-pair", "cfg-1", syncT0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.HoldSyncControl(ctx, "wiki-pair", "trust_failure", "cfg-1", syncT1); err != nil {
+		t.Fatal(err)
+	}
+	control, err := s.HoldSyncControl(ctx, "wiki-pair", "recovery_required", "cfg-2", syncT2)
+	if err != nil || control.Reason != "trust_failure" || control.ConfigRevision != "cfg-2" {
+		t.Fatalf("recovery symptom downgraded trust hold: %+v err=%v", control, err)
+	}
+	escalation := openTestStore(t)
+	if _, err := escalation.EnsureSyncControl(ctx, "wiki-pair", "cfg-1", syncT0); err != nil {
+		t.Fatal(err)
+	}
+	control, err = escalation.HoldSyncControl(ctx, "wiki-pair", "conflict", "cfg-1", syncT1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	control, err = escalation.HoldSyncControl(ctx, "wiki-pair", "recovery_required", "cfg-1", syncT2)
+	if err != nil || control.Reason != "recovery_required" {
+		t.Fatalf("recovery evidence did not escalate conflict: %+v err=%v", control, err)
+	}
+	control, err = escalation.HoldSyncControl(ctx, "wiki-pair", "trust_failure", "cfg-1", syncT3)
+	if err != nil || control.Reason != "trust_failure" {
+		t.Fatalf("trust evidence did not escalate recovery hold: %+v err=%v", control, err)
+	}
+}
+
+func TestE21ObsoleteImportIsResolvedOnlyWithNoEffectEvidence(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	if _, err := s.EnsureSyncControl(ctx, "wiki-pair", "cfg-1", syncT0); err != nil {
+		t.Fatal(err)
+	}
+	job, _, err := s.AdmitSyncJob(ctx, SyncJobInput{JobID: "obsolete-import", GroupID: "wiki-pair", Kind: "import", LogicalKey: "obsolete-import", InitialState: "validated", PayloadJSON: `{}`, ConfigRevision: "cfg-1", QueueLimit: 10, Now: syncT0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	job, err = s.ClaimSyncJob(ctx, job.JobID, "old-import", "cfg-1", syncT0, syncT1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	invalidJournal := SyncJournalEntry{JournalID: "obsolete-unknown", JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_unknown", EvidenceJSON: `{"obsolete":true}`, RecordedAt: syncT2}
+	if err := s.ResolveObsoleteImport(ctx, job.JobID, job.Fence, invalidJournal, syncT2); err == nil {
+		t.Fatal("obsolete import resolved without no-effect evidence")
+	}
+	stillPending, found, err := s.FindSyncJob(ctx, "wiki-pair", "import", "obsolete-import")
+	if err != nil || !found || stillPending.State != "validated" || stillPending.ResolvedAt != "" {
+		t.Fatalf("invalid resolution mutated import=%+v found=%v err=%v", stillPending, found, err)
+	}
+	journal := SyncJournalEntry{JournalID: "obsolete-no-effect", JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: `{"obsolete":true}`, RecordedAt: syncT2}
+	if err := s.ResolveObsoleteImport(ctx, job.JobID, job.Fence, journal, syncT2); err != nil {
+		t.Fatal(err)
+	}
+	resolved, found, err := s.FindSyncJob(ctx, "wiki-pair", "import", "obsolete-import")
+	if err != nil || !found || resolved.State != "deferred" || resolved.ResolvedAt != syncT2 || resolved.RetainUntilResolved {
+		t.Fatalf("resolved obsolete import=%+v found=%v err=%v", resolved, found, err)
+	}
+
+	unclaimed, _, err := s.AdmitSyncJob(ctx, SyncJobInput{JobID: "obsolete-unclaimed-import", GroupID: "wiki-pair", Kind: "import", LogicalKey: "obsolete-unclaimed-import", InitialState: "validated", PayloadJSON: `{}`, ConfigRevision: "cfg-1", QueueLimit: 10, Now: syncT0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	unclaimedJournal := SyncJournalEntry{JournalID: "obsolete-unclaimed-no-effect", JobID: unclaimed.JobID, Fence: 1, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: `{"obsolete":true}`, RecordedAt: syncT2}
+	if err := s.ResolveObsoleteImport(ctx, unclaimed.JobID, unclaimed.Fence, unclaimedJournal, syncT2); err != nil {
+		t.Fatal(err)
+	}
+	resolved, found, err = s.FindSyncJob(ctx, "wiki-pair", "import", "obsolete-unclaimed-import")
+	if err != nil || !found || resolved.State != "deferred" || resolved.Fence != 1 || resolved.ResolvedAt != syncT2 || resolved.RetainUntilResolved {
+		t.Fatalf("resolved unclaimed import=%+v found=%v err=%v", resolved, found, err)
 	}
 }

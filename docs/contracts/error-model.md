@@ -44,10 +44,11 @@ Exit code 1 is intentionally unassigned and must never be emitted; unclassified 
 
 Sync disposition commands are the explicit exception to the ordinary error
 envelope rule. After they durably record a retry, unknown effect, conflict
-hold, or emergency/trust hold, they may emit a versioned `ok: true` result on
+hold, or emergency/trust/recovery hold, they may emit a versioned `ok: true` result on
 stdout and return 10, 13, 14, or 30 without a stderr error object. The exit code
 classifies the recorded disposition; clients consume the result's `state` and
-`reason`. Commands that do emit an error object still use the one-to-one
+`reason`; a `recovery_required` result at exit 30 is a recorded disposition,
+not `sync_trust_failed` or a security-category error. Commands that do emit an error object still use the one-to-one
 category mapping below.
 
 A Watchman trigger invocation may receive nonzero status, but durable state and logs remain the source of truth. Exit 13 must never cause the caller to submit through another sink.

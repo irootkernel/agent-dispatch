@@ -697,9 +697,13 @@ publication/import services, canonical sync records, and CLI integration:
 go test ./internal/adapters/gitlocal ./internal/adapters/sqlite \
   ./internal/app/syncimport ./internal/app/syncpublication \
   ./internal/domain/syncrecords ./internal/cli \
-  -run 'Test(G17|E21|RestrictedGit|Import|Signed|Remote|Push|ReadContent|Fetch)' \
+  -run 'Test(G17|E21|RestrictedGit|Import|Inspect|Apply|Advance|Signed|Remote|Push|ReadContent|Fetch)' \
   -count=1
 ```
+
+The expanded selector was re-run on all three platforms on 2026-09-23 so the
+focused matrix directly includes the cited mixed-apply and content-ref-advance
+tests rather than relying on the native full-suite run for those names.
 
 | Platform | Tool evidence | Result |
 |---|---|---|

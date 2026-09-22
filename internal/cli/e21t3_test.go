@@ -14,7 +14,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irootkernel/agent-dispatch/internal/adapters/gitlocal"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/app/syncmembership"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/domain/syncrecords"
 )
@@ -162,7 +164,7 @@ exec %s "$@"
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	gitTestRun(t, realGit, repo, "update-ref", cfg.Sync.ContentRef, base)
+	gitTestRun(t, realGit, repo, "checkout", "-q", "-b", strings.TrimPrefix(cfg.Sync.ContentRef, "refs/heads/"), base)
 	var planOut, planErr bytes.Buffer
 	if code := Run([]string{"sync", "membership", "plan", "--group", cfg.Sync.GroupID, "--change", "bootstrap", "--output", "json"}, &planOut, &planErr); code != 0 {
 		t.Fatalf("membership plan: %d %s", code, planErr.String())
@@ -225,6 +227,7 @@ exec %s "$@"
 	if code := Run([]string{"sync", "checkpoint", "apply", "--group", cfg.Sync.GroupID, "--plan", checkpointPath, "--output", "json"}, &checkpointOut, &checkpointErr); code != 0 {
 		t.Fatalf("checkpoint apply: %d %s", code, checkpointErr.String())
 	}
+	assertE21ContentVerificationRejectsSnapshotMismatch(t, cfg, repo, publisherKey)
 	prepareE21T3State(t, cfg, configPath)
 	revision, _ := config.SyncRevision(cfg)
 	contentBeforeIneligible := strings.TrimSpace(string(mustRead(t, contentState)))
@@ -275,6 +278,10 @@ exec %s "$@"
 	}
 	if got := strings.TrimSpace(string(mustRead(t, contentState))); got != published.Result.CandidateCommit {
 		t.Fatalf("remote=%s candidate=%s", got, published.Result.CandidateCommit)
+	}
+	postPublishStatus := gitTestOutput(t, realGit, repo, "status", "--porcelain=v1")
+	if strings.Contains(postPublishStatus, ".agent-dispatch-sync/") {
+		t.Fatalf("publication left controller metadata dirty: %q", postPublishStatus)
 	}
 	candidateRaw := gitTestOutput(t, realGit, repo, "show", published.Result.CandidateCommit+":note.md")
 	if candidateRaw != "changed" {
@@ -413,7 +420,7 @@ exec %s "$@"
 		t.Fatalf("emergency reconcile fence: %d out=%s err=%s", code, blockedOut.String(), blockedErr.String())
 	}
 
-	_, replacementFingerprint := e21t3Key(t, dir, "replacement-publisher")
+	replacementKey, replacementFingerprint := e21t3Key(t, dir, "replacement-publisher")
 	cfg.Sync.Nodes[1].PublisherKey = replacementFingerprint
 	cfg.Sync.Nodes[1].StateIncarnationID = "node-b-0002"
 	updatedConfig, err := json.Marshal(cfg)
@@ -438,7 +445,7 @@ exec %s "$@"
 	if err != nil || control.State != "active" || control.Reason != "none" || control.MembershipMode != "normal" {
 		t.Fatalf("normal equal-ref reconcile control=%+v err=%v", control, err)
 	}
-
+	assertE21PublishedNodeCanApplyPeerRoundTrip(t, cfg, configPath, contentState, repo, replacementKey)
 }
 
 func e21t3ApplyMembershipChange(t *testing.T, cfg *config.Config, dir, change, instance, predecessor string) string {
@@ -476,6 +483,181 @@ func e21t3ApplyMembershipChange(t *testing.T, cfg *config.Config, dir, change, i
 		t.Fatal(err)
 	}
 	return applied.Result.MembershipRevision
+}
+
+func assertE21ContentVerificationRejectsSnapshotMismatch(t *testing.T, cfg *config.Config, repo string, publisherKey []byte) {
+	t.Helper()
+	client, err := gitlocal.New(repo, gitlocal.Limits{Timeout: 30 * time.Second, MaxOutput: 1 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	membership, err := client.ResolveRef(requestCtx(), cfg.Sync.MembershipRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	history, err := syncmembership.LoadHistory(requestCtx(), client, membership, membershipBinding(cfg, cfg.Sync), cfg.Sync.Bounds.HistoryCommits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, ok := history.Current()
+	if !ok {
+		t.Fatal("membership history has no current record")
+	}
+	var publisher syncrecords.ActiveMember
+	for _, member := range current.ActiveMembers {
+		if member.InstanceID == cfg.Sync.LocalInstanceID {
+			publisher = member
+			break
+		}
+	}
+	if publisher.InstanceID == "" {
+		t.Fatal("local publisher is not active")
+	}
+	base, err := client.ResolveRef(requestCtx(), cfg.Sync.ContentRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseFiles, err := client.ReadContentFiles(requestCtx(), base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publication, err := syncrecords.NewPublication(syncrecords.PublicationBinding{
+		GroupID: cfg.Sync.GroupID, Publisher: publisher.InstanceID, StateIncarnationID: publisher.StateIncarnationID,
+		MembershipRevision: membership, ContentRef: cfg.Sync.ContentRef, BaseCommit: base,
+		ScopeDigest: config.SyncScopeDigest(cfg, cfg.Sync.Resource), ContractDigest: config.SyncContractDigest(),
+		SourceRevision: 1, ReceiptIDs: []string{"receipt-forged-binding"},
+	}, syncrecords.SnapshotFiles(baseFiles))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := syncrecords.CanonicalPublication(publication)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forgedFiles := cloneFiles(baseFiles)
+	forgedFiles["note.md"] = []byte("forged snapshot bytes\n")
+	forgedFiles[".agent-dispatch-sync/publications/"+publication.PublicationID+".json"] = raw
+	tree, err := client.SnapshotTreeChanges(requestCtx(), base, forgedFiles, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate, err := client.CreateSignedContentCommit(requestCtx(), tree, publisherKey, base, time.Unix(1_700_000_100, 0), "publisher", "forged snapshot binding")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyContentHead(client, history, cfg, cfg.Sync, candidate); err == nil {
+		t.Fatal("content verification accepted a publication whose snapshot digest did not bind its tree")
+	}
+}
+
+func assertE21PublishedNodeCanApplyPeerRoundTrip(t *testing.T, cfg *config.Config, configPath, contentState, repo string, peerKey []byte) {
+	t.Helper()
+	client, err := gitlocal.New(repo, gitlocal.Limits{Timeout: 30 * time.Second, MaxOutput: 1 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	base, err := client.ResolveRef(requestCtx(), cfg.Sync.ContentRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseFiles, err := client.ReadContentFiles(requestCtx(), base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "note.md"), baseFiles["note.md"], 0o600); err != nil {
+		t.Fatal(err)
+	}
+	membership, err := client.ResolveRef(requestCtx(), cfg.Sync.MembershipRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	history, err := syncmembership.LoadHistory(requestCtx(), client, membership, membershipBinding(cfg, cfg.Sync), cfg.Sync.Bounds.HistoryCommits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, ok := history.Current()
+	if !ok {
+		t.Fatal("membership history has no current record")
+	}
+	var peer syncrecords.ActiveMember
+	for _, member := range current.ActiveMembers {
+		if member.InstanceID != cfg.Sync.LocalInstanceID {
+			peer = member
+			break
+		}
+	}
+	if peer.InstanceID == "" {
+		t.Fatal("peer publisher is not active")
+	}
+	targetFiles := cloneFiles(baseFiles)
+	targetFiles["note.md"] = []byte("peer round trip\n")
+	publication, err := syncrecords.NewPublication(syncrecords.PublicationBinding{
+		GroupID: cfg.Sync.GroupID, Publisher: peer.InstanceID, StateIncarnationID: peer.StateIncarnationID,
+		MembershipRevision: membership, ContentRef: cfg.Sync.ContentRef, BaseCommit: base,
+		ScopeDigest: config.SyncScopeDigest(cfg, cfg.Sync.Resource), ContractDigest: config.SyncContractDigest(),
+		SourceRevision: 2, ReceiptIDs: []string{"receipt-peer-round-trip"},
+	}, syncrecords.SnapshotFiles(targetFiles))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := syncrecords.CanonicalPublication(publication)
+	if err != nil {
+		t.Fatal(err)
+	}
+	treeFiles := cloneFiles(targetFiles)
+	treeFiles[".agent-dispatch-sync/publications/"+publication.PublicationID+".json"] = raw
+	tree, err := client.SnapshotTreeChanges(requestCtx(), base, treeFiles, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := client.CreateSignedContentCommit(requestCtx(), tree, peerKey, base, time.Unix(1_700_000_200, 0), "publisher", "peer round trip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(contentState, []byte(target+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	revision, ok := config.SyncRevision(cfg)
+	if !ok {
+		t.Fatal("sync revision unavailable")
+	}
+	incarnation := localSyncIncarnation(cfg)
+	cfg.Sync.ImportAcknowledgement = &config.SyncImportAcknowledgement{
+		SchemaVersion: "agent-dispatch.sync-import-acknowledgement/v1", AcknowledgementID: "acknowledgement-round-trip",
+		GroupID: cfg.Sync.GroupID, ResourceID: cfg.Sync.Resource, RemoteName: cfg.Sync.RemoteName,
+		RemoteRepositoryDigest: cfg.Sync.RemoteRepositoryDigest, ContentRef: cfg.Sync.ContentRef, MembershipRef: cfg.Sync.MembershipRef,
+		ScopeDigest: config.SyncScopeDigest(cfg, cfg.Sync.Resource), LocalInstanceID: cfg.Sync.LocalInstanceID,
+		StateIncarnationID: incarnation, AdministratorKey: cfg.Sync.AdministratorKey,
+		SafetyPolicyDigest: config.SyncSafetyPolicyDigest(), ImportBoundsDigest: config.SyncImportBoundsDigest(cfg.Sync.Bounds), ConfigRevision: revision,
+	}
+	updated, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, updated, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := openStateStore(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Exec(`UPDATE destination_lane_state SET active_dispatch_id=NULL WHERE route_id IN (SELECT route_id FROM routes WHERE resource_id=?)`, cfg.Sync.Resource); err != nil {
+		store.Close()
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var out, stderr bytes.Buffer
+	if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &out, &stderr); code != 0 || !bytes.Contains(out.Bytes(), []byte(`"state":"applied"`)) {
+		t.Fatalf("peer round-trip reconcile: %d out=%s err=%s", code, out.String(), stderr.String())
+	}
+	if got := gitTestOutput(t, "git", repo, "rev-parse", cfg.Sync.ContentRef); got != target {
+		t.Fatalf("round-trip content ref=%s want=%s", got, target)
+	}
+	if raw, err := os.ReadFile(filepath.Join(repo, "note.md")); err != nil || string(raw) != "peer round trip\n" {
+		t.Fatalf("round-trip content=%q err=%v", raw, err)
+	}
 }
 
 func seedE21T3Eligibility(t *testing.T, cfg *config.Config, configPath string, content []byte) {

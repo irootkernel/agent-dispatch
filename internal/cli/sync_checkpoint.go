@@ -1,13 +1,10 @@
 package cli
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"reflect"
-	"sort"
 	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/gitlocal"
@@ -220,7 +217,7 @@ func runSyncCheckpointApply(args []string, stdout, stderr io.Writer) int {
 			return finishCheckpointFailure(stderr, store, job, owner, "uncertain", "effect_unknown", fmt.Sprintf("checkpoint push %s", push.State))
 		}
 	}
-	if err := client.UpdateRefExpected(requestCtx(), s.ContentRef, candidate, predecessor); err != nil {
+	if err := client.AdvanceContentRef(requestCtx(), s.ContentRef, predecessor, candidate); err != nil {
 		local, _ := client.ResolveRef(requestCtx(), s.ContentRef)
 		if local != candidate {
 			return finishCheckpointFailure(stderr, store, job, owner, "uncertain", "effect_unknown", "remote confirmed but local content ref update failed")
@@ -320,7 +317,7 @@ func recoverCheckpointApply(stdout, stderr io.Writer, store *sqlite.Store, clien
 			if local != plan.ExpectedContentPredecessor {
 				return true, syncMembershipError(stderr, "sync checkpoint apply", errors.New("local content ref moved during checkpoint recovery"), 14)
 			}
-			if updateErr := client.UpdateRefExpected(requestCtx(), s.ContentRef, candidate, plan.ExpectedContentPredecessor); updateErr != nil {
+			if updateErr := client.AdvanceContentRef(requestCtx(), s.ContentRef, plan.ExpectedContentPredecessor, candidate); updateErr != nil {
 				return true, syncMembershipError(stderr, "sync checkpoint apply", fmt.Errorf("remote checkpoint is confirmed but the local content ref did not move: %w", updateErr), 13)
 			}
 		}
@@ -431,13 +428,7 @@ func checkpointBindingError(stderr io.Writer, command string, err error) int {
 }
 
 func snapshotDigestFromFiles(files map[string][]byte) (string, error) {
-	records := make([]syncrecords.SnapshotFile, 0, len(files))
-	for p, b := range files {
-		sum := sha256.Sum256(b)
-		records = append(records, syncrecords.SnapshotFile{Path: p, Digest: "sha256:" + hex.EncodeToString(sum[:])})
-	}
-	sort.Slice(records, func(i, j int) bool { return records[i].Path < records[j].Path })
-	return syncrecords.SnapshotDigest(records)
+	return syncrecords.SnapshotDigest(syncrecords.SnapshotFiles(files))
 }
 
 func checkpointControlMatches(kind string, control sqlite.SyncControlRow) bool {

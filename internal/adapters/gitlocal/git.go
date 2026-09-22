@@ -441,6 +441,35 @@ func (c *Client) ApplyImportIndex(ctx context.Context, contentRef, from, target 
 	return c.UpdateRefExpected(ctx, contentRef, target, from)
 }
 
+// AdvanceContentRef makes the caller's index and controller worktree follow a
+// locally created content commit before advancing the checked-out content ref.
+// Ordinary Markdown worktree bytes are left untouched so an uncooperative late
+// edit remains visible as a dirty change instead of being overwritten.
+func (c *Client) AdvanceContentRef(ctx context.Context, contentRef, from, target string) error {
+	fromFiles, err := c.ReadContentFiles(ctx, from)
+	if err != nil {
+		return err
+	}
+	targetFiles, err := c.ReadContentFiles(ctx, target)
+	if err != nil {
+		return err
+	}
+	changed := make(map[string][]byte)
+	for path, raw := range targetFiles {
+		if before, ok := fromFiles[path]; !ok || !bytes.Equal(before, raw) {
+			changed[path] = raw
+		}
+	}
+	deletions := make([]string, 0)
+	for path := range fromFiles {
+		if _, ok := targetFiles[path]; !ok {
+			deletions = append(deletions, path)
+		}
+	}
+	sort.Strings(deletions)
+	return c.ApplyImportIndex(ctx, contentRef, from, target, changed, deletions)
+}
+
 func (c *Client) writeControllerFile(path string, raw []byte) error {
 	if !validContentControllerPath(path) {
 		return fmt.Errorf("unsafe controller path")

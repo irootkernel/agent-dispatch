@@ -109,6 +109,52 @@ func TestImportIndexPreservesDisjointDirtyPath(t *testing.T) {
 	}
 }
 
+func TestAdvanceContentRefKeepsLateMarkdownEditDirtyWithoutControllerResidue(t *testing.T) {
+	repo := initRepository(t)
+	from := gitOutput(t, repo, "rev-parse", "HEAD")
+	if err := os.WriteFile(filepath.Join(repo, "note.md"), []byte("published\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	controllerDir := filepath.Join(repo, ".agent-dispatch-sync", "publications")
+	if err := os.MkdirAll(controllerDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(controllerDir, "publication.json"), []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, repo, "add", "note.md", ".agent-dispatch-sync/publications/publication.json")
+	gitRun(t, repo, "commit", "-m", "published target")
+	target := gitOutput(t, repo, "rev-parse", "HEAD")
+	gitRun(t, repo, "reset", "--hard", from)
+	if err := os.WriteFile(filepath.Join(repo, "note.md"), []byte("late edit\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	client, err := New(repo, Limits{Timeout: 5 * time.Second, MaxOutput: 64 << 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := client.AdvanceContentRef(context.Background(), "refs/heads/main", from, target); err != nil {
+		t.Fatal(err)
+	}
+	state, err := client.InspectImport(context.Background(), "refs/heads/main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.ActiveOperation != "" {
+		t.Fatalf("local publication left an active Git operation: %+v", state)
+	}
+	if len(state.DirtyPaths) != 1 || state.DirtyPaths[0] != "note.md" {
+		t.Fatalf("late edit was not preserved as the only dirty path: %+v", state)
+	}
+	status := gitOutput(t, repo, "status", "--porcelain=v1")
+	if !strings.Contains(status, "note.md") || strings.Contains(status, ".agent-dispatch-sync/") {
+		t.Fatalf("unexpected status after local content advance: %q", status)
+	}
+	if raw, err := os.ReadFile(filepath.Join(controllerDir, "publication.json")); err != nil || string(raw) != "{}\n" {
+		t.Fatalf("controller record was not materialized: %q err=%v", raw, err)
+	}
+}
+
 func TestImportInspectionIncludesIgnoredCollisionAndCaseAlias(t *testing.T) {
 	repo := initRepository(t)
 	if err := os.WriteFile(filepath.Join(repo, ".gitignore"), []byte("ignored/\n"), 0o600); err != nil {

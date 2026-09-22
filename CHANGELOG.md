@@ -52,6 +52,9 @@ This file records concise shipped outcomes and pending changes.
 - Harden guarded import around active maintenance writers, concurrent Watchman
   arrivals, ignored-file collisions, cross-host path aliases, controller-only
   checkpoints, and nonzero blocked or uncertain outcomes.
+- Keep the checked-out content ref, index, and controller records coherent after
+  local publication and checkpoint advances so a node can later apply its
+  peer's publication without a false dirty-controller or overlap fence.
 
 ## v0.1.8 - 2026-09-10
 

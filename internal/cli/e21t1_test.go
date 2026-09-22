@@ -409,10 +409,15 @@ func TestE21RecoverPendingImportConvergesCoherentPartialState(t *testing.T) {
 	gitTestRun(t, gitPath, repo, "config", "user.email", "test@example.invalid")
 	beforeBytes := []byte("before\n")
 	afterBytes := []byte("after\n")
+	beforeOther := []byte("other-before\n")
+	afterOther := []byte("other-after\n")
 	if err := os.WriteFile(filepath.Join(repo, "note.md"), beforeBytes, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	gitTestRun(t, gitPath, repo, "add", "note.md")
+	if err := os.WriteFile(filepath.Join(repo, "other.md"), beforeOther, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitTestRun(t, gitPath, repo, "add", "note.md", "other.md")
 	gitTestRun(t, gitPath, repo, "commit", "-q", "-m", "before")
 	from := gitTestOutput(t, gitPath, repo, "rev-parse", "HEAD")
 	client, err := gitlocal.New(repo, gitlocal.Limits{Timeout: 30 * time.Second, MaxOutput: 1 << 20})
@@ -426,7 +431,10 @@ func TestE21RecoverPendingImportConvergesCoherentPartialState(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, "note.md"), afterBytes, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	gitTestRun(t, gitPath, repo, "add", "note.md")
+	if err := os.WriteFile(filepath.Join(repo, "other.md"), afterOther, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitTestRun(t, gitPath, repo, "add", "note.md", "other.md")
 	gitTestRun(t, gitPath, repo, "commit", "-q", "-m", "after")
 	target := gitTestOutput(t, gitPath, repo, "rev-parse", "HEAD")
 	gitTestRun(t, gitPath, repo, "reset", "--hard", from)
@@ -463,7 +471,10 @@ func TestE21RecoverPendingImportConvergesCoherentPartialState(t *testing.T) {
 		GroupID: cfg.Sync.GroupID, FromCommit: from, TargetCommit: target, MembershipRevision: membership,
 		AcknowledgementID: cfg.Sync.ImportAcknowledgement.AcknowledgementID, ResourceObservationRevision: 1,
 		ExpectedGitStateDigest: baseState.Digest, HistoryEvidenceID: "history-evidence-test", CaseMode: config.CaseMode(), State: "validated", Reason: "none",
-	}, []syncrecords.ImportPath{{Path: "note.md", Before: syncimport.Digest(beforeBytes), After: syncimport.Digest(afterBytes)}})
+	}, []syncrecords.ImportPath{
+		{Path: "note.md", Before: syncimport.Digest(beforeBytes), After: syncimport.Digest(afterBytes)},
+		{Path: "other.md", Before: syncimport.Digest(beforeOther), After: syncimport.Digest(afterOther)},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -503,6 +514,9 @@ func TestE21RecoverPendingImportConvergesCoherentPartialState(t *testing.T) {
 	}
 	if got := gitTestOutput(t, gitPath, repo, "rev-parse", cfg.Sync.ContentRef); got != target {
 		t.Fatalf("content ref=%s want=%s", got, target)
+	}
+	if raw, err := os.ReadFile(filepath.Join(repo, "other.md")); err != nil || !bytes.Equal(raw, afterOther) {
+		t.Fatalf("mixed recovery did not converge the remaining effect: raw=%q err=%v", raw, err)
 	}
 
 	gitTestRun(t, gitPath, repo, "reset", "--hard", from)

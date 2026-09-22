@@ -47,6 +47,30 @@ func TestApplyPreservesDisjointFilesAndDetectsLateEdit(t *testing.T) {
 	}
 }
 
+func TestInspectAndApplyConvergeMixedEffects(t *testing.T) {
+	root := t.TempDir()
+	before := map[string][]byte{"a.md": []byte("old-a"), "b.md": []byte("old-b")}
+	after := map[string][]byte{"a.md": []byte("new-a"), "b.md": []byte("new-b")}
+	for path, raw := range before {
+		if err := os.WriteFile(filepath.Join(root, path), raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	effects, writes, _ := Diff(before, after)
+	if err := os.WriteFile(filepath.Join(root, "a.md"), after["a.md"], 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if state, err := Inspect(root, effects); err != nil || state != Mixed {
+		t.Fatalf("partial application state=%s err=%v", state, err)
+	}
+	if err := Apply(root, effects, writes); err != nil {
+		t.Fatal(err)
+	}
+	if state, err := Inspect(root, effects); err != nil || state != AllAfter {
+		t.Fatalf("converged state=%s err=%v", state, err)
+	}
+}
+
 func TestApplyRefusesInRootSymlink(t *testing.T) {
 	root := t.TempDir()
 	target := filepath.Join(root, "protected.md")

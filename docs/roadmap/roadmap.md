@@ -5259,6 +5259,19 @@ E20-T5 Completed.
   clearing conflict, revocation, or trust blocks.
 - Existing route and notification state survives migration and rollback restoration.
 
+### Evidence
+
+- Schema migrations v21, v23, v24, and v25 add the sync job, control, journal,
+  membership-posture, and durable ordering substrate without rewriting shipped
+  migration units; the migration ledger, backup, and version-drift suites cover
+  forward application, interruption, restoration, and newer-schema refusal.
+- `internal/adapters/sqlite/e21t1_test.go` covers fingerprint-bound idempotent
+  admission, queue and attempt bounds, stale-owner fencing, transition closure,
+  concurrent admission, retention, pause/resume, recovery edges, and preserved
+  conflict, revocation, and trust holds against real SQLite stores.
+- `internal/cli/e21t1_test.go` covers the public pause, resume, and status
+  envelopes together with explicit recovery and partial-effect dispositions.
+
 ## E21-T2: Implement Restricted Git, Trust, and Membership Administration
 
 **Status:** Completed
@@ -5297,6 +5310,21 @@ E21-T1 Completed.
   emergency revocation blocks protected effects until the pair is restored.
 - Arbitrary Git arguments, prompts, hooks, filters, recursive submodules, force,
   merge, rebase, stash, reset, and clean are unreachable.
+
+### Evidence
+
+- `internal/adapters/gitlocal/git_test.go` exercises clean/dirty/ref relations,
+  missing refs, bounded process cleanup, remote-binding rejection, non-force
+  push classification, pinned Ed25519 signatures, hostile Git configuration,
+  controller allowlisting, and preservation of both histories after a lost
+  fast-forward.
+- Membership domain, history, CLI, and SQLite suites cover two-phase plans,
+  expected predecessors, administrator signatures, closed transition kinds,
+  linear history, emergency posture, removed-key first-seen refusal, and pair
+  restoration before protected effects resume.
+- The adapter exposes only typed fixed-argument operations and supplies a
+  sanitized non-interactive Git/SSH environment with bounded output, deadlines,
+  redirect and helper rejection, and process-group termination.
 
 ## E21-T3: Implement Explicit Signed Publication
 
@@ -5341,7 +5369,9 @@ E21-T2 Completed.
 - Snapshot, Git, and SQLite suites cover two-way maintained-fact matching,
   private-index late-edit preservation, disabled-route eligibility, paused
   admission refusal, controller-path allowlisting, already-confirmed remote
-  convergence, and recovered publication/checkpoint settlement.
+  convergence, recovered publication/checkpoint settlement, local
+  ref/index/controller coherence, forged snapshot-binding rejection, and a
+  reverse-direction peer publication applied by the node that published first.
 - Mulgae full and delta reviews (final focused run
   `r_01a0c2fe-96cc-76e0-a6b4-eefd9aa52e84`) passed CI with complete coverage
   and zero findings after the report-level recovery, integrity, and
@@ -5395,7 +5425,8 @@ E21-T3 Completed.
 - Resource-guard serialization, active-writer refusal, unique recovery
   journals, all-before/mixed/all-after/unexpected classification, advanced
   observation recovery, and controller-only uncertainty preserve Watchman and
-  local-edit evidence across interruption.
+  local-edit evidence across interruption; the mixed case is exercised with a
+  multi-path partial application through exact recovery convergence.
 - Focused domain, Git, SQLite, ingest, import, and CLI tests cover conservative
   sensitive-mode aliases, disjoint dirty preservation, ignored collisions,
   exact write/delete attribution, newest-only consumption, duplicate refusal,

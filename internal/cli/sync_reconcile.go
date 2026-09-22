@@ -273,7 +273,7 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 		reason = "local_overlap"
 	} else if !config.SyncAcknowledgementCurrent(cfg, localSyncIncarnation(cfg)) || control.ConfigRevision != revision {
 		reason = "acknowledgement_stale"
-		reasonDetail = "the cooperative import acknowledgement or control configuration binding is stale"
+		reasonDetail = "sync.cooperative_import_acknowledgement or the control configuration binding is stale"
 	} else if control.State == "paused" {
 		return reconcileEnvelope(stdout, "deferred", "operator_pause", map[string]any{"target_commit": target, "membership_mode": control.MembershipMode, "detail": "sync is paused; run sync resume after review"})
 	} else if control.State == "blocked" && !(len(effects) == 0 && strongerHold) && !administratorCheckpointImport {

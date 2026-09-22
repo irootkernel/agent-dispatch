@@ -2,14 +2,18 @@
 
 The current implementation is a Go module with one CLI. Start at
 `cmd/agent-dispatch/main.go`, then follow the command into `internal/cli` and
-its application service. The [architecture overview](../architecture/architecture-overview.md)
-explains runtime responsibility and data flow.
+its supporting application, domain, and adapter packages. Most established
+flows delegate orchestration to an application service; the E21 manual sync
+commands currently own their orchestration in `internal/cli` while reusing the
+pure sync application helpers and storage-enforced state machines. The
+[architecture overview](../architecture/architecture-overview.md) explains
+runtime responsibility and data flow.
 
 | Location | Responsibility |
 |---|---|
 | `cmd/agent-dispatch/` | Executable entry point |
-| `internal/cli/` | Command parsing, operator output, and public CLI gate tests |
-| `internal/app/` | Ingest, dispatch, reconciliation, receipts, work receipts, quarantine, maintenance, doctor, notifications |
+| `internal/cli/` | Command parsing, operator output, public CLI gate tests, and current E21 manual-sync orchestration |
+| `internal/app/` | Ingest, dispatch, reconciliation, receipts, work receipts, quarantine, maintenance, doctor, notifications, and sync publication/import/membership helpers |
 | `internal/domain/` | IDs, records, policy, state, and fingerprints |
 | `internal/ports/` | Behavioral interfaces by domain family |
 | `internal/adapters/` | Watchman, local files, SQLite, Hermes Kanban/webhook, notification sinks, secret resolution |

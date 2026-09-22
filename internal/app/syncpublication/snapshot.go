@@ -4,8 +4,6 @@ package syncpublication
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"io/fs"
@@ -65,12 +63,7 @@ func Capture(cfg *config.Config, resourceID string) (Snapshot, error) {
 	if !equalFiles(first, second) {
 		return Snapshot{}, fmt.Errorf("resource changed while publication snapshot was frozen")
 	}
-	records := make([]syncrecords.SnapshotFile, 0, len(first))
-	for path, raw := range first {
-		sum := sha256.Sum256(raw)
-		records = append(records, syncrecords.SnapshotFile{Path: path, Digest: "sha256:" + hex.EncodeToString(sum[:])})
-	}
-	sort.Slice(records, func(i, j int) bool { return records[i].Path < records[j].Path })
+	records := syncrecords.SnapshotFiles(first)
 	return Snapshot{Files: first, Records: records}, nil
 }
 

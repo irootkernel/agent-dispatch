@@ -46,6 +46,20 @@ type SnapshotFile struct {
 	Digest string `json:"digest"`
 }
 
+func ContentDigest(raw []byte) string {
+	sum := sha256.Sum256(raw)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func SnapshotFiles(files map[string][]byte) []SnapshotFile {
+	records := make([]SnapshotFile, 0, len(files))
+	for path, raw := range files {
+		records = append(records, SnapshotFile{Path: path, Digest: ContentDigest(raw)})
+	}
+	sort.Slice(records, func(i, j int) bool { return records[i].Path < records[j].Path })
+	return records
+}
+
 type PublicationBinding struct {
 	GroupID, Publisher, StateIncarnationID, MembershipRevision string
 	ContentRef, BaseCommit, ScopeDigest, ContractDigest        string

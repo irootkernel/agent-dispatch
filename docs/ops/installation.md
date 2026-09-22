@@ -69,6 +69,13 @@ a `keychain:` reference fails closed naming the unsupported kind
 The E21 manual sync workflow requires Git, `ssh`, and `ssh-keygen` on every
 participating host. Git must support SSH commit signing and the configured
 publisher and administrator keys must be OpenSSH Ed25519 keys. Agent Dispatch
+requires the worktree's symbolic `HEAD` to be the configured `content_ref`;
+`sync reconcile` verifies that binding before it inspects or mutates the index
+or live Markdown. Check out that branch explicitly on both nodes before
+bootstrap, and do not run the sync commands from a detached or different
+branch.
+
+Agent Dispatch
 does not inherit interactive prompts, credential helpers, user SSH
 configuration, hooks, filters/LFS, recursive submodules, proxy overrides, or
 URL rewrite rules. SSH remotes use batch mode and strict host-key checking;

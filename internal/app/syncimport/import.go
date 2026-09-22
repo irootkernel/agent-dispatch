@@ -3,8 +3,6 @@
 package syncimport
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -17,8 +15,7 @@ import (
 )
 
 func Digest(raw []byte) string {
-	sum := sha256.Sum256(raw)
-	return "sha256:" + hex.EncodeToString(sum[:])
+	return syncrecords.ContentDigest(raw)
 }
 
 // Diff returns exact write/delete effects plus the target bytes needed for the

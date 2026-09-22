@@ -39,9 +39,15 @@ agent-dispatch dispatches list --state unknown
 agent-dispatch dispatches list --state dead_lettered
 agent-dispatch quarantine list
 agent-dispatch receipts list --route wiki-maintenance
+agent-dispatch sync status --group <group-id> --output json
 ```
 
-Investigate any unknown dispatch before retrying.
+Investigate any unknown dispatch before retrying. For an enabled sync group,
+also inspect `control_state`, `control_reason`, and the separate
+`latest_publication`, `latest_delivery`, and `latest_import` outcomes. An
+unresolved `uncertain`, `recovering`, or `recovery_required` outcome is not a
+successful synchronization; retain its evidence and use the matching row in
+[failure recovery](failure-recovery.md#sync-publication-import-and-membership).
 
 ## 3. Normal Change Flow
 
@@ -53,6 +59,39 @@ A normal trigger invocation should:
 - produce stable causal IDs in logs.
 
 No operator action is required unless target acceptance becomes unknown, the item is quarantined, or active work becomes stale.
+
+### 3a. Normal Manual Sync Flow
+
+Sync is opt-in and manual in E21. After membership bootstrap and the initial
+administrator checkpoint, the publishing node runs `sync publish`; the peer
+runs `sync reconcile`; each node then inspects `sync status`. Publication does
+not require a cooperative-import acknowledgement, but live-tree import does.
+The repository worktree must have the configured `content_ref` checked out on
+both nodes; a detached or different `HEAD` fails closed.
+
+Before enabling import on a node:
+
+1. Start from that node's normalized, validated configuration and its current
+   state-incarnation ID. Do not copy another node's acknowledgement.
+2. Have the configuration producer compute the canonical `scope_digest`,
+   `safety_policy_digest`, `import_bounds_digest`, and acknowledgement
+   `config_revision` defined in the sync contract's acknowledgement-digest
+   section. The paired example configuration and record provide checked vectors
+   in `docs/examples/config.yaml` and
+   `docs/examples/sync-import-acknowledgement.json`.
+3. Review the complete versioned record, give it a new `acknowledgement_id`,
+   and place it at `sync.cooperative_import_acknowledgement`. Run
+   `config validate`, then `sync status --group <group-id> --output json` and
+   require both acknowledgement and control-configuration currentness before
+   `sync reconcile` may apply live-tree effects.
+4. Repeat this review after any bound local resource, remote/ref, scope, local
+   identity, administrator anchor, import-bound, safety-policy, or state-
+   incarnation change. A stale record deliberately defers import without
+   blocking publication or validation.
+
+Never invent or shorten a digest projection. If no trusted configuration
+producer can supply the exact values, leave import unacknowledged and allow
+`sync reconcile` to fail closed.
 
 ## 4. Unknown Dispatch Recovery
 

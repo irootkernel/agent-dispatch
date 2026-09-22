@@ -131,11 +131,17 @@ func runSyncPublish(args []string, stdout, stderr io.Writer) int {
 		return syncMembershipError(stderr, command, err, 14)
 	}
 	confirmedEligibility, err := store.LoadPublicationEligibility(requestCtx(), syncCfg.Resource)
-	factsMatch := false
-	if err == nil {
-		factsMatch, err = syncpublication.MatchesObservedFacts(cfg, syncCfg.Resource, snapshot.Records, confirmedEligibility.PathDigests)
+	if err != nil {
+		if errors.Is(err, sqlite.ErrSyncPrecondition) {
+			return writeEnvelope(stdout, command, map[string]any{"schema_version": "agent-dispatch.sync-publish-result/v1", "state": "no_eligible_snapshot", "reason": "maintenance_evidence_changed_or_did_not_match", "side_effects": []string{}})
+		}
+		return syncStoreError(stderr, command, err)
 	}
-	if err != nil || confirmedEligibility.SourceRevision != eligible.SourceRevision || !equalStrings(confirmedEligibility.ReceiptIDs, eligible.ReceiptIDs) || !factsMatch {
+	factsMatch, err := syncpublication.MatchesObservedFacts(cfg, syncCfg.Resource, snapshot.Records, confirmedEligibility.PathDigests)
+	if err != nil {
+		return syncMembershipError(stderr, command, err, 14)
+	}
+	if confirmedEligibility.SourceRevision != eligible.SourceRevision || !equalStrings(confirmedEligibility.ReceiptIDs, eligible.ReceiptIDs) || !factsMatch {
 		return writeEnvelope(stdout, command, map[string]any{"schema_version": "agent-dispatch.sync-publish-result/v1", "state": "no_eligible_snapshot", "reason": "maintenance_evidence_changed_or_did_not_match", "side_effects": []string{}})
 	}
 	baseFiles, err := client.ReadContentFiles(requestCtx(), base)
@@ -252,7 +258,7 @@ func runSyncPublish(args []string, stdout, stderr io.Writer) int {
 			return finishPublicationFailureWithEvidence(stderr, store, job, owner, "uncertain", "effect_unknown", "content push outcome is ambiguous; rerun sync publish for remote confirmation", evidence)
 		}
 	}
-	if err := client.UpdateRefExpected(requestCtx(), syncCfg.ContentRef, candidate, base); err != nil {
+	if err := client.AdvanceContentRef(requestCtx(), syncCfg.ContentRef, base, candidate); err != nil {
 		local, _ := client.ResolveRef(requestCtx(), syncCfg.ContentRef)
 		if local != candidate {
 			return finishPublicationFailure(stderr, store, job, owner, "uncertain", "effect_unknown", "remote confirmed but local content ref update failed")
@@ -453,7 +459,7 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 			if local != publication.BaseCommit {
 				return true, syncMembershipError(stderr, "sync publish", errors.New("local content ref moved during publication recovery"), 14)
 			}
-			if err := client.UpdateRefExpected(requestCtx(), s.ContentRef, candidate, publication.BaseCommit); err != nil {
+			if err := client.AdvanceContentRef(requestCtx(), s.ContentRef, publication.BaseCommit, candidate); err != nil {
 				return true, syncMembershipError(stderr, "sync publish", fmt.Errorf("remote publication is confirmed but the local content ref did not move: %w", err), 13)
 			}
 		}

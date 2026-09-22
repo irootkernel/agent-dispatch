@@ -312,6 +312,7 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 			continue
 		}
 		recoveryOwner := ""
+		administrationRetry := false
 		if candidate != remote {
 			if remote != publication.BaseCommit {
 				now := time.Now().UTC()
@@ -332,11 +333,24 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 				return true, syncMembershipError(stderr, "sync publish", errors.New("publication recovery found a moved remote content revision; review history and create a conflict-resolution checkpoint plan"), 14)
 			}
 			if job.State == "blocked" {
+				control, loadErr := store.LoadSyncControl(requestCtx(), s.GroupID)
+				if loadErr != nil {
+					return true, syncStoreError(stderr, "sync publish", loadErr)
+				}
+				if control.State != "blocked" || control.Reason != "conflict" {
+					return true, syncMembershipError(stderr, "sync publish", fmt.Errorf("publication remains blocked by %s", control.Reason), syncControlHoldExitCode(control.MembershipMode, control.Reason))
+				}
+				if verifyErr := verifyContentHead(client, history, cfg, s, candidate); verifyErr != nil {
+					return true, syncMembershipError(stderr, "sync publish", verifyErr, 30)
+				}
 				nowText := time.Now().UTC().Format(time.RFC3339Nano)
-				if _, err := store.HoldSyncControl(requestCtx(), s.GroupID, "conflict", revision, nowText); err != nil {
+				journal := sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": remote, "reopened_after_conflict": true}), RecordedAt: nowText}
+				if err := store.ReopenRejectedPublication(requestCtx(), job.JobID, job.Fence, journal, nowText); err != nil {
 					return true, syncStoreError(stderr, "sync publish", err)
 				}
-				return true, syncMembershipError(stderr, "sync publish", errors.New("publication remains blocked after predecessor loss; preserve the signed candidate and create a conflict-resolution checkpoint plan"), 14)
+				job.State = "signed"
+				job.ClaimOwner = ""
+				administrationRetry = true
 			}
 			if job.State != "signed" && job.State != "uncertain" {
 				continue
@@ -365,7 +379,13 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 				return true, syncMembershipError(stderr, "sync publish", verifyErr, 30)
 			}
 			owner := randomSyncID("publication-owner")
-			claimed, claimErr := store.ClaimSyncJob(requestCtx(), job.JobID, owner, revision, now.Format(time.RFC3339Nano), now.Add(time.Duration(s.Bounds.SubprocessSeconds*4+60)*time.Second).Format(time.RFC3339Nano))
+			var claimed sqlite.SyncJobRow
+			var claimErr error
+			if administrationRetry {
+				claimed, claimErr = store.ClaimSyncAdministrationJob(requestCtx(), job.JobID, owner, revision, now.Format(time.RFC3339Nano), now.Add(time.Duration(s.Bounds.SubprocessSeconds*4+60)*time.Second).Format(time.RFC3339Nano))
+			} else {
+				claimed, claimErr = store.ClaimSyncJob(requestCtx(), job.JobID, owner, revision, now.Format(time.RFC3339Nano), now.Add(time.Duration(s.Bounds.SubprocessSeconds*4+60)*time.Second).Format(time.RFC3339Nano))
+			}
 			if claimErr != nil {
 				return true, syncStoreError(stderr, "sync publish", claimErr)
 			}

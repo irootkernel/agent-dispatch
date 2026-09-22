@@ -519,6 +519,7 @@ func TestE21RecoveryEdgesAreExplicitAndNotGenerallyClaimable(t *testing.T) {
 		to   string
 	}{
 		{kind: "publication", from: "blocked", to: "published"},
+		{kind: "publication", from: "blocked", to: "signed"},
 		{kind: "membership", from: "blocked", to: "applied"},
 		{kind: "membership", from: "uncertain", to: "planned"},
 		{kind: "checkpoint", from: "blocked", to: "applied"},
@@ -530,9 +531,6 @@ func TestE21RecoveryEdgesAreExplicitAndNotGenerallyClaimable(t *testing.T) {
 		if !validSyncRecoveryTransition(edge.kind, edge.from, edge.to) {
 			t.Fatalf("recovery edge is undeclared: %#v", edge)
 		}
-	}
-	if validSyncRecoveryTransition("publication", "blocked", "signed") {
-		t.Fatal("unapproved blocked publication reopen was accepted")
 	}
 }
 

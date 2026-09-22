@@ -37,7 +37,8 @@ two-node sync workflow. Peer service, pair verification, and release remain disa
 - E21-T5 qualifies G17 on every supported platform with disposable repositories,
   pins two-writer history preservation, documents the unsupported Git surface,
   and exposes publication, delivery, and import outcomes separately in status.
-- Validation remediation adds schema v23 retained blocked obligations and schema
+- Validation remediation makes schema v23 a compatibility marker while current
+  writers retain blocked obligations with their matching hold, and adds schema
   v24 causal journal sequencing. Same-base push rejection preserves the signed
   candidate as retryable, exact remote evidence settles interrupted work, and
   membership changes preserve stronger control holds.

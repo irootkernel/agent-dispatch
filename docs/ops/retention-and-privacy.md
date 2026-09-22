@@ -47,6 +47,11 @@ Not stored by default:
 | Unknown, ready, retrying, active, quarantined, dead-lettered | Until resolved |
 | State transition audit required by unresolved lineage | Until lineage resolves |
 
+Schema v23 is a compatibility marker and does not reopen historical blocked
+rows that an older writer already made terminal without a matching group hold.
+The unresolved guarantee applies to obligations created by current writers
+together with that hold.
+
 ## 3. Pruning Rules
 
 - dry-run by default;

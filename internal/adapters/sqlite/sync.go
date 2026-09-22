@@ -1087,6 +1087,9 @@ func administrationRepairAllowed(kind string, _ bool, state, reason, membershipM
 		return false
 	}
 	strongerHold := reason == "conflict" || reason == "trust_failure" || reason == "recovery_required"
+	if kind == "publication" {
+		return reason == "conflict"
+	}
 	return strongerHold && (kind == "checkpoint" || kind == "import")
 }
 
@@ -1512,6 +1515,12 @@ func (s *Store) ReopenRejectedCheckpoint(ctx context.Context, jobID string, expe
 	return s.reopenRejectedAdministrationJob(ctx, jobID, expectedFence, "checkpoint", "applying", journal, now)
 }
 
+// ReopenRejectedPublication records an exact predecessor probe and makes the
+// preserved signed candidate claimable through its existing conflict hold.
+func (s *Store) ReopenRejectedPublication(ctx context.Context, jobID string, expectedFence int64, journal SyncJournalEntry, now string) error {
+	return s.reopenRejectedAdministrationJob(ctx, jobID, expectedFence, "publication", "signed", journal, now)
+}
+
 // ReopenRejectedMembership records an exact predecessor probe and makes the
 // already-signed membership candidate claimable again.
 func (s *Store) ReopenRejectedMembership(ctx context.Context, jobID string, expectedFence int64, journal SyncJournalEntry, now string) error {
@@ -1893,7 +1902,7 @@ func validSyncRecoveryTransition(kind, from, to string) bool {
 			"signed":       {"published": true},
 			"push_pending": {"published": true},
 			"uncertain":    {"published": true},
-			"blocked":      {"published": true},
+			"blocked":      {"published": true, "signed": true},
 		},
 		"membership": {
 			"planned":   {"applied": true},

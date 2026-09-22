@@ -165,7 +165,7 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return syncMembershipError(stderr, command, err, 14)
 	}
-	if handled, result := recoverPendingImport(stdout, stderr, cfg, s, revision, store, client, remoteMembership, target); handled {
+	if handled, result := recoverPendingImport(stdout, stderr, cfg, s, revision, store, client, remoteHistory, remoteMembership, target); handled {
 		return result
 	}
 	relation, err := client.Compare(requestCtx(), from, target)
@@ -506,11 +506,17 @@ func reconcileEvidenceID(from, target, membership string, commits []string) stri
 	return "history-evidence-" + hex.EncodeToString(h.Sum(nil))[:32]
 }
 
-func recoverPendingImport(stdout, stderr io.Writer, cfg *config.Config, s *config.Sync, revision string, store *sqlite.Store, client *gitlocal.Client, membership, remoteTarget string) (bool, int) {
+func recoverPendingImport(stdout, stderr io.Writer, cfg *config.Config, s *config.Sync, revision string, store *sqlite.Store, client *gitlocal.Client, history syncmembership.History, membership, remoteTarget string) (bool, int) {
 	jobs, err := store.LoadUnresolvedSyncJobs(requestCtx(), s.GroupID, "import")
 	if err != nil {
 		return true, syncStoreError(stderr, "sync reconcile", err)
 	}
+	control, err := store.LoadSyncControl(requestCtx(), s.GroupID)
+	if err != nil {
+		return true, syncStoreError(stderr, "sync reconcile", err)
+	}
+	strongerHold := control.State == "blocked" && (control.Reason == "conflict" || control.Reason == "trust_failure" || control.Reason == "recovery_required")
+	administratorCheckpointRecovery := strongerHold && contentHeadAddsCheckpoint(client, remoteTarget) && verifyContentHead(client, history, cfg, s, remoteTarget) == nil
 	for _, job := range jobs {
 		if job.State == "deferred" || job.State == "blocked" || job.State == "requested" || job.State == "fetched" || (job.State == "validated" && job.ClaimOwner == "") {
 			continue
@@ -519,7 +525,7 @@ func recoverPendingImport(stdout, stderr io.Writer, cfg *config.Config, s *confi
 			continue
 		}
 		record, decodeErr := syncrecords.DecodeImport([]byte(job.PayloadJSON))
-		if decodeErr != nil || record.TargetCommit != remoteTarget || record.MembershipRevision != membership {
+		if decodeErr != nil || record.MembershipRevision != membership || (record.TargetCommit != remoteTarget && !administratorCheckpointRecovery) {
 			_, _ = store.HoldSyncControl(requestCtx(), s.GroupID, "recovery_required", revision, time.Now().UTC().Format(time.RFC3339Nano))
 			return true, reconcileEnvelopeCode(stdout, "uncertain", "partial_effect", map[string]any{"import_job_id": job.JobID, "detail": "stored recovery plan no longer matches the approved remote"}, 13)
 		}
@@ -581,7 +587,7 @@ func recoverPendingImport(stdout, stderr io.Writer, cfg *config.Config, s *confi
 			_, _ = store.HoldSyncControl(requestCtx(), s.GroupID, "recovery_required", revision, now)
 			return true, reconcileEnvelopeCode(stdout, "uncertain", "partial_effect", map[string]any{"import_job_id": job.JobID, "detail": "controller-only recovery found an unexplained index, worktree, or ref state"}, 13)
 		}
-		if job.State == "uncertain" {
+		if job.State == "uncertain" && !administratorCheckpointRecovery {
 			_, _ = store.HoldSyncControl(requestCtx(), s.GroupID, "recovery_required", revision, time.Now().UTC().Format(time.RFC3339Nano))
 			return true, reconcileEnvelopeCode(stdout, "uncertain", "partial_effect", map[string]any{"import_job_id": job.JobID, "detail": "an earlier import has unresolved partial effects"}, 13)
 		}
@@ -659,7 +665,12 @@ func recoverPendingImport(stdout, stderr io.Writer, cfg *config.Config, s *confi
 		}
 		owner := randomSyncID("import-recovery-owner")
 		claimAt := time.Now().UTC()
-		claimed, err := store.ClaimSyncJob(requestCtx(), job.JobID, owner, revision, claimAt.Format(time.RFC3339Nano), claimAt.Add(time.Duration(s.Bounds.SubprocessSeconds*4+60)*time.Second).Format(time.RFC3339Nano))
+		var claimed sqlite.SyncJobRow
+		if administratorCheckpointRecovery {
+			claimed, err = store.ClaimSyncAdministrationJob(requestCtx(), job.JobID, owner, revision, claimAt.Format(time.RFC3339Nano), claimAt.Add(time.Duration(s.Bounds.SubprocessSeconds*4+60)*time.Second).Format(time.RFC3339Nano))
+		} else {
+			claimed, err = store.ClaimSyncJob(requestCtx(), job.JobID, owner, revision, claimAt.Format(time.RFC3339Nano), claimAt.Add(time.Duration(s.Bounds.SubprocessSeconds*4+60)*time.Second).Format(time.RFC3339Nano))
+		}
 		if err != nil {
 			return true, syncStoreError(stderr, "sync reconcile", err)
 		}

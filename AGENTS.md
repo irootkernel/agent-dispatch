@@ -63,6 +63,7 @@ Agent Dispatch turns Markdown vault changes into Hermes Kanban tasks; this file 
 - Use `$humanizer` once as the final prose pass for English human-authored documentation, preserving facts, identifiers, commands, URLs, citations, and generated content. If it is unavailable or validation fails, retain the unchanged draft.
 - Treat `.mulgae/**`, `.gaori/runs/**`, `.podway/runtime/**`, and other local runtime evidence as transient. When tracked documentation needs evidence, use only a reviewed promoted evidence package rather than raw logs or runtime identities.
 - Repository-specific rules in Project Configuration override these defaults.
+- Use `$use-sorage` only when Master explicitly requests a broker operation. Check only the requested inbox or outbox; Project registration does not authorize discovery. Resolve Handoff, review, revision, retention, deletion, and Vault operations through that skill; never edit the managed Vault or derived `.sorage/INBOX.md` directly.
 
 ## Project Configuration
 

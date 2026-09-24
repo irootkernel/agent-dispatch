@@ -438,9 +438,6 @@ func TestE21RecoverPendingImportConvergesCoherentPartialState(t *testing.T) {
 	gitTestRun(t, gitPath, repo, "commit", "-q", "-m", "after")
 	target := gitTestOutput(t, gitPath, repo, "rev-parse", "HEAD")
 	gitTestRun(t, gitPath, repo, "reset", "--hard", from)
-	if err := os.WriteFile(filepath.Join(repo, "note.md"), afterBytes, 0o600); err != nil {
-		t.Fatal(err)
-	}
 
 	cfg, err := config.Load("../../docs/examples/config.yaml")
 	if err != nil {
@@ -499,9 +496,36 @@ func TestE21RecoverPendingImportConvergesCoherentPartialState(t *testing.T) {
 	if _, err := store.EnsureSyncControl(requestCtx(), cfg.Sync.GroupID, revision, "2026-09-21T00:00:00Z"); err != nil {
 		t.Fatal(err)
 	}
-	job, _, err := store.AdmitSyncJob(requestCtx(), sqlite.SyncJobInput{JobID: "recover-coherent-partial", GroupID: cfg.Sync.GroupID, Kind: "import", LogicalKey: record.ImportID, InitialState: "recovering", PayloadJSON: string(payload), ConfigRevision: revision, QueueLimit: 10, Now: "2026-09-21T00:00:01Z"})
+	job, _, err := store.AdmitSyncJob(requestCtx(), sqlite.SyncJobInput{JobID: "recover-coherent-partial", GroupID: cfg.Sync.GroupID, Kind: "import", LogicalKey: record.ImportID, InitialState: "validated", PayloadJSON: string(payload), ConfigRevision: revision, QueueLimit: 10, Now: "2026-09-21T00:00:01Z"})
 	if err != nil {
 		t.Fatal(err)
+	}
+	job, err = store.ClaimSyncJob(requestCtx(), job.JobID, "crashed-importer", revision, "2026-09-21T00:00:02Z", "2026-09-21T00:00:03Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.BeginImportApply(requestCtx(), job.JobID, "crashed-importer", cfg.Sync.Resource, job.Fence, record.Paths, sqlite.SyncJournalEntry{JournalID: "partial-import-start", JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "started", EvidenceJSON: `{}`, RecordedAt: "2026-09-21T00:00:02Z"}, "2026-09-21T00:00:02Z"); err != nil {
+		t.Fatal(err)
+	}
+	// Interrupt after the durable pre-apply boundary and the first live effect.
+	if err := syncimport.Apply(repo, record.Paths[:1], map[string][]byte{"note.md": afterBytes}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err = sqlite.Open(filepath.Join(dir, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	startJournals, err := store.LoadSyncJournals(requestCtx(), job.JobID)
+	if err != nil || len(startJournals) == 0 || startJournals[0].Outcome != "started" {
+		t.Fatalf("pre-apply journal did not survive restart: %+v %v", startJournals, err)
+	}
+	pending, err := store.LoadPendingImportEffects(requestCtx(), cfg.Sync.Resource)
+	if err != nil || len(pending) != len(record.Paths) {
+		t.Fatalf("resource effect fence did not survive restart: %+v %v", pending, err)
 	}
 	var stdout, stderr bytes.Buffer
 	handled, code := recoverPendingImport(&stdout, &stderr, cfg, cfg.Sync, revision, store, client, syncmembership.History{}, membership, target)

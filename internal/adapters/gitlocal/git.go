@@ -364,6 +364,19 @@ func (c *Client) ApplyImportIndex(ctx context.Context, contentRef, from, target 
 	if !validRef(contentRef) || !validOID(from) || !validOID(target) || from == target {
 		return fmt.Errorf("invalid import index request")
 	}
+	if _, err := c.checkContentAdvance(ctx, contentRef, from, target, files, deletions, true); err != nil {
+		return err
+	}
+	indexPath, privateIndex, unlock, err := c.lockIndex(ctx)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	controllers, err := c.checkContentAdvance(ctx, contentRef, from, target, files, deletions, false)
+	if err != nil {
+		return err
+	}
+	indexEnv := map[string]string{"GIT_INDEX_FILE": privateIndex}
 	paths := make([]string, 0, len(files))
 	for path := range files {
 		if !validTreePath(path) {
@@ -381,7 +394,7 @@ func (c *Client) ApplyImportIndex(ctx context.Context, contentRef, from, target 
 		if !validOID(oid) {
 			return fmt.Errorf("git returned an invalid import blob")
 		}
-		if _, _, err := c.run(ctx, nil, nil, "update-index", "--add", "--cacheinfo", "100644,"+oid+","+path); err != nil {
+		if _, _, err := c.run(ctx, indexEnv, nil, "update-index", "--add", "--cacheinfo", "100644,"+oid+","+path); err != nil {
 			return err
 		}
 	}
@@ -389,23 +402,13 @@ func (c *Client) ApplyImportIndex(ctx context.Context, contentRef, from, target 
 		if !validTreePath(path) {
 			return fmt.Errorf("unsafe import deletion %q", path)
 		}
-		if _, _, err := c.run(ctx, nil, nil, "update-index", "--force-remove", "--", path); err != nil {
+		if _, _, err := c.run(ctx, indexEnv, nil, "update-index", "--force-remove", "--", path); err != nil {
 			return err
 		}
 	}
 	// Controller records are verified append-only evidence, not Watchman
 	// attribution effects. They still need to follow the checked-out commit so
 	// the index/worktree does not become dirty merely because the ref advanced.
-	controllers := map[string][]byte{}
-	for _, prefix := range []string{".agent-dispatch-sync/publications/", ".agent-dispatch-sync/checkpoints/", ".agent-dispatch-sync/checkpoint-plans/"} {
-		entries, err := c.ReadTreePrefix(ctx, target, prefix)
-		if err != nil {
-			return err
-		}
-		for path, raw := range entries {
-			controllers[path] = raw
-		}
-	}
 	controllerPaths := make([]string, 0, len(controllers))
 	for path := range controllers {
 		controllerPaths = append(controllerPaths, path)
@@ -424,7 +427,7 @@ func (c *Client) ApplyImportIndex(ctx context.Context, contentRef, from, target 
 		if !validOID(oid) {
 			return fmt.Errorf("git returned an invalid controller blob")
 		}
-		if _, _, err := c.run(ctx, nil, nil, "update-index", "--add", "--cacheinfo", "100644,"+oid+","+path); err != nil {
+		if _, _, err := c.run(ctx, indexEnv, nil, "update-index", "--add", "--cacheinfo", "100644,"+oid+","+path); err != nil {
 			return err
 		}
 	}
@@ -438,7 +441,62 @@ func (c *Client) ApplyImportIndex(ctx context.Context, contentRef, from, target 
 	if current != from {
 		return fmt.Errorf("content ref changed during import")
 	}
+	if err := os.Rename(privateIndex, indexPath); err != nil {
+		return err
+	}
 	return c.UpdateRefExpected(ctx, contentRef, target, from)
+}
+
+func (c *Client) lockIndex(ctx context.Context) (string, string, func(), error) {
+	out, _, err := c.run(ctx, nil, nil, "rev-parse", "--git-path", "index")
+	if err != nil {
+		return "", "", nil, err
+	}
+	indexPath := strings.TrimSpace(string(out))
+	if !filepath.IsAbs(indexPath) {
+		indexPath = filepath.Join(c.root, indexPath)
+	}
+	info, err := os.Lstat(indexPath)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("git index is unavailable: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", "", nil, fmt.Errorf("git index is not a regular file")
+	}
+	lockPath := indexPath + ".lock"
+	lock, err := os.OpenFile(lockPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return "", "", nil, err
+	}
+	cleanup := func() {
+		_ = lock.Close()
+		_ = os.Remove(lockPath)
+	}
+	private, err := os.CreateTemp(filepath.Dir(indexPath), ".agent-dispatch-index-*")
+	if err != nil {
+		cleanup()
+		return "", "", nil, err
+	}
+	source, err := os.Open(indexPath)
+	if err == nil {
+		_, err = io.Copy(private, source)
+		_ = source.Close()
+	}
+	if err == nil {
+		err = private.Chmod(info.Mode().Perm())
+	}
+	if closeErr := private.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		_ = os.Remove(private.Name())
+		cleanup()
+		return "", "", nil, err
+	}
+	return indexPath, private.Name(), func() {
+		_ = os.Remove(private.Name())
+		cleanup()
+	}, nil
 }
 
 // AdvanceContentRef makes the caller's index and controller worktree follow a
@@ -446,13 +504,32 @@ func (c *Client) ApplyImportIndex(ctx context.Context, contentRef, from, target 
 // Ordinary Markdown worktree bytes are left untouched so an uncooperative late
 // edit remains visible as a dirty change instead of being overwritten.
 func (c *Client) AdvanceContentRef(ctx context.Context, contentRef, from, target string) error {
-	fromFiles, err := c.ReadContentFiles(ctx, from)
+	changed, deletions, err := c.contentAdvanceChanges(ctx, from, target)
 	if err != nil {
 		return err
 	}
-	targetFiles, err := c.ReadContentFiles(ctx, target)
+	return c.ApplyImportIndex(ctx, contentRef, from, target, changed, deletions)
+}
+
+// CheckAdvanceContentRef refuses local collisions before a candidate is pushed.
+// AdvanceContentRef repeats the check after remote confirmation.
+func (c *Client) CheckAdvanceContentRef(ctx context.Context, contentRef, from, target string) error {
+	changed, deletions, err := c.contentAdvanceChanges(ctx, from, target)
 	if err != nil {
 		return err
+	}
+	_, err = c.checkContentAdvance(ctx, contentRef, from, target, changed, deletions, true)
+	return err
+}
+
+func (c *Client) contentAdvanceChanges(ctx context.Context, from, target string) (map[string][]byte, []string, error) {
+	fromFiles, err := c.ReadContentFiles(ctx, from)
+	if err != nil {
+		return nil, nil, err
+	}
+	targetFiles, err := c.ReadContentFiles(ctx, target)
+	if err != nil {
+		return nil, nil, err
 	}
 	changed := make(map[string][]byte)
 	for path, raw := range targetFiles {
@@ -467,7 +544,187 @@ func (c *Client) AdvanceContentRef(ctx context.Context, contentRef, from, target
 		}
 	}
 	sort.Strings(deletions)
-	return c.ApplyImportIndex(ctx, contentRef, from, target, changed, deletions)
+	return changed, deletions, nil
+}
+
+func (c *Client) checkContentAdvance(ctx context.Context, contentRef, from, target string, files map[string][]byte, deletions []string, inspect bool) (map[string][]byte, error) {
+	if !validRef(contentRef) || !validOID(from) || !validOID(target) || from == target {
+		return nil, fmt.Errorf("invalid content advance request")
+	}
+	var head string
+	var localState ImportState
+	if inspect {
+		state, err := c.InspectImport(ctx, contentRef)
+		if err != nil {
+			return nil, err
+		}
+		if state.ActiveOperation != "" && state.ActiveOperation != "controller_dirty" {
+			return nil, fmt.Errorf("active Git operation prevents content advance: %s", state.ActiveOperation)
+		}
+		head = state.Head
+		localState = state
+	} else {
+		symbolic, _, err := c.run(ctx, nil, nil, "symbolic-ref", "-q", "HEAD")
+		if err != nil || strings.TrimSpace(string(symbolic)) != contentRef {
+			return nil, fmt.Errorf("checked-out HEAD is not the configured content ref")
+		}
+		head, err = c.ResolveRef(ctx, contentRef)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if head != from && head != target {
+		return nil, fmt.Errorf("checked-out content ref changed before index update")
+	}
+	paths := make(map[string]bool, len(files)+len(deletions))
+	for path := range files {
+		if !validTreePath(path) {
+			return nil, fmt.Errorf("unsafe content advance path %q", path)
+		}
+		paths[path] = true
+	}
+	for _, path := range deletions {
+		if !validTreePath(path) || paths[path] {
+			return nil, fmt.Errorf("unsafe content advance deletion %q", path)
+		}
+		paths[path] = true
+	}
+	controllers := map[string][]byte{}
+	for _, prefix := range []string{".agent-dispatch-sync/publications/", ".agent-dispatch-sync/checkpoints/", ".agent-dispatch-sync/checkpoint-plans/"} {
+		before, err := c.ReadTreePrefix(ctx, from, prefix)
+		if err != nil {
+			return nil, err
+		}
+		after, err := c.ReadTreePrefix(ctx, target, prefix)
+		if err != nil {
+			return nil, err
+		}
+		for path, raw := range before {
+			if next, ok := after[path]; !ok || !bytes.Equal(raw, next) {
+				return nil, fmt.Errorf("content advance changes an existing controller record %q", path)
+			}
+		}
+		for path, raw := range after {
+			if _, existed := before[path]; !existed {
+				controllers[path] = raw
+				paths[path] = true
+			}
+		}
+	}
+	if inspect {
+		for _, path := range localState.DirtyPaths {
+			if strings.HasPrefix(path, ".agent-dispatch-sync/") {
+				if _, expected := controllers[path]; !expected {
+					return nil, fmt.Errorf("unrelated controller path %q is dirty", path)
+				}
+			}
+		}
+		controllerPaths := make([]string, 0, len(controllers))
+		for path := range controllers {
+			controllerPaths = append(controllerPaths, path)
+		}
+		_, collisions := ImportOverlap(controllerPaths, nil, localState.UntrackedPaths)
+		for _, path := range collisions {
+			if _, exact := controllers[path]; !exact {
+				return nil, fmt.Errorf("controller path alias %q is occupied", path)
+			}
+		}
+	}
+	for path := range paths {
+		before, err := c.treePathOID(ctx, from, path)
+		if err != nil {
+			return nil, err
+		}
+		after, err := c.treePathOID(ctx, target, path)
+		if err != nil {
+			return nil, err
+		}
+		staged, err := c.indexPathOID(ctx, path)
+		if err != nil {
+			return nil, err
+		}
+		if staged != before && staged != after {
+			return nil, fmt.Errorf("staged content at %q differs from both content commits", path)
+		}
+		if raw, ok := controllers[path]; ok {
+			if err := c.checkControllerFile(path, raw); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return controllers, nil
+}
+
+func (c *Client) treePathOID(ctx context.Context, commit, path string) (string, error) {
+	out, _, err := c.run(ctx, nil, nil, "ls-tree", "-z", commit, "--", path)
+	if err != nil {
+		return "", err
+	}
+	return parseIndexTreeEntry(out, path, false)
+}
+
+func (c *Client) indexPathOID(ctx context.Context, path string) (string, error) {
+	out, _, err := c.run(ctx, nil, nil, "ls-files", "--stage", "-z", "--", ":(literal)"+path)
+	if err != nil {
+		return "", err
+	}
+	return parseIndexTreeEntry(out, path, true)
+}
+
+func parseIndexTreeEntry(raw []byte, path string, index bool) (string, error) {
+	if len(raw) == 0 {
+		return "", nil
+	}
+	entries := bytes.Split(raw, []byte{0})
+	if len(entries) != 2 || len(entries[1]) != 0 {
+		return "", fmt.Errorf("multiple Git entries for %q", path)
+	}
+	parts := bytes.SplitN(entries[0], []byte{'\t'}, 2)
+	if len(parts) != 2 || string(parts[1]) != path {
+		return "", fmt.Errorf("unexpected Git entry for %q", path)
+	}
+	meta := bytes.Fields(parts[0])
+	if len(meta) != 3 || string(meta[0]) != "100644" {
+		return "", fmt.Errorf("unsupported Git entry for %q", path)
+	}
+	if index {
+		if !validOID(string(meta[1])) || string(meta[2]) != "0" {
+			return "", fmt.Errorf("unsupported Git index entry for %q", path)
+		}
+		return string(meta[1]), nil
+	}
+	if string(meta[1]) != "blob" || !validOID(string(meta[2])) {
+		return "", fmt.Errorf("unsupported Git entry for %q", path)
+	}
+	return string(meta[2]), nil
+}
+
+func (c *Client) checkControllerFile(path string, raw []byte) error {
+	if !validContentControllerPath(path) {
+		return fmt.Errorf("unsafe controller path")
+	}
+	if err := c.checkControllerAncestors(path); err != nil {
+		return err
+	}
+	target := filepath.Join(c.root, filepath.FromSlash(path))
+	info, err := os.Lstat(target)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("controller target %q is not a regular file", path)
+	}
+	current, err := os.ReadFile(target)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(current, raw) {
+		return fmt.Errorf("controller target %q contains independent local content", path)
+	}
+	return nil
 }
 
 func (c *Client) writeControllerFile(path string, raw []byte) error {
@@ -488,9 +745,12 @@ func (c *Client) writeControllerFile(path string, raw []byte) error {
 		return err
 	}
 	target := filepath.Join(c.root, filepath.FromSlash(path))
-	if info, err := os.Lstat(target); err == nil && info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("controller target is a symlink")
-	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := c.checkControllerFile(path, raw); err != nil {
+		return err
+	}
+	if _, err := os.Lstat(target); err == nil {
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	tmp, err := os.CreateTemp(dir, ".agent-dispatch-controller-*")
@@ -514,11 +774,12 @@ func (c *Client) writeControllerFile(path string, raw []byte) error {
 		err = closeErr
 	}
 	if err == nil {
-		err = os.Rename(name, target)
+		err = os.Link(name, target)
+		if errors.Is(err, os.ErrExist) {
+			err = c.checkControllerFile(path, raw)
+		}
 	}
-	if err != nil {
-		_ = os.Remove(name)
-	}
+	_ = os.Remove(name)
 	return err
 }
 

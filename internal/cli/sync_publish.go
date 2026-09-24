@@ -105,6 +105,13 @@ func runSyncPublish(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return syncMembershipError(stderr, command, fmt.Errorf("content ref requires an administrator checkpoint before publication: %w", err), 14)
 	}
+	localState, err := client.InspectImport(requestCtx(), syncCfg.ContentRef)
+	if err != nil {
+		return syncMembershipError(stderr, command, fmt.Errorf("checked-out content ref is not ready for publication: %w", err), 14)
+	}
+	if localState.Head != base {
+		return syncMembershipError(stderr, command, errors.New("checked-out content ref changed before publication"), 14)
+	}
 	remoteBase, err := client.RemoteRef(requestCtx(), syncCfg.RemoteName, syncCfg.ContentRef, syncCfg.RemoteRepositoryDigest)
 	if err != nil {
 		wrapped := fmt.Errorf("content predecessor could not be measured on the approved remote: %w", err)
@@ -236,6 +243,9 @@ func runSyncPublish(args []string, stdout, stderr io.Writer) int {
 	remoteNow, remoteErr := client.RemoteRef(requestCtx(), syncCfg.RemoteName, syncCfg.ContentRef, syncCfg.RemoteRepositoryDigest)
 	confirmed := remoteErr == nil && remoteNow == candidate
 	if !confirmed {
+		if err := client.CheckAdvanceContentRef(requestCtx(), syncCfg.ContentRef, base, candidate); err != nil {
+			return finishPublicationFailureWithEvidence(stderr, store, job, owner, "signed", "effect_not_started", "local content advance is unsafe: "+err.Error(), map[string]any{"candidate": candidate})
+		}
 		push := client.PushFastForward(requestCtx(), syncCfg.RemoteName, syncCfg.ContentRef, candidate, base, syncCfg.RemoteRepositoryDigest)
 		switch classifySyncPush(push.State, push.RemoteOID, base, candidate, push.Underlying) {
 		case syncPushTrust:
@@ -415,6 +425,9 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 			}
 			if claimErr != nil {
 				return true, syncStoreError(stderr, "sync publish", claimErr)
+			}
+			if err := client.CheckAdvanceContentRef(requestCtx(), s.ContentRef, publication.BaseCommit, candidate); err != nil {
+				return true, finishPublicationFailureWithEvidence(stderr, store, claimed, owner, "signed", "effect_not_started", "local content advance is unsafe: "+err.Error(), map[string]any{"candidate": candidate, "recovered": true})
 			}
 			push := client.PushFastForward(requestCtx(), s.RemoteName, s.ContentRef, candidate, publication.BaseCommit, s.RemoteRepositoryDigest)
 			switch classifySyncPush(push.State, push.RemoteOID, publication.BaseCommit, candidate, push.Underlying) {

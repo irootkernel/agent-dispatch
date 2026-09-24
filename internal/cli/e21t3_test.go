@@ -213,6 +213,12 @@ exec %s "$@"
 	if err := os.WriteFile(checkpointPath, checkpointRaw, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	gitTestRun(t, realGit, repo, "checkout", "-q", "-b", "other-checkpoint")
+	var wrongCheckpointOut, wrongCheckpointErr bytes.Buffer
+	if code := Run([]string{"sync", "checkpoint", "apply", "--group", cfg.Sync.GroupID, "--plan", checkpointPath, "--output", "json"}, &wrongCheckpointOut, &wrongCheckpointErr); code != 14 || strings.TrimSpace(string(mustRead(t, contentState))) != base {
+		t.Fatalf("wrong-branch checkpoint: %d out=%s err=%s", code, wrongCheckpointOut.String(), wrongCheckpointErr.String())
+	}
+	gitTestRun(t, realGit, repo, "checkout", "-q", strings.TrimPrefix(cfg.Sync.ContentRef, "refs/heads/"))
 	if err := os.WriteFile(pushReject, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -249,6 +255,12 @@ exec %s "$@"
 		t.Fatalf("ineligible publish mutated state: jobs=%d remote=%s", ineligibleJobs, strings.TrimSpace(string(mustRead(t, contentState))))
 	}
 	seedE21T3Eligibility(t, cfg, configPath, []byte("changed\n"))
+	gitTestRun(t, realGit, repo, "checkout", "-q", "-b", "other-publication")
+	var wrongPublishOut, wrongPublishErr bytes.Buffer
+	if code := Run([]string{"sync", "publish", "--group", cfg.Sync.GroupID, "--expected-config-revision", revision, "--output", "json"}, &wrongPublishOut, &wrongPublishErr); code != 14 || strings.TrimSpace(string(mustRead(t, contentState))) != contentBeforeIneligible {
+		t.Fatalf("wrong-branch publication: %d out=%s err=%s", code, wrongPublishOut.String(), wrongPublishErr.String())
+	}
+	gitTestRun(t, realGit, repo, "checkout", "-q", strings.TrimPrefix(cfg.Sync.ContentRef, "refs/heads/"))
 	if err := os.WriteFile(pushReject, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}

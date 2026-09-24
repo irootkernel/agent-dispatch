@@ -24,6 +24,9 @@ This file records concise shipped outcomes and pending changes.
 
 ### Fixed
 
+- Preserve staged Markdown changes and independent controller files during
+  publication and checkpoint advancement, and reject a detached or different
+  checked-out content branch before push.
 - Retain blocked sync obligations until exact remote confirmation, a membership
   replacement, or an administrator checkpoint records the applicable recovery,
   and keep attributed observations through the linked sync evidence horizon

@@ -62,7 +62,10 @@ func TestImportIndexPreservesDisjointDirtyPath(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, "local.md"), []byte("base-local\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	gitRun(t, repo, "add", "local.md")
+	if err := os.WriteFile(filepath.Join(repo, "staged.md"), []byte("base-staged\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, repo, "add", "local.md", "staged.md")
 	gitRun(t, repo, "commit", "-m", "local base")
 	from := gitOutput(t, repo, "rev-parse", "HEAD")
 	if err := os.WriteFile(filepath.Join(repo, "note.md"), []byte("remote\n"), 0o600); err != nil {
@@ -75,6 +78,11 @@ func TestImportIndexPreservesDisjointDirtyPath(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, "local.md"), []byte("local edit\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(repo, "staged.md"), []byte("staged edit\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, repo, "add", "staged.md")
+	stagedBefore := gitOutput(t, repo, "rev-parse", ":staged.md")
 	client, err := New(repo, Limits{Timeout: 5 * time.Second, MaxOutput: 64 << 10})
 	if err != nil {
 		t.Fatal(err)
@@ -99,6 +107,9 @@ func TestImportIndexPreservesDisjointDirtyPath(t *testing.T) {
 	if raw, _ := os.ReadFile(filepath.Join(repo, "local.md")); string(raw) != "local edit\n" {
 		t.Fatalf("disjoint working edit changed: %q", raw)
 	}
+	if stagedAfter := gitOutput(t, repo, "rev-parse", ":staged.md"); stagedAfter != stagedBefore {
+		t.Fatalf("disjoint staged edit changed: %s -> %s", stagedBefore, stagedAfter)
+	}
 	status := gitOutput(t, repo, "status", "--porcelain=v1")
 	if !strings.Contains(status, "local.md") || strings.Contains(status, "note.md") {
 		t.Fatalf("unexpected status after import: %q", status)
@@ -106,6 +117,44 @@ func TestImportIndexPreservesDisjointDirtyPath(t *testing.T) {
 	commits, err := client.FirstParentRange(context.Background(), from, target, 2)
 	if err != nil || len(commits) != 1 || commits[0] != target {
 		t.Fatalf("range=%v err=%v", commits, err)
+	}
+}
+
+func TestImportIndexTreatsMarkdownPathAsLiteral(t *testing.T) {
+	repo := initRepository(t)
+	for path, body := range map[string]string{"draft*.md": "original\n", "draft1.md": "neighbor\n"} {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gitRun(t, repo, "add", "--", ":(literal)draft*.md", "draft1.md")
+	gitRun(t, repo, "commit", "-m", "literal path base")
+	from := gitOutput(t, repo, "rev-parse", "HEAD")
+	if err := os.WriteFile(filepath.Join(repo, "draft*.md"), []byte("remote\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, repo, "add", "--", ":(literal)draft*.md")
+	gitRun(t, repo, "commit", "-m", "literal path target")
+	target := gitOutput(t, repo, "rev-parse", "HEAD")
+	gitRun(t, repo, "reset", "--hard", from)
+	if err := os.WriteFile(filepath.Join(repo, "draft*.md"), []byte("remote\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	client, err := New(repo, Limits{Timeout: 5 * time.Second, MaxOutput: 64 << 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := client.ApplyImportIndex(context.Background(), "refs/heads/main", from, target, map[string][]byte{"draft*.md": []byte("remote\n")}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := gitOutput(t, repo, "rev-parse", "refs/heads/main"); got != target {
+		t.Fatalf("content ref=%s target=%s", got, target)
+	}
+	if got := gitOutput(t, repo, "rev-parse", ":draft*.md"); got != gitOutput(t, repo, "rev-parse", target+":draft*.md") {
+		t.Fatalf("literal path index does not match target: %s", got)
+	}
+	if got := gitOutput(t, repo, "status", "--porcelain=v1"); got != "" {
+		t.Fatalf("unexpected status after import: %q", got)
 	}
 }
 
@@ -152,6 +201,97 @@ func TestAdvanceContentRefKeepsLateMarkdownEditDirtyWithoutControllerResidue(t *
 	}
 	if raw, err := os.ReadFile(filepath.Join(controllerDir, "publication.json")); err != nil || string(raw) != "{}\n" {
 		t.Fatalf("controller record was not materialized: %q err=%v", raw, err)
+	}
+	if err := client.AdvanceContentRef(context.Background(), "refs/heads/main", from, target); err != nil {
+		t.Fatalf("exact after-image retry failed: %v", err)
+	}
+}
+
+func TestAdvanceContentRefRefusesLocalCollisions(t *testing.T) {
+	for _, scenario := range []string{"staged_note", "controller_collision", "tracked_controller_edit", "other_branch", "detached_head"} {
+		t.Run(scenario, func(t *testing.T) {
+			repo := initRepository(t)
+			controllerPath := filepath.Join(repo, ".agent-dispatch-sync", "publications", "publication.json")
+			existingControllerPath := filepath.Join(repo, ".agent-dispatch-sync", "publications", "existing.json")
+			if err := os.MkdirAll(filepath.Dir(controllerPath), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(existingControllerPath, []byte("existing record\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			gitRun(t, repo, "add", ".agent-dispatch-sync/publications/existing.json")
+			gitRun(t, repo, "commit", "-m", "existing controller")
+			from := gitOutput(t, repo, "rev-parse", "HEAD")
+			if err := os.WriteFile(filepath.Join(repo, "note.md"), []byte("published\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(controllerPath, []byte("published record\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			gitRun(t, repo, "add", "note.md", ".agent-dispatch-sync/publications/publication.json")
+			gitRun(t, repo, "commit", "-m", "candidate")
+			target := gitOutput(t, repo, "rev-parse", "HEAD")
+			gitRun(t, repo, "reset", "--hard", from)
+			client, err := New(repo, Limits{Timeout: 5 * time.Second, MaxOutput: 64 << 10})
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx := context.Background()
+			if err := client.CheckAdvanceContentRef(ctx, "refs/heads/main", from, target); err != nil {
+				t.Fatalf("clean candidate failed the pre-push check: %v", err)
+			}
+			wantNote := ""
+			wantController := ""
+			switch scenario {
+			case "staged_note":
+				wantNote = "new staged edit\n"
+				if err := os.WriteFile(filepath.Join(repo, "note.md"), []byte(wantNote), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				gitRun(t, repo, "add", "note.md")
+			case "controller_collision":
+				wantController = "local record\n"
+				if err := os.MkdirAll(filepath.Dir(controllerPath), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(controllerPath, []byte(wantController), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			case "tracked_controller_edit":
+				controllerPath = existingControllerPath
+				wantController = "edited existing record\n"
+				if err := os.WriteFile(controllerPath, []byte(wantController), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			case "other_branch":
+				gitRun(t, repo, "checkout", "-b", "other")
+			case "detached_head":
+				gitRun(t, repo, "checkout", "--detach", from)
+			}
+			if err := client.CheckAdvanceContentRef(ctx, "refs/heads/main", from, target); err == nil {
+				t.Fatal("unsafe candidate passed the pre-push check")
+			}
+			indexBefore := gitOutput(t, repo, "write-tree")
+			if err := client.AdvanceContentRef(ctx, "refs/heads/main", from, target); err == nil {
+				t.Fatal("unsafe candidate advanced local content")
+			}
+			if got := gitOutput(t, repo, "write-tree"); got != indexBefore {
+				t.Fatalf("index changed: %s -> %s", indexBefore, got)
+			}
+			if got := gitOutput(t, repo, "rev-parse", "refs/heads/main"); got != from {
+				t.Fatalf("content ref changed: %s", got)
+			}
+			if wantNote != "" {
+				if raw, err := os.ReadFile(filepath.Join(repo, "note.md")); err != nil || string(raw) != wantNote {
+					t.Fatalf("staged note changed: %q %v", raw, err)
+				}
+			}
+			if wantController != "" {
+				if raw, err := os.ReadFile(controllerPath); err != nil || string(raw) != wantController {
+					t.Fatalf("local controller changed: %q %v", raw, err)
+				}
+			}
+		})
 	}
 }
 

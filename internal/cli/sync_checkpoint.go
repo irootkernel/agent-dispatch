@@ -115,6 +115,13 @@ func runSyncCheckpointApply(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return checkpointBindingError(stderr, command, err)
 	}
+	localState, err := client.InspectImport(requestCtx(), s.ContentRef)
+	if err != nil {
+		return syncMembershipError(stderr, command, fmt.Errorf("checked-out content ref is not ready for checkpoint apply: %w", err), 14)
+	}
+	if localState.Head != predecessor {
+		return syncMembershipError(stderr, command, errors.New("checked-out content ref changed before checkpoint apply"), 14)
+	}
 	if plan.ProposedCheckpoint.Kind == "initial_baseline" {
 		if plan.ProposedCheckpoint.TargetCommit != predecessor {
 			return syncMembershipError(stderr, command, errors.New("initial baseline must bind the current content predecessor"), 14)
@@ -198,6 +205,9 @@ func runSyncCheckpointApply(args []string, stdout, stderr io.Writer) int {
 	}
 	remoteNow, remoteErr := client.RemoteRef(requestCtx(), s.RemoteName, s.ContentRef, s.RemoteRepositoryDigest)
 	if remoteErr != nil || remoteNow != candidate {
+		if err := client.CheckAdvanceContentRef(requestCtx(), s.ContentRef, predecessor, candidate); err != nil {
+			return finishCheckpointFailure(stderr, store, job, owner, "applying", "effect_not_started", "local content advance is unsafe: "+err.Error())
+		}
 		push := client.PushFastForward(requestCtx(), s.RemoteName, s.ContentRef, candidate, predecessor, s.RemoteRepositoryDigest)
 		switch classifySyncPush(push.State, push.RemoteOID, predecessor, candidate, push.Underlying) {
 		case syncPushTrust:

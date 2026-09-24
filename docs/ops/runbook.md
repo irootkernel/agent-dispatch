@@ -43,11 +43,11 @@ agent-dispatch sync status --group <group-id> --output json
 ```
 
 Investigate any unknown dispatch before retrying. For an enabled sync group,
-also inspect `control_state`, `control_reason`, and the separate
+also inspect `state`, `reason`, and the separate
 `latest_publication`, `latest_delivery`, and `latest_import` outcomes. An
 unresolved `uncertain`, `recovering`, or `recovery_required` outcome is not a
 successful synchronization; retain its evidence and use the matching row in
-[failure recovery](failure-recovery.md#sync-publication-import-and-membership).
+[failure recovery](failure-recovery.md).
 
 ## 3. Normal Change Flow
 
@@ -86,8 +86,13 @@ Before enabling import on a node:
    `sync reconcile` may apply live-tree effects.
 4. Repeat this review after any bound local resource, remote/ref, scope, local
    identity, administrator anchor, import-bound, safety-policy, or state-
-   incarnation change. A stale record deliberately defers import without
-   blocking publication or validation.
+   incarnation change. When a bound configuration value changes, inspect the
+   current `control_revision` in `sync status`, then run
+   `sync resume --group <group-id> --expected-control-revision <revision> --config <path>`
+   using that configuration. Require both
+   `import_acknowledgement_current` and `control_config_current` in a fresh
+   status result before importing. A blocked control still requires its named
+   recovery procedure; `sync resume` cannot clear a safety hold.
 
 Never invent or shorten a digest projection. If no trusted configuration
 producer can supply the exact values, leave import unacknowledged and allow

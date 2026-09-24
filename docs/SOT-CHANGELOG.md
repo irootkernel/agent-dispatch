@@ -47,6 +47,8 @@ two-node sync workflow. Peer service, pair verification, and release remain disa
   also use Unicode case folding on every host. Protected and immutable
   deletions are refused, and repository-local or worktree URL rewrites are
   rejected before remote access.
+- The contributor toolchain pin advances to Go 1.27.1 with compatible module
+  and Staticcheck updates; the exact-pin verification contract remains in force.
 
 ## 1.7.0 - 2026-09-19
 

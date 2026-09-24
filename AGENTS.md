@@ -84,4 +84,4 @@ Agent Dispatch turns Markdown vault changes into Hermes Kanban tasks; this file 
 - Mulgae active roles, provider routing, required roles, and findings policy follow `.mulgae/config.yaml`.
 - The five tracked `.podway/procedures/aquarium-*-v2.yaml` files are managed Procedures. `.podway/runtime/` contains ignored session history and is never edited by hand.
 - `docs/MANIFEST.sha256` is generated and checked by `make manifest-check`. Keep `.mulgae/local.yaml`, `.gaori/runs/`, and `.zcode/` untracked.
-- Go is pinned to 1.26.6. Staticcheck is a `go.mod` tool dependency (SCP-005), so verification needs no network fetch.
+- Go is pinned to 1.27.1. Staticcheck is a `go.mod` tool dependency (SCP-005), so verification needs no network fetch.

@@ -749,31 +749,31 @@ func buildHeldLineage(a *planArtifacts) (ports.Lineage, ports.QuarantineInput, e
 		classification = a.plan.Classification[0]
 	}
 	return ports.Lineage{
-			Observation: ports.ObservationInput{
-				ObservationID: string(observationID), SchemaVersion: "agent-dispatch.source-observation/v1",
-				SourceType: "watchman", SourceID: a.route.Source.SourceID,
-				SourceEventKey: a.input.SourceEventKey(a.route.Source.SourceID),
-				TriggerName:    a.env.Trigger, ResourceID: a.route.Source.Resource,
-				ObservedAt: now, ReceivedAt: now,
-				RawPayloadDigest: string(a.input.RawDigest), IngestStatus: "accepted",
-				FlagsJSON: string(flagsJSON), PositionJSON: string(positionJSON), Changes: changes, ImportAttributions: importAttributions,
-			},
-			Batch: ports.BatchInput{
-				BatchID: string(batchID), RouteID: a.opts.routeID, RouteRevision: a.plan.Route.Revision,
-				ResourceID: a.route.Source.Resource, CreatedAt: now,
-				ContentFingerprint: a.plan.ContentFingerprint,
-				ObservationIDs:     []string{string(observationID)},
-			},
-			Decision: ports.DecisionInput{
-				DecisionID: string(decisionID), BatchID: string(batchID), RouteID: a.opts.routeID,
-				RouteRevision: a.plan.Route.Revision, PolicyRevision: config.PolicyRevision(a.route),
-				Disposition: a.plan.Disposition, Classification: classification,
-				ReasonCodesJSON: string(reasons), CreatedAt: now, Actor: "planner",
-			},
-		}, ports.QuarantineInput{
-			QuarantineID: "q-" + string(quarantineID), BatchID: string(batchID), DecisionID: string(decisionID),
-			ReasonCodes: a.plan.ReasonCodes, CreatedAt: now,
-		}, nil
+		Observation: ports.ObservationInput{
+			ObservationID: string(observationID), SchemaVersion: "agent-dispatch.source-observation/v1",
+			SourceType: "watchman", SourceID: a.route.Source.SourceID,
+			SourceEventKey: a.input.SourceEventKey(a.route.Source.SourceID),
+			TriggerName:    a.env.Trigger, ResourceID: a.route.Source.Resource,
+			ObservedAt: now, ReceivedAt: now,
+			RawPayloadDigest: string(a.input.RawDigest), IngestStatus: "accepted",
+			FlagsJSON: string(flagsJSON), PositionJSON: string(positionJSON), Changes: changes, ImportAttributions: importAttributions,
+		},
+		Batch: ports.BatchInput{
+			BatchID: string(batchID), RouteID: a.opts.routeID, RouteRevision: a.plan.Route.Revision,
+			ResourceID: a.route.Source.Resource, CreatedAt: now,
+			ContentFingerprint: a.plan.ContentFingerprint,
+			ObservationIDs:     []string{string(observationID)},
+		},
+		Decision: ports.DecisionInput{
+			DecisionID: string(decisionID), BatchID: string(batchID), RouteID: a.opts.routeID,
+			RouteRevision: a.plan.Route.Revision, PolicyRevision: config.PolicyRevision(a.route),
+			Disposition: a.plan.Disposition, Classification: classification,
+			ReasonCodesJSON: string(reasons), CreatedAt: now, Actor: "planner",
+		},
+	}, ports.QuarantineInput{
+		QuarantineID: "q-" + string(quarantineID), BatchID: string(batchID), DecisionID: string(decisionID),
+		ReasonCodes: a.plan.ReasonCodes, CreatedAt: now,
+	}, nil
 }
 
 // errNoDestinationSelected is the fail-closed no-selection sentinel

@@ -12,15 +12,15 @@ func TestVersionMatches(t *testing.T) {
 		want     string
 		expected bool
 	}{
-		{"go1.26.6", "1.26.6", true},
-		{"1.26.6", "1.26.6", true},
-		{"go1.26.6", "go1.26.6", true},
-		{"go1.26.5", "1.26.6", false},
-		{"go1.27.0", "1.26.6", false},
-		{"go1.26", "1.26.6", false},
-		{"go1.26.6-rc1", "1.26.6", false},
-		{"go1.26.6", "1.26.7", false},
-		{"", "1.26.6", false},
+		{"go1.27.1", "1.27.1", true},
+		{"1.27.1", "1.27.1", true},
+		{"go1.27.1", "go1.27.1", true},
+		{"go1.27.0", "1.27.1", false},
+		{"go1.26.6", "1.27.1", false},
+		{"go1.27", "1.27.1", false},
+		{"go1.27.1-rc1", "1.27.1", false},
+		{"go1.27.1", "1.27.2", false},
+		{"", "1.27.1", false},
 	}
 	for _, tc := range cases {
 		if got := VersionMatches(tc.inUse, tc.want); got != tc.expected {

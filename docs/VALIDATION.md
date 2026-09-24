@@ -751,3 +751,34 @@ with exit 0. The closeout-only lifecycle, dossier retirement, generated
 traceability, and manifest delta was then validated locally without reopening
 the completed semantic review. G17 and E21 are complete; only E22-T1 is handed
 forward.
+
+## Go 1.27.1 Toolchain and Dependency Update (2026-09-24)
+
+The current checkout uses Go 1.27.1, SQLite v1.59.0, jsonschema v6.0.3,
+x/text v0.42.0, and Staticcheck v0.8.1. Historical G15-G17 qualification
+records remain above. `go mod verify`, `go mod tidy -diff`, build, format, vet,
+Staticcheck 2026.2.1, import rules, and native macOS unit/integration tests
+passed. Go 1.27.1 `gofmt` required one indentation-only update in
+`internal/cli/plan.go`.
+
+The first native `make verify` reached the race suite, where the CLI package
+hit Go's default 10-minute package timeout while other repository suites were
+running on the host. A rerun with `GOFLAGS=-timeout=30m make test-race` passed
+the CLI package in 708 seconds and all other packages except the real Hermes
+probe. That probe timed out at its 10-second `hermes --version` deadline; a
+focused race rerun reproduced the timeout. Direct `hermes --version` completed
+in under one second with the ordinary environment and in about three seconds
+with an isolated HOME and the probe's allowlisted environment. A later focused
+race run of `TestRealHermesProbeIfAvailable` passed in 2.42 seconds after host
+load declined. The subsequent full native
+`GOFLAGS=-timeout=30m make verify` passed, including the real Hermes probe,
+isolated real Watchman tests, and the CLI race package (374 seconds). The
+earlier timeout and probe failures remain recorded as host-load sensitivity.
+
+Full `make verify` passed in both `golang:1.27.1-bookworm` Linux containers,
+under `--platform linux/arm64` and `linux/amd64`, with `GOFLAGS=-timeout=30m`
+and a disposable passwd entry for the non-root host UID so OpenSSH signing
+tests could run. Both passed unit and race suites, static analysis, manifest,
+schema, traceability, sync contract, and scheduler shell checks. Those images
+had neither Hermes nor Watchman, and lacked `plutil` and `systemd-analyze`;
+their corresponding real integration and platform lints were skipped.

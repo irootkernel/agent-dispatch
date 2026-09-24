@@ -22,6 +22,11 @@ This file records concise shipped outcomes and pending changes.
 - Add truthful sync status projections for the latest publication, peer-delivery,
   and import outcomes, including unresolved signed and pending work.
 
+### Changed
+
+- Build and verify with Go 1.27.1, update pinned dependencies and Staticcheck,
+  and require macOS 13 or newer when building from source on Darwin.
+
 ### Fixed
 
 - Preserve staged Markdown changes and independent controller files during

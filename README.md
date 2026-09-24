@@ -31,7 +31,8 @@ provide the ongoing triggers and scheduling.
   skills your route requests. The generated example uses board
   `agent-dispatch`, profile `wiki-maintainer`, and skill `llm-wiki`.
 - A local state directory outside the watched vault and cloud-sync folders.
-- **Go 1.26.6** if building from source. Contributor verification also uses Python 3.
+- **Go 1.27.1** if building from source (macOS 13 or newer). Contributor
+  verification also uses Python 3.
 
 The [companion worker skill](docs/skills/agent-dispatch-wiki-maintenance/INSTALL.md)
 helps a Hermes agent report work receipts. The optional

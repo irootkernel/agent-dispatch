@@ -1,8 +1,9 @@
 # Dependency License Review
 
-Reviewed 2026-08-23 for v0.1.1 (release-checklist §1, M-27). Every module
-in `go.mod` (direct and indirect) is listed with its license and
-compatibility verdict against the project MIT license.
+Reviewed 2026-09-24 for the Go 1.27.1 dependency update. Every module in the
+resolved `go list -m all` graph (39 dependencies) is listed with its license
+and compatibility verdict against the project MIT license. The historical
+v0.1.1 review is recorded in the release checklist (§1, M-27).
 
 | Module | License | Verdict |
 |---|---|---|
@@ -46,10 +47,13 @@ compatibility verdict against the project MIT license.
 | modernc.org/strutil (indirect) | BSD-3-Clause | compatible |
 | modernc.org/token (indirect) | BSD-3-Clause | compatible |
 
-All 39 modules carry MIT, BSD-2-Clause,
+All 39 dependency modules carry MIT, BSD-2-Clause,
 BSD-3-Clause, Apache-2.0, or MPL-2.0 licenses; none impose restrictions
 incompatible with MIT distribution of the binaries and source. MPL-2.0
 (golang-lru, an indirect dependency of the staticcheck tool chain) is
 file-level copyleft and does not propagate to this project's code; the
 staticcheck tool chain and the modernc.org transitive generator modules
 are build-time dependencies and do not ship in the released binaries.
+Staticcheck is pinned at v0.8.1. SQLite is pinned at v1.59.0 with the
+modernc.org/libc v1.75.7 version required by that release.
+The SQLite module also carries public-domain SQLite and MIT sqlite-vec notices.

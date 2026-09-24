@@ -131,7 +131,8 @@ Under [D-029](specs/decision-log.md) (epic E19), Agent Dispatch is supported on
 including Linux XDG locations, are documented in
 [`ops/installation.md`](ops/installation.md). The Hermes plugin
 remains out of scope for this support matrix. E18 remains Absolute Watch-Root
-Binding (D-028 / G14), not the Linux epic.
+Binding (D-028 / G14), not the Linux epic. Source builds with the current Go
+1.27.1 pin require macOS 13 or newer on `darwin/arm64`.
 
 ## Documentation Checks
 

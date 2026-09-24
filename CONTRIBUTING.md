@@ -8,10 +8,11 @@ use English.
 ## Development Environment
 
 Use a supported platform (`darwin/arm64`, `linux/amd64`, or `linux/arm64`) and
-the Go 1.26.6 toolchain pinned in `go.mod`. Python 3 runs the traceability
-generator. Staticcheck is a pinned Go tool dependency. Watchman and Hermes are
-needed for their real integration scenarios; use disposable fixtures and the
-repository's test isolation, not production data.
+the Go 1.27.1 toolchain pinned in `go.mod` (macOS 13 or newer on Darwin).
+Python 3 runs the traceability generator. Staticcheck is a pinned Go tool
+dependency. Watchman and Hermes are needed for their real integration
+scenarios; use disposable fixtures and the repository's test isolation,
+not production data.
 
 ```sh
 make build

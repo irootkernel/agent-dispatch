@@ -5,9 +5,9 @@ For installation and normal operation, use the [public README](../../README.md).
 
 ## Prepare and Build
 
-Use Go 1.26.6 (the `go.mod` pin), Python 3, and the platform checksum and
-scheduler validation tools (`shasum` and `plutil` on macOS; `sha256sum` and
-`systemd-analyze` on Linux).
+Use Go 1.27.1 (the `go.mod` pin; macOS 13 or newer on Darwin), Python 3, and
+the platform checksum and scheduler validation tools (`shasum` and `plutil`
+on macOS; `sha256sum` and `systemd-analyze` on Linux).
 The Go command must have access to the pinned module dependencies; staticcheck
 is already declared as a tool dependency. No global staticcheck install is needed.
 Watchman and Hermes 0.20.5+ are prerequisites for real integration scenarios.

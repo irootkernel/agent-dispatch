@@ -47,14 +47,17 @@ The implementation must verify the resulting journal mode and fail `doctor` if t
 | `sync_journal_entries` | Immutable per-fence recovery and effect evidence (schema v21; migration v24 adds causal sequence) | unique journal ID; indexed job + sequence |
 | `sync_import_effects` | Immutable pre-apply before/after path evidence for live import and crash attribution (schema v22) | unique job + fence + path; newest active-or-applied effect wins per resource path |
 | `sync_import_attributions` | One-use exact Watchman consumption of an applied import effect, separate from work receipts (schema v22) | unique job + fence + path; indexed observation identity |
+| `sync_peer_nudges` | Authenticated peer wake-up inbox (schema v26); HTTP 202 follows its transaction commit | unique group + publication identity; immutable request fingerprint; pending sequence, bounded failure reason, terminal resolution; 100,000 retained rows per group before new admission is refused |
 
-Migration v25 is the current schema head. Migration v23 is a compatibility
+Migration v26 is the current schema head. Migration v23 is a compatibility
 marker and does not reopen historical `blocked` rows that older code already
 made terminal without a matching group hold. Current writers retain a new
 blocked obligation together with its hold. Migration v24 makes journal order
 explicit, and v25 persists membership posture separately and assigns every sync
-job a durable creation sequence. Exact remote confirmation, a normal membership
-replacement, or an exact administrator checkpoint may resolve an applicable
+job a durable creation sequence. Migration v26 adds the durable peer inbox;
+repeated logical requests with different payloads are refused. Exact remote
+confirmation, a normal membership replacement, or an exact administrator
+checkpoint may resolve an applicable
 current blocked obligation. Resolution makes publication and import jobs
 eligible for the completed-receipt horizon; membership and checkpoint jobs and
 journals remain for the life of the sync group.

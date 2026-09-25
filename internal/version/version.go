@@ -41,8 +41,8 @@ const ConfigVersion = "1"
 // effects and exact Watchman attribution (E21-T4); v23 is a compatibility
 // marker while current writers retain blocked sync obligations with a hold;
 // v24 adds causal journal order; v25 separates membership posture and gives
-// sync jobs a durable creation sequence.
-const SchemaRange = "1-25"
+// sync jobs a durable creation sequence; v26 adds the durable peer nudge inbox.
+const SchemaRange = "1-26"
 
 // AdapterVersions returns the pinned adapter implementation versions the
 // build carries. Each entry names the delivered surface and its verified
@@ -51,7 +51,7 @@ func AdapterVersions() map[string]string {
 	return map[string]string{
 		"watchman":      "bounded parser and managed trigger lifecycle, verified watchman 2026.07.27.00 (E2)",
 		"localfs":       "containment resolver (E2-T2)",
-		"sqlite":        "schema-v1..v25 (v2 attempts uniqueness through v7 record revision columns, v8-v9 observation revision and managed watch bindings, v10-v11 destination cutover and capability binding, v12-v13 aggregate fan-out on destination lanes, v14-v15 receipt outcomes and batch evidence, v16 durable notification outbox, v17 disabled-route baselines, v18 serialization-group topology, v19 notification drain leases and drain-run evidence, v20 managed schedule timing overrides, v21 durable sync jobs and journals, v22 exact sync-import attribution, v23 blocked-sync compatibility marker, v24 explicit sync journal sequence, v25 membership posture and sync-job sequence)",
+		"sqlite":        "schema-v1..v26 (v2 attempts uniqueness through v7 record revision columns, v8-v9 observation revision and managed watch bindings, v10-v11 destination cutover and capability binding, v12-v13 aggregate fan-out on destination lanes, v14-v15 receipt outcomes and batch evidence, v16 durable notification outbox, v17 disabled-route baselines, v18 serialization-group topology, v19 notification drain leases and drain-run evidence, v20 managed schedule timing overrides, v21 durable sync jobs and journals, v22 exact sync-import attribution, v23 blocked-sync compatibility marker, v24 explicit sync journal sequence, v25 membership posture and sync-job sequence, v26 durable peer nudge inbox)",
 		"hermeskanban":  "public-cli transport, capability probe, and durable sink, verified hermes 0.20.5 (E15-T4)",
 		"hermeswebhook": "static-declaration HTTPS sink, transport acceptance only, from the E0-T4 s9 evidence (E6-T1)",
 	}

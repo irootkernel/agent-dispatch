@@ -263,6 +263,14 @@ func CanonicalNudge(n Nudge) ([]byte, error) {
 	return json.Marshal(n)
 }
 
+func DecodeNudge(raw []byte) (Nudge, error) {
+	var n Nudge
+	if err := decodeStrict(raw, &n); err != nil {
+		return n, err
+	}
+	return n, n.Validate()
+}
+
 func recordID(v string) bool { return len(v) > 0 && len(v) <= 128 && regexpRecordID(v) }
 func regexpRecordID(v string) bool {
 	for i, b := range []byte(v) {

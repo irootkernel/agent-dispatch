@@ -73,6 +73,10 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		if err != nil {
 			return syncStoreError(stderr, command, err)
 		}
+		inbox, err := concrete.LoadPeerNudgeBacklog(requestCtx(), group)
+		if err != nil {
+			return syncStoreError(stderr, command, err)
+		}
 		return writeEnvelope(stdout, command, map[string]any{
 			"schema_version": "agent-dispatch.sync-status/v1", "group_id": group,
 			"state": control.State, "reason": control.Reason, "membership_mode": control.MembershipMode, "control_revision": control.Revision,
@@ -81,6 +85,12 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 			"latest_publication":             latestPublication,
 			"latest_delivery":                latestDelivery,
 			"latest_import":                  latestImport,
+			"peer_inbox_pending":             inbox.Pending,
+			"peer_inbox_failed":              inbox.Failed,
+			"peer_inbox_retained":            inbox.Retained,
+			"peer_inbox_retention_limit":     sqlite.PeerNudgeLedgerLimit,
+			"peer_inbox_oldest_received_at":  inbox.OldestPendingAt,
+			"peer_inbox_oldest_reason":       inbox.OldestReason,
 			"side_effects":                   []string{},
 		})
 	case "pause", "resume":
@@ -142,6 +152,8 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		return runSyncCheckpoint(args[1:], stdout, stderr)
 	case "reconcile":
 		return runSyncReconcile(args[1:], stdout, stderr)
+	case "serve":
+		return runSyncServe(args[1:], stdout, stderr)
 	default:
 		if reservedSyncCommand(args) {
 			writeErrorWithResult(stderr, command, "sync_capability_unavailable", "configuration", "the requested sync capability is reserved but unavailable in this build", map[string]any{"side_effects": []string{}})
@@ -259,7 +271,7 @@ func syncCapabilities() map[string]any {
 	return map[string]any{
 		"contract_read": true, "status_read": true,
 		"publication": true, "reconciliation": true, "pair_verification": false,
-		"peer_service": false, "control": true, "membership_plan": true,
+		"peer_service": true, "control": true, "membership_plan": true,
 		"membership_apply": true, "checkpoint_plan": true, "checkpoint_apply": true,
 		"service_render": false, "service_install": false, "service_inspect": false,
 		"service_stop": false, "service_disable": false, "service_uninstall": false,
@@ -319,7 +331,7 @@ func reservedSyncCommand(args []string) bool {
 		return false
 	}
 	switch args[0] {
-	case "verify", "serve":
+	case "verify":
 		return true
 	case "service":
 		return len(args) >= 2 && (args[1] == "render" || args[1] == "install" || args[1] == "inspect" || args[1] == "stop" || args[1] == "disable" || args[1] == "uninstall")

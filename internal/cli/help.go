@@ -82,6 +82,7 @@ Usage: agent-dispatch sync capabilities --output json
        agent-dispatch sync membership apply --group <id> --plan <file> --expected-membership-predecessor <oid|none> --output json
        agent-dispatch sync publish --group <id> --expected-config-revision <digest> --output json
        agent-dispatch sync reconcile --group <id> --output json
+       agent-dispatch sync serve --group <id>
        agent-dispatch sync checkpoint plan --group <id> --target-commit <oid> --kind <kind> --output json
        agent-dispatch sync checkpoint apply --group <id> --plan <file> --output json
 
@@ -94,6 +95,8 @@ of initial_baseline, conflict_resolution, or history_bound_exhausted;
 --output json selects the versioned machine envelope.
 
 Defaults: the platform configuration path; sync is disabled by default.
+Serve binds an owner-only Unix socket under the state directory for an
+operator-managed Tailscale HTTPS route.
 Approval requirements: none for capabilities/status, membership plan, or
 checkpoint plan. Pause and resume are
 explicit operator state changes. Membership apply resolves the configured local
@@ -124,6 +127,9 @@ Reconcile fetches and verifies bounded signed history, then applies only exact
 acknowledged, path-disjoint effects to the live tree, index, local content ref,
 and path facts while publishing immutable import effects. A later exact
 Watchman observation consumes one effect as a one-use attribution record.
+Serve accepts authenticated peer requests into a durable inbox and retries
+configured peer-delivery obligations. Its separate inbox worker invokes the
+same guarded reconcile path; signing keys are unavailable to the service.
 Checkpoint apply performs the corresponding administrator-signed content-ref
 update. Re-entering apply recovers the same already-signed checkpoint candidate;
 it never signs a replacement during recovery. A publish result of

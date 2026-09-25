@@ -138,10 +138,97 @@ Security review is required before:
 For v0.2.0, E22-T1 must complete the listener/authentication threat-model
 review before introducing `sync serve`, and E22-T5 must carry the reviewed
 real-vault automatic-write disposition into the release handoff. The peer
-listener is loopback or tailnet-only; public interface binding, Funnel, and
+listener is a local owner-only socket or tailnet-only; public interface binding, Funnel, and
 Tailscale configuration changes are outside the admitted design.
 
-## 9. v0.1.5 Boundary Additions
+### E22-T1 peer listener and authentication threat model
+
+The operator controls the Tailscale HTTPS route and its certificate. Agent
+Dispatch uses an owner-only Unix socket beneath the state directory behind
+that route. It does not create a Serve or Funnel route. A Tailscale identity or
+forwarded header alone is not application authorization: a tailnet member,
+local process, or compromised reverse proxy can still send a request. Public
+interface binding, an unexpected proxy hop, and a changed route are deployment
+failures. The peer client uses only the configured `https://*.ts.net` endpoint,
+validates its certificate and exact destination, ignores ambient proxy settings,
+and refuses redirects. The service does not log credentials or full sensitive
+URLs.
+
+The configured group, two member identities and incarnations, membership
+revision, endpoints, content ref, and direction-specific secret references are
+the authority boundary. The receiving node resolves only its inbound direction
+secret; the sender resolves only the configured outbound direction secret.
+Each request must authenticate to the configured group, sender, and receiver,
+then match the current locally signed membership. A stale revision, retired
+identity, wrong receiver, or invalid credential fails before durable admission.
+The peer request carries no incarnation field; replacing an incarnation also
+requires rotating its directional credential so the old process cannot
+authenticate as the new one. Secret values remain in memory and are compared
+without exposing their length, value, or reference. A nudge grants no
+publication, import, signing, or membership authority.
+
+The service resolves peer credentials only. It has no code path for resolving
+publisher or administrator signing keys. Managed launchd and systemd services
+run under the same user as the explicit CLI, so a same-user `file:` or
+`keychain:` signing reference cannot isolate the signer from the service.
+For a service-enabled group, signing references must use `env:` or `fd:`;
+the named variables and descriptors must be absent from the service process.
+Startup checks this condition without resolving a signing value and refuses
+`file:` or `keychain:` signing references. The operator supplies the signing
+environment or descriptor only to an explicit CLI invocation. Service render
+and install must not propagate either into the managed unit.
+
+The fixed socket path is inside an owner-only real directory, so another UID
+cannot bind the final proxy hop while the service is down. An active socket
+cannot be replaced at startup; a stale socket is removed only after a refused
+local connection. A compromised process with the same UID remains inside the
+operator's OS credential boundary and requires credential rotation. The
+operator must route Tailscale Serve to `unix:<state_dir>/peer-service/http.sock`
+and verify that no Funnel or public route exists.
+
+The HTTP parser admits only the two fixed POST routes. It limits request and
+response bytes, header bytes, concurrency, and time, rejects unsupported
+content types and transfer ambiguity, and requires exactly one unambiguous
+authorization value. JSON parsing rejects duplicate and unknown fields,
+trailing values, malformed types, and schema mismatches. The nudge body is at
+most 256 KiB; the status request body is at most 16 KiB. Peer fields are
+correlation data, never executable, path, remote, ref, profile, credential, or
+force selectors. The content ref must equal the configured ref and the target
+must be a full object ID. The nudge cannot prove that the target is trusted;
+the separate worker checks the fetched commit and publication evidence before
+import. The sender's rate budget is charged before secret resolution, including
+failed credentials, to bound credential-store work. Rate limits and bounded
+shutdown protect existing local work.
+
+An accepted nudge is keyed by its stable publication identity and exact
+sender, receiver, membership revision, and target. Duplicate delivery of the
+same logical request is idempotent; reuse of an identity with different bytes
+is refused. HTTP 202 follows the inbox transaction commit, even if the sender
+disconnects after commit. A database error or queue limit returns failure
+without a success claim. The handler may inspect local signed membership and
+refs through the restricted Git adapter, but does not fetch, import, write
+the vault, or mutate Git. A separate fenced worker handles admitted obligations.
+Failed or offline peers leave the local signed publication intact, with a durable
+delivery obligation and bounded retry. Process loss or timeout preserves the
+logical identity and does not turn an uncertain attempt into success.
+
+Fresh status is read-only. Its nonce and requested revision, commit, scope,
+and contract digests are correlation and equality checks. E22-T1 reports a
+freshly read local ref with `unknown` state and `uncertain: true`; E22-T3 will
+measure governed dirtiness, pending work, membership currentness, and evidence
+age for pair verification. Echoing a new nonce cannot refresh cached evidence.
+Pair convergence requires observations from both nodes within the 300-second
+age bound. Shutdown stops admission, lets committed requests finish within the
+bounded grace period, and preserves queued work for restart.
+
+The security review accepts this model only if implementation and tests cover
+wrong-direction, revoked and stale membership, replay and conflicting
+duplicates, parser ambiguity, payload and resource bounds, redirects, commit
+before 202, crash recovery, and shutdown. An unresolved local bind, identity,
+or credential ambiguity blocks listener activation. The external HTTPS route
+remains an operator deployment check.
+
+## 10. v0.1.5 Boundary Additions
 
 - Destination profile, skill, workstream, workspace, target, mutex, conditions,
   and notification sinks come only from trusted configuration.

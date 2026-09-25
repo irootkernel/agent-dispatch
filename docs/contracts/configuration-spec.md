@@ -458,9 +458,19 @@ references, direction-specific peer secret references, and bounded queue,
 history, subprocess time, and subprocess output values. Inline credentials,
 unknown fields, a third member, a non-Git resource, a public or credential-bearing
 endpoint, or reused trust or directional credentials fail configuration
-validation. An enabled block activates only implemented protected surfaces; it
-does not make the reserved listener, verification, or service capabilities
-available. Guarded import is available only through explicit `sync reconcile`.
+validation. An enabled block activates only implemented protected surfaces.
+Pair verification and managed service lifecycle remain reserved until their
+E22 tasks complete. `sync serve` binds an owner-only
+`<state_dir>/peer-service/http.sock` Unix socket; the operator manages the
+Tailscale HTTPS route separately. `sync.bounds.queue` limits pending nudges.
+A fixed 100,000-row cap limits retained nudge identities per group.
+`sync status` reports that bound, and admission refuses new identities without
+deleting replay evidence. For a service-enabled group, signing-key references
+must be `env:` variables absent from the service environment or `fd:`
+descriptors absent from the service process. Same-user
+`file:` and `keychain:` signing references are refused by service startup.
+Guarded import uses the same `sync reconcile` application path whether invoked
+by an operator or by the admitted inbox worker.
 Publication remains an explicit CLI action and never becomes automatic merely
 because the block is enabled. Membership plan needs no signing secret. Membership apply requires
 `administrator_signing_key_ref` to resolve immediately before use to OpenSSH

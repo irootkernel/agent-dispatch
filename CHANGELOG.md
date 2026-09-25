@@ -21,6 +21,8 @@ This file records concise shipped outcomes and pending changes.
   attribution for imported writes, renames, and deletions.
 - Add truthful sync status projections for the latest publication, peer-delivery,
   and import outcomes, including unresolved signed and pending work.
+- Add authenticated local peer service over an owner-only Unix socket with a durable idempotent nudge inbox,
+  bounded conservative status responses, and configured HTTPS delivery retries.
 
 ### Changed
 

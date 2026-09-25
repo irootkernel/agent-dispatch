@@ -2,8 +2,9 @@
 
 > **Status:** Partially implemented for v0.2.0 under D-030. E21 provides
 > qualified durable jobs and control, restricted Git and membership, explicit
-> signed publication, signed checkpoints, guarded local import, and exact
-> attribution. Peer service, pair verification, and release remain unavailable.
+> signed publication, signed checkpoints, guarded local import, exact
+> attribution, and authenticated peer admission. Periodic recovery, pair
+> verification, managed service lifecycle, and release remain unavailable.
 
 Agent Dispatch extends the existing maintenance loop with an explicit Git
 publication step and a peer import loop. Hermes still owns Wiki semantics.
@@ -23,9 +24,9 @@ local change -> Watchman -> maintenance lanes -> validated receipt
                                                    v
                                   fetch and validate -> guarded import -> receipt
 
-future: peer service -> inbox -> the same reconciliation/import path
+peer service -> durable inbox -> the same reconciliation/import path
              ^
-             +---- periodic reconciliation
+             +---- periodic ref inspection (E22-T2)
 ```
 
 ## Boundaries
@@ -39,7 +40,7 @@ fixed-argument subprocess execution, delimiter-safe parsing, SSH signature
 verification, explicit refspecs, deadlines, and output limits. The peer HTTP
 adapter owns authentication, parsing, size limits, and response mapping only.
 
-The future service must use the same application methods as manual CLI commands
+The service uses the same guarded reconciliation path as the manual CLI command
 and must not create an alternate Git or recovery path. Local SQLite state is
 never placed in Git or on a network filesystem.
 
@@ -74,8 +75,37 @@ immutable-object method. It never runs broad `git add -A` over a mutable live
 tree. Edits that arrive after the frozen snapshot remain local and dirty. The
 publisher key is available only to the explicit `sync publish` process.
 Explicit re-entry of `sync publish` may recover an already-signed candidate.
-No peer service performs that recovery until E22, and a future service cannot
-sign unattended.
+No service signs a publication unattended.
+
+## Peer service
+
+`sync serve` binds an owner-only Unix socket at
+`<state_dir>/peer-service/http.sock` and leaves the Tailscale HTTPS route under
+operator control. It accepts only the configured peer identity and directional
+credential after checking the current locally signed membership. Strict JSON
+and HTTP bounds precede an idempotent SQLite inbox transaction. HTTP 202 means
+that transaction committed. A separate worker wakes the existing guarded
+`sync reconcile` path; the nudge never supplies its remote, ref, path, or
+executable. Delivery jobs use the configured `.ts.net` HTTPS origin with
+certificate verification, no ambient proxy, and no redirects. A lost response
+retains an unknown delivery attempt and replays the same logical request under
+a new fence. The service has no signing-key resolution path and refuses startup
+when its process can access a configured signer reference.
+The inbox worker reconciles the approved remote once for each pending batch,
+then records each hint separately. A target covered by the local bounded
+history is `covered`; a stale or unrelated target is `superseded` only after
+the current approved remote head has reconciled, without claiming that hint's
+target was imported. Invalid persisted payloads retain an `invalid_payload`
+record. Deferred rows retain a reason and cannot block later rows. Enabled
+`sync status` exposes pending and failed counts, the oldest pending timestamp,
+and the oldest row's bounded reason. Configuration drift and worker failures
+produce rate-limited service warnings. After a configuration revision changes,
+the operator runs `sync reconcile` to refresh the guarded control revision and
+restarts `sync serve` to load the new configuration. Until both actions succeed,
+peer admission and delivery remain deferred.
+The inbox retains at most 100,000 logical nudge identities per group.
+Exhaustion refuses new nudges while the sender retains its delivery obligation;
+`sync status` reports the retained count and limit for operator diagnosis.
 
 ## Import and attribution
 
@@ -132,8 +162,8 @@ Nudges reduce latency but are not required for correctness. Startup and
 periodic reconciliation inspect configured Git refs and recover missed work.
 An offline peer does not block local publication, but fresh pair convergence
 remains incomplete until both nodes answer with current authenticated evidence.
-The listener binds only to a loopback or tailnet-only endpoint, does not enable
-Funnel or public exposure, and does not modify Tailscale configuration.
+The peer listener binds an owner-only local Unix socket. The service does not
+enable Funnel or public exposure and does not modify Tailscale configuration.
 
 Verification rechecks membership and content refs before completion. A changed
 target produces `target_changed` rather than a false success. Equal commit IDs

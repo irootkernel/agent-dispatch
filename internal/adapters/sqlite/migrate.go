@@ -57,6 +57,7 @@ var Migrations = []Migration{
 	{Version: 23, Name: "retain-blocked-sync-obligations", SQL: schemaV23RetainBlockedSyncObligations},
 	{Version: 24, Name: "sequence-sync-journals", SQL: schemaV24SequenceSyncJournals},
 	{Version: 25, Name: "sync-membership-posture-and-job-sequence", SQL: schemaV25SyncMembershipPostureAndJobSequence},
+	{Version: 26, Name: "sync-peer-nudge-inbox", SQL: schemaV26SyncPeerNudgeInbox},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
@@ -226,6 +227,26 @@ CREATE TRIGGER sync_jobs_assign_sequence AFTER INSERT ON sync_jobs
 BEGIN
 	INSERT INTO sync_job_sequences(job_id) VALUES (NEW.job_id);
 END;
+`
+
+// schemaV26SyncPeerNudgeInbox retains each logical request identity after
+// processing, so a replay cannot create a second obligation. Pending rows are
+// ordered by a durable sequence rather than a caller supplied timestamp.
+const schemaV26SyncPeerNudgeInbox = `
+CREATE TABLE sync_peer_nudges (
+	sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+	group_id TEXT NOT NULL CHECK (length(group_id) BETWEEN 1 AND 256),
+	publication_id TEXT NOT NULL CHECK (length(publication_id) BETWEEN 1 AND 256),
+	request_fingerprint TEXT NOT NULL CHECK (length(request_fingerprint) BETWEEN 1 AND 128),
+	payload_json TEXT NOT NULL CHECK (length(payload_json) BETWEEN 1 AND 16384 AND json_valid(payload_json)),
+	received_at TEXT NOT NULL CHECK (length(received_at) BETWEEN 1 AND 64),
+	processed_at TEXT,
+	resolution TEXT NOT NULL DEFAULT 'pending' CHECK (resolution IN ('pending','covered','superseded','invalid_payload','obsolete_binding')),
+	last_reason TEXT NOT NULL DEFAULT '',
+	UNIQUE (group_id, publication_id)
+);
+CREATE INDEX idx_sync_peer_nudges_pending ON sync_peer_nudges(group_id, sequence)
+	WHERE processed_at IS NULL;
 `
 
 // migrationVersion resolves one registered migration's version by

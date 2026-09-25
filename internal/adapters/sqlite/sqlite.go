@@ -197,7 +197,7 @@ func rejectNetworkPlacementStatfs(path string, statfs func(string, *syscall.Stat
 func isBusy(err error) bool {
 	var derr *sqlite.Error
 	if errors.As(err, &derr) {
-		return derr.Code() == 5 || derr.Code() == 261
+		return derr.Code() == 5 || derr.Code() == 261 || derr.Code() == 517
 	}
 	return false
 }

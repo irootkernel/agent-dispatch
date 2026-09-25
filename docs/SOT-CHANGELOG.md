@@ -8,8 +8,10 @@ retain their recorded scope; migrated document pointers use their current paths.
 ## 1.8.0 - Unreleased
 
 E21 implements and qualifies the durable local substrate, signed membership,
-explicit publication, checkpoints, and guarded local import for the still-manual
-two-node sync workflow. Peer service, pair verification, and release remain disabled.
+explicit publication, checkpoints, and guarded local import. E22-T1 adds
+authenticated peer admission over an owner-only local socket. Periodic
+recovery, pair verification, managed service lifecycle, and release remain
+incomplete.
 
 - SQLite schema v21 stores group controls, idempotent logical jobs, fenced
   claims, bounded attempts, and append-only recovery journals before effects.
@@ -37,6 +39,10 @@ two-node sync workflow. Peer service, pair verification, and release remain disa
 - E21-T5 qualifies G17 on every supported platform with disposable repositories,
   pins two-writer history preservation, documents the unsupported Git surface,
   and exposes publication, delivery, and import outcomes separately in status.
+- E22-T1 adds schema v26 for a durable idempotent peer inbox, an authenticated
+  owner-only Unix-socket listener, conservative status observations, and configured HTTPS delivery
+  retries. Service signing references are limited to command-only `env:` or
+  `fd:` inputs absent from the service process.
 - Validation remediation makes schema v23 a compatibility marker while current
   writers retain blocked obligations with their matching hold, and adds schema
   v24 causal journal sequencing. Same-base push rejection preserves the signed

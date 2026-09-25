@@ -735,8 +735,8 @@ claimed here.
 
 The capability matrix remains exact against
 `docs/contracts/sync-provider-v1/commands.json`: publication, reconciliation,
-control, membership, and checkpoint commands are implemented; peer verify,
-serve, and managed service commands remain reserved and return
+control, membership, checkpoint, and peer serve commands are implemented;
+peer verify and managed service commands remain reserved and return
 `sync_capability_unavailable`. Enabled status now exposes the latest durable
 publication, delivery, and import outcomes separately, including unresolved
 signed, pending, deferred, or uncertain work. Full repository verification and
@@ -751,6 +751,71 @@ with exit 0. The closeout-only lifecycle, dossier retirement, generated
 traceability, and manifest delta was then validated locally without reopening
 the completed semantic review. G17 and E21 are complete; only E22-T1 is handed
 forward.
+
+## Gate G18: Peer Recovery, Verification, and Operations (E22)
+
+E22-T1 implementation began on 2026-09-25. An independent review of
+the listener and authentication threat model found two issues. The corrected
+model passed a focused follow-up review before `sync serve` was introduced.
+The peer service binds an owner-only state-directory Unix socket, persists authenticated
+nudges in schema v26 before HTTP 202, and reuses the guarded `sync reconcile`
+path from a separate inbox worker. The configured HTTPS delivery client does
+not use ambient proxies or follow redirects. Focused tests cover wrong
+identity, group, receiver, membership revision, and credential; duplicate and
+conflicting nudges; parser ambiguity, queue and rate bounds; response loss;
+signer isolation; conservative status; and graceful shutdown with retained
+inbox work. The schema v25-to-v26 upgrade, concurrent admission, commit
+failure, and reopen recovery were exercised in the SQLite suite.
+The first six-role Mulgae T1 review found three Medium and three Low issues.
+The correction makes error triples match the registry, prevents stale inbox
+rows from blocking later hints, exposes backlog and configuration drift, and
+aligns the staged command and response documentation. The corrected target's
+focused CLI and SQLite race checks passed. Full verification with the installed
+real Hermes hit its 10-second probe deadline; the failure is unrelated to the
+peer service change.
+The second six-role review passed CI and coverage but found missing assertions
+for enabled inbox status and delivery response classes. Focused CLI tests now
+cover both. The same review identified a local port-squatting risk; the revised
+candidate uses an owner-only Unix socket. Master approved the corresponding
+SYN-006 and AC-1806 transport clarification on 2026-09-25.
+`GOFLAGS=-timeout=30m make verify` passed on the revised candidate with the
+installed Hermes removed from the test `PATH`; this skipped its optional real
+probe while retaining the installed real Watchman tests. Build, format, vet,
+staticcheck, import rules, unit and race suites, manifest, schema, traceability,
+schedule, and sync contract checks passed. The socket's active-occupancy,
+stale-path recovery, file-squat refusal, and owner-only mode have focused tests.
+The third six-role review passed CI and complete role coverage but identified a
+stale-control diagnostic and recovery-guidance gap, a peer-inbox timestamp
+projection defect, and stale Unix-socket wording. The correction warns when a
+loaded control revision is stale, directs the operator to guarded `sync
+reconcile` before restarting the service, selects the oldest inbox row by
+sequence, and aligns the architecture and SOT changelog. The inbox worker now
+invokes the guarded operator command in a separate process group and cancels
+that group on shutdown, including its Git children. The fourth six-role
+confirmation review identified that the existing shutdown test substituted the
+reconcile call and did not exercise the real child process. A focused test now
+re-executes the test binary through the actual `runReconcile` branch, checks its
+arguments and configuration binding, and verifies that cancellation terminates
+both the child and its grandchild. Separate assertions cover the admission and
+delivery warnings for stale control. Other focused tests exercise live
+disablement, held and stale control, directional credentials, wake and
+cancellation, reconcile success and failure, membership refusal, and parser
+status codes.
+The retained nudge ledger is capped at 100,000 identities per group; new
+identities are refused at the bound while exact replays remain idempotent and
+the sender keeps its delivery obligation. Enabled `sync status` exposes the
+retained count and limit, and a focused store test covers exhaustion.
+The fifth six-role confirmation completed with CI passing and full role
+coverage after exact reruns of two roles that hit provider rate limits. Its
+accepted reports confirmed the three prior corrections. A new Low test gap
+for successful child output was then closed locally: a focused test now checks
+that a real child result reaches `runReconcile` as a settled target. A reported
+cleanup leak on the test's readiness-failure path was invalid because the
+test registers context cancellation before waiting for readiness.
+
+These checks cover T1 behavior in disposable local fixtures. Later E22 tasks
+cover lost-nudge periodic recovery, fresh pair completion, managed service
+lifecycle, and real two-node AC-1805 qualification.
 
 ## Go 1.27.1 Toolchain and Dependency Update (2026-09-24)
 

@@ -15,9 +15,9 @@
 | Release target | v0.2.0 (Two-Node Wiki Sync MVP) |
 | Current epic | E22 Peer Recovery, Verification, and Operations (In Progress) |
 | Current active task | None |
-| Next task | E22-T1 Authenticated peer service and durable nudges |
-| Completed tasks | 111 / 116 |
-| Planned tasks | 5 / 116 |
+| Next task | E22-T2 Periodic reconciliation and offline catch-up |
+| Completed tasks | 112 / 116 |
+| Planned tasks | 4 / 116 |
 | In progress tasks | 0 |
 | In review tasks | 0 |
 | Blocked tasks | 0 |
@@ -175,7 +175,7 @@
 | 109 | E21-T3 | Completed | Explicit signed publication workflow |
 | 110 | E21-T4 | Completed | Guarded import and exact Watchman attribution |
 | 111 | E21-T5 | Completed | Publication/import crash and conflict qualification |
-| 112 | E22-T1 | Planned | Authenticated peer service and durable nudges |
+| 112 | E22-T1 | Completed | Authenticated peer service and durable nudges |
 | 113 | E22-T2 | Planned | Periodic reconciliation and offline catch-up |
 | 114 | E22-T3 | Planned | Pair status and fresh verification |
 | 115 | E22-T4 | Planned | Managed service lifecycle and diagnostics |
@@ -5499,7 +5499,7 @@ fresh pair verification, service management, and real two-node qualification.
 
 ## E22-T1: Implement Authenticated Peer Service and Nudges
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -5526,7 +5526,7 @@ E21-T5 Completed.
 
 - HTTP 202 follows the durable inbox commit and never claims import completion.
 - One peer failure does not block local publication or healthy local work.
-- The listener is loopback or tailnet-only, exposes no public/Funnel surface,
+- The listener is local-only or tailnet-only, exposes no public/Funnel surface,
   and makes no Tailscale configuration change.
 - Peer data cannot choose Git, filesystem, executable, profile, or credential inputs.
 

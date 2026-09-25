@@ -130,7 +130,19 @@ behavior.
 Enabled `sync status` reports `latest_publication`, `latest_delivery`, and
 `latest_import` separately so a signed or uncertain publication, pending peer
 delivery, and local import can never collapse into one claimed outcome. Every
-projection includes the durable job identity, logical key, state, update time,
+enabled response also reports `peer_inbox_pending`, `peer_inbox_failed`,
+`peer_inbox_retained`, `peer_inbox_retention_limit`,
+`peer_inbox_oldest_received_at`, and `peer_inbox_oldest_reason`. A deferred
+nudge retains its bounded reason; a covered or superseded nudge remains in the
+ledger while freeing queue capacity. `sync serve --group GROUP` listens on an
+owner-only Unix socket at `<state_dir>/peer-service/http.sock` for an
+operator-managed Tailscale HTTPS route. Startup rejects accessible signing
+references, a conflicting live socket, and unsafe socket path ownership.
+It prints startup and shutdown feedback to stderr, reports bounded worker
+warnings, and does not configure Tailscale. E22-T2 adds independent periodic
+configured-ref reconciliation; T1 wakes on admitted inbox work.
+
+Each job projection includes the durable job identity, logical key, state, update time,
 resolution, claim, and fence. Resolution evidence is reported separately from
 the historical terminal state, and later resolver journals do not erase the
 latest reason, candidate, remote, or push disposition. A newer successful

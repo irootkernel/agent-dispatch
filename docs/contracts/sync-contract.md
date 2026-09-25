@@ -56,8 +56,8 @@ administrator-signed checkpoint; it never adopts uncovered history by itself.
 scope digest, contract digest, both node identities, and their incarnations.
 It reports historical delivery separately from fresh pair convergence.
 
-`sync serve` hosts the authenticated nudge and fresh-status endpoints and runs
-bounded periodic reconciliation. HTTP handlers validate and persist requests;
+`sync serve` hosts the authenticated nudge and fresh-status endpoints. E22-T2
+adds bounded periodic configured-ref reconciliation. HTTP handlers validate and persist requests;
 application services perform Git and filesystem effects after admission.
 
 `pause` prevents new protected effects and lets in-flight work reach a safe
@@ -140,7 +140,7 @@ age is at most 300 seconds, and `complete` requires the bound for both nodes.
 Requests reject unknown fields, duplicate-field ambiguity, oversized input,
 wrong group or receiver, revoked identities, unsupported schemas, invalid
 credentials, and unapproved redirects. Peer messages never contain note bodies
-or arbitrary commands. The listener is loopback or tailnet-only, never enables
+or arbitrary commands. The listener is local-only or tailnet-only, never enables
 Funnel or public binding, never changes Tailscale configuration, and
 verifies the configured peer endpoint and certificate.
 
@@ -150,6 +150,9 @@ Publication preparation, remote publication, nudge acceptance, local import,
 historical delivery, and fresh pair convergence are separate durable milestones. Every external effect
 has a stable logical identity, bounded attempts, claim ownership, a fencing
 generation, and an explicit ambiguous outcome.
+The peer inbox retains at most 100,000 logical nudge identities per group.
+At that bound it refuses a new identity before HTTP 202, while the sender keeps
+its delivery obligation. Exact replays of retained identities remain idempotent.
 
 The service recovers already-signed publication, delivery, and import work at
 startup and during periodic reconciliation. Duplicate or reordered nudges are
@@ -176,7 +179,7 @@ uses the explicit v25 sync-job sequence and fence, never a hidden SQLite
 | Record | State progression | Terminal or held result |
 |---|---|---|
 | publication job | `eligible -> prepared -> signed -> push_pending -> published` | `blocked` or `uncertain` retains the obligation |
-| delivery | `pending -> attempted -> accepted` | `retryable`, `unknown`, or `refused`; HTTP 202 proves only `accepted` |
+| delivery | `pending -> accepted` (`attempted` is optional) | `retryable`, `unknown`, or `refused`; HTTP 202 proves only `accepted` |
 | import | `requested -> fetched -> validated -> applying -> applied` | `deferred`, `blocked`, `recovering`, or `uncertain` |
 | control | `active <-> paused` | `blocked` requires explicit recovery evidence; `membership_mode` records the separate adopted posture in every canonical control record |
 | verification | `planned -> collecting -> finished` | `complete`, `incomplete`, `target_changed`, `blocked`, or `expired` |

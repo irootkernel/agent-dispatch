@@ -1695,6 +1695,41 @@ func (s *Store) ReconcileExpiredSyncClaim(ctx context.Context, jobID string, exp
 	return tx.Commit()
 }
 
+// PrepareUnknownDeliveryRetry records why replaying an ambiguous delivery is
+// safe: the immutable logical key and request fingerprint are reused, and the
+// receiver's inbox is idempotent on those same values. This exceptional edge
+// does not turn an unknown attempt into accepted evidence.
+func (s *Store) PrepareUnknownDeliveryRetry(ctx context.Context, jobID string, expectedFence int64, journal SyncJournalEntry, now string) error {
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	row, err := loadSyncJob(ctx, tx, jobID)
+	if err != nil {
+		return err
+	}
+	if row.Kind != "delivery" || row.State != "unknown" || row.Fence != expectedFence || row.ClaimOwner != "" || row.ResolvedAt != "" || row.RequestFingerprint == "" {
+		return ErrSyncPrecondition
+	}
+	if journal.JobID != jobID || journal.Fence != expectedFence || journal.JournalID == "" || journal.RecordedAt != now || journal.Phase != "claim_recovery" || journal.Outcome != "effect_unknown" {
+		return fmt.Errorf("delivery replay journal does not bind the unknown attempt")
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO sync_journal_entries
+		(journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES (?,?,?,?,?,?,?)`,
+		journal.JournalID, journal.JobID, journal.Fence, journal.Phase, journal.Outcome, journal.EvidenceJSON, journal.RecordedAt); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE sync_jobs SET state='retryable',updated_at=? WHERE job_id=? AND fence=? AND state='unknown' AND claim_owner IS NULL AND resolved_at IS NULL`, now, jobID, expectedFence)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return ErrSyncPrecondition
+	}
+	return tx.Commit()
+}
+
 // ResolveObsoleteImport retires a validated import that is unclaimed, or whose
 // expired claim is proven not to have started, after the approved plan moved.
 func (s *Store) ResolveObsoleteImport(ctx context.Context, jobID string, expectedFence int64, journal SyncJournalEntry, now string) error {

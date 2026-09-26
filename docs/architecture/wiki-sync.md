@@ -4,8 +4,8 @@
 > qualified durable jobs and control, restricted Git and membership, explicit
 > signed publication, signed checkpoints, guarded local import, and exact
 > attribution. E22-T1 adds authenticated peer admission; E22-T2 adds periodic
-> recovery. Pair verification, managed service lifecycle, and release remain
-> unavailable.
+> recovery; E22-T3 adds local pair verification. Managed service lifecycle and
+> real two-node release qualification remain unavailable.
 
 Agent Dispatch extends the existing maintenance loop with an explicit Git
 publication step and a peer import loop. Hermes still owns Wiki semantics.
@@ -187,3 +187,11 @@ or uncertain evidence.
 Each status observation retains its measured age. Evidence is fresh only at
 300 seconds or less; verification persists that age and derives the boolean
 freshness flag from the same bound.
+The verifier admits a planned SQLite job before the HTTPS request. It observes
+the peer with the outbound directional credential, samples local Git and queue
+state, then rechecks both remote refs, the local refs, and the sync configuration.
+Only two authenticated nonce-bound observations can complete the job. A lost
+peer leaves one collected node and an `incomplete` result; an interrupted plan
+remains visible and expires after five minutes when a later verification runs.
+The service samples local
+status for each inbound request rather than recycling a cached result.

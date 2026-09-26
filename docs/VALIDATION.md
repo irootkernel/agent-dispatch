@@ -837,8 +837,43 @@ reservation expiry, the failure cap, the paused and stale-control guards,
 the stale-control warning remedy, membership adoption followed by content
 reconciliation, and process-group cancellation on shutdown. These local
 fixtures cover T1 and T2 behavior.
-T3 owns fresh pair completion, T4 owns managed service lifecycle, and T5 owns
-real two-node AC-1805 qualification.
+
+E22-T3 local qualification uses fresh Git and SQLite observations for local
+status, including a governed edit and pending delivery. A signed-membership
+real-Git fixture drives `sync verify` through a nonce-correlated peer response:
+two clean nodes complete, an offline peer leaves one observed node and an
+incomplete result, and content or membership ref movement during collection
+produces `target_changed`. Separate tests reject a stale response and a wrong
+nonce, check the directional credential, and cover atomic verification outcome
+and interrupted planned-job expiry. The peer response in these tests uses an
+in-process HTTP transport; T5 retains real two-node qualification. T4 owns
+managed service lifecycle.
+
+The first six-role T3 static review had committed publication, complete role
+coverage, and a passing backend CI decision. Its structured extraction was
+`reports_only`, so the role reports were read directly. They found a mismatch
+between the verification job's declared transitions and its store update, a
+case-variant reserved-path gap, two stale contract statements, and missing
+negative checks. The corrected store traverses the declared transitions in
+one transaction, the observation path shares publication's portable reserved
+path rule, and the verifier rechecks age before completion under a four-minute
+command deadline. Focused tests now cover those corrections, obsolete
+incarnations, local dirty and pending results through `sync verify`, generation
+sanity, response decoding bounds, warning codes, configuration movement, and
+expiry journaling. T3 closeout requires a fresh selected-route review and full
+verification of the corrected candidate.
+
+The second T3 six-role review completed through exact recovery of three
+rate-limited role attempts. Its composite publication had complete coverage
+and a passing CI decision. The reports found that protected and Git-ignored
+working files could escape governed-dirtiness detection, and that deadline and
+warning-branch assertions were incomplete. The next candidate classifies
+protected-path errors as uncertain, includes ignored occupants in the Git
+observation, retains incomplete verification evidence until superseded, keeps
+planned intent separate from the finished record schema, and tests the live
+deadline against interrupted expiry. Focused tests exercise local binding and
+unavailable target rechecks, final local-state changes, interrupted-plan
+visibility, the exact expiry boundary, and reserved service failure.
 
 ## Go 1.27.1 Toolchain and Dependency Update (2026-09-24)
 

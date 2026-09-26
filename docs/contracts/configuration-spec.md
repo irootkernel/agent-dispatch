@@ -459,10 +459,11 @@ history, subprocess time, and subprocess output values. Inline credentials,
 unknown fields, a third member, a non-Git resource, a public or credential-bearing
 endpoint, or reused trust or directional credentials fail configuration
 validation. An enabled block activates only implemented protected surfaces.
-Pair verification and managed service lifecycle remain reserved until their
-E22 tasks complete. `sync serve` binds an owner-only
+Pair verification is implemented in E22-T3. Managed service lifecycle remains
+reserved until E22-T4. `sync serve` binds an owner-only
 `<state_dir>/peer-service/http.sock` Unix socket; the operator manages the
-Tailscale HTTPS route separately. `sync.bounds.queue` limits pending nudges.
+Tailscale HTTPS route separately. `sync.bounds.queue` limits all unresolved
+group obligations, including nudges, publications, imports, and verifications.
 A fixed 100,000-row cap limits retained nudge identities per group.
 `sync status` reports that bound, and admission refuses new identities without
 deleting replay evidence. For a service-enabled group, signing-key references

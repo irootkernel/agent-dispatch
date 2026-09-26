@@ -106,7 +106,7 @@ func ValidateFiles(cfg *config.Config, resourceID string, files map[string][]byt
 	}
 	aliases := map[string]string{}
 	for path := range files {
-		if reservedMetadataPath(path) {
+		if ReservedMetadataPath(path) {
 			return fmt.Errorf("remote content path %q targets reserved sync or Git metadata", path)
 		}
 		included, err := governedMarkdown(path, engines)
@@ -125,6 +125,17 @@ func ValidateFiles(cfg *config.Config, resourceID string, files map[string][]byt
 	return nil
 }
 
+// ClassifyLocalPath reports whether a working-tree path is governed. A
+// protected path or invalid route configuration remains an error so a peer
+// observation cannot mistake it for an out-of-scope path.
+func ClassifyLocalPath(cfg *config.Config, resourceID, path string) (bool, error) {
+	engines, _, err := buildRouteEngines(cfg, resourceID)
+	if err != nil {
+		return false, err
+	}
+	return governedMarkdown(path, engines)
+}
+
 // ValidateTransition applies local path safety to both the target tree and
 // removals from its predecessor. A trusted signer may propose a deletion, but
 // cannot override this node's protected or immutable policy.
@@ -140,7 +151,7 @@ func ValidateTransition(cfg *config.Config, resourceID string, before, after map
 		if _, present := after[path]; present {
 			continue
 		}
-		if reservedMetadataPath(path) {
+		if ReservedMetadataPath(path) {
 			return fmt.Errorf("remote content deletion targets reserved sync or Git metadata path %q", path)
 		}
 		if err := rejectProtectedPath(path, engines); err != nil {
@@ -245,7 +256,7 @@ func captureOnce(resolver *localfs.Resolver, engines []routeEngines, max int64) 
 		rel = filepath.ToSlash(rel)
 		policyPath := rel
 		if d.IsDir() {
-			if reservedMetadataPath(rel) {
+			if ReservedMetadataPath(rel) {
 				return fs.SkipDir
 			}
 			return nil
@@ -300,7 +311,9 @@ func captureOnce(resolver *localfs.Resolver, engines []routeEngines, max int64) 
 	return out, nil
 }
 
-func reservedMetadataPath(path string) bool {
+// ReservedMetadataPath recognizes controller and Git metadata using the same
+// portable path identity applied to publication and import candidates.
+func ReservedMetadataPath(path string) bool {
 	path = filepath.ToSlash(path)
 	first := path
 	if slash := strings.IndexByte(path, '/'); slash >= 0 {

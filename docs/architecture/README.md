@@ -14,4 +14,4 @@ For the partially implemented v0.2.0 two-node Git sync loop, read
 [`wiki-sync.md`](wiki-sync.md). E21 provides local control, membership, signed
 publication, checkpoints, and guarded import. E22-T1 adds authenticated peer
 admission, and E22-T2 adds periodic configured-ref recovery. Pair verification
-remains planned.
+is implemented locally in E22-T3; real two-node qualification remains E22-T5.

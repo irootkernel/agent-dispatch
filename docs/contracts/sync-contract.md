@@ -139,6 +139,12 @@ uncertainty. Cached evidence retains its original age and generation; echoing a
 new nonce does not make cached evidence fresh. Verification carries each
 response's `evidence_age_seconds`; `evidence_fresh` is true exactly when that
 age is at most 300 seconds, and `complete` requires the bound for both nodes.
+The peer service samples Git working paths and unresolved local work for each
+request. Its `evidence_generation` is the observation time in Unix
+nanoseconds; the verifier increases a reported age by elapsed wall time and
+rejects an implausible future generation. Verification refreshes the age again
+before recording a completion decision. Status and verification never use a
+request-supplied path, ref, repository, or command.
 
 Requests reject unknown fields, duplicate-field ambiguity, oversized input,
 wrong group or receiver, revoked identities, unsupported schemas, invalid
@@ -223,6 +229,12 @@ Publication `published`, delivery `accepted`, import `applied`, and verification
 stable logical record ID, attempt count, claim owner where applicable, and a
 monotonic fence before an external effect. Retries reuse the logical ID and a
 new fence; lease expiry, process loss, or timeout alone cannot advance state.
+An interrupted verification admission remains `planned` and visible until a
+later invocation records its five-minute expiry. The verification command has
+a four-minute overall deadline, so a live attempt cannot cross the expiry age.
+A finished attempt stores
+its target, collected nodes, result, and bounded reason codes in a journal;
+historical delivery remains an independent job outcome.
 The provider `results.json` file freezes semantic outcome fragments, not the
 literal CLI wire envelope. CLI responses wrap those fragments in
 `agent-dispatch.cli/v1` and may add target identity fields; the error registry

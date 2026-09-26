@@ -272,7 +272,7 @@ func (s *peerService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	limit := int64(256 << 10)
 	if r.URL.Path == "/v1/sync/status" {
-		limit = 16 << 10
+		limit = syncrecords.MaxPeerStatusBytes
 	}
 	if r.ContentLength > limit {
 		http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
@@ -344,19 +344,7 @@ func (s *peerService) status(w http.ResponseWriter, r *http.Request, raw []byte)
 		http.Error(w, "status unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	localHead, err := client.ResolveRef(r.Context(), s.cfg.Sync.ContentRef)
-	if err != nil {
-		http.Error(w, "status unavailable", http.StatusServiceUnavailable)
-		return
-	}
-	response := syncrecords.StatusResponse{
-		SchemaVersion: syncrecords.StatusResponseSchema, GroupID: request.GroupID,
-		Responder: s.cfg.Sync.LocalInstanceID, StateIncarnationID: localSyncIncarnation(s.cfg),
-		MembershipRevision: request.MembershipRevision, ContentRef: s.cfg.Sync.ContentRef,
-		TargetCommit: localHead, ScopeDigest: request.ScopeDigest, ContractDigest: request.ContractDigest,
-		Nonce: request.Nonce, EvidenceGeneration: time.Now().UnixNano(), EvidenceAgeSeconds: 0,
-		State: "unknown", GovernedDirty: true, PendingWork: true, MembershipCurrent: false, Uncertain: true,
-	}
+	response := observeSyncPeer(r.Context(), s.cfg, s.store, client, request)
 	if err := response.Validate(); err != nil {
 		http.Error(w, "status unavailable", http.StatusServiceUnavailable)
 		return

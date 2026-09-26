@@ -214,8 +214,8 @@ logical identity and does not turn an uncertain attempt into success.
 
 Fresh status is read-only. Its nonce and requested revision, commit, scope,
 and contract digests are correlation and equality checks. E22-T1 reports a
-freshly read local ref with `unknown` state and `uncertain: true`; E22-T3 will
-measure governed dirtiness, pending work, membership currentness, and evidence
+freshly read local ref with `unknown` state and `uncertain: true`; E22-T3
+measures governed dirtiness, pending work, membership currentness, and evidence
 age for pair verification. Echoing a new nonce cannot refresh cached evidence.
 Pair convergence requires observations from both nodes within the 300-second
 age bound. Shutdown stops admission, lets committed requests finish within the

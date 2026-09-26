@@ -69,6 +69,25 @@ not require a cooperative-import acknowledgement, but live-tree import does.
 The repository worktree must have the configured `content_ref` checked out on
 both nodes; a detached or different `HEAD` fails closed.
 
+After both nodes have reconciled, run
+`sync verify --group <group-id> --output json` on either node. Require
+`result: complete` and two collected nodes before
+claiming fresh pair convergence. `sync status` keeps `latest_delivery` and
+`latest_verification` separate and lists both expected incarnations even when
+one peer is offline. An `incomplete` result with `peer_unavailable` requires
+checking that node's service and approved HTTPS route; `local_incomplete` or
+`peer_incomplete` requires inspecting dirtiness, pending work, membership, and
+control on that node. `local_binding_mismatch` calls for checking the local ref,
+incarnation, and configuration; `peer_binding_mismatch` calls for checking the
+peer's membership and incarnation. For `target_recheck_unavailable`, restore
+the approved Git remote or local ref read and retry. For
+`local_changed_during_verification`, inspect local work and control, let them
+settle, then retry. `target_changed` requires a new verification after the
+configured refs settle. An interrupted `planned` result remains visible until
+the next `sync verify` expires it after five minutes. Do not treat a previous
+complete result as current
+after either ref, incarnation, or governed working copy changes.
+
 When an operator starts `sync serve`, its worker inspects configured refs on
 startup and every five minutes even if every nudge is lost. The same guarded
 reconcile command processes a successful nudge wake. `sync status` reports the

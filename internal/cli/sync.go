@@ -73,6 +73,10 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		if err != nil {
 			return syncStoreError(stderr, command, err)
 		}
+		latestVerification, err := latestSyncJobStatus(concrete, group, "verification")
+		if err != nil {
+			return syncStoreError(stderr, command, err)
+		}
 		inbox, err := concrete.LoadPeerNudgeBacklog(requestCtx(), group)
 		if err != nil {
 			return syncStoreError(stderr, command, err)
@@ -93,10 +97,15 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 			"schema_version": "agent-dispatch.sync-status/v1", "group_id": group,
 			"state": control.State, "reason": control.Reason, "membership_mode": control.MembershipMode, "control_revision": control.Revision,
 			"config_revision": revision, "control_config_current": control.ConfigRevision == revision,
-			"import_acknowledgement_current":     config.SyncAcknowledgementCurrent(cfg, incarnation),
-			"latest_publication":                 latestPublication,
-			"latest_delivery":                    latestDelivery,
-			"latest_import":                      latestImport,
+			"import_acknowledgement_current": config.SyncAcknowledgementCurrent(cfg, incarnation),
+			"latest_publication":             latestPublication,
+			"latest_delivery":                latestDelivery,
+			"latest_import":                  latestImport,
+			"latest_verification":            latestVerification,
+			"expected_nodes": []syncrecords.ExpectedNode{
+				{InstanceID: cfg.Sync.Nodes[0].InstanceID, StateIncarnationID: cfg.Sync.Nodes[0].StateIncarnationID},
+				{InstanceID: cfg.Sync.Nodes[1].InstanceID, StateIncarnationID: cfg.Sync.Nodes[1].StateIncarnationID},
+			},
 			"peer_inbox_pending":                 inbox.Pending,
 			"peer_inbox_failed":                  inbox.Failed,
 			"peer_inbox_retained":                inbox.Retained,
@@ -167,6 +176,8 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		return runSyncCheckpoint(args[1:], stdout, stderr)
 	case "reconcile":
 		return runSyncReconcile(args[1:], stdout, stderr)
+	case "verify":
+		return runSyncVerify(args[1:], stdout, stderr)
 	case "serve":
 		return runSyncServe(args[1:], stdout, stderr)
 	default:
@@ -179,16 +190,17 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 }
 
 type syncStatusEvidence struct {
-	Reason     string `json:"reason"`
-	Detail     string `json:"detail"`
-	Candidate  string `json:"candidate"`
-	Remote     string `json:"remote"`
-	PushState  string `json:"push_state"`
-	Resolution string `json:"resolution"`
-	ResolverID string `json:"resolver_id"`
+	Reason      string   `json:"reason"`
+	ReasonCodes []string `json:"reason_codes"`
+	Detail      string   `json:"detail"`
+	Candidate   string   `json:"candidate"`
+	Remote      string   `json:"remote"`
+	PushState   string   `json:"push_state"`
+	Resolution  string   `json:"resolution"`
+	ResolverID  string   `json:"resolver_id"`
 }
 
-// latestSyncJobStatus keeps publication, delivery, and import outcomes
+// latestSyncJobStatus keeps publication, delivery, import, and verification outcomes
 // separate. A malformed retained payload must not hide the durable job head;
 // the common fields remain visible and only the optional typed details drop.
 func latestSyncJobStatus(store *sqlite.Store, groupID, kind string) (map[string]any, error) {
@@ -228,6 +240,11 @@ func latestSyncJobStatus(store *sqlite.Store, groupID, kind string) (map[string]
 				continue
 			}
 			copySyncStatusField(result, "reason", evidence.Reason)
+			if kind == "verification" && evidence.ReasonCodes != nil {
+				if _, exists := result["reason_codes"]; !exists {
+					result["reason_codes"] = evidence.ReasonCodes
+				}
+			}
 			copySyncStatusField(result, "detail", evidence.Detail)
 			copySyncStatusField(result, "candidate", evidence.Candidate)
 			copySyncStatusField(result, "remote", evidence.Remote)
@@ -285,7 +302,7 @@ func syncCommandPath(args []string) string {
 func syncCapabilities() map[string]any {
 	return map[string]any{
 		"contract_read": true, "status_read": true,
-		"publication": true, "reconciliation": true, "pair_verification": false,
+		"publication": true, "reconciliation": true, "pair_verification": true,
 		"peer_service": true, "control": true, "membership_plan": true,
 		"membership_apply": true, "checkpoint_plan": true, "checkpoint_apply": true,
 		"service_render": false, "service_install": false, "service_inspect": false,
@@ -346,8 +363,6 @@ func reservedSyncCommand(args []string) bool {
 		return false
 	}
 	switch args[0] {
-	case "verify":
-		return true
 	case "service":
 		return len(args) >= 2 && (args[1] == "render" || args[1] == "install" || args[1] == "inspect" || args[1] == "stop" || args[1] == "disable" || args[1] == "uninstall")
 	default:

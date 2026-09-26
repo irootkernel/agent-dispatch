@@ -212,16 +212,28 @@ func TestE20T4CapabilitiesMatchProviderCommandVocabulary(t *testing.T) {
 	}
 }
 
-func TestE20T4ReservedSyncCommandUnavailable(t *testing.T) {
+func TestE20T4SyncVerifyRequiresConfiguredGroup(t *testing.T) {
+	t.Setenv("AGENT_DISPATCH_CONFIG", "../../docs/examples/config.yaml")
 	var out, errOut bytes.Buffer
-	if code := Run([]string{"sync", "verify", "--group", "wiki-pair"}, &out, &errOut); code != 3 {
+	if code := Run([]string{"sync", "verify", "--group", "other-pair"}, &out, &errOut); code != 3 {
 		t.Fatalf("verify code = %d, stderr=%s", code, errOut.String())
 	}
-	if out.Len() != 0 || !bytes.Contains(errOut.Bytes(), []byte("sync_capability_unavailable")) {
+	if out.Len() != 0 || !bytes.Contains(errOut.Bytes(), []byte("sync_group_not_found")) {
 		t.Fatalf("unexpected streams out=%q err=%q", out.String(), errOut.String())
 	}
 	errOut.Reset()
 	if code := Run([]string{"sync", "nonsense"}, &out, &errOut); code != 2 {
 		t.Fatalf("unknown sync command code = %d, stderr=%s", code, errOut.String())
+	}
+}
+
+func TestE20T4ReservedServiceCommandFailsClosed(t *testing.T) {
+	t.Setenv("AGENT_DISPATCH_CONFIG", filepath.Join(t.TempDir(), "missing-config.yaml"))
+	var out, errOut bytes.Buffer
+	if code := Run([]string{"sync", "service", "install"}, &out, &errOut); code != 3 {
+		t.Fatalf("reserved service command code = %d, stderr=%s", code, errOut.String())
+	}
+	if out.Len() != 0 || !bytes.Contains(errOut.Bytes(), []byte("sync_capability_unavailable")) {
+		t.Fatalf("unexpected streams out=%q err=%q", out.String(), errOut.String())
 	}
 }

@@ -77,6 +77,7 @@ var commandHelp = map[string]string{
 
 Usage: agent-dispatch sync capabilities --output json
        agent-dispatch sync status --group <id> [--config <path>] --output json
+       agent-dispatch sync verify --group <id> --output json
        agent-dispatch sync pause|resume --group <id> --expected-control-revision <n> [--config <path>] --output json
        agent-dispatch sync membership plan --group <id> --change <kind> [--instance <id>] --output json
        agent-dispatch sync membership apply --group <id> --plan <file> --expected-membership-predecessor <oid|none> --output json
@@ -97,8 +98,9 @@ of initial_baseline, conflict_resolution, or history_bound_exhausted;
 Defaults: the platform configuration path; sync is disabled by default.
 Serve binds an owner-only Unix socket under the state directory for an
 operator-managed Tailscale HTTPS route.
-Approval requirements: none for capabilities/status, membership plan, or
-checkpoint plan. Pause and resume are
+Approval requirements: none for capabilities/status, verify, membership plan,
+or checkpoint plan. Verify records a durable observation and queries the peer.
+Pause and resume are
 explicit operator state changes. Membership apply resolves the configured local
 administrator key and performs a non-force signed ref update. Publish resolves
 the configured publisher key; checkpoint apply resolves the distinct configured

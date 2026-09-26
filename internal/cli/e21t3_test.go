@@ -233,6 +233,7 @@ exec %s "$@"
 	if code := Run([]string{"sync", "checkpoint", "apply", "--group", cfg.Sync.GroupID, "--plan", checkpointPath, "--output", "json"}, &checkpointOut, &checkpointErr); code != 0 {
 		t.Fatalf("checkpoint apply: %d %s", code, checkpointErr.String())
 	}
+	e22t3AssertPairVerification(t, cfg, contentState, membershipState)
 	assertE21ContentVerificationRejectsSnapshotMismatch(t, cfg, repo, publisherKey)
 	prepareE21T3State(t, cfg, configPath)
 	revision, _ := config.SyncRevision(cfg)

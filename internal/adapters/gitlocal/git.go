@@ -107,6 +107,67 @@ type ImportState struct {
 	ActiveOperation string
 }
 
+// WorkingPaths is a read-only status projection for peer observations.
+// It does not materialize the index tree or change any ref.
+type WorkingPaths struct {
+	Head            string
+	CheckedOutRef   string
+	DirtyPaths      []string
+	UntrackedPaths  []string
+	ActiveOperation string
+}
+
+func (c *Client) InspectWorkingPaths(ctx context.Context) (WorkingPaths, error) {
+	var state WorkingPaths
+	head, _, err := c.run(ctx, nil, nil, "rev-parse", "--verify", "HEAD^{commit}")
+	if err != nil {
+		return state, err
+	}
+	state.Head = strings.TrimSpace(string(head))
+	if !validOID(state.Head) {
+		return state, fmt.Errorf("git returned an invalid HEAD")
+	}
+	branch, _, err := c.run(ctx, nil, nil, "symbolic-ref", "-q", "HEAD")
+	if err == nil {
+		state.CheckedOutRef = strings.TrimSpace(string(branch))
+	}
+	status, _, err := c.run(ctx, nil, nil, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=no")
+	if err != nil {
+		return state, err
+	}
+	state.DirtyPaths, state.UntrackedPaths, err = parsePorcelainPaths(status)
+	if err != nil {
+		return state, err
+	}
+	_, ignored, err := c.ignoredWorkingPaths(ctx)
+	if err != nil {
+		return state, err
+	}
+	state.UntrackedPaths = append(state.UntrackedPaths, ignored...)
+	sort.Strings(state.UntrackedPaths)
+	state.ActiveOperation, err = c.activeOperation(ctx)
+	return state, err
+}
+
+func (c *Client) ignoredWorkingPaths(ctx context.Context) ([]byte, []string, error) {
+	raw, _, err := c.run(ctx, nil, nil, "ls-files", "--others", "--ignored", "--exclude-standard", "-z")
+	if err != nil {
+		return nil, nil, err
+	}
+	paths := make([]string, 0)
+	for _, entry := range bytes.Split(raw, []byte{0}) {
+		if len(entry) == 0 {
+			continue
+		}
+		path := string(entry)
+		if !validTreePath(path) {
+			return nil, nil, fmt.Errorf("git ignored-file listing contains an unsafe path")
+		}
+		paths = append(paths, path)
+	}
+	return raw, paths, nil
+}
+
 func New(root string, limits Limits) (*Client, error) {
 	if !filepath.IsAbs(root) {
 		return nil, fmt.Errorf("git root must be absolute")
@@ -205,20 +266,11 @@ func (c *Client) InspectImport(ctx context.Context, contentRef string) (ImportSt
 	if err != nil {
 		return ImportState{}, err
 	}
-	ignoredRaw, _, ignoredErr := c.run(ctx, nil, nil, "ls-files", "--others", "--ignored", "--exclude-standard", "-z")
-	if ignoredErr != nil {
-		return ImportState{}, ignoredErr
+	ignoredRaw, ignored, err := c.ignoredWorkingPaths(ctx)
+	if err != nil {
+		return ImportState{}, err
 	}
-	for _, rawPath := range bytes.Split(ignoredRaw, []byte{0}) {
-		if len(rawPath) == 0 {
-			continue
-		}
-		path := string(rawPath)
-		if !validTreePath(path) {
-			return ImportState{}, fmt.Errorf("git ignored-file listing contains an unsafe path")
-		}
-		untracked = append(untracked, path)
-	}
+	untracked = append(untracked, ignored...)
 	sort.Strings(untracked)
 	operation, err := c.activeOperation(ctx)
 	if err != nil {

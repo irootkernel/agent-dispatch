@@ -1328,8 +1328,11 @@ func (s *Store) LoadLatestSyncJob(ctx context.Context, groupID, kind string) (Sy
 		return SyncJobRow{}, fmt.Errorf("unsupported sync job kind %q", kind)
 	}
 	var row SyncJobRow
+	// RFC3339Nano omits trailing zeroes, so its raw strings do not sort by time.
 	err := s.QueryRowContext(ctx, `SELECT job_id,group_id,kind,logical_key,request_fingerprint,state,payload_json,attempts,COALESCE(claim_owner,''),COALESCE(claim_expires_at,''),fence,retain_until_resolved,created_at,updated_at,COALESCE(resolved_at,'')
-		FROM sync_jobs WHERE group_id=? AND kind=? ORDER BY updated_at DESC,job_id DESC LIMIT 1`, groupID, kind).Scan(
+		FROM sync_jobs WHERE group_id=? AND kind=?
+		ORDER BY CAST(strftime('%s',updated_at) AS INTEGER) DESC,
+		         CAST(substr(updated_at,20) AS REAL) DESC,job_id DESC LIMIT 1`, groupID, kind).Scan(
 		&row.JobID, &row.GroupID, &row.Kind, &row.LogicalKey, &row.RequestFingerprint, &row.State, &row.PayloadJSON,
 		&row.Attempts, &row.ClaimOwner, &row.ClaimExpiresAt, &row.Fence, &row.RetainUntilResolved,
 		&row.CreatedAt, &row.UpdatedAt, &row.ResolvedAt)

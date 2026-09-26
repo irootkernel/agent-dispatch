@@ -140,7 +140,11 @@ enabled response also reports `peer_inbox_pending`, `peer_inbox_failed`,
 `peer_inbox_retained`, `peer_inbox_retention_limit`,
 `peer_inbox_oldest_received_at`, and `peer_inbox_oldest_reason`. It also reports
 `recovery_schedule`, `pre_signature_publications_pending`, and
-`pre_signature_oldest_created_at`. A deferred nudge retains its bounded reason;
+`pre_signature_oldest_created_at`. E22-T3 adds `expected_nodes` from both
+configured incarnations and `latest_verification` with its durable state and
+bounded `reason_codes`. An offline node remains expected even when no
+observation exists. Historical delivery stays in `latest_delivery` and does
+not inherit the verification result. A deferred nudge retains its bounded reason;
 a covered or superseded nudge remains in the
 ledger while freeing queue capacity. `sync serve --group GROUP` listens on an
 owner-only Unix socket at `<state_dir>/peer-service/http.sock` for an
@@ -162,6 +166,22 @@ persisted exponential delay capped at five minutes. An admitted nudge wakes
 the worker without bypassing failure backoff. A long historical catch-up uses
 the configured per-operation Git limits; service shutdown cancels the child
 and its Git process group.
+
+`sync verify --group GROUP --output json` pins the approved remote membership
+and content refs, the scope and contract digests, and both configured node
+incarnations. It admits a planned verification before contacting the peer,
+uses a new nonce with the directional credential, and records bounded local
+and peer observations. `complete` requires two target-bound, fresh, clean,
+current observations. Offline, stale, dirty, pending, or uncertain evidence
+returns `incomplete`; confirmed ref or sync configuration movement during
+collection returns `target_changed`. The JSON result is
+`agent-dispatch.sync-verification/v1`; the outer envelope carries bounded
+warning codes. `incomplete` and `target_changed` return exit 0; automation
+must inspect `result.result` and both collected nodes before claiming convergence.
+An interrupted planned attempt remains visible until a later `sync verify`
+records its expiry after five minutes with a journal entry. A verification
+command has a four-minute overall deadline. Verification does not publish or
+import content.
 
 Each job projection includes the durable job identity, logical key, state, update time,
 resolution, claim, and fence. Resolution evidence is reported separately from

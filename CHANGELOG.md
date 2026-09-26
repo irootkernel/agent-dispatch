@@ -25,6 +25,8 @@ This file records concise shipped outcomes and pending changes.
   bounded conservative status responses, and configured HTTPS delivery retries.
 - Add startup and periodic configured-ref recovery with durable retry timing,
   missed-nudge catch-up, and recovery of already-signed publication work.
+- Add pair status and fresh two-node verification with explicit incomplete
+  and changed-target results for unsafe or shifting evidence.
 
 ### Changed
 

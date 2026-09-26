@@ -5,6 +5,7 @@ import "fmt"
 const (
 	StatusRequestSchema  = "agent-dispatch.sync-status-request/v1"
 	StatusResponseSchema = "agent-dispatch.sync-status-response/v1"
+	MaxPeerStatusBytes   = 16 << 10
 )
 
 // StatusRequest binds a fresh peer observation to one proposed pair target.
@@ -34,7 +35,7 @@ func (r StatusRequest) Validate() error {
 
 func DecodeStatusRequest(raw []byte) (StatusRequest, error) {
 	var r StatusRequest
-	if len(raw) > 16<<10 {
+	if len(raw) > MaxPeerStatusBytes {
 		return r, fmt.Errorf("%w: peer status request exceeds 16 KiB", ErrInvalidRecord)
 	}
 	if err := decodeStrict(raw, &r); err != nil {
@@ -76,4 +77,15 @@ func (r StatusResponse) Validate() error {
 		return fmt.Errorf("%w: invalid peer status response", ErrInvalidRecord)
 	}
 	return nil
+}
+
+func DecodeStatusResponse(raw []byte) (StatusResponse, error) {
+	var r StatusResponse
+	if len(raw) > MaxPeerStatusBytes {
+		return r, fmt.Errorf("%w: peer status response exceeds 16 KiB", ErrInvalidRecord)
+	}
+	if err := decodeStrict(raw, &r); err != nil {
+		return r, err
+	}
+	return r, r.Validate()
 }

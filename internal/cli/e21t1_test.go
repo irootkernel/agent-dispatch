@@ -166,11 +166,11 @@ func TestE21T5StatusSeparatesDurableSyncOutcomes(t *testing.T) {
 	}
 }
 
-func TestE21T1EnabledConfigDoesNotActivateStillReservedGitCommands(t *testing.T) {
+func TestE21T1VerifyRejectsUnsupportedConfigFlag(t *testing.T) {
 	configPath := enabledSyncConfig(t)
 	code, _, stderr := syncResult(t, "verify", "--group", "wiki-pair", "--config", configPath, "--output", "json")
-	if code != 3 || !bytes.Contains([]byte(stderr), []byte("sync_capability_unavailable")) {
-		t.Fatalf("reserved verify: %d %s", code, stderr)
+	if code != 2 || !bytes.Contains([]byte(stderr), []byte("flag_invalid")) {
+		t.Fatalf("unsupported verify flag: %d %s", code, stderr)
 	}
 }
 

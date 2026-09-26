@@ -864,7 +864,15 @@ func (c *Client) Fetch(ctx context.Context, remote, sourceRef, destinationRef, r
 	if err != nil && fetchRejectedRewrite(stderr) {
 		return fmt.Errorf("%w: %v", ErrFetchRewrite, err)
 	}
+	if err != nil && fetchMissingRef(stderr) {
+		return fmt.Errorf("%w: %v", ErrMissingRef, err)
+	}
 	return err
+}
+
+func fetchMissingRef(stderr []byte) bool {
+	message := strings.ToLower(string(stderr))
+	return strings.Contains(message, "couldn't find remote ref") || strings.Contains(message, "could not find remote ref")
 }
 
 func fetchRejectedRewrite(stderr []byte) bool {

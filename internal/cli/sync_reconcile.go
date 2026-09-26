@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io"
 	"time"
@@ -60,6 +62,11 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 		}
 		if errors.Is(err, gitlocal.ErrFetchRewrite) {
 			return blockReconcile(stdout, stderr, store, s.GroupID, revision, "trust_failure", "membership_stale", err)
+		}
+		// Fetch diagnostics vary by Git version and can include remote text.
+		// Confirm a missing ref from the pinned remote before arming a hold.
+		if _, probeErr := client.RemoteRef(requestCtx(), s.RemoteName, s.MembershipRef, s.RemoteRepositoryDigest); errors.Is(probeErr, gitlocal.ErrMissingRef) {
+			return blockReconcile(stdout, stderr, store, s.GroupID, revision, "trust_failure", "membership_stale", probeErr)
 		}
 		return reconcileEnvelopeCode(stdout, "deferred", "git_unstable", map[string]any{"detail": "membership fetch failed: " + err.Error()}, 10)
 	}
@@ -146,6 +153,29 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 			return reconcileEnvelopeCode(stdout, "blocked", control.Reason, map[string]any{"membership_mode": control.MembershipMode, "detail": "emergency membership posture has an unsupported visible control state"}, 30)
 		}
 	}
+	// Probe the configured content ref before signed-publication recovery.
+	// A deleted ref is an administrative history break, not a transport retry.
+	if _, err := client.RemoteRef(requestCtx(), s.RemoteName, s.ContentRef, s.RemoteRepositoryDigest); err != nil {
+		if errors.Is(err, gitlocal.ErrMissingRef) {
+			return blockReconcile(stdout, stderr, store, s.GroupID, revision, "trust_failure", "trust_failed", err)
+		}
+		if errors.Is(err, gitlocal.ErrRemoteBinding) {
+			return syncMembershipError(stderr, command, err, 30)
+		}
+		return reconcileEnvelopeCode(stdout, "deferred", "git_unstable", map[string]any{"detail": "content ref could not be measured"}, 10)
+	}
+	// This path has no signing-key resolution. Reuse the explicit command's
+	// guarded recovery of an already-signed candidate before fetching the
+	// content head, so a service can finish it after publisher process loss.
+	if control.State == "active" {
+		if self, peer, ok := publicationMembers(remoteHistory, s.LocalInstanceID); ok {
+			var recoveryError bytes.Buffer
+			claimPending := false
+			if recovered, result := recoverConfirmedPublication(io.Discard, &recoveryError, store, client, cfg, s, remoteHistory, remoteMembership, self, peer, &claimPending); recovered && result != 0 {
+				return reconcilePublicationRecoveryResult(stdout, stderr, store, s.GroupID, revision, result, claimPending, recoveryError.Bytes())
+			}
+		}
+	}
 
 	contentTracking := "refs/agent-dispatch/sync/content/" + s.GroupID
 	if err := client.Fetch(requestCtx(), s.RemoteName, s.ContentRef, contentTracking, s.RemoteRepositoryDigest); err != nil {
@@ -154,6 +184,15 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 		}
 		if errors.Is(err, gitlocal.ErrFetchRewrite) {
 			return blockReconcile(stdout, stderr, store, s.GroupID, revision, "trust_failure", "trust_failed", err)
+		}
+		if errors.Is(err, gitlocal.ErrMissingRef) {
+			// Fetch stderr can contain remote text. Confirm deletion from the
+			// pinned ref advertisement before creating a durable hold.
+			if _, probeErr := client.RemoteRef(requestCtx(), s.RemoteName, s.ContentRef, s.RemoteRepositoryDigest); errors.Is(probeErr, gitlocal.ErrMissingRef) {
+				return blockReconcile(stdout, stderr, store, s.GroupID, revision, "trust_failure", "trust_failed", probeErr)
+			} else if errors.Is(probeErr, gitlocal.ErrRemoteBinding) {
+				return syncMembershipError(stderr, command, probeErr, 30)
+			}
 		}
 		return reconcileEnvelopeCode(stdout, "deferred", "git_unstable", map[string]any{"detail": "content fetch failed: " + err.Error()}, 10)
 	}
@@ -859,6 +898,58 @@ func blockReconcile(stdout, stderr io.Writer, store *sqlite.Store, group, revisi
 	return reconcileEnvelopeCode(stdout, "blocked", resultReason, map[string]any{
 		"control_state": held.State, "control_reason": held.Reason, "membership_mode": held.MembershipMode, "detail": cause.Error(),
 	}, syncControlHoldExitCode(held.MembershipMode, held.Reason))
+}
+
+// The publisher helper retains its own output contract. Reconcile translates
+// its bounded result here and never exposes a "sync publish" error for a
+// "sync reconcile" request. Every nonzero result gets a reconcile envelope.
+func reconcilePublicationRecoveryResult(stdout, stderr io.Writer, store *sqlite.Store, group, revision string, result int, claimPending bool, innerError []byte) int {
+	control, err := store.LoadSyncControl(requestCtx(), group)
+	if err != nil {
+		return syncStoreError(stderr, "sync reconcile", err)
+	}
+	if control.State == "blocked" {
+		return reconcileEnvelopeCode(stdout, "blocked", control.Reason, map[string]any{"detail": "signed publication recovery requires administrator review"}, syncControlHoldExitCode(control.MembershipMode, control.Reason))
+	}
+	if result == 14 && claimPending {
+		return reconcileEnvelopeCode(stdout, "deferred", "publication_recovery_pending", map[string]any{"detail": "a signed publication is still claimed; retry after its owner settles"}, 10)
+	}
+	switch result {
+	case 10:
+		return reconcileEnvelopeCode(stdout, "deferred", "publication_recovery_pending", map[string]any{"detail": "signed publication recovery had a retryable failure"}, 10)
+	case 13, 30:
+		reason := "recovery_required"
+		if result == 30 {
+			reason = "trust_failure"
+		}
+		held, err := store.HoldSyncControl(requestCtx(), group, reason, revision, time.Now().UTC().Format(time.RFC3339Nano))
+		if err != nil {
+			return syncStoreError(stderr, "sync reconcile", err)
+		}
+		exit := syncControlHoldExitCode(held.MembershipMode, held.Reason)
+		if result == 13 && held.Reason == "recovery_required" {
+			exit = 13
+		}
+		return reconcileEnvelopeCode(stdout, "blocked", held.Reason, map[string]any{"detail": "signed publication recovery requires administrator review"}, exit)
+	default:
+		// A publisher precondition (14) does not prove Git divergence. Store
+		// errors (3/20) likewise cannot authorize a new control hold.
+		var errorEnvelope struct {
+			Error struct {
+				Code     string `json:"code"`
+				Category string `json:"category"`
+				Message  string `json:"message"`
+			} `json:"error"`
+		}
+		if json.Unmarshal(innerError, &errorEnvelope) == nil && errorEnvelope.Error.Code != "" {
+			writeError(stderr, "sync reconcile", errorEnvelope.Error.Code, errorEnvelope.Error.Category, errorEnvelope.Error.Message)
+		}
+		reason := "publication_recovery_error"
+		if result == 14 {
+			reason = "publication_recovery_precondition"
+		}
+		return reconcileEnvelopeCode(stdout, "failed", reason, map[string]any{"detail": "signed publication recovery did not settle; inspect its journal and control"}, result)
+	}
 }
 
 func pendingImportPartialEffect(stdout, stderr io.Writer, store *sqlite.Store, group, revision string, job sqlite.SyncJobRow, detail string) int {

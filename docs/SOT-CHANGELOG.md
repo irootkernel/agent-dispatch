@@ -9,9 +9,9 @@ retain their recorded scope; migrated document pointers use their current paths.
 
 E21 implements and qualifies the durable local substrate, signed membership,
 explicit publication, checkpoints, and guarded local import. E22-T1 adds
-authenticated peer admission over an owner-only local socket. Periodic
-recovery, pair verification, managed service lifecycle, and release remain
-incomplete.
+authenticated peer admission over an owner-only local socket. E22-T2 adds
+periodic configured-ref recovery with persisted backoff. Pair verification,
+managed service lifecycle, and release remain incomplete.
 
 - SQLite schema v21 stores group controls, idempotent logical jobs, fenced
   claims, bounded attempts, and append-only recovery journals before effects.
@@ -43,6 +43,10 @@ incomplete.
   owner-only Unix-socket listener, conservative status observations, and configured HTTPS delivery
   retries. Service signing references are limited to command-only `env:` or
   `fd:` inputs absent from the service process.
+- E22-T2 adds schema v27 for persisted configured-ref inspection and bounded
+  retry timing. A service wake and periodic pass share the guarded operator
+  reconcile path; deleted refs and non-fast-forward rewrites retain a trust
+  hold for administrator review.
 - Validation remediation makes schema v23 a compatibility marker while current
   writers retain blocked obligations with their matching hold, and adds schema
   v24 causal journal sequencing. Same-base push rejection preserves the signed

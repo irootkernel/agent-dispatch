@@ -77,21 +77,36 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		if err != nil {
 			return syncStoreError(stderr, command, err)
 		}
+		recovery, scheduled, err := concrete.LoadSyncRecoverySchedule(requestCtx(), group)
+		if err != nil {
+			return syncStoreError(stderr, command, err)
+		}
+		preSignature, oldestPreSignature, err := concrete.PreSignaturePublications(requestCtx(), group, time.Now())
+		if err != nil {
+			return syncStoreError(stderr, command, err)
+		}
+		var recoveryStatus any
+		if scheduled {
+			recoveryStatus = recovery
+		}
 		return writeEnvelope(stdout, command, map[string]any{
 			"schema_version": "agent-dispatch.sync-status/v1", "group_id": group,
 			"state": control.State, "reason": control.Reason, "membership_mode": control.MembershipMode, "control_revision": control.Revision,
 			"config_revision": revision, "control_config_current": control.ConfigRevision == revision,
-			"import_acknowledgement_current": config.SyncAcknowledgementCurrent(cfg, incarnation),
-			"latest_publication":             latestPublication,
-			"latest_delivery":                latestDelivery,
-			"latest_import":                  latestImport,
-			"peer_inbox_pending":             inbox.Pending,
-			"peer_inbox_failed":              inbox.Failed,
-			"peer_inbox_retained":            inbox.Retained,
-			"peer_inbox_retention_limit":     sqlite.PeerNudgeLedgerLimit,
-			"peer_inbox_oldest_received_at":  inbox.OldestPendingAt,
-			"peer_inbox_oldest_reason":       inbox.OldestReason,
-			"side_effects":                   []string{},
+			"import_acknowledgement_current":     config.SyncAcknowledgementCurrent(cfg, incarnation),
+			"latest_publication":                 latestPublication,
+			"latest_delivery":                    latestDelivery,
+			"latest_import":                      latestImport,
+			"peer_inbox_pending":                 inbox.Pending,
+			"peer_inbox_failed":                  inbox.Failed,
+			"peer_inbox_retained":                inbox.Retained,
+			"peer_inbox_retention_limit":         sqlite.PeerNudgeLedgerLimit,
+			"peer_inbox_oldest_received_at":      inbox.OldestPendingAt,
+			"peer_inbox_oldest_reason":           inbox.OldestReason,
+			"recovery_schedule":                  recoveryStatus,
+			"pre_signature_publications_pending": preSignature,
+			"pre_signature_oldest_created_at":    oldestPreSignature,
+			"side_effects":                       []string{},
 		})
 	case "pause", "resume":
 		group, expected, configPath, ok := syncControlFlags(args[1:])

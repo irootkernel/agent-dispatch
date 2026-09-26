@@ -13,69 +13,113 @@ import (
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/gitlocal"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/domain/syncrecords"
 )
 
-// The inbox wakes the same guarded reconcile path as the operator command.
-// Its pending rows remain after a deferral or process loss. Periodic remote
-// inspection independent of inbox delivery is installed by E22-T2.
+// One worker serializes inbox wakes and configured-ref inspection. The
+// persisted schedule prevents restarts or failed nudges from spinning while
+// a healthy wake can still shorten the ordinary periodic interval.
 func (s *peerService) inboxLoop(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
+	wake := true // startup uncertainty requires a configured-ref inspection
 	for {
-		s.processInbox(ctx)
+		s.recoverScheduled(ctx, wake)
 		select {
 		case <-ctx.Done():
 			return
 		case <-s.wake:
+			wake = true
 		case <-ticker.C:
+			wake = false
 		}
 	}
 }
 
-func (s *peerService) processInbox(ctx context.Context) {
+func (s *peerService) recoverScheduled(ctx context.Context, wake bool) {
+	if !s.recoveryAllowed(ctx) {
+		return
+	}
+	attempt := randomSyncID("recovery")
+	due, err := s.store.ReserveSyncRecovery(ctx, s.cfg.Sync.GroupID, attempt, time.Now(), wake)
+	if err != nil {
+		s.warn("recovery schedule unavailable")
+		return
+	}
+	if !due {
+		return
+	}
+	if pending, _, err := s.store.PreSignaturePublications(ctx, s.cfg.Sync.GroupID, time.Now()); err == nil && pending != 0 {
+		s.warn("pre-signature publication awaits explicit sync publish re-entry")
+	}
+	rows, err := s.store.LoadPendingPeerNudges(ctx, s.cfg.Sync.GroupID, s.cfg.Sync.Bounds.Queue)
+	settled, reason := false, sqlite.SyncRecoveryReasonReconcileFailed
+	if err == nil {
+		if len(rows) != 0 {
+			settled, reason = s.processInboxRows(ctx, rows)
+		} else {
+			settled, _ = s.runReconcile(ctx)
+		}
+	} else {
+		reason = sqlite.SyncRecoveryReasonInboxUnavailable
+		s.warn("peer inbox read failed")
+	}
+	if err := s.store.CompleteSyncRecovery(ctx, s.cfg.Sync.GroupID, attempt, time.Now(), settled, reason); err != nil && ctx.Err() == nil {
+		s.warn("recovery schedule update failed")
+	}
+	if !settled && ctx.Err() == nil {
+		s.warn("configured-ref reconciliation deferred")
+	}
+}
+
+func (s *peerService) recoveryAllowed(ctx context.Context) bool {
 	if reason := s.configurationProblem(); reason != "" {
 		s.warn(reason)
-		return
+		return false
 	}
 	control, err := s.store.LoadSyncControl(ctx, s.cfg.Sync.GroupID)
 	if err != nil {
 		s.warn("sync control unavailable")
-		return
+		return false
+	}
+	revision, _ := config.SyncRevision(s.cfg)
+	if control.ConfigRevision != revision {
+		s.warn("sync control configuration binding is stale; run sync reconcile")
+		return false
 	}
 	if control.State == "paused" {
-		return
+		return false
 	}
-	rows, err := s.store.LoadPendingPeerNudges(ctx, s.cfg.Sync.GroupID, s.cfg.Sync.Bounds.Queue)
-	if err != nil {
-		s.warn("peer inbox read failed")
-		return
-	}
-	if len(rows) == 0 {
-		return
-	}
+	return true
+}
+
+func (s *peerService) processInboxRows(ctx context.Context, rows []sqlite.PeerNudgeRow) (bool, string) {
 	settled, reconciledTarget := s.runReconcile(ctx)
 	if !settled {
 		for _, row := range rows {
-			_ = s.store.RecordPeerNudgeFailure(ctx, row.GroupID, row.PublicationID, row.Fingerprint, "reconcile_failed")
+			_ = s.store.RecordPeerNudgeFailure(ctx, row.GroupID, row.PublicationID, row.Fingerprint, sqlite.SyncRecoveryReasonReconcileFailed)
 		}
 		s.warn("peer inbox reconcile deferred")
-		return
+		return false, sqlite.SyncRecoveryReasonReconcileFailed
 	}
 	client, err := membershipGitClient(s.cfg, s.cfg.Sync)
 	if err != nil {
 		s.warn("peer inbox local Git unavailable")
-		return
+		return false, sqlite.SyncRecoveryReasonLocalRefUnavailable
 	}
 	local, err := client.ResolveRef(ctx, s.cfg.Sync.ContentRef)
 	if err != nil || local != reconciledTarget {
 		for _, row := range rows {
-			_ = s.store.RecordPeerNudgeFailure(ctx, row.GroupID, row.PublicationID, row.Fingerprint, "local_ref_unavailable")
+			_ = s.store.RecordPeerNudgeFailure(ctx, row.GroupID, row.PublicationID, row.Fingerprint, sqlite.SyncRecoveryReasonLocalRefUnavailable)
 		}
 		s.warn("peer inbox local ref is not reconciled")
-		return
+		return false, sqlite.SyncRecoveryReasonLocalRefUnavailable
 	}
-	s.settleInboxRows(ctx, client, local, rows)
+	if !s.settleInboxRows(ctx, client, local, rows) {
+		return false, sqlite.SyncRecoveryReasonInboxUnsettled
+	}
+	return true, sqlite.SyncRecoveryReasonNone
 }
 
 // Reconcile in a cancellable child of the service, preserving the operator
@@ -89,34 +133,47 @@ func (s *peerService) runReconcile(ctx context.Context) (bool, string) {
 	if err != nil {
 		return false, ""
 	}
-	cmd := exec.CommandContext(ctx, executable, "sync", "reconcile", "--state-dir="+stateDirOf(s.cfg), "--group", s.cfg.Sync.GroupID)
-	cmd.Env = append(os.Environ(), "AGENT_DISPATCH_CONFIG="+s.configPath)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
-	cmd.Stderr = io.Discard
-	var stdout bytes.Buffer
-	cmd.Stdout = &stdout
-	if err := cmd.Run(); err != nil {
-		return false, ""
+	// A full bounded history can outlive any single claim lease. Let the
+	// operator command's per-operation limits bound its work, while service
+	// cancellation still kills the child and its Git process group.
+	for attempt := 0; attempt < 2; attempt++ {
+		cmd := exec.CommandContext(ctx, executable, "sync", "reconcile", "--state-dir="+stateDirOf(s.cfg), "--group", s.cfg.Sync.GroupID)
+		cmd.Env = append(os.Environ(), "AGENT_DISPATCH_CONFIG="+s.configPath)
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+		cmd.Stderr = io.Discard
+		var stdout bytes.Buffer
+		cmd.Stdout = &stdout
+		if err := cmd.Run(); err != nil {
+			return false, ""
+		}
+		state, target := parseReconcileResult(stdout.Bytes())
+		if state == "membership_adopted" {
+			continue // a normal adoption needs a content pass before inbox settlement
+		}
+		return settledReconcileResult(state, target)
 	}
-	return reconcileSettled(stdout.Bytes())
+	return false, ""
 }
 
-func (s *peerService) settleInboxRows(ctx context.Context, client *gitlocal.Client, local string, rows []sqlite.PeerNudgeRow) {
+func (s *peerService) settleInboxRows(ctx context.Context, client *gitlocal.Client, local string, rows []sqlite.PeerNudgeRow) bool {
+	settled := true
 	for _, row := range rows {
 		if ctx.Err() != nil {
-			return
+			return false
 		}
 		nudge, err := syncrecords.DecodeNudge([]byte(row.PayloadJSON))
 		if err != nil {
 			if s.store.ResolvePeerNudge(ctx, row.GroupID, row.PublicationID, row.Fingerprint, "invalid_payload", time.Now().UTC().Format(time.RFC3339Nano)) != nil {
 				s.warn("peer inbox resolution failed")
+				settled = false
 			}
 			continue
 		}
 		if nudge.GroupID != s.cfg.Sync.GroupID || nudge.Receiver != s.cfg.Sync.LocalInstanceID {
 			if s.store.ResolvePeerNudge(ctx, row.GroupID, row.PublicationID, row.Fingerprint, "obsolete_binding", time.Now().UTC().Format(time.RFC3339Nano)) != nil {
 				s.warn("peer inbox resolution failed")
+				settled = false
 			}
 			continue
 		}
@@ -124,6 +181,7 @@ func (s *peerService) settleInboxRows(ctx context.Context, client *gitlocal.Clie
 		if err != nil {
 			_ = s.store.RecordPeerNudgeFailure(ctx, row.GroupID, row.PublicationID, row.Fingerprint, "coverage_unavailable")
 			s.warn("peer inbox coverage unavailable")
+			settled = false
 			continue
 		}
 		resolution := "covered"
@@ -134,8 +192,10 @@ func (s *peerService) settleInboxRows(ctx context.Context, client *gitlocal.Clie
 		}
 		if err := s.store.ResolvePeerNudge(ctx, row.GroupID, row.PublicationID, row.Fingerprint, resolution, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 			s.warn("peer inbox resolution failed")
+			settled = false
 		}
 	}
+	return settled
 }
 
 // Walk only from the configured local ref through discovered parents. The
@@ -163,7 +223,7 @@ func nudgeCoveredByLocalHistory(ctx context.Context, client *gitlocal.Client, lo
 	return false, nil
 }
 
-func reconcileSettled(raw []byte) (bool, string) {
+func parseReconcileResult(raw []byte) (string, string) {
 	var envelope struct {
 		Result struct {
 			State        string `json:"state"`
@@ -171,11 +231,15 @@ func reconcileSettled(raw []byte) (bool, string) {
 		} `json:"result"`
 	}
 	if json.Unmarshal(raw, &envelope) != nil {
-		return false, ""
+		return "", ""
 	}
-	switch envelope.Result.State {
+	return envelope.Result.State, envelope.Result.TargetCommit
+}
+
+func settledReconcileResult(state, target string) (bool, string) {
+	switch state {
 	case "no_change", "applied", "recovered":
-		return envelope.Result.TargetCommit != "", envelope.Result.TargetCommit
+		return target != "", target
 	default:
 		return false, ""
 	}

@@ -15,9 +15,9 @@
 | Release target | v0.2.0 (Two-Node Wiki Sync MVP) |
 | Current epic | E22 Peer Recovery, Verification, and Operations (In Progress) |
 | Current active task | None |
-| Next task | E22-T2 Periodic reconciliation and offline catch-up |
-| Completed tasks | 112 / 116 |
-| Planned tasks | 4 / 116 |
+| Next task | E22-T3 Pair status and fresh verification |
+| Completed tasks | 113 / 116 |
+| Planned tasks | 3 / 116 |
 | In progress tasks | 0 |
 | In review tasks | 0 |
 | Blocked tasks | 0 |
@@ -176,7 +176,7 @@
 | 110 | E21-T4 | Completed | Guarded import and exact Watchman attribution |
 | 111 | E21-T5 | Completed | Publication/import crash and conflict qualification |
 | 112 | E22-T1 | Completed | Authenticated peer service and durable nudges |
-| 113 | E22-T2 | Planned | Periodic reconciliation and offline catch-up |
+| 113 | E22-T2 | Completed | Periodic reconciliation and offline catch-up |
 | 114 | E22-T3 | Planned | Pair status and fresh verification |
 | 115 | E22-T4 | Planned | Managed service lifecycle and diagnostics |
 | 116 | E22-T5 | Planned | Real two-node qualification and v0.2.0 handoff |
@@ -5532,7 +5532,7 @@ E21-T5 Completed.
 
 ## E22-T2: Implement Periodic Recovery and Offline Catch-Up
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 

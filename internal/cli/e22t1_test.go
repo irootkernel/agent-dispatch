@@ -38,8 +38,20 @@ func init() {
 			time.Sleep(time.Hour)
 		}
 	}
-	if (mode != "reconcile" && mode != "success") || len(os.Args) != 6 || os.Args[1] != "sync" || os.Args[2] != "reconcile" {
+	if (mode != "reconcile" && mode != "success" && mode != "adopt-once") || len(os.Args) != 6 || os.Args[1] != "sync" || os.Args[2] != "reconcile" {
 		os.Exit(2)
+	}
+	if mode == "adopt-once" {
+		marker := os.Getenv("AGENT_DISPATCH_E22_RECONCILE_RECORD")
+		if _, err := os.Stat(marker); os.IsNotExist(err) {
+			if err := os.WriteFile(marker, []byte("adopted"), 0o600); err != nil {
+				os.Exit(2)
+			}
+			fmt.Fprint(os.Stdout, `{"result":{"state":"membership_adopted"}}`)
+			os.Exit(0)
+		}
+		fmt.Fprintf(os.Stdout, `{"result":{"state":"no_change","target_commit":"%s"}}`, strings.Repeat("a", 40))
+		os.Exit(0)
 	}
 	if mode == "success" {
 		fmt.Fprintf(os.Stdout, `{"result":{"state":"no_change","target_commit":"%s"}}`, strings.Repeat("a", 40))
@@ -85,7 +97,7 @@ func e22t1Service(t *testing.T) (*peerService, func()) {
 		t.Fatal(err)
 	}
 	t.Setenv("AGENT_DISPATCH_CONFIG", configPath)
-	store, err := sqlite.Open(filepath.Join(t.TempDir(), "state.db"))
+	store, err := sqlite.Open(filepath.Join(cfg.Instance.StateDir, "state.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -950,16 +962,23 @@ func TestE22T1StaleNudgeDoesNotBlockLaterInboxRow(t *testing.T) {
 	if err != nil || len(rows) != 3 {
 		t.Fatalf("pending: %v %v", rows, err)
 	}
-	svc.processInbox(context.Background())
+	e22t1RunScheduledInbox(t, svc)
 	deferred, err := svc.store.LoadPeerNudgeBacklog(context.Background(), svc.cfg.Sync.GroupID)
 	if err != nil || deferred.Pending != 3 || deferred.Failed != 3 || deferred.OldestReason != "local_ref_unavailable" {
 		t.Fatalf("local ref mismatch did not retain inbox: %+v %v", deferred, err)
 	}
+	if failed, found, err := svc.store.LoadSyncRecoverySchedule(context.Background(), svc.cfg.Sync.GroupID); err != nil || !found || failed.LastReason != "local_ref_unavailable" || failed.ConsecutiveFailures != 1 {
+		t.Fatalf("local ref mismatch schedule: %+v found=%v err=%v", failed, found, err)
+	}
 	svc.reconcile = func(context.Context) (bool, string) { return true, current }
-	svc.processInbox(context.Background())
+	e22t1RunScheduledInbox(t, svc)
 	backlog, err := svc.store.LoadPeerNudgeBacklog(context.Background(), svc.cfg.Sync.GroupID)
 	if err != nil || backlog.Pending != 0 {
 		t.Fatalf("backlog: %+v %v", backlog, err)
+	}
+	schedule, found, err := svc.store.LoadSyncRecoverySchedule(context.Background(), svc.cfg.Sync.GroupID)
+	if err != nil || !found || schedule.LastSuccessAt == "" || schedule.LastReason != "none" {
+		t.Fatalf("scheduled inbox settlement was not recorded: %+v found=%v err=%v", schedule, found, err)
 	}
 	var invalidResolution string
 	if err := svc.store.QueryRowContext(context.Background(), `SELECT resolution FROM sync_peer_nudges WHERE publication_id='invalid-persisted'`).Scan(&invalidResolution); err != nil || invalidResolution != "invalid_payload" {
@@ -970,6 +989,35 @@ func TestE22T1StaleNudgeDoesNotBlockLaterInboxRow(t *testing.T) {
 		if err := svc.store.QueryRowContext(context.Background(), `SELECT resolution FROM sync_peer_nudges WHERE publication_id=?`, fmt.Sprintf("publication-%d", i)).Scan(&resolution); err != nil || resolution != expected {
 			t.Fatalf("row %d resolution: %q %v", i, resolution, err)
 		}
+	}
+	// A non-linear configured head prevents bounded causal coverage. The
+	// scheduled worker must keep the nudge and record that distinct failure.
+	tree := gitTestOutput(t, "git", repo, "rev-parse", current+"^{tree}")
+	merge := gitTestOutput(t, "git", repo, "commit-tree", tree, "-p", old, "-p", current)
+	gitTestRun(t, "git", repo, "update-ref", svc.cfg.Sync.ContentRef, merge, current)
+	svc.reconcile = func(context.Context) (bool, string) { return true, merge }
+	nudge := e22t1Nudge()
+	nudge.PublicationID = "nonlinear-history"
+	nudge.TargetCommit = old
+	raw, err := syncrecords.CanonicalNudge(nudge)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.store.AdmitPeerNudge(context.Background(), sqlite.PeerNudgeInput{
+		GroupID: nudge.GroupID, PublicationID: nudge.PublicationID,
+		Fingerprint: fmt.Sprintf("sha256:%x", sha256.Sum256(raw)), PayloadJSON: string(raw),
+		ReceivedAt: time.Now().UTC().Format(time.RFC3339Nano), QueueLimit: 3,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	e22t1RunScheduledInbox(t, svc)
+	schedule, found, err = svc.store.LoadSyncRecoverySchedule(context.Background(), svc.cfg.Sync.GroupID)
+	if err != nil || !found || schedule.LastReason != "inbox_unsettled" || schedule.ConsecutiveFailures != 1 {
+		t.Fatalf("non-linear history did not persist inbox failure: %+v found=%v err=%v", schedule, found, err)
+	}
+	backlog, err = svc.store.LoadPeerNudgeBacklog(context.Background(), svc.cfg.Sync.GroupID)
+	if err != nil || backlog.Pending != 1 || backlog.Failed != 1 || backlog.OldestReason != "coverage_unavailable" {
+		t.Fatalf("non-linear history lost the pending nudge: %+v err=%v", backlog, err)
 	}
 }
 
@@ -987,10 +1035,13 @@ func TestE22T1InboxRetainsFailedReconcile(t *testing.T) {
 	}
 	called := false
 	svc.reconcile = func(context.Context) (bool, string) { called = true; return false, "" }
-	svc.processInbox(context.Background())
+	e22t1RunScheduledInbox(t, svc)
 	backlog, err := svc.store.LoadPeerNudgeBacklog(context.Background(), nudge.GroupID)
 	if err != nil || !called || backlog.Pending != 1 || backlog.Failed != 1 || backlog.OldestReason != "reconcile_failed" {
 		t.Fatalf("failed reconcile obligation: called=%v backlog=%+v err=%v", called, backlog, err)
+	}
+	if schedule, found, err := svc.store.LoadSyncRecoverySchedule(context.Background(), nudge.GroupID); err != nil || !found || schedule.LastReason != "reconcile_failed" || schedule.ConsecutiveFailures != 1 {
+		t.Fatalf("failed reconcile schedule: %+v found=%v err=%v", schedule, found, err)
 	}
 }
 
@@ -1013,7 +1064,7 @@ func TestE22T1PausedInboxRetainsWorkWithoutFailure(t *testing.T) {
 		t.Fatal("paused inbox must not reconcile")
 		return false, ""
 	}
-	svc.processInbox(context.Background())
+	e22t1RunScheduledInbox(t, svc)
 	backlog, err := svc.store.LoadPeerNudgeBacklog(context.Background(), nudge.GroupID)
 	if err != nil || backlog.Pending != 1 || backlog.Failed != 0 {
 		t.Fatalf("paused inbox: %+v %v", backlog, err)
@@ -1032,11 +1083,21 @@ func TestE22T1ReconcileOutcomeRequiresSettledTarget(t *testing.T) {
 		{"applied", "", false},
 	} {
 		raw, _ := json.Marshal(map[string]any{"result": map[string]any{"state": tc.state, "target_commit": tc.target}})
-		settled, target := reconcileSettled(raw)
+		settled, target := settledReconcileResult(parseReconcileResult(raw))
 		if settled != tc.settled || (settled && target != tc.target) {
 			t.Fatalf("state=%s target=%s: settled=%v actual=%s", tc.state, tc.target, settled, target)
 		}
 	}
+}
+
+func e22t1RunScheduledInbox(t *testing.T, svc *peerService) {
+	t.Helper()
+	// Drive an existing failed reservation due; the production worker still
+	// owns loading, dispatching, settlement, and durable completion.
+	if _, err := svc.store.ExecContext(context.Background(), `UPDATE sync_recovery_schedule SET next_due_at=? WHERE group_id=?`, time.Now().Add(-time.Second).UTC().Format(time.RFC3339Nano), svc.cfg.Sync.GroupID); err != nil {
+		t.Fatal(err)
+	}
+	svc.recoverScheduled(context.Background(), true)
 }
 
 func TestE22T1CurrentMembersRejectsUnsignedAndNonAdvancingHistory(t *testing.T) {
@@ -1104,7 +1165,7 @@ func TestE22T1ConfigurationDriftIsVisibleToOperator(t *testing.T) {
 	if err := os.WriteFile(svc.configPath, raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	svc.processInbox(context.Background())
+	e22t1RunScheduledInbox(t, svc)
 	if err := svc.deliverPending(context.Background(), peerHTTPClient()); err == nil {
 		t.Fatal("drift must defer delivery")
 	}

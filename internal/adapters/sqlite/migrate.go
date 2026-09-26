@@ -58,6 +58,7 @@ var Migrations = []Migration{
 	{Version: 24, Name: "sequence-sync-journals", SQL: schemaV24SequenceSyncJournals},
 	{Version: 25, Name: "sync-membership-posture-and-job-sequence", SQL: schemaV25SyncMembershipPostureAndJobSequence},
 	{Version: 26, Name: "sync-peer-nudge-inbox", SQL: schemaV26SyncPeerNudgeInbox},
+	{Version: 27, Name: "sync-recovery-schedule", SQL: schemaV27SyncRecoverySchedule},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a
@@ -247,6 +248,22 @@ CREATE TABLE sync_peer_nudges (
 );
 CREATE INDEX idx_sync_peer_nudges_pending ON sync_peer_nudges(group_id, sequence)
 	WHERE processed_at IS NULL;
+`
+
+// A reserved attempt survives process loss. The next service process waits
+// until next_due_at before retrying; completion is fenced by attempt_id.
+// The last_reason CHECK is durable schema. Extend it through a new migration
+// whenever the producer and Go validator add a recovery reason.
+const schemaV27SyncRecoverySchedule = `
+CREATE TABLE sync_recovery_schedule (
+	group_id TEXT PRIMARY KEY REFERENCES sync_controls(group_id),
+	consecutive_failures INTEGER NOT NULL DEFAULT 0 CHECK (consecutive_failures BETWEEN 0 AND 16),
+	next_due_at TEXT NOT NULL,
+	last_attempt_at TEXT NOT NULL DEFAULT '',
+	attempt_id TEXT NOT NULL DEFAULT '',
+	last_success_at TEXT NOT NULL DEFAULT '',
+	last_reason TEXT NOT NULL DEFAULT 'none' CHECK (last_reason IN ('none','reconcile_failed','inbox_unavailable','local_ref_unavailable','inbox_unsettled'))
+);
 `
 
 // migrationVersion resolves one registered migration's version by

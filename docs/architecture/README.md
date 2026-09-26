@@ -11,6 +11,7 @@ then the source, persistence, reconciliation, Hermes, observability, and
 security documents for the owning subsystem.
 
 For the partially implemented v0.2.0 two-node Git sync loop, read
-[`wiki-sync.md`](wiki-sync.md). Local control, membership, signed publication,
-checkpoints, guarded import, and authenticated peer admission are present.
-Periodic recovery and pair verification remain planned.
+[`wiki-sync.md`](wiki-sync.md). E21 provides local control, membership, signed
+publication, checkpoints, and guarded import. E22-T1 adds authenticated peer
+admission, and E22-T2 adds periodic configured-ref recovery. Pair verification
+remains planned.

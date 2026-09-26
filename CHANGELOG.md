@@ -23,6 +23,8 @@ This file records concise shipped outcomes and pending changes.
   and import outcomes, including unresolved signed and pending work.
 - Add authenticated local peer service over an owner-only Unix socket with a durable idempotent nudge inbox,
   bounded conservative status responses, and configured HTTPS delivery retries.
+- Add startup and periodic configured-ref recovery with durable retry timing,
+  missed-nudge catch-up, and recovery of already-signed publication work.
 
 ### Changed
 

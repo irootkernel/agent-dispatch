@@ -813,9 +813,32 @@ that a real child result reaches `runReconcile` as a settled target. A reported
 cleanup leak on the test's readiness-failure path was invalid because the
 test registers context cancellation before waiting for readiness.
 
-These checks cover T1 behavior in disposable local fixtures. Later E22 tasks
-cover lost-nudge periodic recovery, fresh pair completion, managed service
-lifecycle, and real two-node AC-1805 qualification.
+E22-T2 local qualification covers schema v27 retry persistence, wake backoff,
+an offline interval followed by configured-ref recovery, and `sync status`
+projection of the schedule and unsigned work requiring publisher re-entry.
+The status test checks due and attempt times, excludes live claims, and
+includes expired claims. A store test checks chronological oldest selection
+across fractional-second timestamps and counts a malformed claim expiry as
+an unclaimed obligation.
+
+The real-Git fixture imports four signed first-parent peer publications with
+no nudges. It confirms that a remote rewind leaves the local content ref
+unchanged and that deleted content and membership refs raise a trust hold.
+It also strands an already-signed publication and checks live-claim and
+transport deferrals, conflict, trust failure, and uncertain local advance
+before completing recovery through `sync reconcile` without a publisher key.
+An unrelated live publication claim cannot turn another precondition into a
+retryable result. Fabricated missing-ref fetch diagnostics leave the control
+active when the pinned remote still advertises the content or membership ref.
+The scheduled worker settles admitted nudges through the guarded command and
+records either success or a retained coverage failure. Tests cover inbox and
+schedule store failures, a second nudge wake after startup, dead-owner
+reservation expiry, the failure cap, the paused and stale-control guards,
+the stale-control warning remedy, membership adoption followed by content
+reconciliation, and process-group cancellation on shutdown. These local
+fixtures cover T1 and T2 behavior.
+T3 owns fresh pair completion, T4 owns managed service lifecycle, and T5 owns
+real two-node AC-1805 qualification.
 
 ## Go 1.27.1 Toolchain and Dependency Update (2026-09-24)
 

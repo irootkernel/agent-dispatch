@@ -216,7 +216,7 @@ func TestPeerNudgeMigrationFromV25(t *testing.T) {
 	if err := s.Migrate(t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
-	if version, err := s.SchemaVersion(); err != nil || version != 26 {
+	if version, err := s.SchemaVersion(); err != nil || version != MaxSchemaVersion {
 		t.Fatalf("v25 upgrade yielded schema %d: %v", version, err)
 	}
 	if _, err := s.AdmitPeerNudge(context.Background(), peerNudge("pub-after-upgrade")); err != nil {

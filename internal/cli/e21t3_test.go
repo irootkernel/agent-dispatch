@@ -344,9 +344,205 @@ exec %s "$@"
 	if err := store.QueryRow(`SELECT COUNT(*) FROM sync_jobs WHERE kind='delivery' AND state='pending'`).Scan(&deliveries); err != nil || deliveries != 1 {
 		t.Fatalf("recovered deliveries=%d err=%v", deliveries, err)
 	}
+	// A service has no publisher signing key. Re-strand the same confirmed
+	// candidate and prove the operator reconcile path can finish it alone.
+	if _, err := store.Exec(`DELETE FROM sync_jobs WHERE kind='delivery'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Exec(`UPDATE sync_jobs SET state='signed',retain_until_resolved=1,resolved_at=NULL WHERE job_id=?`, publicationJobID); err != nil {
+		t.Fatal(err)
+	}
+	gitTestRun(t, realGit, repo, "update-ref", cfg.Sync.ContentRef, publicationRecord.BaseCommit, published.Result.CandidateCommit)
+	t.Setenv("E21T3_PUBLISHER", "")
+	faultBin := filepath.Join(dir, "recovery-fault-bin")
+	if err := os.Mkdir(faultBin, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	remoteFailure := filepath.Join(dir, "fail-recovery-remote")
+	remoteCount := filepath.Join(dir, "recovery-remote-count")
+	advanceFailure := filepath.Join(dir, "fail-local-advance")
+	fetchFailure := filepath.Join(dir, "fail-content-fetch")
+	membershipFetchFailure := filepath.Join(dir, "fail-membership-fetch")
+	faultWrapper := `#!/bin/sh
+case " $* " in
+  *" ls-remote "*)
+    for last do :; done
+    if test "$last" = __CONTENT_REF__ && test -e __REMOTE_FAILURE__; then
+      count=0
+      if test -s __REMOTE_COUNT__; then count=$(cat __REMOTE_COUNT__); fi
+      count=$((count + 1))
+      printf '%s\n' "$count" > __REMOTE_COUNT__
+      if test "$count" -eq 2; then exit 1; fi
+    fi;;
+  *" fetch "*"__CONTENT_REF_PATTERN__:refs/agent-dispatch/sync/content/"*)
+    if test -e __FETCH_FAILURE__; then
+      printf '%s\n' "remote: fatal: couldn't find remote ref" >&2
+      exit 1
+    fi;;
+  *" fetch "*"__MEMBERSHIP_REF_PATTERN__:refs/agent-dispatch/sync/membership/"*)
+    if test -e __MEMBERSHIP_FETCH_FAILURE__; then
+      printf '%s\n' "remote: fatal: couldn't find remote ref" >&2
+      exit 1
+    fi;;
+  *" update-ref "*)
+    previous=
+    for arg do
+      if test "$previous" = update-ref && test "$arg" = __CONTENT_REF__ && test -e __ADVANCE_FAILURE__; then exit 1; fi
+      previous=$arg
+    done;;
+esac
+exec __BASE_WRAPPER__ "$@"
+`
+	shellQuote := func(value string) string { return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'" }
+	faultWrapper = strings.NewReplacer(
+		"__CONTENT_REF_PATTERN__", cfg.Sync.ContentRef,
+		"__MEMBERSHIP_REF_PATTERN__", cfg.Sync.MembershipRef,
+		"__CONTENT_REF__", shellQuote(cfg.Sync.ContentRef),
+		"__REMOTE_FAILURE__", shellQuote(remoteFailure),
+		"__REMOTE_COUNT__", shellQuote(remoteCount),
+		"__ADVANCE_FAILURE__", shellQuote(advanceFailure),
+		"__FETCH_FAILURE__", shellQuote(fetchFailure),
+		"__MEMBERSHIP_FETCH_FAILURE__", shellQuote(membershipFetchFailure),
+		"__BASE_WRAPPER__", shellQuote(wrapper),
+	).Replace(faultWrapper)
+	if err := os.WriteFile(filepath.Join(faultBin, "git"), []byte(faultWrapper), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", faultBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if _, err := store.Exec(`UPDATE sync_jobs SET claim_owner='live-publisher',claim_expires_at=? WHERE job_id=?`, time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano), publicationJobID); err != nil {
+		t.Fatal(err)
+	}
+	var claimedOut, claimedErr bytes.Buffer
+	if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &claimedOut, &claimedErr); code != 10 || !bytes.Contains(claimedOut.Bytes(), []byte(`"state":"deferred"`)) || !bytes.Contains(claimedOut.Bytes(), []byte(`"reason":"publication_recovery_pending"`)) || claimedErr.Len() != 0 {
+		t.Fatalf("live publication claim: %d out=%s err=%s", code, claimedOut.String(), claimedErr.String())
+	}
+	if _, err := store.Exec(`UPDATE sync_jobs SET claim_owner=NULL,claim_expires_at=NULL WHERE job_id=?`, publicationJobID); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(remoteFailure, []byte("fail second content probe\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var retryOut, retryErr bytes.Buffer
+	if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &retryOut, &retryErr); code != 10 || !bytes.Contains(retryOut.Bytes(), []byte(`"state":"deferred"`)) || !bytes.Contains(retryOut.Bytes(), []byte(`"reason":"publication_recovery_pending"`)) || retryErr.Len() != 0 {
+		t.Fatalf("transient signed-publication recovery: %d out=%s err=%s", code, retryOut.String(), retryErr.String())
+	}
+	if err := os.Remove(remoteFailure); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if _, err := store.Exec(`INSERT INTO sync_jobs(job_id,group_id,kind,logical_key,request_fingerprint,state,payload_json,claim_owner,claim_expires_at,created_at,updated_at) VALUES ('unrelated-live-publisher',?,'publication','unrelated','sha256:unrelated','eligible','{}','other-publisher',?,?,?)`, cfg.Sync.GroupID, now.Add(time.Hour).Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	baseTree := gitTestOutput(t, realGit, repo, "rev-parse", publicationRecord.BaseCommit+"^{tree}")
+	otherLocal := strings.TrimSpace(string(commandBytesWithInput(t, []byte("other local head\n"), realGit, "-C", repo, "commit-tree", baseTree, "-p", publicationRecord.BaseCommit)))
+	gitTestRun(t, realGit, repo, "update-ref", cfg.Sync.ContentRef, otherLocal, publicationRecord.BaseCommit)
+	var unrelatedOut, unrelatedErr bytes.Buffer
+	if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &unrelatedOut, &unrelatedErr); code != 14 || !bytes.Contains(unrelatedOut.Bytes(), []byte(`"state":"failed"`)) || !bytes.Contains(unrelatedOut.Bytes(), []byte(`"reason":"publication_recovery_precondition"`)) {
+		t.Fatalf("unrelated live claim masked a recovery precondition: %d out=%s err=%s", code, unrelatedOut.String(), unrelatedErr.String())
+	}
+	control, err := store.LoadSyncControl(requestCtx(), cfg.Sync.GroupID)
+	if err != nil || control.State != "active" {
+		t.Fatalf("unrelated live claim changed control: %+v err=%v", control, err)
+	}
+	gitTestRun(t, realGit, repo, "update-ref", cfg.Sync.ContentRef, publicationRecord.BaseCommit, otherLocal)
+	if _, err := store.Exec(`DELETE FROM sync_jobs WHERE job_id='unrelated-live-publisher'`); err != nil {
+		t.Fatal(err)
+	}
+	var fence int
+	if err := store.QueryRow(`SELECT fence FROM sync_jobs WHERE job_id=?`, publicationJobID).Scan(&fence); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Exec(`INSERT INTO sync_journal_entries(journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES ('e22-invalid-candidate',?,?,'claim_recovery','signed',?,?)`, publicationJobID, fence, mustJSON(map[string]any{"candidate": strings.Repeat("f", 40)}), time.Now().Add(time.Second).UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	var invalidOut, invalidErr bytes.Buffer
+	if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &invalidOut, &invalidErr); code != 14 || !bytes.Contains(invalidOut.Bytes(), []byte(`"state":"blocked"`)) || !bytes.Contains(invalidOut.Bytes(), []byte(`"reason":"conflict"`)) || invalidErr.Len() != 0 {
+		t.Fatalf("moved signed-publication candidate: %d out=%s err=%s", code, invalidOut.String(), invalidErr.String())
+	}
+	if _, err := store.Exec(`UPDATE sync_controls SET state='active',reason='none' WHERE group_id=?`, cfg.Sync.GroupID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Exec(`UPDATE sync_jobs SET state='signed' WHERE job_id=?`, publicationJobID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Exec(`INSERT INTO sync_journal_entries(journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES ('e22-restored-candidate',?,?,'claim_recovery','signed',?,?)`, publicationJobID, fence, mustJSON(map[string]any{"candidate": published.Result.CandidateCommit}), time.Now().Add(2*time.Second).UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	badCandidate := strings.Repeat("f", 40)
+	if _, err := store.Exec(`INSERT INTO sync_journal_entries(journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES ('e22-trust-candidate',?,?,'claim_recovery','signed',?,?)`, publicationJobID, fence, mustJSON(map[string]any{"candidate": badCandidate}), time.Now().Add(3*time.Second).UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(contentState, []byte(badCandidate+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var trustOut, trustErr bytes.Buffer
+	if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &trustOut, &trustErr); code != 30 || !bytes.Contains(trustOut.Bytes(), []byte(`"state":"blocked"`)) || !bytes.Contains(trustOut.Bytes(), []byte(`"reason":"trust_failure"`)) || trustErr.Len() != 0 {
+		t.Fatalf("untrusted signed-publication recovery: %d out=%s err=%s", code, trustOut.String(), trustErr.String())
+	}
+	if err := os.WriteFile(contentState, []byte(published.Result.CandidateCommit+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Exec(`UPDATE sync_controls SET state='active',reason='none' WHERE group_id=?`, cfg.Sync.GroupID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Exec(`INSERT INTO sync_journal_entries(journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES ('e22-after-trust-candidate',?,?,'claim_recovery','signed',?,?)`, publicationJobID, fence, mustJSON(map[string]any{"candidate": published.Result.CandidateCommit}), time.Now().Add(4*time.Second).UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(advanceFailure, []byte("fail local advance\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var uncertainOut, uncertainErr bytes.Buffer
+	if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &uncertainOut, &uncertainErr); code != 13 || !bytes.Contains(uncertainOut.Bytes(), []byte(`"state":"blocked"`)) || !bytes.Contains(uncertainOut.Bytes(), []byte(`"reason":"recovery_required"`)) || uncertainErr.Len() != 0 {
+		t.Fatalf("uncertain signed-publication recovery: %d out=%s err=%s", code, uncertainOut.String(), uncertainErr.String())
+	}
+	if err := os.Remove(advanceFailure); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Exec(`UPDATE sync_controls SET state='active',reason='none' WHERE group_id=?`, cfg.Sync.GroupID); err != nil {
+		t.Fatal(err)
+	}
+	var serviceRecoveryOut, serviceRecoveryErr bytes.Buffer
+	if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &serviceRecoveryOut, &serviceRecoveryErr); code != 0 || !bytes.Contains(serviceRecoveryOut.Bytes(), []byte(`"state":"no_change"`)) {
+		t.Fatalf("signer-free reconcile recovery: %d out=%s err=%s", code, serviceRecoveryOut.String(), serviceRecoveryErr.String())
+	}
+	if got := gitTestOutput(t, realGit, repo, "rev-parse", cfg.Sync.ContentRef); got != published.Result.CandidateCommit {
+		t.Fatalf("reconcile did not restore local content ref: %s", got)
+	}
+	if err := store.QueryRow(`SELECT COUNT(*) FROM sync_jobs WHERE kind='delivery' AND state='pending'`).Scan(&deliveries); err != nil || deliveries != 1 {
+		t.Fatalf("reconcile did not retain publication delivery: %d err=%v", deliveries, err)
+	}
+	t.Setenv("E21T3_PUBLISHER", string(publisherKey))
 	var noOpOut, noOpErr bytes.Buffer
 	if code := Run([]string{"sync", "publish", "--group", cfg.Sync.GroupID, "--expected-config-revision", revision, "--output", "json"}, &noOpOut, &noOpErr); code != 0 || !bytes.Contains(noOpOut.Bytes(), []byte(`"state":"no_content_change"`)) {
 		t.Fatalf("no-op: %d out=%s err=%s", code, noOpOut.String(), noOpErr.String())
+	}
+	if err := os.WriteFile(membershipFetchFailure, []byte("spoof missing membership ref\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var membershipSpoofOut, membershipSpoofErr bytes.Buffer
+	if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &membershipSpoofOut, &membershipSpoofErr); code != 10 || !bytes.Contains(membershipSpoofOut.Bytes(), []byte(`"state":"deferred"`)) || !bytes.Contains(membershipSpoofOut.Bytes(), []byte(`"reason":"git_unstable"`)) {
+		t.Fatalf("unconfirmed membership missing-ref diagnostic created a hold: %d out=%s err=%s", code, membershipSpoofOut.String(), membershipSpoofErr.String())
+	}
+	control, err = store.LoadSyncControl(requestCtx(), cfg.Sync.GroupID)
+	if err != nil || control.State != "active" {
+		t.Fatalf("unconfirmed membership missing-ref diagnostic changed control: %+v err=%v", control, err)
+	}
+	if err := os.Remove(membershipFetchFailure); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fetchFailure, []byte("spoof missing ref\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var spoofOut, spoofErr bytes.Buffer
+	if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &spoofOut, &spoofErr); code != 10 || !bytes.Contains(spoofOut.Bytes(), []byte(`"state":"deferred"`)) || !bytes.Contains(spoofOut.Bytes(), []byte(`"reason":"git_unstable"`)) {
+		t.Fatalf("unconfirmed missing-ref diagnostic created a hold: %d out=%s err=%s", code, spoofOut.String(), spoofErr.String())
+	}
+	control, err = store.LoadSyncControl(requestCtx(), cfg.Sync.GroupID)
+	if err != nil || control.State != "active" {
+		t.Fatalf("unconfirmed missing-ref diagnostic changed control: %+v err=%v", control, err)
+	}
+	if err := os.Remove(fetchFailure); err != nil {
+		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(repo, "note.md"), []byte("conflict\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -367,7 +563,7 @@ exec %s "$@"
 	if code := Run([]string{"sync", "publish", "--group", cfg.Sync.GroupID, "--expected-config-revision", revision, "--output", "json"}, &conflictOut, &conflictErr); code != 14 {
 		t.Fatalf("losing fast-forward: %d out=%s err=%s", code, conflictOut.String(), conflictErr.String())
 	}
-	control, err := store.LoadSyncControl(requestCtx(), cfg.Sync.GroupID)
+	control, err = store.LoadSyncControl(requestCtx(), cfg.Sync.GroupID)
 	if err != nil || control.State != "blocked" || control.Reason != "conflict" {
 		t.Fatalf("losing fast-forward control=%+v err=%v", control, err)
 	}
@@ -458,6 +654,39 @@ exec %s "$@"
 		t.Fatalf("normal equal-ref reconcile control=%+v err=%v", control, err)
 	}
 	assertE21PublishedNodeCanApplyPeerRoundTrip(t, cfg, configPath, contentState, repo, replacementKey)
+	// Rewinding the remote after a successful import must leave the local
+	// content ref unchanged and arm a conflict hold.
+	if err := os.WriteFile(contentState, []byte(base+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	localBeforeRewrite := gitTestOutput(t, realGit, repo, "rev-parse", cfg.Sync.ContentRef)
+	var rewriteOut, rewriteErr bytes.Buffer
+	if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &rewriteOut, &rewriteErr); code != 14 || !bytes.Contains(rewriteOut.Bytes(), []byte(`"state":"blocked"`)) || !bytes.Contains(rewriteOut.Bytes(), []byte(`"control_reason":"conflict"`)) {
+		t.Fatalf("remote history rewrite was not held: %d out=%s err=%s", code, rewriteOut.String(), rewriteErr.String())
+	}
+	if got := gitTestOutput(t, realGit, repo, "rev-parse", cfg.Sync.ContentRef); got != localBeforeRewrite {
+		t.Fatalf("remote rewrite moved the protected local ref: %s -> %s", localBeforeRewrite, got)
+	}
+	// A deleted configured ref is a stronger trust failure, not an ordinary
+	// offline transport failure. It must remain visible across a prior hold.
+	if err := os.WriteFile(contentState, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var missingOut, missingErr bytes.Buffer
+	if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &missingOut, &missingErr); code != 30 || !bytes.Contains(missingOut.Bytes(), []byte(`"state":"blocked"`)) || !bytes.Contains(missingOut.Bytes(), []byte(`"control_reason":"trust_failure"`)) {
+		t.Fatalf("deleted configured ref was not held: %d out=%s err=%s", code, missingOut.String(), missingErr.String())
+	}
+	if err := os.WriteFile(membershipState, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	localMembershipBeforeDeletion := gitTestOutput(t, realGit, repo, "rev-parse", cfg.Sync.MembershipRef)
+	var missingMembershipOut, missingMembershipErr bytes.Buffer
+	if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &missingMembershipOut, &missingMembershipErr); code != 30 || !bytes.Contains(missingMembershipOut.Bytes(), []byte(`"state":"blocked"`)) || !bytes.Contains(missingMembershipOut.Bytes(), []byte(`"control_reason":"trust_failure"`)) {
+		t.Fatalf("deleted membership ref was not held: %d out=%s err=%s", code, missingMembershipOut.String(), missingMembershipErr.String())
+	}
+	if got := gitTestOutput(t, realGit, repo, "rev-parse", cfg.Sync.MembershipRef); got != localMembershipBeforeDeletion {
+		t.Fatalf("deleted remote membership moved local ref: %s -> %s", localMembershipBeforeDeletion, got)
+	}
 }
 
 func e21t3ApplyMembershipChange(t *testing.T, cfg *config.Config, dir, change, instance, predecessor string) string {
@@ -601,30 +830,36 @@ func assertE21PublishedNodeCanApplyPeerRoundTrip(t *testing.T, cfg *config.Confi
 	if peer.InstanceID == "" {
 		t.Fatal("peer publisher is not active")
 	}
-	targetFiles := cloneFiles(baseFiles)
-	targetFiles["note.md"] = []byte("peer round trip\n")
-	publication, err := syncrecords.NewPublication(syncrecords.PublicationBinding{
-		GroupID: cfg.Sync.GroupID, Publisher: peer.InstanceID, StateIncarnationID: peer.StateIncarnationID,
-		MembershipRevision: membership, ContentRef: cfg.Sync.ContentRef, BaseCommit: base,
-		ScopeDigest: config.SyncScopeDigest(cfg, cfg.Sync.Resource), ContractDigest: config.SyncContractDigest(),
-		SourceRevision: 2, ReceiptIDs: []string{"receipt-peer-round-trip"},
-	}, syncrecords.SnapshotFiles(targetFiles))
-	if err != nil {
-		t.Fatal(err)
-	}
-	raw, err := syncrecords.CanonicalPublication(publication)
-	if err != nil {
-		t.Fatal(err)
-	}
-	treeFiles := cloneFiles(targetFiles)
-	treeFiles[".agent-dispatch-sync/publications/"+publication.PublicationID+".json"] = raw
-	tree, err := client.SnapshotTreeChanges(requestCtx(), base, treeFiles, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	target, err := client.CreateSignedContentCommit(requestCtx(), tree, peerKey, base, time.Unix(1_700_000_200, 0), "publisher", "peer round trip")
-	if err != nil {
-		t.Fatal(err)
+	// Several publications accumulate while this node is offline. One
+	// configured-ref reconcile must verify every signed first-parent commit,
+	// including publications for which no nudge was received.
+	target := base
+	for i := 1; i <= 4; i++ {
+		targetFiles := cloneFiles(baseFiles)
+		targetFiles["note.md"] = []byte(fmt.Sprintf("peer round trip %d\n", i))
+		publication, err := syncrecords.NewPublication(syncrecords.PublicationBinding{
+			GroupID: cfg.Sync.GroupID, Publisher: peer.InstanceID, StateIncarnationID: peer.StateIncarnationID,
+			MembershipRevision: membership, ContentRef: cfg.Sync.ContentRef, BaseCommit: target,
+			ScopeDigest: config.SyncScopeDigest(cfg, cfg.Sync.Resource), ContractDigest: config.SyncContractDigest(),
+			SourceRevision: int64(i + 1), ReceiptIDs: []string{fmt.Sprintf("receipt-peer-round-trip-%d", i)},
+		}, syncrecords.SnapshotFiles(targetFiles))
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := syncrecords.CanonicalPublication(publication)
+		if err != nil {
+			t.Fatal(err)
+		}
+		treeFiles := cloneFiles(targetFiles)
+		treeFiles[".agent-dispatch-sync/publications/"+publication.PublicationID+".json"] = raw
+		tree, err := client.SnapshotTreeChanges(requestCtx(), target, treeFiles, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		target, err = client.CreateSignedContentCommit(requestCtx(), tree, peerKey, target, time.Unix(int64(1_700_000_200+i), 0), "publisher", "peer round trip")
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := os.WriteFile(contentState, []byte(target+"\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -667,7 +902,7 @@ func assertE21PublishedNodeCanApplyPeerRoundTrip(t *testing.T, cfg *config.Confi
 	if got := gitTestOutput(t, "git", repo, "rev-parse", cfg.Sync.ContentRef); got != target {
 		t.Fatalf("round-trip content ref=%s want=%s", got, target)
 	}
-	if raw, err := os.ReadFile(filepath.Join(repo, "note.md")); err != nil || string(raw) != "peer round trip\n" {
+	if raw, err := os.ReadFile(filepath.Join(repo, "note.md")); err != nil || string(raw) != "peer round trip 4\n" {
 		t.Fatalf("round-trip content=%q err=%v", raw, err)
 	}
 }

@@ -56,9 +56,12 @@ administrator-signed checkpoint; it never adopts uncovered history by itself.
 scope digest, contract digest, both node identities, and their incarnations.
 It reports historical delivery separately from fresh pair convergence.
 
-`sync serve` hosts the authenticated nudge and fresh-status endpoints. E22-T2
-adds bounded periodic configured-ref reconciliation. HTTP handlers validate and persist requests;
-application services perform Git and filesystem effects after admission.
+`sync serve` hosts the authenticated nudge and fresh-status endpoints. Its
+worker inspects configured refs on startup and every five minutes. Failed
+attempts use persisted backoff from 30 seconds to five minutes. An admitted
+nudge wakes the worker when no failure backoff is active. HTTP handlers
+validate and persist requests; application services perform Git and filesystem
+effects after admission.
 
 `pause` prevents new protected effects and lets in-flight work reach a safe
 boundary. `resume` revalidates configuration, membership, activation, and local
@@ -155,10 +158,15 @@ At that bound it refuses a new identity before HTTP 202, while the sender keeps
 its delivery obligation. Exact replays of retained identities remain idempotent.
 
 The service recovers already-signed publication, delivery, and import work at
-startup and during periodic reconciliation. Duplicate or reordered nudges are
-normal. Retries reuse the original logical identity. Conflict, trust failure,
-pre-signature publication work, and unsafe local state require operator action
-and are not retryable transport failures.
+startup and during periodic reconciliation. The schedule is durable in schema
+v27 and reported separately by `sync status`. Every admitted nudge retains its
+own historical resolution after a coalesced reconcile. Duplicate or reordered
+nudges are normal. Retries reuse the original logical identity. Conflict, trust
+failure, pre-signature publication work, and unsafe local state require operator action
+and are not retryable transport failures. Status reports the count and oldest
+creation time of `eligible` or `prepared` publications without an unexpired
+publisher claim; the service warns and leaves their
+logical identities for explicit publisher re-entry.
 
 ## Versioned records and closed states
 

@@ -2003,9 +2003,26 @@ func timeBefore(left, right string) bool {
 	return a.Before(b)
 }
 
+// SyncClaimLiveAt is the shared lease predicate used by publication recovery
+// and the status projection. A malformed expiry is not a live claim.
+func SyncClaimLiveAt(owner, expiry string, now time.Time) bool {
+	if owner == "" {
+		return false
+	}
+	until, err := time.Parse(time.RFC3339Nano, expiry)
+	return err == nil && now.Before(until)
+}
+
+// Publication states before a signed candidate exists. Keep these beside the
+// job validator and transitions; recovery status uses the same vocabulary.
+const (
+	preSignatureEligible = "eligible"
+	preSignaturePrepared = "prepared"
+)
+
 func validSyncState(kind, state string) bool {
 	allowed := map[string]map[string]bool{
-		"publication":  {"eligible": true, "prepared": true, "signed": true, "push_pending": true, "published": true, "blocked": true, "uncertain": true},
+		"publication":  {preSignatureEligible: true, preSignaturePrepared: true, "signed": true, "push_pending": true, "published": true, "blocked": true, "uncertain": true},
 		"delivery":     {"pending": true, "attempted": true, "accepted": true, "retryable": true, "unknown": true, "refused": true},
 		"import":       {"requested": true, "fetched": true, "validated": true, "applying": true, "applied": true, "deferred": true, "blocked": true, "recovering": true, "uncertain": true},
 		"verification": {"planned": true, "collecting": true, "finished": true, "complete": true, "incomplete": true, "target_changed": true, "blocked": true, "expired": true},
@@ -2022,11 +2039,11 @@ func validSyncState(kind, state string) bool {
 func validSyncTransition(kind, from, to string) bool {
 	edges := map[string]map[string]map[string]bool{
 		"publication": {
-			"eligible":     {"eligible": true, "prepared": true, "blocked": true, "uncertain": true},
-			"prepared":     {"prepared": true, "signed": true, "blocked": true, "uncertain": true},
-			"signed":       {"signed": true, "push_pending": true, "published": true, "blocked": true, "uncertain": true},
-			"push_pending": {"push_pending": true, "published": true, "blocked": true, "uncertain": true},
-			"uncertain":    {"uncertain": true, "signed": true, "published": true},
+			preSignatureEligible: {preSignatureEligible: true, preSignaturePrepared: true, "blocked": true, "uncertain": true},
+			preSignaturePrepared: {preSignaturePrepared: true, "signed": true, "blocked": true, "uncertain": true},
+			"signed":             {"signed": true, "push_pending": true, "published": true, "blocked": true, "uncertain": true},
+			"push_pending":       {"push_pending": true, "published": true, "blocked": true, "uncertain": true},
+			"uncertain":          {"uncertain": true, "signed": true, "published": true},
 		},
 		"delivery": {
 			"pending":   {"pending": true, "attempted": true, "accepted": true, "retryable": true, "unknown": true, "refused": true},

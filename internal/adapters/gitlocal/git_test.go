@@ -772,6 +772,12 @@ func TestFetchRewriteClassificationDoesNotConfuseTransportFailure(t *testing.T) 
 	if fetchRejectedRewrite([]byte("fatal: Could not resolve hostname example.invalid")) {
 		t.Fatal("transport failure must remain retryable and must not become a trust hold")
 	}
+	if !fetchMissingRef([]byte("fatal: couldn't find remote ref refs/heads/wiki-sync")) {
+		t.Fatal("deleted configured ref must be classified separately from transport failure")
+	}
+	if fetchMissingRef([]byte("fatal: Could not resolve hostname example.invalid")) {
+		t.Fatal("offline remote must not look like a deleted ref")
+	}
 }
 
 func initRepository(t *testing.T) string {

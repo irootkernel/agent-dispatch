@@ -69,6 +69,22 @@ not require a cooperative-import acknowledgement, but live-tree import does.
 The repository worktree must have the configured `content_ref` checked out on
 both nodes; a detached or different `HEAD` fails closed.
 
+When an operator starts `sync serve`, its worker inspects configured refs on
+startup and every five minutes even if every nudge is lost. The same guarded
+reconcile command processes a successful nudge wake. `sync status` reports the
+durable `recovery_schedule`; repeated failures delay retries by 30 seconds up
+to five minutes and survive service restart. The reported failure count stops
+at 16. A paused group waits without claiming recovery. A stale sync control
+configuration binding also suspends recovery until explicit `sync reconcile`
+rebinds it. In `recovery_schedule.last_reason`, `reconcile_failed` means the
+configured-ref pass did not settle; inspect the reconcile result and control.
+`inbox_unavailable` means the worker could not read its local inbox; inspect
+SQLite health. `local_ref_unavailable` means the local content ref could not
+be confirmed after reconciliation; inspect that ref and the peer inbox.
+`inbox_unsettled` means at least one nudge could not be settled; inspect its
+retained reason and retry after resolving the cause. The managed service
+definition remains E22-T4 work.
+
 Before enabling import on a node:
 
 1. Start from that node's normalized, validated configuration and its current

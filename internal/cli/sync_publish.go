@@ -84,7 +84,7 @@ func runSyncPublish(args []string, stdout, stderr io.Writer) int {
 	if err := history.AuthorizePublisher(membershipHead, member.PublisherKey, false, false); err != nil {
 		return syncMembershipError(stderr, command, err, 30)
 	}
-	if recovered, result := recoverConfirmedPublication(stdout, stderr, store, client, cfg, syncCfg, history, membershipHead, member, peer); recovered {
+	if recovered, result := recoverConfirmedPublication(stdout, stderr, store, client, cfg, syncCfg, history, membershipHead, member, peer, nil); recovered {
 		return result
 	}
 	control, err = store.LoadSyncControl(requestCtx(), syncCfg.GroupID)
@@ -306,7 +306,7 @@ func publicationMembers(h syncmembership.History, local string) (syncrecords.Act
 // recoverConfirmedPublication closes the narrow crash window after a signed
 // candidate reached the remote but before SQLite and the local ref committed.
 // It never signs or creates another commit.
-func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, client *gitlocal.Client, cfg *config.Config, s *config.Sync, history syncmembership.History, membership string, self, peer syncrecords.ActiveMember) (bool, int) {
+func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, client *gitlocal.Client, cfg *config.Config, s *config.Sync, history syncmembership.History, membership string, self, peer syncrecords.ActiveMember, claimPending *bool) (bool, int) {
 	jobs, err := store.LoadUnresolvedSyncJobs(requestCtx(), s.GroupID, "publication")
 	if err != nil {
 		return true, syncStoreError(stderr, "sync publish", err)
@@ -344,8 +344,10 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 			if remote != publication.BaseCommit {
 				now := time.Now().UTC()
 				if job.ClaimOwner != "" {
-					expires, _ := time.Parse(time.RFC3339Nano, job.ClaimExpiresAt)
-					if expires.After(now) {
+					if sqlite.SyncClaimLiveAt(job.ClaimOwner, job.ClaimExpiresAt, now) {
+						if claimPending != nil {
+							*claimPending = true
+						}
 						return true, syncMembershipError(stderr, "sync publish", errors.New("pending publication still has an unexpired claim"), 14)
 					}
 				}
@@ -394,8 +396,10 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 			}
 			now := time.Now().UTC()
 			if job.ClaimOwner != "" {
-				expires, _ := time.Parse(time.RFC3339Nano, job.ClaimExpiresAt)
-				if expires.After(now) {
+				if sqlite.SyncClaimLiveAt(job.ClaimOwner, job.ClaimExpiresAt, now) {
+					if claimPending != nil {
+						*claimPending = true
+					}
 					return true, syncMembershipError(stderr, "sync publish", errors.New("pending publication still has an unexpired claim"), 14)
 				}
 				nowText := now.Format(time.RFC3339Nano)
@@ -459,8 +463,10 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 		}
 		now := time.Now().UTC()
 		if recoveryOwner == "" && job.ClaimOwner != "" {
-			expires, _ := time.Parse(time.RFC3339Nano, job.ClaimExpiresAt)
-			if expires.After(now) {
+			if sqlite.SyncClaimLiveAt(job.ClaimOwner, job.ClaimExpiresAt, now) {
+				if claimPending != nil {
+					*claimPending = true
+				}
 				return true, syncMembershipError(stderr, "sync publish", errors.New("confirmed publication still has an unexpired claim"), 14)
 			}
 		}

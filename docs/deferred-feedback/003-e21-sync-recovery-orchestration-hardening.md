@@ -17,8 +17,19 @@ different logical identity. These are Low maintainability and operability
 concerns: current bounds, attempt caps, status visibility, and fail-closed
 admission preserve correctness.
 
-**Reconsideration condition.** E22-T2 owns periodic recovery, persisted
-backoff, and the managed service loop. Name the lease policy, consolidate the
-shared push disposition only where evidence/result differences remain explicit,
-and define how the service retires or escalates a stranded pre-signature
-obligation when that task extracts the one-shot orchestration.
+**E22-T2 disposition.** The peer worker now uses the guarded `sync reconcile`
+command for startup, periodic, and nudge-driven work. It persists retry timing
+in schema v27. `sync status` reports the count and oldest creation time of
+pre-signature publication obligations, and the service warns while leaving
+them for explicit `sync publish` re-entry. Push classification was already
+shared by the fresh and recovery paths through `classifySyncPush`; their
+evidence and result mappings remain distinct. Claim leases currently reserve
+the configured subprocess limit times six for new publication, five for
+checkpoint application, or four for signed-publication and import recovery,
+plus 60 seconds in each case. This is a Low consolidation concern; the
+durable claim fence and guarded recovery preserve correctness.
+
+**Reconsideration condition.** E22-T4 owns the managed service lifecycle.
+Consolidate phase-specific lease arithmetic if its lifecycle implementation
+needs a shared deadline policy. Do not change the operation counts without
+requalifying publication, checkpoint, and import recovery boundaries.

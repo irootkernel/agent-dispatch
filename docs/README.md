@@ -13,9 +13,9 @@ and everyday use, start with the [project README](../README.md).
 sync work / SOT 1.8.0. The shipped baseline is tracked
 under [v0.1.8 - 2026-09-10](../CHANGELOG.md#v018---2026-09-10). The qualified
 contract is not release evidence. E21 provides qualified local runtime control,
-membership, signed publication, checkpoints, guarded import, and authenticated
-peer admission; periodic recovery, pair verification, and v0.2.0 release
-evidence remain incomplete.
+membership, signed publication, checkpoints, and guarded import. E22-T1 adds
+authenticated peer admission; E22-T2 adds periodic recovery. Pair verification
+and v0.2.0 release evidence remain incomplete.
 
 ## Start Here
 

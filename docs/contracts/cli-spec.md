@@ -126,21 +126,42 @@ posture remains visible while pause or a stronger hold owns `state` and
 Transient membership or content fetch transport failure emits `deferred` with
 `git_unstable` at exit 10 and does not create a trust hold. A fetch rejected as
 non-fast-forward is classified separately and retains the fail-closed trust
-behavior.
+behavior. An already-signed publication delayed by a live claim or transient
+failure emits `deferred` with `publication_recovery_pending` at exit 10.
+Confirmed remote divergence blocks with exit 14; unknown effects and trust
+failures retain a durable `recovery_required` or `trust_failure` hold. The
+unresolved publication and its journal remain visible in status. Other
+publisher precondition or store errors return a `failed` reconcile result
+with the original exit code; they do not create a new history hold.
 Enabled `sync status` reports `latest_publication`, `latest_delivery`, and
 `latest_import` separately so a signed or uncertain publication, pending peer
 delivery, and local import can never collapse into one claimed outcome. Every
 enabled response also reports `peer_inbox_pending`, `peer_inbox_failed`,
 `peer_inbox_retained`, `peer_inbox_retention_limit`,
-`peer_inbox_oldest_received_at`, and `peer_inbox_oldest_reason`. A deferred
-nudge retains its bounded reason; a covered or superseded nudge remains in the
+`peer_inbox_oldest_received_at`, and `peer_inbox_oldest_reason`. It also reports
+`recovery_schedule`, `pre_signature_publications_pending`, and
+`pre_signature_oldest_created_at`. A deferred nudge retains its bounded reason;
+a covered or superseded nudge remains in the
 ledger while freeing queue capacity. `sync serve --group GROUP` listens on an
 owner-only Unix socket at `<state_dir>/peer-service/http.sock` for an
 operator-managed Tailscale HTTPS route. Startup rejects accessible signing
 references, a conflicting live socket, and unsafe socket path ownership.
 It prints startup and shutdown feedback to stderr, reports bounded worker
-warnings, and does not configure Tailscale. E22-T2 adds independent periodic
-configured-ref reconciliation; T1 wakes on admitted inbox work.
+warnings, and does not configure Tailscale. `recovery_schedule` is null before
+the first service attempt; afterward it reports the durable next due time,
+consecutive failure count, last attempt and success times, and a bounded
+reason. The failure count saturates at 16.
+`pre_signature_publications_pending` and
+`pre_signature_oldest_created_at` identify unresolved publication work without
+an unexpired publisher claim in `eligible` or `prepared` state that still
+requires explicit publisher re-entry. Other unresolved publication states
+remain visible through `latest_publication` and the job journal.
+The same worker runs configured-ref
+reconciliation at startup and every five minutes while healthy. Failures use
+persisted exponential delay capped at five minutes. An admitted nudge wakes
+the worker without bypassing failure backoff. A long historical catch-up uses
+the configured per-operation Git limits; service shutdown cancels the child
+and its Git process group.
 
 Each job projection includes the durable job identity, logical key, state, update time,
 resolution, claim, and fence. Resolution evidence is reported separately from

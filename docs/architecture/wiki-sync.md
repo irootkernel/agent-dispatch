@@ -2,9 +2,10 @@
 
 > **Status:** Partially implemented for v0.2.0 under D-030. E21 provides
 > qualified durable jobs and control, restricted Git and membership, explicit
-> signed publication, signed checkpoints, guarded local import, exact
-> attribution, and authenticated peer admission. Periodic recovery, pair
-> verification, managed service lifecycle, and release remain unavailable.
+> signed publication, signed checkpoints, guarded local import, and exact
+> attribution. E22-T1 adds authenticated peer admission; E22-T2 adds periodic
+> recovery. Pair verification, managed service lifecycle, and release remain
+> unavailable.
 
 Agent Dispatch extends the existing maintenance loop with an explicit Git
 publication step and a peer import loop. Hermes still owns Wiki semantics.
@@ -26,7 +27,7 @@ local change -> Watchman -> maintenance lanes -> validated receipt
 
 peer service -> durable inbox -> the same reconciliation/import path
              ^
-             +---- periodic ref inspection (E22-T2)
+             +---- periodic configured-ref inspection
 ```
 
 ## Boundaries
@@ -158,8 +159,22 @@ commit timestamps cannot restore trust.
 
 ## Liveness and verification
 
-Nudges reduce latency but are not required for correctness. Startup and
-periodic reconciliation inspect configured Git refs and recover missed work.
+Nudges reduce latency but are not required for correctness. The peer worker
+inspects configured Git refs at startup and every five minutes, using the same
+guarded `sync reconcile` command as inbox wakes and operators. A successful
+nudge wake may advance that timer. A failed run records exponential retry delay
+from 30 seconds to five minutes in SQLite; a restart or repeated wake cannot
+bypass that backoff. Each admitted nudge keeps its own durable identity and
+resolution, even when one reconcile covers a batch. The worker also recovers
+already-signed publication work without resolving a publisher signing key.
+A pre-signature `eligible` or `prepared` obligation without a live publisher
+claim remains for explicit `sync publish` re-entry. `sync status` reports its
+count and oldest creation time, and the service warns without attempting to
+sign it.
+
+Deleted configured refs and non-fast-forward rewrites create a trust hold for
+administrator review.
+
 An offline peer does not block local publication, but fresh pair convergence
 remains incomplete until both nodes answer with current authenticated evidence.
 The peer listener binds an owner-only local Unix socket. The service does not

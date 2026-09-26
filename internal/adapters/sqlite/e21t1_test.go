@@ -758,7 +758,10 @@ func TestE21Migration23PreservesLegacyBlockedFinality(t *testing.T) {
 	if _, err := s.Exec(`DROP TABLE sync_peer_nudges`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Exec(`DELETE FROM schema_migrations WHERE version IN (23,24,25,26)`); err != nil {
+	if _, err := s.Exec(`DROP TABLE sync_recovery_schedule`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Exec(`DELETE FROM schema_migrations WHERE version IN (23,24,25,26,27)`); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Close(); err != nil {

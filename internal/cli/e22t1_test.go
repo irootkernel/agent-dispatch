@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -38,8 +40,12 @@ func init() {
 			time.Sleep(time.Hour)
 		}
 	}
-	if (mode != "reconcile" && mode != "success" && mode != "adopt-once") || len(os.Args) != 6 || os.Args[1] != "sync" || os.Args[2] != "reconcile" {
+	if (mode != "reconcile" && mode != "success" && mode != "adopt-once" && mode != "excess-output") || len(os.Args) != 6 || os.Args[1] != "sync" || os.Args[2] != "reconcile" {
 		os.Exit(2)
+	}
+	if mode == "excess-output" {
+		fmt.Fprint(os.Stdout, e22t1OversizedReconcileResult())
+		os.Exit(0)
 	}
 	if mode == "adopt-once" {
 		marker := os.Getenv("AGENT_DISPATCH_E22_RECONCILE_RECORD")
@@ -77,6 +83,10 @@ func init() {
 	}
 	_ = child.Wait()
 	os.Exit(0)
+}
+
+func e22t1OversizedReconcileResult() string {
+	return fmt.Sprintf(`{"result":{"state":"no_change","target_commit":"%s"}}`, strings.Repeat("a", 40)) + strings.Repeat(" ", 2*1024*1024)
 }
 
 func e22t1Service(t *testing.T) (*peerService, func()) {
@@ -655,6 +665,45 @@ func TestE22T1PeerClientNeverFollowsRedirect(t *testing.T) {
 	}
 }
 
+func TestE22T1PeerClientRejectsUntrustedAndWrongHostCertificates(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	client := peerHTTPClient()
+	defer client.CloseIdleConnections()
+	transport := client.Transport.(*http.Transport)
+	if transport.Proxy != nil || transport.TLSClientConfig.InsecureSkipVerify || transport.TLSClientConfig.MinVersion < tls.VersionTLS12 {
+		t.Fatal("peer transport must use direct, verified TLS 1.2 or newer")
+	}
+	if _, err := client.Get(server.URL); err == nil {
+		t.Fatal("untrusted peer certificate was accepted")
+	} else {
+		var authorityErr x509.UnknownAuthorityError
+		if !errors.As(err, &authorityErr) {
+			t.Fatalf("untrusted certificate error = %v", err)
+		}
+	}
+	certificate, err := x509.ParseCertificate(server.TLS.Certificates[0].Certificate[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	roots := x509.NewCertPool()
+	roots.AddCert(certificate)
+	transport.TLSClientConfig.RootCAs = roots
+	transport.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, "tcp", server.Listener.Addr().String())
+	}
+	if _, err := client.Get("https://wrong-host.ts.net/"); err == nil {
+		t.Fatal("wrong-host peer certificate was accepted")
+	} else {
+		var hostErr x509.HostnameError
+		if !errors.As(err, &hostErr) {
+			t.Fatalf("wrong-host certificate error = %v", err)
+		}
+	}
+}
+
 func TestE22T1StatusReportsUnknownUntilPairVerification(t *testing.T) {
 	svc, closeStore := e22t1Service(t)
 	defer closeStore()
@@ -878,6 +927,20 @@ func TestE22T1ReconcileChildSuccessReturnsTarget(t *testing.T) {
 	}
 }
 
+func TestE22T1ReconcileChildOutputLimitDefersSettlement(t *testing.T) {
+	state, candidate := parseReconcileResult([]byte(e22t1OversizedReconcileResult()))
+	if settled, target := settledReconcileResult(state, candidate); !settled || target != strings.Repeat("a", 40) {
+		t.Fatalf("oversized fixture must settle without an output limit: settled=%v target=%q", settled, target)
+	}
+	svc, closeStore := e22t1Service(t)
+	defer closeStore()
+	t.Setenv("AGENT_DISPATCH_E22_RECONCILE_HELPER", "excess-output")
+	settled, target := svc.runReconcile(context.Background())
+	if settled || target != "" {
+		t.Fatalf("oversized child result: settled=%v target=%q", settled, target)
+	}
+}
+
 func TestE22T1OlderNudgeCoverageWalksConfiguredLocalHistory(t *testing.T) {
 	repo := t.TempDir()
 	commands := [][]string{
@@ -929,11 +992,19 @@ func TestE22T1OlderNudgeCoverageWalksConfiguredLocalHistory(t *testing.T) {
 		{"untrusted object", strings.Repeat("f", 40), 2, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			covered, err := nudgeCoveredByLocalHistory(context.Background(), client, second, tc.target, tc.bound)
+			history := localHistoryCoverage{client: client, current: second, remaining: tc.bound, covered: make(map[string]bool)}
+			covered, err := history.contains(context.Background(), tc.target)
 			if err != nil || covered != tc.want {
 				t.Fatalf("covered=%v want=%v err=%v", covered, tc.want, err)
 			}
 		})
+	}
+	history := localHistoryCoverage{client: client, current: second, remaining: 2, covered: make(map[string]bool)}
+	for _, target := range []string{second, first, strings.Repeat("f", 40), second, first} {
+		covered, err := history.contains(context.Background(), target)
+		if err != nil || covered != (target != strings.Repeat("f", 40)) {
+			t.Fatalf("shared history target %s: covered=%v err=%v", target, covered, err)
+		}
 	}
 }
 

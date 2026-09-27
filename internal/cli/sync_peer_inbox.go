@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -142,12 +143,12 @@ func (s *peerService) runReconcile(ctx context.Context) (bool, string) {
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 		cmd.Stderr = io.Discard
-		var stdout bytes.Buffer
+		stdout := boundedReconcileOutput{limit: s.cfg.Sync.Bounds.SubprocessBytes}
 		cmd.Stdout = &stdout
 		if err := cmd.Run(); err != nil {
 			return false, ""
 		}
-		state, target := parseReconcileResult(stdout.Bytes())
+		state, target := parseReconcileResult(stdout.buffer.Bytes())
 		if state == "membership_adopted" {
 			continue // a normal adoption needs a content pass before inbox settlement
 		}
@@ -156,8 +157,25 @@ func (s *peerService) runReconcile(ctx context.Context) (bool, string) {
 	return false, ""
 }
 
+type boundedReconcileOutput struct {
+	buffer bytes.Buffer
+	limit  int
+}
+
+func (b *boundedReconcileOutput) Write(p []byte) (int, error) {
+	remaining := b.limit - b.buffer.Len()
+	if len(p) > remaining {
+		if remaining > 0 {
+			_, _ = b.buffer.Write(p[:remaining])
+		}
+		return max(remaining, 0), errors.New("reconcile output exceeds configured limit")
+	}
+	return b.buffer.Write(p)
+}
+
 func (s *peerService) settleInboxRows(ctx context.Context, client *gitlocal.Client, local string, rows []sqlite.PeerNudgeRow) bool {
 	settled := true
+	history := localHistoryCoverage{client: client, current: local, remaining: s.cfg.Sync.Bounds.HistoryCommits, covered: make(map[string]bool)}
 	for _, row := range rows {
 		if ctx.Err() != nil {
 			return false
@@ -177,7 +195,7 @@ func (s *peerService) settleInboxRows(ctx context.Context, client *gitlocal.Clie
 			}
 			continue
 		}
-		covered, err := nudgeCoveredByLocalHistory(ctx, client, local, nudge.TargetCommit, s.cfg.Sync.Bounds.HistoryCommits)
+		covered, err := history.contains(ctx, nudge.TargetCommit)
 		if err != nil {
 			_ = s.store.RecordPeerNudgeFailure(ctx, row.GroupID, row.PublicationID, row.Fingerprint, "coverage_unavailable")
 			s.warn("peer inbox coverage unavailable")
@@ -198,29 +216,53 @@ func (s *peerService) settleInboxRows(ctx context.Context, client *gitlocal.Clie
 	return settled
 }
 
-// Walk only from the configured local ref through discovered parents. The
-// peer-supplied target is compared as data and never passed to Git as an
-// object selector. A non-linear history retains the inbox row; a target past
-// the scan bound can be superseded only after the approved remote reconciles.
-func nudgeCoveredByLocalHistory(ctx context.Context, client *gitlocal.Client, local, target string, bound int) (bool, error) {
-	current := local
-	for i := 0; i < bound; i++ {
-		if current == target {
-			return true, nil
+// Reuse the same bounded local history across every row in one inbox pass.
+// A peer-supplied target is compared as data and never passed to Git.
+type localHistoryCoverage struct {
+	client    *gitlocal.Client
+	current   string
+	remaining int
+	covered   map[string]bool
+	advance   bool
+	done      bool
+	err       error
+}
+
+func (h *localHistoryCoverage) contains(ctx context.Context, target string) (bool, error) {
+	if h.covered[target] {
+		return true, nil
+	}
+	for !h.done && h.remaining > 0 {
+		if h.advance {
+			h.advance = false
+		} else {
+			current := h.current
+			h.covered[current] = true
+			h.remaining--
+			if current == target {
+				h.advance = true
+				return true, nil
+			}
 		}
-		parents, err := client.CommitParents(ctx, current)
+		current := h.current
+		parents, err := h.client.CommitParents(ctx, current)
 		if err != nil {
-			return false, err
+			h.err = err
+			h.done = true
+			break
 		}
 		if len(parents) == 0 {
-			return false, nil
+			h.done = true
+			break
 		}
 		if len(parents) != 1 {
-			return false, fmt.Errorf("local sync history is not first-parent linear")
+			h.err = fmt.Errorf("local sync history is not first-parent linear")
+			h.done = true
+			break
 		}
-		current = parents[0]
+		h.current = parents[0]
 	}
-	return false, nil
+	return false, h.err
 }
 
 func parseReconcileResult(raw []byte) (string, string) {

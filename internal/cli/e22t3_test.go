@@ -263,7 +263,17 @@ func TestE22T3PeerResponseBindsNonceAndRetainsAge(t *testing.T) {
 			t.Fatalf("invalid peer generation %d was accepted", generation)
 		}
 	}
-	for _, endpoint := range []string{"http://node-b.example.ts.net", "https://node-b.example.ts.net:8443", "https://node-b.example.ts.net?ref=evil"} {
+	response.EvidenceGeneration = time.Now().Add(-301 * time.Second).UnixNano()
+	portClient := &http.Client{Transport: e22t3RoundTrip(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Scheme != "https" || r.URL.Host != "node-b.example.ts.net:8448" || r.URL.Path != "/v1/sync/status" {
+			t.Fatalf("private HTTPS peer request drift: %s", r.URL)
+		}
+		return transport.RoundTrip(r)
+	})}
+	if _, err := querySyncPeer(context.Background(), cfg, portClient, "https://node-b.example.ts.net:8448", request); err != nil {
+		t.Fatalf("private HTTPS peer port rejected: %v", err)
+	}
+	for _, endpoint := range []string{"http://node-b.example.ts.net", "https://node-b.example.ts.net:65536", "https://node-b.example.ts.net?ref=evil"} {
 		if _, err := querySyncPeer(context.Background(), cfg, client, endpoint, request); err == nil {
 			t.Fatalf("invalid peer endpoint %q was accepted", endpoint)
 		}

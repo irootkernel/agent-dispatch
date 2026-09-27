@@ -15,9 +15,9 @@
 | Release target | v0.2.0 (Two-Node Wiki Sync MVP) |
 | Current epic | E22 Peer Recovery, Verification, and Operations (In Progress) |
 | Current active task | None |
-| Next task | E22-T5 Real two-node qualification and v0.2.0 handoff |
-| Completed tasks | 115 / 116 |
-| Planned tasks | 1 / 116 |
+| Next task | None |
+| Completed tasks | 116 / 116 |
+| Planned tasks | 0 / 116 |
 | In progress tasks | 0 |
 | In review tasks | 0 |
 | Blocked tasks | 0 |
@@ -179,7 +179,7 @@
 | 113 | E22-T2 | Completed | Periodic reconciliation and offline catch-up |
 | 114 | E22-T3 | Completed | Pair status and fresh verification |
 | 115 | E22-T4 | Completed | Managed service lifecycle and diagnostics |
-| 116 | E22-T5 | Planned | Real two-node qualification and v0.2.0 handoff |
+| 116 | E22-T5 | Completed | Real two-node qualification and v0.2.0 handoff |
 
 ---
 
@@ -5625,7 +5625,7 @@ E22-T3 Completed.
 
 ## E22-T5: Qualify the Real Two-Node System
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -5657,6 +5657,10 @@ E22-T4 Completed.
 - Every configured bound fails visibly without dropping a publication, import,
   peer, or verification obligation.
 - Tag creation, remote publication, and production activation require their own authorization.
+
+### Evidence
+
+- [Disposable two-node qualification](../integrations/e22t5-two-node-qualification.md) records real signed publication, private-port nudge, guarded import, lost-nudge Git recovery, conflict stop, pair verification, and both service-manager lifecycles on fixed `v0.2.0` corrected binaries. The source digest, passing three-platform gates, bound matrix, and synthetic maintenance-receipt boundary are recorded there. Two release builds from the same explicit pre-closeout revision were reproducible and checksum-verified. Independent hardening risks are owned by [DF-004](../deferred-feedback/004-e22-final-observation-integration.md), [DF-005](../deferred-feedback/005-e22-endpoint-operations-hardening.md), and [DF-006](../deferred-feedback/006-doc-manifest-inventory-hardening.md). Final commit-stamped release rehearsal remains open.
 
 # 4. Deferred Future Work
 

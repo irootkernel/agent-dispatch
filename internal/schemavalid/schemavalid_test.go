@@ -1,10 +1,14 @@
 package schemavalid
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/irootkernel/agent-dispatch/internal/domain/syncrecords"
 )
 
 // writeFixture creates a minimal valid docs package under root: one
@@ -183,6 +187,55 @@ func TestSyncMembershipAllowsRetainedIncarnationHistory(t *testing.T) {
 	}
 	if err := validateSyncSemantics(doc); err != nil {
 		t.Fatalf("retained prior incarnation must remain representable: %v", err)
+	}
+}
+
+func TestSyncMembershipEndpointAcceptsPrivateHTTPSPort(t *testing.T) {
+	if err := validateSyncMemberEndpoint("https://node-a.example.ts.net:8448"); err != nil {
+		t.Fatal(err)
+	}
+	for _, endpoint := range []string{"https://node-a.example.ts.net:0", "https://node-a.example.ts.net:65536", "https://public.example.com:8448"} {
+		if err := validateSyncMemberEndpoint(endpoint); err == nil {
+			t.Fatalf("invalid endpoint %q accepted", endpoint)
+		}
+	}
+}
+
+func TestSyncMembershipEndpointSchemaMatchesParser(t *testing.T) {
+	raw, err := os.ReadFile("../../docs/schemas/sync-membership.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		t.Fatal(err)
+	}
+	defs := schema["$defs"].(map[string]any)
+	active := defs["active"].(map[string]any)
+	properties := active["properties"].(map[string]any)
+	pattern := regexp.MustCompile(properties["endpoint"].(map[string]any)["pattern"].(string))
+	for _, endpoint := range []string{
+		"https://node-a.example.ts.net", "https://node-a.example.ts.net/",
+		"https://node-a.example.ts.net:1", "https://node-a.example.ts.net:443",
+		"https://node-a.example.ts.net:8448", "https://node-a.example.ts.net:9999",
+		"https://node-a.example.ts.net:10000", "https://node-a.example.ts.net:59999",
+		"https://node-a.example.ts.net:60000", "https://node-a.example.ts.net:64999",
+		"https://node-a.example.ts.net:65000", "https://node-a.example.ts.net:65499",
+		"https://node-a.example.ts.net:65500", "https://node-a.example.ts.net:65529",
+		"https://node-a.example.ts.net:65530", "https://node-a.example.ts.net:65535",
+		"https://node-a.example.ts.net:8448/", "https://NODE-A.example.ts.net:8448",
+		"https://node-a.example.ts.net:0", "https://node-a.example.ts.net:65536",
+		"https://node-a.example.ts.net:01", "https://node-a.example.ts.net:",
+		"HTTPS://node-a.example.ts.net:8448", "https://node-a.example.TS.NET:8448",
+		"https://[node-a.example.ts.net]:8448",
+		"https://public.example.com:8448", "https://node-a.example.ts.net:8448/path",
+		"https://node-a.example.ts.net/%2F",
+		"https://user@node-a.example.ts.net:8448", "https://node-a.example.ts.net:8448?",
+	} {
+		_, parseErr := syncrecords.ParseTailnetEndpoint(endpoint)
+		if pattern.MatchString(endpoint) != (parseErr == nil) {
+			t.Errorf("schema/parser mismatch for %q: %v", endpoint, parseErr)
+		}
 	}
 }
 

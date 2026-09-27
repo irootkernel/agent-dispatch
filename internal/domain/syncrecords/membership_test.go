@@ -25,6 +25,7 @@ func TestMembershipPlansCoverClosedChangeVocabulary(t *testing.T) {
 		mode               string
 	}{
 		{"endpoint", "endpoint_update", "node-a", mutate(desired, "node-a", func(m *ActiveMember) { m.Endpoint = "https://node-a-next.example.ts.net" }), "normal"},
+		{"endpoint private port", "endpoint_update", "node-a", mutate(desired, "node-a", func(m *ActiveMember) { m.Endpoint = "https://node-a.example.ts.net:8448" }), "normal"},
 		{"key", "key_rotation", "node-a", mutate(desired, "node-a", func(m *ActiveMember) { m.PublisherKey = fingerprint('D'); m.StateIncarnationID = "node-a-0002" }), "normal"},
 		{"incarnation", "incarnation_registration", "node-a", mutate(desired, "node-a", func(m *ActiveMember) { m.StateIncarnationID = "node-a-0002" }), "normal"},
 		{"replacement", "replacement", "node-a", []ActiveMember{desired[1], {InstanceID: "node-c", StateIncarnationID: "node-c-0001", PublisherKey: fingerprint('D'), Endpoint: "https://node-c.example.ts.net"}}, "normal"},
@@ -114,6 +115,22 @@ func testMembers() []ActiveMember {
 	return []ActiveMember{
 		{InstanceID: "node-a", StateIncarnationID: "node-a-0001", PublisherKey: fingerprint('B'), Endpoint: "https://node-a.example.ts.net"},
 		{InstanceID: "node-b", StateIncarnationID: "node-b-0001", PublisherKey: fingerprint('C'), Endpoint: "https://node-b.example.ts.net"},
+	}
+}
+
+func TestMembershipRejectsInvalidEndpointPorts(t *testing.T) {
+	for _, endpoint := range []string{
+		"https://node-a.example.ts.net:0",
+		"https://node-a.example.ts.net:65536",
+		"https://node-a.example.ts.net:",
+		"https://node-a.example.ts.net:01",
+		"https://user@node-a.example.ts.net:8448",
+	} {
+		members := testMembers()
+		members[0].Endpoint = endpoint
+		if _, err := NewPlan("bootstrap", "", nil, nil, members, testBinding()); err == nil {
+			t.Errorf("invalid signed membership endpoint accepted: %q", endpoint)
+		}
 	}
 }
 

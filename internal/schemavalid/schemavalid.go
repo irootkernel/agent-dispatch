@@ -9,13 +9,13 @@ package schemavalid
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/syncrecords"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
 )
@@ -531,8 +531,7 @@ func validateSyncMembership(m map[string]any) error {
 }
 
 func validateSyncMemberEndpoint(raw string) error {
-	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "https" || u.Host == "" || u.Hostname() == "" || u.Port() != "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") || !strings.HasSuffix(strings.ToLower(u.Hostname()), ".ts.net") {
+	if _, err := syncrecords.ParseTailnetEndpoint(raw); err != nil {
 		return fmt.Errorf("membership endpoint must be a credential-free Tailscale HTTPS origin")
 	}
 	return nil

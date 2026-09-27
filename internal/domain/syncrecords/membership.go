@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/url"
 	"reflect"
 	"regexp"
 	"sort"
@@ -409,8 +408,8 @@ func validActive(m ActiveMember) bool {
 	if !identityPattern.MatchString(m.InstanceID) || !incarnationPattern.MatchString(m.StateIncarnationID) || !fingerprintPattern.MatchString(m.PublisherKey) {
 		return false
 	}
-	u, err := url.Parse(m.Endpoint)
-	return err == nil && u.Scheme == "https" && u.User == nil && u.RawQuery == "" && u.Fragment == "" && (u.Path == "" || u.Path == "/") && endpointHostPattern.MatchString(u.Hostname()) && u.Port() == ""
+	_, err := ParseTailnetEndpoint(m.Endpoint)
+	return err == nil
 }
 
 func validHistorical(m HistoricalMember) bool {

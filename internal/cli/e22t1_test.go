@@ -451,6 +451,7 @@ func (f e22t1RoundTrip) RoundTrip(r *http.Request) (*http.Response, error) { ret
 func TestE22T1DeliveryUsesConfiguredPeerAndSettlesOnlyOn202(t *testing.T) {
 	svc, closeStore := e22t1Service(t)
 	defer closeStore()
+	svc.cfg.Sync.Nodes[1].Endpoint = "https://node-b.example.ts.net:8448"
 	t.Setenv("SYNC_NODE_A_TO_B", "test-outbound-credential")
 	nudge := e22t1Nudge()
 	nudge.Sender, nudge.Receiver = nudge.Receiver, nudge.Sender
@@ -465,7 +466,7 @@ func TestE22T1DeliveryUsesConfiguredPeerAndSettlesOnlyOn202(t *testing.T) {
 	called := 0
 	client := &http.Client{Transport: e22t1RoundTrip(func(r *http.Request) (*http.Response, error) {
 		called++
-		if r.URL.String() != "https://node-b.example.ts.net/v1/sync/nudges" || r.Header.Get("Authorization") != "Bearer test-outbound-credential" || r.Header.Get("Content-Type") != "application/json" {
+		if r.URL.String() != "https://node-b.example.ts.net:8448/v1/sync/nudges" || r.Header.Get("Authorization") != "Bearer test-outbound-credential" || r.Header.Get("Content-Type") != "application/json" {
 			t.Fatalf("outbound request drift: %s %v", r.URL, r.Header)
 		}
 		return &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader(`{}`)), Header: make(http.Header)}, nil
@@ -583,6 +584,39 @@ func TestE22T1DeliveryRejectsWrongPayloadWithoutDial(t *testing.T) {
 	job, err := svc.store.LoadLatestSyncJob(context.Background(), nudge.GroupID, "delivery")
 	if err != nil || job.State != "refused" || job.ResolvedAt == "" {
 		t.Fatalf("invalid payload resolution: %+v %v", job, err)
+	}
+}
+
+func TestE22T1DeliveryRefusesEndpointDriftWithoutDial(t *testing.T) {
+	for _, tc := range []struct{ configured, signed string }{
+		{"https://node-b.example.ts.net", "https://node-b.example.ts.net:8448"},
+		{"https://node-b.example.ts.net:8448", "https://node-b.example.ts.net"},
+		{"https://node-b.example.ts.net:8448/", "https://node-b.example.ts.net:8448"},
+		{"https://user@node-b.example.ts.net:8448", "https://user@node-b.example.ts.net:8448"},
+	} {
+		t.Run(tc.configured+"/"+tc.signed, func(t *testing.T) {
+			svc, closeStore := e22t1Service(t)
+			defer closeStore()
+			t.Setenv("SYNC_NODE_A_TO_B", "test-outbound-credential")
+			svc.cfg.Sync.Nodes[1].Endpoint = tc.configured
+			svc.members = func(context.Context) (string, [2]syncrecords.ActiveMember, error) {
+				return strings.Repeat("1", 40), [2]syncrecords.ActiveMember{{InstanceID: "node-b", Endpoint: tc.signed}, {InstanceID: "workstation-main", Endpoint: svc.cfg.Sync.Nodes[0].Endpoint}}, nil
+			}
+			nudge := e22t1Nudge()
+			nudge.Sender, nudge.Receiver = nudge.Receiver, nudge.Sender
+			raw, err := syncrecords.CanonicalNudge(nudge)
+			if err != nil {
+				t.Fatal(err)
+			}
+			client := &http.Client{Transport: e22t1RoundTrip(func(*http.Request) (*http.Response, error) {
+				t.Fatal("endpoint drift must not dial")
+				return nil, errors.New("unexpected dial")
+			})}
+			state, _, _ := svc.sendNudge(context.Background(), client, sqlite.SyncJobRow{PayloadJSON: string(raw)})
+			if state != "refused" {
+				t.Fatalf("endpoint drift state = %s", state)
+			}
+		})
 	}
 }
 

@@ -157,7 +157,29 @@ group's exact definition before installing the new group. `inspect` reports
 manager load state; confirm `sync status` reports `health.listener` ready to
 establish that the executor is serving. The service does not configure
 Tailscale or start an HTTPS proxy; review that route before expecting remote
-peer requests.
+peer requests. Keep `state_dir` short enough for its
+`peer-service/http.sock` Unix socket path; on Linux a long disposable path
+caused `sync serve` to fail with `bind: invalid argument` before any listener
+was available.
+
+For a private Serve route, select a reviewed HTTPS port on each tailnet node,
+install port-capable binaries on both nodes, then configure and sign the
+membership endpoints with that port. Keep each configured endpoint string
+identical to its signed membership value, including explicit port, trailing
+slash, and host spelling. Confirm the
+route is restricted to the tailnet with Funnel disabled. Proxy to the
+owner-only Unix socket where the installed Tailscale service can reach it.
+On macOS, if the Tailscale network extension returns HTTP 502 when proxying
+directly to the socket, provision an operator-owned bridge bound only to
+`127.0.0.1`, forward that bridge to the socket, and point the private Serve
+route at the loopback port. Confirm TLS and `sync verify` in both directions
+before relying on the route. Keep the bridge under operator supervision;
+Agent Dispatch does not install or manage it. Other local processes can reach
+the loopback listener while it runs; peer authentication still applies, but
+the Unix socket's filesystem permissions no longer guard that hop. The bridge
+forwards HTTP request headers, including the bearer credential, and bodies in
+cleartext over the local loopback hop; restrict access to the host and stop the
+bridge when the service is not needed.
 
 For a planned interruption, use `sync service stop` to keep its definition or
 `sync service disable` to stop automatic start. Inspect pending publication,

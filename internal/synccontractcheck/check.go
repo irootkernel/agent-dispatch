@@ -25,7 +25,7 @@ var expectedArtifacts = []string{
 // allowlisted path and its bytes in bundle order. SHA256SUMS supports ordinary
 // corruption detection; this pin ensures the checksum regeneration command
 // cannot silently bless coordinated schema/fixture drift.
-const expectedArtifactSetDigest = "4d468034c8e27e82799b79ceaa1ab5e41246d9af461b72fbcbe13f371b10144f"
+const expectedArtifactSetDigest = "75c29977d43c20c9e369c9bfca4b09bc247e2a606b90354ab6cb2f285d0305e9"
 
 type bundle struct {
 	SchemaVersion  string   `json:"schema_version"`

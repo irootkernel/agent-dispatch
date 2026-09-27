@@ -32,6 +32,8 @@ This file records concise shipped outcomes and pending changes.
 
 ### Changed
 
+- Accept an explicit port on private Tailscale HTTPS peer endpoints for signed
+  membership, delivery, and pair verification.
 - Build and verify with Go 1.27.1, update pinned dependencies and Staticcheck,
   and require macOS 13 or newer when building from source on Darwin.
 

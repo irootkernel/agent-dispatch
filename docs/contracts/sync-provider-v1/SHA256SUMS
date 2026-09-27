@@ -4,7 +4,7 @@
 7c53b99433e0c228d9fdd9cdcbb72b7e1bd452a076fd356abe37b310cfd4dabb  errors.json
 592351459f54b3063e456513b55e5d524a991aab31832dab71c2ca7c342f8679  trust-fixtures.json
 228e9cbfa3db58dd5e6aff5da3d509724833fb70d151c5cf0ec9633873058951  digest-vectors.json
-7e8ec41170c2c4193ace7ed0935f1a46c972c57e3e8e7ddb68b49ba4734479c6  ../../schemas/sync-membership.schema.json
+551b04fe2c4fa160d92edf9eab2ae57689a3d4fcd9c1fda7e8eb057bee8b556c  ../../schemas/sync-membership.schema.json
 453f7792e61ad5f4f37ff3efd0eff639735a34fff6984bc935fc3a545c36ed45  ../../schemas/sync-membership-plan.schema.json
 a31484eec9b0bf4f7cd3d25b4f995ba2c3c9627fc6cb0e153e6aa6df9f9c3a2a  ../../schemas/sync-checkpoint.schema.json
 9395145ba6b4d07f2f56b3a78e6d4d12af586ede162d67035cbc3545c66212c8  ../../schemas/sync-checkpoint-plan.schema.json

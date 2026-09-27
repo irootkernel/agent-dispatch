@@ -158,6 +158,22 @@ func TestE21T1EnabledSyncKeepsUnavailableEffectsClosed(t *testing.T) {
 	}
 }
 
+func TestE20T4PrivateHTTPSPort(t *testing.T) {
+	raw, err := os.ReadFile("../../docs/examples/config.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	configured := []byte(strings.Replace(string(raw), "https://node-a.example.ts.net", "https://node-a.example.ts.net:8448", 1))
+	if _, err := Parse(configured); err != nil {
+		t.Fatalf("private HTTPS port rejected: %v", err)
+	}
+	for _, endpoint := range []string{"https://node-a.example.ts.net:0", "https://node-a.example.ts.net:", "https://node-a.example.ts.net:65536", "https://node-a.example.ts.net:01"} {
+		if err := validateSyncEndpoint(endpoint); err == nil {
+			t.Fatalf("invalid port %q accepted", endpoint)
+		}
+	}
+}
+
 func TestE20T4InvalidSyncInputsFailClosed(t *testing.T) {
 	raw, err := os.ReadFile("../../docs/examples/config.yaml")
 	if err != nil {
@@ -166,22 +182,24 @@ func TestE20T4InvalidSyncInputsFailClosed(t *testing.T) {
 	tests := map[string]struct {
 		old, new, want string
 	}{
-		"unsafe ref":               {"refs/heads/wiki-sync", "refs/heads/wiki..sync", "safe Git ref"},
-		"inline secret":            {"env:SYNC_NODE_A_TO_B", "not-a-secret-reference", "does not match"},
-		"unknown resource":         {"resource: vault-main", "resource: missing-vault", "is not defined"},
-		"wrong local node":         {"local_instance_id: workstation-main", "local_instance_id: node-b", "must equal instance.id"},
-		"public endpoint":          {"node-a.example.ts.net", "public.example.com", "Tailscale HTTPS"},
-		"userinfo endpoint":        {"https://node-a.example.ts.net", "https://user:secret@node-a.example.ts.net", "must not contain userinfo"},
-		"endpoint port":            {"https://node-a.example.ts.net", "https://node-a.example.ts.net:8443", "must not specify a port"},
-		"short fingerprint":        {"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "SHA256:AAAAAAAAAAAAAAAAAAAA", "does not match"},
-		"noncanonical fingerprint": {"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "does not match"},
-		"invalid dot ref":          {"refs/heads/wiki-sync", "refs/heads/wiki/.hidden", "safe Git ref"},
-		"disabled git":             {"mode: optional", "mode: disabled", "must configure git.mode optional"},
-		"reused credential":        {"env:SYNC_NODE_B_TO_A", "env:SYNC_NODE_A_TO_B", "separately provisioned"},
-		"reused publisher":         {"SHA256:CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCA", "SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA", "must be distinct"},
-		"administrator publisher":  {"SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA", "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "must be distinct"},
-		"duplicate node":           {"instance_id: node-b", "instance_id: workstation-main", "is duplicated"},
-		"duplicate incarnation":    {"state_incarnation_id: node-b-0001", "state_incarnation_id: workstation-main-state-001", "is duplicated"},
+		"unsafe ref":                {"refs/heads/wiki-sync", "refs/heads/wiki..sync", "safe Git ref"},
+		"inline secret":             {"env:SYNC_NODE_A_TO_B", "not-a-secret-reference", "does not match"},
+		"unknown resource":          {"resource: vault-main", "resource: missing-vault", "is not defined"},
+		"wrong local node":          {"local_instance_id: workstation-main", "local_instance_id: node-b", "must equal instance.id"},
+		"public endpoint":           {"node-a.example.ts.net", "public.example.com", "Tailscale HTTPS"},
+		"userinfo endpoint":         {"https://node-a.example.ts.net", "https://user:secret@node-a.example.ts.net", "must not contain userinfo"},
+		"invalid endpoint port":     {"https://node-a.example.ts.net", "https://node-a.example.ts.net:65536", "valid HTTPS port"},
+		"uppercase endpoint scheme": {"https://node-a.example.ts.net", "HTTPS://node-a.example.ts.net", "does not match pattern"},
+		"endpoint path":             {"https://node-a.example.ts.net", "https://node-a.example.ts.net/peer", "origin URL without a path"},
+		"short fingerprint":         {"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "SHA256:AAAAAAAAAAAAAAAAAAAA", "does not match"},
+		"noncanonical fingerprint":  {"SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "does not match"},
+		"invalid dot ref":           {"refs/heads/wiki-sync", "refs/heads/wiki/.hidden", "safe Git ref"},
+		"disabled git":              {"mode: optional", "mode: disabled", "must configure git.mode optional"},
+		"reused credential":         {"env:SYNC_NODE_B_TO_A", "env:SYNC_NODE_A_TO_B", "separately provisioned"},
+		"reused publisher":          {"SHA256:CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCA", "SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA", "must be distinct"},
+		"administrator publisher":   {"SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA", "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "must be distinct"},
+		"duplicate node":            {"instance_id: node-b", "instance_id: workstation-main", "is duplicated"},
+		"duplicate incarnation":     {"state_incarnation_id: node-b-0001", "state_incarnation_id: workstation-main-state-001", "is duplicated"},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {

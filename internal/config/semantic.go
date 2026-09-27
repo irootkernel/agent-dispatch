@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"net/url"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -10,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/syncrecords"
 )
 
 // SemanticValidate applies the checks beyond the JSON Schema
@@ -142,24 +142,23 @@ func validConfiguredGitRef(ref string) bool {
 	return true
 }
 
+// validateSyncEndpoint maps the shared tailnet origin grammar to config errors.
 func validateSyncEndpoint(raw string) error {
-	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "https" || u.Host == "" || u.Hostname() == "" {
+	_, err := syncrecords.ParseTailnetEndpoint(raw)
+	switch err {
+	case nil:
+		return nil
+	case syncrecords.ErrEndpointData:
+		return fmt.Errorf("must not contain userinfo, query, or fragment data")
+	case syncrecords.ErrEndpointPort:
+		return fmt.Errorf("must specify a valid HTTPS port")
+	case syncrecords.ErrEndpointPath:
+		return fmt.Errorf("must be an origin URL without a path")
+	case syncrecords.ErrEndpointHost:
+		return fmt.Errorf("must use a configured Tailscale HTTPS .ts.net endpoint")
+	default:
 		return fmt.Errorf("must be a valid https URL")
 	}
-	if u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return fmt.Errorf("must not contain userinfo, query, or fragment data")
-	}
-	if u.Port() != "" {
-		return fmt.Errorf("must not specify a port")
-	}
-	if u.Path != "" && u.Path != "/" {
-		return fmt.Errorf("must be an origin URL without a path")
-	}
-	if !strings.HasSuffix(strings.ToLower(u.Hostname()), ".ts.net") {
-		return fmt.Errorf("must use a configured Tailscale HTTPS .ts.net endpoint")
-	}
-	return nil
 }
 
 // MinimumEligibleHermesVersion is the product support floor (E15-T2,

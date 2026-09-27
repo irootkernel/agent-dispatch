@@ -13,7 +13,12 @@ authenticated peer admission over an owner-only local socket. E22-T2 adds
 periodic configured-ref recovery with persisted backoff. E22-T3 adds locally
 verified pair-status and nonce-bound convergence behavior. E22-T4 adds
 managed user-service lifecycle and bounded sync diagnostics. Real two-node
-release qualification remains incomplete.
+qualification has a disposable Mac/Oracle Cloud Linux matrix, while final
+release gates remain incomplete. Private `.ts.net` HTTPS endpoints may name an
+explicit Serve port in configuration and signed membership.
+The frozen provider bundle's artifact-set golden was re-pinned after reviewing
+the membership schema change; its protocol digest and other artifacts remain
+unchanged.
 
 Managed service definition file and log-directory I/O failures use the
 registered `sync_service_io_failed` storage error at exit 20; definition

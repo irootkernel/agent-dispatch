@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/gitlocal"
@@ -277,8 +276,8 @@ func querySyncPeer(ctx context.Context, cfg *config.Config, client *http.Client,
 	if err != nil {
 		return empty, err
 	}
-	endpoint, err := url.Parse(rawEndpoint)
-	if err != nil || endpoint.Scheme != "https" || endpoint.Hostname() == "" || endpoint.Port() != "" || endpoint.RawQuery != "" || endpoint.Fragment != "" {
+	endpoint, err := syncrecords.ParseTailnetEndpoint(rawEndpoint)
+	if err != nil {
 		return empty, fmt.Errorf("configured peer endpoint is invalid")
 	}
 	endpoint.Path = "/v1/sync/status"

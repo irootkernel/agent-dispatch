@@ -462,8 +462,14 @@ validation. An enabled block activates only implemented protected surfaces.
 Pair verification is implemented in E22-T3. E22-T4 implements the managed
 service lifecycle. `sync serve` binds an owner-only
 `<state_dir>/peer-service/http.sock` Unix socket; the operator manages the
-Tailscale HTTPS route separately. `sync.bounds.queue` limits all unresolved
+Tailscale HTTPS route separately. The endpoint may include a canonical decimal
+HTTPS port from 1 to 65535 configured for a private Tailscale Serve route. Use
+the same endpoint string in configuration and signed membership, including its
+port, trailing slash, and host spelling. The grammar requires lowercase
+`https://` and a lowercase `.ts.net` suffix. `sync.bounds.queue` limits all unresolved
 group obligations, including nudges, publications, imports, and verifications.
+The [operator runbook](../ops/runbook.md) describes the macOS Serve-to-socket
+HTTP 502 case and its loopback-only bridge disposition.
 A fixed 100,000-row cap limits retained nudge identities per group.
 `sync status` reports that bound, and admission refuses new identities without
 deleting replay evidence. For a service-enabled group, signing-key references

@@ -9,7 +9,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/secretresolver"
@@ -171,8 +170,8 @@ func (s *peerService) sendNudge(ctx context.Context, client *http.Client, job sq
 	if err != nil {
 		return "retryable", "retryable", 0
 	}
-	endpoint, err := url.Parse(peer.Endpoint)
-	if err != nil || endpoint.Scheme != "https" || endpoint.Hostname() == "" || endpoint.Port() != "" {
+	endpoint, err := syncrecords.ParseTailnetEndpoint(peer.Endpoint)
+	if err != nil {
 		return "refused", "refused", 0
 	}
 	endpoint.Path = "/v1/sync/nudges"

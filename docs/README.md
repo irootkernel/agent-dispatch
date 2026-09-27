@@ -17,7 +17,8 @@ membership, signed publication, checkpoints, and guarded import. E22-T1 adds
 authenticated peer admission; E22-T2 adds periodic recovery; E22-T3 adds
 local pair-status and fresh verification behavior; E22-T4 adds managed
 user-service lifecycle and bounded diagnostics. Real two-node release evidence
-remains incomplete.
+has a disposable Mac/Oracle Cloud Linux matrix; the final release gates remain
+incomplete.
 
 ## Start Here
 

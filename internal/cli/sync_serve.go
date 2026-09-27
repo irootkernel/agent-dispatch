@@ -45,6 +45,7 @@ type peerService struct {
 	rateMu     sync.Mutex
 	rate       map[string]peerRate
 	stderr     io.Writer
+	managed    bool
 	warnMu     sync.Mutex
 	warnedAt   map[string]time.Time
 	memberMu   sync.Mutex
@@ -59,15 +60,49 @@ type peerRate struct {
 
 func runSyncServe(args []string, _ io.Writer, stderr io.Writer) int {
 	const command = "sync serve"
-	if len(args) != 2 || args[0] != "--group" || args[1] == "" {
-		return usageError(stderr, command, "serve requires --group GROUP")
+	var group, explicitConfig string
+	managed := false
+	seen := map[string]bool{}
+	for i := 0; i < len(args); {
+		if args[i] == "--managed" && !seen["--managed"] {
+			managed, seen["--managed"] = true, true
+			i++
+			continue
+		}
+		if i+1 >= len(args) || seen[args[i]] || args[i+1] == "" {
+			return usageError(stderr, command, "serve requires --group GROUP and accepts --config PATH")
+		}
+		seen[args[i]] = true
+		switch args[i] {
+		case "--group":
+			group = args[i+1]
+		case "--config":
+			explicitConfig = args[i+1]
+		default:
+			return usageError(stderr, command, "serve requires --group GROUP and accepts --config PATH")
+		}
+		i += 2
 	}
-	configPath := resolveConfigPath("")
+	if group == "" {
+		return usageError(stderr, command, "serve requires --group GROUP and accepts --config PATH")
+	}
+	if managed {
+		capManagedSyncLog(stderr)
+	}
+	configPath := resolveConfigPath(explicitConfig)
 	cfg, err := config.Load(configPath)
 	if err != nil {
+		if managed {
+			fmt.Fprintln(stderr, "sync serve: configuration unavailable; managed service stopped")
+			return 0
+		}
 		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
 	}
-	if cfg.Sync == nil || cfg.Sync.GroupID != args[1] || !cfg.Sync.Enabled {
+	if cfg.Sync == nil || cfg.Sync.GroupID != group || !cfg.Sync.Enabled {
+		if managed {
+			fmt.Fprintln(stderr, "sync serve: configured group is disabled; managed service stopped")
+			return 0
+		}
 		return planErr(stderr, command, "sync_precondition_failed", "conflict", "configured sync group must be enabled", 14)
 	}
 	if err := verifyPeerSignerIsolation(cfg.Sync); err != nil {
@@ -83,7 +118,7 @@ func runSyncServe(args []string, _ io.Writer, stderr io.Writer) int {
 	if err != nil {
 		return syncStoreError(stderr, command, err)
 	}
-	svc := &peerService{cfg: cfg, configPath: configPath, store: store, slots: make(chan struct{}, 2), wake: make(chan struct{}, 1), rate: map[string]peerRate{}, stderr: stderr, warnedAt: map[string]time.Time{}}
+	svc := &peerService{cfg: cfg, configPath: configPath, store: store, slots: make(chan struct{}, 2), wake: make(chan struct{}, 1), rate: map[string]peerRate{}, stderr: stderr, warnedAt: map[string]time.Time{}, managed: managed}
 	if control.ConfigRevision != revision {
 		svc.warn("sync control configuration binding is stale; run sync reconcile")
 	}
@@ -165,7 +200,27 @@ func (s *peerService) warn(reason string) {
 		return
 	}
 	s.warnedAt[reason] = now
+	if s.managed {
+		capManagedSyncLog(s.stderr)
+	}
 	fmt.Fprintf(s.stderr, "sync serve: %s; inspect sync status and restart after correcting the cause\n", reason)
+}
+
+// launchd keeps its log descriptor open for the lifetime of a service. Trim
+// that regular file in place before writing so a persistent warning cannot
+// grow it without bound; pipes and systemd's journal are left to their owner.
+func capManagedSyncLog(w io.Writer) {
+	f, ok := w.(*os.File)
+	if !ok {
+		return
+	}
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() < scheduleLogMaxBytes {
+		return
+	}
+	if f.Truncate(0) == nil {
+		_, _ = f.Seek(0, io.SeekStart)
+	}
 }
 
 func (s *peerService) configurationProblem() string {
@@ -452,33 +507,44 @@ func (s *peerService) currentMembers(ctx context.Context) (string, [2]syncrecord
 			return "", members, fmt.Errorf("local peer membership did not advance linearly")
 		}
 	}
-	history, err := syncmembership.LoadHistory(ctx, client, head, membershipBinding(s.cfg, s.cfg.Sync), s.cfg.Sync.Bounds.HistoryCommits)
+	members, err = loadConfiguredMembers(ctx, s.cfg, client, head)
 	if err != nil {
 		return "", members, err
 	}
+	s.memberHead, s.memberPair = head, members
+	return head, members, nil
+}
+
+// loadConfiguredMembers reads membership using only explicit configuration and
+// Git inputs. Status and doctor use it without constructing a serving process.
+func loadConfiguredMembers(ctx context.Context, cfg *config.Config, client *gitlocal.Client, head string) ([2]syncrecords.ActiveMember, error) {
+	var members [2]syncrecords.ActiveMember
+	history, err := syncmembership.LoadHistory(ctx, client, head, membershipBinding(cfg, cfg.Sync), cfg.Sync.Bounds.HistoryCommits)
+	if err != nil {
+		return members, err
+	}
 	current, ok := history.Current()
 	if !ok || current.Mode != "normal" || len(current.ActiveMembers) != 2 {
-		return "", members, fmt.Errorf("peer membership is not normal and current")
+		return members, fmt.Errorf("peer membership is not normal and current")
 	}
 	for _, member := range current.ActiveMembers {
 		var configured *config.SyncNode
-		for i := range s.cfg.Sync.Nodes {
-			if s.cfg.Sync.Nodes[i].InstanceID == member.InstanceID {
-				configured = &s.cfg.Sync.Nodes[i]
+		for i := range cfg.Sync.Nodes {
+			if cfg.Sync.Nodes[i].InstanceID == member.InstanceID {
+				configured = &cfg.Sync.Nodes[i]
 			}
 		}
 		if configured == nil || configured.StateIncarnationID != member.StateIncarnationID || configured.Endpoint != member.Endpoint || configured.PublisherKey != member.PublisherKey {
-			return "", members, fmt.Errorf("peer membership differs from configured identities")
+			return members, fmt.Errorf("peer membership differs from configured identities")
 		}
-		if member.InstanceID == s.cfg.Sync.LocalInstanceID {
+		if member.InstanceID == cfg.Sync.LocalInstanceID {
 			members[1] = member
 		} else {
 			members[0] = member
 		}
 	}
 	if members[0].InstanceID == "" || members[1].InstanceID == "" {
-		return "", members, fmt.Errorf("configured local peer is not active")
+		return members, fmt.Errorf("configured local peer is not active")
 	}
-	s.memberHead, s.memberPair = head, members
-	return head, members, nil
+	return members, nil
 }

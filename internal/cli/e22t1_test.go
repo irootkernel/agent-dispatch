@@ -81,6 +81,7 @@ func init() {
 
 func e22t1Service(t *testing.T) (*peerService, func()) {
 	t.Helper()
+	isolateSyncServiceForTest(t)
 	cfg, err := config.Load("../../docs/examples/config.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -123,6 +124,22 @@ func e22t1Service(t *testing.T) (*peerService, func()) {
 	}
 	t.Setenv("SYNC_NODE_B_TO_A", "test-inbound-credential")
 	return service, func() { _ = store.Close() }
+}
+
+func isolateSyncServiceForTest(t *testing.T) {
+	t.Helper()
+	oldPlatform, oldLaunchDir, oldSystemdDir := syncServicePlatform, launchAgentsDir, systemdUserDir
+	oldLaunchctl, oldSystemctl := launchctlRun, systemctlRun
+	root := t.TempDir()
+	syncServicePlatform = func() string { return "darwin" }
+	launchAgentsDir = func() string { return filepath.Join(root, "LaunchAgents") }
+	systemdUserDir = func() string { return filepath.Join(root, "systemd") }
+	launchctlRun = func(...string) (string, error) { return "Could not find service", os.ErrNotExist }
+	systemctlRun = func(...string) (string, error) { return "inactive\n", os.ErrNotExist }
+	t.Cleanup(func() {
+		syncServicePlatform, launchAgentsDir, systemdUserDir = oldPlatform, oldLaunchDir, oldSystemdDir
+		launchctlRun, systemctlRun = oldLaunchctl, oldSystemctl
+	})
 }
 
 func e22t1Nudge() syncrecords.Nudge {

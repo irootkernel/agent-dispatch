@@ -14,6 +14,10 @@ import (
 )
 
 func TestE20T4SyncCapabilitiesAndDisabledStatus(t *testing.T) {
+	oldPlatform, oldLaunchDir := syncServicePlatform, launchAgentsDir
+	syncServicePlatform = func() string { return "darwin" }
+	launchAgentsDir = func() string { return filepath.Join(t.TempDir(), "LaunchAgents") }
+	t.Cleanup(func() { syncServicePlatform, launchAgentsDir = oldPlatform, oldLaunchDir })
 	var out, errOut bytes.Buffer
 	if code := Run([]string{"sync", "capabilities", "--output", "json"}, &out, &errOut); code != 0 {
 		t.Fatalf("capabilities: %d %s", code, errOut.String())
@@ -44,7 +48,7 @@ func TestE20T4SyncCapabilitiesAndDisabledStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 	revision, _ := configpkg.SyncRevision(cfg)
-	wantStatus := map[string]any{"schema_version": "agent-dispatch.sync-status/v1", "group_id": "wiki-pair", "state": "disabled", "reason": "not_configured_or_disabled", "config_revision": revision, "import_acknowledgement_current": false, "side_effects": []any{}}
+	wantStatus := map[string]any{"schema_version": "agent-dispatch.sync-status/v1", "group_id": "wiki-pair", "state": "disabled", "reason": "not_configured_or_disabled", "config_revision": revision, "import_acknowledgement_current": false, "health": map[string]any{"service": map[string]any{"state": "disabled", "reason": "definition_absent"}}, "side_effects": []any{}}
 	if !reflect.DeepEqual(result, wantStatus) {
 		t.Fatalf("disabled status = %v", result)
 	}
@@ -123,6 +127,7 @@ func TestE20T4AbsentSyncPreservesOrdinaryConfigShow(t *testing.T) {
 }
 
 func TestE20T4StatusHandlesAbsentStaleAndWrongGroup(t *testing.T) {
+	isolateSyncServiceForTest(t)
 	cfg, err := configpkg.Load("../../docs/examples/config.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -195,9 +200,8 @@ func TestE20T4CapabilitiesMatchProviderCommandVocabulary(t *testing.T) {
 	want := map[string]any{}
 	for _, command := range provider.Commands {
 		want[command.Capability] = command.Availability == "implemented" || command.Availability == "implemented_disabled_only"
-		parts := strings.Fields(command.Path)
-		if len(parts) > 1 && command.Availability == "reserved" && !reservedSyncCommand(parts[1:]) {
-			t.Fatalf("provider command is not registered as reserved: %s", command.Path)
+		if command.Availability == "reserved" {
+			t.Fatalf("provider still reserves an unimplemented command: %s", command.Path)
 		}
 	}
 	if !reflect.DeepEqual(syncCapabilities(), want) {
@@ -227,13 +231,13 @@ func TestE20T4SyncVerifyRequiresConfiguredGroup(t *testing.T) {
 	}
 }
 
-func TestE20T4ReservedServiceCommandFailsClosed(t *testing.T) {
+func TestE20T4ServiceCommandRejectsMissingConfiguration(t *testing.T) {
 	t.Setenv("AGENT_DISPATCH_CONFIG", filepath.Join(t.TempDir(), "missing-config.yaml"))
 	var out, errOut bytes.Buffer
-	if code := Run([]string{"sync", "service", "install"}, &out, &errOut); code != 3 {
-		t.Fatalf("reserved service command code = %d, stderr=%s", code, errOut.String())
+	if code := Run([]string{"sync", "service", "install", "--group", "wiki-pair", "--output", "json"}, &out, &errOut); code != 3 {
+		t.Fatalf("service command code = %d, stderr=%s", code, errOut.String())
 	}
-	if out.Len() != 0 || !bytes.Contains(errOut.Bytes(), []byte("sync_capability_unavailable")) {
+	if out.Len() != 0 || !bytes.Contains(errOut.Bytes(), []byte("config_invalid")) {
 		t.Fatalf("unexpected streams out=%q err=%q", out.String(), errOut.String())
 	}
 }

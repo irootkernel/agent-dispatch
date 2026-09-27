@@ -1,10 +1,8 @@
 # Two-Node Wiki Sync Contract
 
-This contract reserves the v0.2.0 Agent Dispatch sync surface. E20 freezes the
-schemas and implements truthful capability reporting. E21 and E22 implement
-the behavior. Until the relevant capability is implemented, commands must
-return the closed unavailable result without a Git, network, filesystem, or
-activation side effect.
+This contract defines the v0.2.0 Agent Dispatch sync surface. E20 froze the
+schemas and capability reporting; E21 and E22 implemented the local commands.
+The real two-node qualification remains E22-T5 work.
 
 ## Scope
 
@@ -31,11 +29,11 @@ agent-dispatch sync membership plan --group GROUP --change KIND [--instance INST
 agent-dispatch sync membership apply --group GROUP --plan FILE --expected-membership-predecessor OID|none --output json
 agent-dispatch sync checkpoint plan --group GROUP --target-commit OID --kind KIND --output json
 agent-dispatch sync checkpoint apply --group GROUP --plan FILE --output json
-agent-dispatch sync service render|install|inspect|stop|disable|uninstall --group GROUP --output json
+agent-dispatch sync service render|install|inspect|stop|disable|uninstall --group GROUP [--config PATH] --output json
 ```
 
-Reserved command identities remain registered in the CLI tree and return the
-closed unavailable result until their owning task implements them.
+All v1 command identities are implemented; unknown sync commands return a
+usage error at exit 2.
 
 `sync publish` is the only ordinary publication entrypoint. It requires an
 eligible maintenance snapshot but not cooperative-import acknowledgement. The
@@ -121,7 +119,12 @@ history/trust failure.
 `sync service` owns the managed launchd/systemd user-service definition. Install
 starts the exact rendered definition, stop preserves it, disable stops and
 disables it, and uninstall removes only the matching managed definition while
-preserving local state and evidence.
+preserving local state and evidence. The label is keyed by group, and the exact
+definition pins the absolute configuration path and invokes `sync serve` with
+direct arguments. A changed or foreign definition requires operator review;
+the lifecycle never overwrites it. Status reports fixed health reasons and
+counts without resolving credentials or exposing subprocess output. Doctor
+reports fixed reasons for unhealthy categories.
 
 ## Peer protocol
 

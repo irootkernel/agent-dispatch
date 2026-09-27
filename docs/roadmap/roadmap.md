@@ -15,9 +15,9 @@
 | Release target | v0.2.0 (Two-Node Wiki Sync MVP) |
 | Current epic | E22 Peer Recovery, Verification, and Operations (In Progress) |
 | Current active task | None |
-| Next task | E22-T4 Managed service lifecycle and diagnostics |
-| Completed tasks | 114 / 116 |
-| Planned tasks | 2 / 116 |
+| Next task | E22-T5 Real two-node qualification and v0.2.0 handoff |
+| Completed tasks | 115 / 116 |
+| Planned tasks | 1 / 116 |
 | In progress tasks | 0 |
 | In review tasks | 0 |
 | Blocked tasks | 0 |
@@ -177,8 +177,8 @@
 | 111 | E21-T5 | Completed | Publication/import crash and conflict qualification |
 | 112 | E22-T1 | Completed | Authenticated peer service and durable nudges |
 | 113 | E22-T2 | Completed | Periodic reconciliation and offline catch-up |
-| 114 | E22-T3 | Planned | Pair status and fresh verification |
-| 115 | E22-T4 | Planned | Managed service lifecycle and diagnostics |
+| 114 | E22-T3 | Completed | Pair status and fresh verification |
+| 115 | E22-T4 | Completed | Managed service lifecycle and diagnostics |
 | 116 | E22-T5 | Planned | Real two-node qualification and v0.2.0 handoff |
 
 ---
@@ -5591,7 +5591,7 @@ E22-T2 Completed.
 
 ## E22-T4: Add Managed Service Lifecycle and Diagnostics
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 

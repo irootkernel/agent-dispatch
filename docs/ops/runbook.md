@@ -1,6 +1,6 @@
 # Operations Runbook
 
-This runbook targets the operator of a local macOS arm64 instance. Identify the
+This runbook targets the operator of a local macOS arm64 or Linux instance. Identify the
 binary version, configuration path, route, and intended Hermes board before acting.
 The installation owner authorizes state changes; repository maintainers own defect
 escalation. Read-only inspection comes first, and uncertain delivery remains
@@ -102,7 +102,7 @@ SQLite health. `local_ref_unavailable` means the local content ref could not
 be confirmed after reconciliation; inspect that ref and the peer inbox.
 `inbox_unsettled` means at least one nudge could not be settled; inspect its
 retained reason and retry after resolving the cause. The managed service
-definition remains E22-T4 work.
+definition is operated through `sync service`.
 
 Before enabling import on a node:
 
@@ -132,6 +132,84 @@ Before enabling import on a node:
 Never invent or shorten a digest projection. If no trusted configuration
 producer can supply the exact values, leave import unacknowledged and allow
 `sync reconcile` to fail closed.
+
+### 3b. Managed Sync Service
+
+On each node, run `sync service render --group <group-id> --config <path> --output json`
+and confirm its binary, configuration path, group, and digest.
+Use `sync service install` with the same flags, then `sync service inspect` and
+require `definition_matches` and `loaded`. The macOS definition is a launchd
+user agent; the Linux definition is a systemd user service. The service runs
+the same `sync serve` and guarded reconcile path as explicit commands. It
+uses `~/Library/Logs/agent-dispatch/<label>.out.log` and `.err.log` on macOS;
+the managed executor truncates an open stderr log at 10 MiB before its next
+write. Systemd logs are available through the user journal on Linux.
+
+Stop or disable the service before changing its sync configuration. If the
+configuration changes first, a running executor suspends peer work; a newly
+launched managed executor exits cleanly. The exact definition can still be
+inspected, disabled, or uninstalled with the original group and config path,
+even if the configuration is unreadable or changes to another group. Restore
+the configuration before reinstalling. On macOS, install kickstarts an already
+loaded job without terminating a running executor; this also starts a job that
+exited cleanly while sync was disabled. When changing groups, uninstall the old
+group's exact definition before installing the new group. `inspect` reports
+manager load state; confirm `sync status` reports `health.listener` ready to
+establish that the executor is serving. The service does not configure
+Tailscale or start an HTTPS proxy; review that route before expecting remote
+peer requests.
+
+For a planned interruption, use `sync service stop` to keep its definition or
+`sync service disable` to stop automatic start. Inspect pending publication,
+delivery, import, and verification work before restarting with `install`.
+`sync service uninstall` removes only the current matching definition and
+preserves SQLite state and evidence. A drifted or foreign definition is
+refused; identify its owner and review it before changing anything. `sync status`
+exposes bounded listener, auth, membership, queue, Git, import,
+verification, activation, and service posture under `health`; `doctor` reports
+unhealthy categories. `credential_resolution_not_probed` means the status
+command did not resolve secrets, so verify live authentication separately.
+
+### 3c. Sync State and Trust Maintenance
+
+- **Upgrade:** Stop the managed service, back up state and configuration, and
+  uninstall the old exact definition with the old binary and config path.
+  Install the reviewed binary, inspect its rendered definition, and install it.
+  Validate config, inspect status and doctor, reconcile, then verify the pair. An ordinary
+  restart retains the state incarnation and all pending obligations.
+- **Backup and restore:** Stop the service and participating writers before
+  taking a consistent SQLite and repository backup. Preserve the old copy for
+  diagnosis. A destructive reset or restore must use a new configured local
+  `state_incarnation_id`, a fresh cooperative-import acknowledgement, and a
+  reviewed `sync membership plan --change incarnation_registration --instance <local-id>`
+  followed by `sync membership apply` with the exact predecessor.
+  Do not start the restored node as its old incarnation or copy the other
+  node's acknowledgement. Reconcile and verify both nodes after registration.
+- **Publisher-key rotation:** Stop the service and pause new protected work.
+  Generate the new key outside the service. Update the local publisher key
+  and state incarnation in config, then
+  review `sync membership plan --change key_rotation --instance <local-id>`
+  and apply its exact predecessor. Refresh the import acknowledgement and
+  verify both nodes before retiring the previous key.
+- **Peer credential rotation:** Stop the service and pause with the current
+  control revision. Then
+  provision distinct directional secret references on both nodes, update
+  configuration and membership endpoint/key declarations when they change,
+  validate, resume with the new configuration revision, then test fresh
+  verification. The service never prints credential values.
+- **Bootstrap or re-registration:** Review the two configured identities and
+  incarnations. Use `sync membership plan --change bootstrap` only for the
+  initial `none` predecessor; use `incarnation_registration` and the exact
+  non-null predecessor after a reset. Apply the reviewed plan, establish an
+  initial signed checkpoint with `sync checkpoint plan --kind initial_baseline`
+  and `sync checkpoint apply`, and reconcile. Never adopt an unsigned tip.
+- **Conflict or history hold:** Pause affected work and preserve both Git
+  histories, index/worktree facts, SQLite journals, and the exact control
+  reason. Resolve the content and obtain administrator review. Use
+  `sync checkpoint plan --kind conflict_resolution` or
+  `--kind history_bound_exhausted` for the actual hold, apply the reviewed
+  plan, reconcile, and verify. Never use force push, reset, or an implicit
+  trust expansion.
 
 ## 4. Unknown Dispatch Recovery
 

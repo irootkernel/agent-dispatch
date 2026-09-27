@@ -459,8 +459,8 @@ history, subprocess time, and subprocess output values. Inline credentials,
 unknown fields, a third member, a non-Git resource, a public or credential-bearing
 endpoint, or reused trust or directional credentials fail configuration
 validation. An enabled block activates only implemented protected surfaces.
-Pair verification is implemented in E22-T3. Managed service lifecycle remains
-reserved until E22-T4. `sync serve` binds an owner-only
+Pair verification is implemented in E22-T3. E22-T4 implements the managed
+service lifecycle. `sync serve` binds an owner-only
 `<state_dir>/peer-service/http.sock` Unix socket; the operator manages the
 Tailscale HTTPS route separately. `sync.bounds.queue` limits all unresolved
 group obligations, including nudges, publications, imports, and verifications.

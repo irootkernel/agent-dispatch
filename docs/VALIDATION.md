@@ -875,6 +875,39 @@ deadline against interrupted expiry. Focused tests exercise local binding and
 unavailable target rechecks, final local-state changes, interrupted-plan
 visibility, the exact expiry boundary, and reserved service failure.
 
+E22-T4's managed service tests use isolated launchd and systemd user-unit
+directories and injected lifecycle commands. `TestE22T4ManagedServiceExactDefinitionLifecycle`
+covers render without a write, executor arguments, restart policy, macOS log
+paths, idempotent install, loaded inspection, stop, disable, foreign-definition
+and symlink refusal, manager failures on both platforms, uninstall with SQLite
+state retained, and cleanup after sync is disabled, removed, or unreadable. A
+newly launched managed executor exits cleanly in those configuration states;
+manual serve refuses disabled or unreadable sync. Disabled status and doctor
+report an installed service as blocked, and
+an alternate config path cannot install a second unit for the same group.
+`TestE22T4DiagnosticsUseBoundedReasons` checks all nine health categories,
+nonempty reasons, withheld credential references, an unresolved verification
+job in the queue count, unknown manager state, and doctor findings.
+`TestE22T4StatusAndDoctorAgreeWithoutControlRow` checks first-use control
+revision agreement. The shared sync test fixture isolates both user-service
+directories and manager runners, including enabled status and doctor calls.
+`TestE22T4LaunchdInstallStartsLoadedIdleService` checks that install starts a
+loaded job after a clean exit without terminating a running instance.
+`TestE22T4ServiceFailuresKeepRegisteredCodes` checks the registered
+configuration and service I/O error tuples. The service I/O tuple is pinned in
+the provider bundle; `config_invalid` is registered in the main error model.
+`TestE22T4ServeRejectsInvalidFlags` checks missing, empty, duplicate, and
+unknown serve flags. `TestE22T4ManagedLogCapsOpenRegularFile` checks the 10 MiB
+managed stderr cap. The service definition invokes `sync serve` with an explicit
+group and config path. Real macOS and Linux service-manager checks,
+the Tailscale route, and real two-node behavior remain E22-T5 gates.
+
+On 2026-09-27, `GOFLAGS=-timeout=30m make verify` passed on the corrected T4
+candidate, including the unit and race suites, manifest, schemas, traceability,
+and frozen sync provider bundle. The isolated test PATH omitted the installed
+Hermes binary. `schedule-check` completed but skipped systemd unit lint because
+`systemd-analyze` is unavailable on this Mac; real manager checks remain T5 work.
+
 ## Go 1.27.1 Toolchain and Dependency Update (2026-09-24)
 
 The current checkout uses Go 1.27.1, SQLite v1.59.0, jsonschema v6.0.3,

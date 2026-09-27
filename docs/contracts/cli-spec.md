@@ -57,7 +57,8 @@ agent-dispatch completion
 
 There is no `replay` command.
 
-The sync identities are contract-reserved in v0.2.0. E21-T1 implements
+The v0.2.0 sync contract defines these identities; they are implemented
+through E22-T4. E21-T1 implements
 JSON-only `sync capabilities`, durable-control-aware `sync status`, and
 revision-fenced `sync pause` and `sync resume`. E21-T2 implements JSON-only
 `sync membership plan` and `sync membership apply`; plan is side-effect-free,
@@ -183,6 +184,37 @@ records its expiry after five minutes with a journal entry. A verification
 command has a four-minute overall deadline. Verification does not publish or
 import content.
 
+`sync service` manages one definition per group. Its label is stable across
+configuration paths, while the exact definition pins the absolute path. On
+macOS it is a launchd user agent; on Linux it is a systemd user service. The
+definition invokes `sync serve` with the group, configuration path, and an
+internal `--managed` flag. A newly launched managed serve exits successfully
+when the configured group is disabled, removed, or unreadable, so the service
+manager does not restart it. The `render|install|inspect|stop|disable|uninstall`
+actions accept `--group GROUP`, `--config PATH`, and `--output json`. Render
+and inspect have no service effect. Install starts the exact definition and is idempotent
+for matching bytes; any foreign or drifted definition is refused. Stop keeps
+the definition, disable also disables automatic start, and uninstall removes
+only matching bytes while preserving SQLite state and evidence. Disable,
+inspect, stop, and uninstall remain available after the group is disabled,
+removed, unreadable, or changed to another group. Install requires an enabled
+group. Inspect reports presence, load state,
+expected and installed digests, definition match, whether the configuration
+is available, and whether the configured group is enabled. Its `healthy` value
+requires a matching definition, loaded manager state, and an enabled group.
+Manager load state does not prove that the local peer listener is accepting;
+check `sync status` health for listener readiness.
+Service definition file and log-directory I/O failures return
+`sync_service_io_failed` at exit 20. Failure to build the definition returns
+`config_invalid` at exit 3.
+Enabled `sync status` also reports a bounded `health` map for listener, auth,
+membership, queue, Git, import, verification, activation, and service posture.
+Disabled status reports service posture alone, including a blocked reason when
+a matching definition remains installed.
+`doctor` projects unhealthy categories into fixed-code findings. Auth
+configuration is inspectable without resolving or printing credential values;
+its `credential_resolution_not_probed` reason is not proof of live peer auth.
+
 Each job projection includes the durable job identity, logical key, state, update time,
 resolution, claim, and fence. Resolution evidence is reported separately from
 the historical terminal state, and later resolver journals do not erase the
@@ -193,8 +225,8 @@ are included when present. Import additionally reports its reason and target
 paths after strict record decoding. Resolved deferrals remain visible without
 occupying the bounded active queue; `present: false` means no retained job of
 that kind exists (none was admitted or all resolved history was pruned).
-Every other unimplemented identity returns `sync_capability_unavailable`
-at exit 3 until its owning E21 or E22 task implements and truthfully advertises it. The executable
+All provider command identities in this version are implemented. Unknown sync
+commands return a usage error at exit 2. The executable
 descriptor and peer contract bundle is
 [`sync-provider-v1`](sync-provider-v1/bundle.json). Capabilities reports both
 `contract_version` and the normative `contract_digest` defined by the sync

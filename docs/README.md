@@ -15,8 +15,9 @@ under [v0.1.8 - 2026-09-10](../CHANGELOG.md#v018---2026-09-10). The qualified
 contract is not release evidence. E21 provides qualified local runtime control,
 membership, signed publication, checkpoints, and guarded import. E22-T1 adds
 authenticated peer admission; E22-T2 adds periodic recovery; E22-T3 adds
-local pair-status and fresh verification behavior. Managed service lifecycle
-and real two-node release evidence remain incomplete.
+local pair-status and fresh verification behavior; E22-T4 adds managed
+user-service lifecycle and bounded diagnostics. Real two-node release evidence
+remains incomplete.
 
 ## Start Here
 

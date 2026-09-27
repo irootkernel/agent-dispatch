@@ -27,6 +27,8 @@ This file records concise shipped outcomes and pending changes.
   missed-nudge catch-up, and recovery of already-signed publication work.
 - Add pair status and fresh two-node verification with explicit incomplete
   and changed-target results for unsafe or shifting evidence.
+- Add managed launchd and systemd peer-service controls with bounded sync
+  health diagnostics and recovery guidance.
 
 ### Changed
 
@@ -35,6 +37,8 @@ This file records concise shipped outcomes and pending changes.
 
 ### Fixed
 
+- Start a loaded macOS sync service after a clean exit when install is rerun,
+  without terminating an already-running executor.
 - Preserve staged Markdown changes and independent controller files during
   publication and checkpoint advancement, and reject a detached or different
   checked-out content branch before push.

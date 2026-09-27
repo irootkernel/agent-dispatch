@@ -11,8 +11,16 @@ E21 implements and qualifies the durable local substrate, signed membership,
 explicit publication, checkpoints, and guarded local import. E22-T1 adds
 authenticated peer admission over an owner-only local socket. E22-T2 adds
 periodic configured-ref recovery with persisted backoff. E22-T3 adds locally
-verified pair-status and nonce-bound convergence behavior. Managed service
-lifecycle and real two-node release qualification remain incomplete.
+verified pair-status and nonce-bound convergence behavior. E22-T4 adds
+managed user-service lifecycle and bounded sync diagnostics. Real two-node
+release qualification remains incomplete.
+
+Managed service definition file and log-directory I/O failures use the
+registered `sync_service_io_failed` storage error at exit 20; definition
+construction failures use `config_invalid` at exit 3.
+The frozen sync provider bundle lists the new service I/O error, and managed
+launchd install starts a previously loaded job after a clean exit without
+terminating a running instance.
 
 - SQLite schema v21 stores group controls, idempotent logical jobs, fenced
   claims, bounded attempts, and append-only recovery journals before effects.
@@ -51,6 +59,8 @@ lifecycle and real two-node release qualification remain incomplete.
 - E22-T3 adds fresh authenticated peer observations, an exact two-node
   verification target, durable attempt results, and bounded interruption
   expiry without promoting historical delivery to convergence.
+- E22-T4 manages the exact launchd or systemd user-service definition and
+  reports bounded sync health reasons for status and doctor.
 - Validation remediation makes schema v23 a compatibility marker while current
   writers retain blocked obligations with their matching hold, and adds schema
   v24 causal journal sequencing. Same-base push rejection preserves the signed

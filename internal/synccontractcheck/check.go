@@ -25,7 +25,7 @@ var expectedArtifacts = []string{
 // allowlisted path and its bytes in bundle order. SHA256SUMS supports ordinary
 // corruption detection; this pin ensures the checksum regeneration command
 // cannot silently bless coordinated schema/fixture drift.
-const expectedArtifactSetDigest = "eb0f52223cd34f2911549880d738421b6748e5ca0558dd7e128786e40bd24b2a"
+const expectedArtifactSetDigest = "4d468034c8e27e82799b79ceaa1ab5e41246d9af461b72fbcbe13f371b10144f"
 
 type bundle struct {
 	SchemaVersion  string   `json:"schema_version"`
@@ -63,13 +63,13 @@ var expectedCommandTuples = []commandTuple{
 	{"sync capabilities", "contract_read", "implemented", "none"}, {"sync status", "status_read", "implemented", "none"},
 	{"sync publish", "publication", "implemented", "git_write"}, {"sync reconcile", "reconciliation", "implemented", "git_read_write"}, {"sync verify", "pair_verification", "implemented", "network_read_and_state_write"}, {"sync serve", "peer_service", "implemented", "listener"}, {"sync pause", "control", "implemented", "state_write"}, {"sync resume", "control", "implemented", "state_write"},
 	{"sync membership plan", "membership_plan", "implemented", "none"}, {"sync membership apply", "membership_apply", "implemented", "git_write"}, {"sync checkpoint plan", "checkpoint_plan", "implemented", "network_read"}, {"sync checkpoint apply", "checkpoint_apply", "implemented", "git_write"},
-	{"sync service render", "service_render", "reserved", "none"}, {"sync service install", "service_install", "reserved", "service_write"}, {"sync service inspect", "service_inspect", "reserved", "none"}, {"sync service stop", "service_stop", "reserved", "service_write"}, {"sync service disable", "service_disable", "reserved", "service_write"}, {"sync service uninstall", "service_uninstall", "reserved", "service_write"},
+	{"sync service render", "service_render", "implemented", "none"}, {"sync service install", "service_install", "implemented", "service_write"}, {"sync service inspect", "service_inspect", "implemented", "none"}, {"sync service stop", "service_stop", "implemented", "service_write"}, {"sync service disable", "service_disable", "implemented", "service_write"}, {"sync service uninstall", "service_uninstall", "implemented", "service_write"},
 }
 
 var expectedCommandFlags = [][]string{
-	{"--output"}, {"--config", "--group", "--output"}, {"--group", "--expected-config-revision", "--output"}, {"--group", "--output"}, {"--group", "--output"}, {"--group"}, {"--group", "--expected-control-revision", "--output"}, {"--group", "--expected-control-revision", "--output"},
+	{"--output"}, {"--config", "--group", "--output"}, {"--group", "--expected-config-revision", "--output"}, {"--group", "--output"}, {"--group", "--output"}, {"--group", "--config", "--managed"}, {"--group", "--expected-control-revision", "--output"}, {"--group", "--expected-control-revision", "--output"},
 	{"--group", "--change", "--instance", "--output"}, {"--group", "--plan", "--expected-membership-predecessor", "--output"}, {"--group", "--target-commit", "--kind", "--output"}, {"--group", "--plan", "--output"},
-	{"--group", "--output"}, {"--group", "--yes", "--output"}, {"--group", "--output"}, {"--group", "--yes", "--output"}, {"--group", "--yes", "--output"}, {"--group", "--yes", "--output"},
+	{"--group", "--config", "--output"}, {"--group", "--config", "--output"}, {"--group", "--config", "--output"}, {"--group", "--config", "--output"}, {"--group", "--config", "--output"}, {"--group", "--config", "--output"},
 }
 
 type peer struct {
@@ -239,13 +239,13 @@ func Check(dir string) error {
 	if err := decodeClosed(filepath.Join(dir, "errors.json"), &e); err != nil {
 		return err
 	}
-	if e.SchemaVersion != "agent-dispatch.sync-provider.errors/v1" || len(e.Errors) != 9 {
+	if e.SchemaVersion != "agent-dispatch.sync-provider.errors/v1" || len(e.Errors) != 10 {
 		return fmt.Errorf("provider error registry mismatch")
 	}
 	wantErrors := []struct {
 		code, category string
 		exit           int
-	}{{"sync_group_not_found", "configuration", 3}, {"sync_capability_unavailable", "configuration", 3}, {"sync_contract_mismatch", "configuration", 3}, {"sync_payload_invalid", "input_rejected", 4}, {"sync_identity_obsolete", "input_rejected", 4}, {"sync_retryable", "transient_local", 10}, {"sync_effect_unknown", "acceptance_unknown", 13}, {"sync_precondition_failed", "conflict", 14}, {"sync_trust_failed", "security", 30}}
+	}{{"sync_group_not_found", "configuration", 3}, {"sync_capability_unavailable", "configuration", 3}, {"sync_contract_mismatch", "configuration", 3}, {"sync_payload_invalid", "input_rejected", 4}, {"sync_identity_obsolete", "input_rejected", 4}, {"sync_retryable", "transient_local", 10}, {"sync_service_io_failed", "storage", 20}, {"sync_effect_unknown", "acceptance_unknown", 13}, {"sync_precondition_failed", "conflict", 14}, {"sync_trust_failed", "security", 30}}
 	for i, entry := range e.Errors {
 		want := wantErrors[i]
 		if entry.Code != want.code || entry.Category != want.category || entry.ExitCode != want.exit {

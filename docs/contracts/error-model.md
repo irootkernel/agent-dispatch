@@ -115,6 +115,7 @@ The v0.1 registry is closed: implementations emit only the codes below. Adding o
 | `work_receipt_invalid` | `input_rejected` | 4 |
 | `sqlite_busy` | `transient_local` | 10 |
 | `sqlite_query_failed` | `storage` | 20 |
+| `sync_service_io_failed` | `storage` | 20 |
 | `hermes_executable_missing` | `target_unavailable` | 11 |
 | `hermes_version_unsupported` | `target_unavailable` | 11 |
 | `watchman_unavailable` | `target_unavailable` | 11 |
@@ -149,7 +150,6 @@ The v0.1 registry is closed: implementations emit only the codes below. Adding o
 | `path_symlink_escape` | `security` | 30 |
 | `source_unsafe_path` | `security` | 30 |
 | `sync_group_not_found` | `configuration` | 3 |
-| `sync_capability_unavailable` | `configuration` | 3 |
 | `sync_payload_invalid` | `input_rejected` | 4 |
 | `sync_precondition_failed` | `conflict` | 14 |
 | `sync_effect_unknown` | `acceptance_unknown` | 13 |
@@ -163,6 +163,7 @@ Reserved code names — defined, never emitted in v0.1:
 | `batch_hard_limit` | `quarantined` (5) | A future policy that durably stores overflow evidence before holding it (today overflow converts to a reconciliation generation or refuses the context at exit 4). |
 | `protected_path_quarantined` | `quarantined` (5) | The same future durable-hold policy for protected paths (today a protected hold is an exit-0 disposition envelope). |
 | `unsafe_path_quarantined` | `quarantined` (5) | The same future durable-hold policy for unsafe paths (today the containment rejection fires first at exit 30). |
+| `sync_capability_unavailable` | `configuration` (3) | A future bundle reserves a command identity before implementing it; all current v1 identities are implemented. |
 | `sync_contract_mismatch` | `configuration` (3) | A configured or received sync contract version or digest is unsupported. |
 | `sync_identity_obsolete` | `input_rejected` (4) | Evidence names an obsolete node incarnation. |
 

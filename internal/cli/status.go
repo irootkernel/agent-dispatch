@@ -287,6 +287,22 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 	// concrete remediations.
 	if storeErr == nil {
 		findings = append(findings, drainDoctorFindings(notificationDrainPosture(requestCtx(), cfg, store, resolveConfigPath(flags.val("--config")), stderr))...)
+		if cfg.Sync != nil && cfg.Sync.Enabled {
+			control, err := store.LoadSyncControl(requestCtx(), cfg.Sync.GroupID)
+			if err == sql.ErrNoRows {
+				revision, _ := config.SyncRevision(cfg)
+				control = defaultSyncControlRow(cfg.Sync.GroupID, revision)
+				err = nil
+			}
+			if err == nil {
+				findings = append(findings, syncDoctorFindings(syncHealthSnapshot(requestCtx(), cfg, resolveConfigPath(flags.val("--config")), store, control))...)
+			} else {
+				findings = append(findings, syncDoctorFindings(map[string]syncHealth{"activation": {State: "unavailable", Reason: "control_unreadable"}})...)
+			}
+		}
+	}
+	if cfg.Sync != nil && !cfg.Sync.Enabled {
+		findings = append(findings, syncDoctorFindings(map[string]syncHealth{"service": syncServiceHealth(cfg, cfg.Sync.GroupID, resolveConfigPath(flags.val("--config")))})...)
 	}
 	emitFindings(log, findings)
 	return writeDoctorResult(stdout, stderr, command, findings)

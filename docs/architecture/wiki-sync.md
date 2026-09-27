@@ -4,8 +4,8 @@
 > qualified durable jobs and control, restricted Git and membership, explicit
 > signed publication, signed checkpoints, guarded local import, and exact
 > attribution. E22-T1 adds authenticated peer admission; E22-T2 adds periodic
-> recovery; E22-T3 adds local pair verification. Managed service lifecycle and
-> real two-node release qualification remain unavailable.
+> recovery; E22-T3 adds local pair verification; E22-T4 adds managed user-service
+> lifecycle and bounded diagnostics. Real two-node release qualification remains open.
 
 Agent Dispatch extends the existing maintenance loop with an explicit Git
 publication step and a peer import loop. Hermes still owns Wiki semantics.
@@ -33,9 +33,9 @@ peer service -> durable inbox -> the same reconciliation/import path
 ## Boundaries
 
 The E21 application helpers live beside the existing dispatch, work-receipt,
-notification, and reconciliation services, while the explicit CLI currently
-owns their bounded orchestration. E22 must extract or reuse that orchestration
-before adding a service so the service and manual commands cannot diverge.
+notification, and reconciliation services. Explicit commands and the managed
+service use the same guarded reconciliation path; the managed definition
+invokes `sync serve` directly with the configured group and config path.
 They reuse the local SQLite store and resource coordination rules. A restricted Git adapter owns
 fixed-argument subprocess execution, delimiter-safe parsing, SSH signature
 verification, explicit refspecs, deadlines, and output limits. The peer HTTP

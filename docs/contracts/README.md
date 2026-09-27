@@ -20,6 +20,7 @@ than a separate lifecycle authority.
 - [`sink-adapter-contract.md`](sink-adapter-contract.md)
 - [`sync-contract.md`](sync-contract.md)
 
-The sync contract reserves the v0.2.0 command and protocol identities. Its
-capability surface must report unimplemented behavior honestly until the owning
-roadmap tasks deliver it.
+The sync contract defines the v0.2.0 command and protocol identities. The v1
+command identities are implemented through E22-T4; the capability surface
+continues to report future behavior as unavailable until its owning task
+delivers it.

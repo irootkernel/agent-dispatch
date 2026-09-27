@@ -45,7 +45,7 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		}
 		revision, _ := config.SyncRevision(cfg)
 		if cfg.Sync == nil || !cfg.Sync.Enabled {
-			return writeEnvelope(stdout, "sync status", map[string]any{"schema_version": "agent-dispatch.sync-status/v1", "group_id": group, "state": "disabled", "reason": "not_configured_or_disabled", "config_revision": revision, "import_acknowledgement_current": false, "side_effects": []string{}})
+			return writeEnvelope(stdout, "sync status", map[string]any{"schema_version": "agent-dispatch.sync-status/v1", "group_id": group, "state": "disabled", "reason": "not_configured_or_disabled", "config_revision": revision, "import_acknowledgement_current": false, "health": map[string]syncHealth{"service": syncServiceHealth(cfg, group, resolveConfigPath(configPath))}, "side_effects": []string{}})
 		}
 		store, concrete, code := openOperatorStore(command, configPath, stderr)
 		if code != 0 {
@@ -54,7 +54,7 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		defer concrete.Close()
 		control, err := store.LoadSyncControl(requestCtx(), group)
 		if errors.Is(err, sql.ErrNoRows) {
-			control = sqlite.SyncControlRow{GroupID: group, Revision: 1, State: "active", Reason: "none", MembershipMode: "normal", ConfigRevision: revision}
+			control = defaultSyncControlRow(group, revision)
 			err = nil
 		}
 		if err != nil {
@@ -115,6 +115,7 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 			"recovery_schedule":                  recoveryStatus,
 			"pre_signature_publications_pending": preSignature,
 			"pre_signature_oldest_created_at":    oldestPreSignature,
+			"health":                             syncHealthSnapshot(requestCtx(), cfg, resolveConfigPath(configPath), concrete, control),
 			"side_effects":                       []string{},
 		})
 	case "pause", "resume":
@@ -180,11 +181,9 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		return runSyncVerify(args[1:], stdout, stderr)
 	case "serve":
 		return runSyncServe(args[1:], stdout, stderr)
+	case "service":
+		return runSyncService(args[1:], stdout, stderr)
 	default:
-		if reservedSyncCommand(args) {
-			writeErrorWithResult(stderr, command, "sync_capability_unavailable", "configuration", "the requested sync capability is reserved but unavailable in this build", map[string]any{"side_effects": []string{}})
-			return 3
-		}
 		return usageError(stderr, "sync", "unknown or incomplete sync command")
 	}
 }
@@ -305,8 +304,8 @@ func syncCapabilities() map[string]any {
 		"publication": true, "reconciliation": true, "pair_verification": true,
 		"peer_service": true, "control": true, "membership_plan": true,
 		"membership_apply": true, "checkpoint_plan": true, "checkpoint_apply": true,
-		"service_render": false, "service_install": false, "service_inspect": false,
-		"service_stop": false, "service_disable": false, "service_uninstall": false,
+		"service_render": true, "service_install": true, "service_inspect": true,
+		"service_stop": true, "service_disable": true, "service_uninstall": true,
 	}
 }
 
@@ -358,16 +357,8 @@ func finishClaimedSyncTrustFailure(stderr io.Writer, command string, store *sqli
 	return syncMembershipError(stderr, command, cause, 30)
 }
 
-func reservedSyncCommand(args []string) bool {
-	if len(args) == 0 {
-		return false
-	}
-	switch args[0] {
-	case "service":
-		return len(args) >= 2 && (args[1] == "render" || args[1] == "install" || args[1] == "inspect" || args[1] == "stop" || args[1] == "disable" || args[1] == "uninstall")
-	default:
-		return false
-	}
+func defaultSyncControlRow(group, revision string) sqlite.SyncControlRow {
+	return sqlite.SyncControlRow{GroupID: group, Revision: 1, State: "active", Reason: "none", MembershipMode: "normal", ConfigRevision: revision}
 }
 
 func localSyncIncarnation(cfg *config.Config) string {
@@ -458,6 +449,9 @@ func syncStatusFlags(args []string) (group, configPath string, ok bool) {
 				return "", "", false
 			}
 			value := args[i+1]
+			if value == "" {
+				return "", "", false
+			}
 			i++
 			if args[i-1] == "--group" {
 				group = value

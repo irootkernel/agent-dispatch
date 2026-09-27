@@ -7,6 +7,7 @@
     {"code":"sync_payload_invalid","category":"input_rejected","exit_code":4},
     {"code":"sync_identity_obsolete","category":"input_rejected","exit_code":4},
 	{"code":"sync_retryable","category":"transient_local","exit_code":10},
+    {"code":"sync_service_io_failed","category":"storage","exit_code":20},
     {"code":"sync_effect_unknown","category":"acceptance_unknown","exit_code":13},
     {"code":"sync_precondition_failed","category":"conflict","exit_code":14},
     {"code":"sync_trust_failed","category":"security","exit_code":30}

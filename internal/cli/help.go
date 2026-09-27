@@ -33,7 +33,7 @@ Commands:
   events         show — aggregate-event inspection with per-child evidence.
   notifications  test, list, retry, drain — the notification delivery surface.
   schedule       render, install, inspect, disable, uninstall, run — the managed launchd drain schedule.
-  sync           capabilities, control, signed publication, guarded import, membership, and checkpoints.
+  sync           capabilities, control, publication, guarded import, membership, checkpoints, and managed service.
   work           begin, complete, fail — the Hermes companion receipt surface.
   quarantine     list, release, discard — held-path operator exits.
   reconcile      Run a full-scope reconciliation generation.
@@ -83,12 +83,13 @@ Usage: agent-dispatch sync capabilities --output json
        agent-dispatch sync membership apply --group <id> --plan <file> --expected-membership-predecessor <oid|none> --output json
        agent-dispatch sync publish --group <id> --expected-config-revision <digest> --output json
        agent-dispatch sync reconcile --group <id> --output json
-       agent-dispatch sync serve --group <id>
+       agent-dispatch sync serve --group <id> [--config <path>]
+       agent-dispatch sync service render|install|inspect|stop|disable|uninstall --group <id> [--config <path>] --output json
        agent-dispatch sync checkpoint plan --group <id> --target-commit <oid> --kind <kind> --output json
        agent-dispatch sync checkpoint apply --group <id> --plan <file> --output json
 
 Flags: --group selects the configured sync group; --config is accepted by status,
-pause, and resume; --expected-control-revision fences control writes;
+serve, service, pause, and resume; --expected-control-revision fences control writes;
 --expected-config-revision is the digest reported by sync status and fences
 publication; --instance selects the affected member; --plan reads a reviewed
 strict-JSON file; --target-commit is the full content object ID; --kind is one
@@ -97,7 +98,8 @@ of initial_baseline, conflict_resolution, or history_bound_exhausted;
 
 Defaults: the platform configuration path; sync is disabled by default.
 Serve binds an owner-only Unix socket under the state directory for an
-operator-managed Tailscale HTTPS route.
+operator-managed Tailscale HTTPS route. Service manages its exact launchd or
+systemd user definition; uninstall preserves SQLite state and evidence.
 Approval requirements: none for capabilities/status, verify, membership plan,
 or checkpoint plan. Verify records a durable observation and queries the peer.
 Pause and resume are
@@ -107,7 +109,7 @@ the configured publisher key; checkpoint apply resolves the distinct configured
 administrator key. Both apply only the reviewed, revision-bound request.
 
 Exit codes: 0 success, including safety deferrals with no protected effect;
-2 usage; 3 configuration or unavailable capability; 4 rejected plan input;
+2 usage; 3 configuration; 4 rejected plan input;
 10 transient transport or pre-push ref-measurement failure, a
 preserved-candidate push retry while the remote is still at the reviewed
 predecessor, or a controller retry after proven no effect; 13 protected effect
@@ -132,6 +134,9 @@ Watchman observation consumes one effect as a one-use attribution record.
 Serve accepts authenticated peer requests into a durable inbox and retries
 configured peer-delivery obligations. Its separate inbox worker invokes the
 same guarded reconcile path; signing keys are unavailable to the service.
+Service render and inspect are read-only. Install starts the exact rendered
+definition; stop preserves it, disable stops and disables it, and uninstall
+removes only a matching managed definition.
 Checkpoint apply performs the corresponding administrator-signed content-ref
 update. Re-entering apply recovers the same already-signed checkpoint candidate;
 it never signs a replacement during recovery. A publish result of
@@ -143,6 +148,8 @@ Example:
   agent-dispatch sync checkpoint apply --group wiki-pair --plan checkpoint-plan.json --output json
   agent-dispatch sync publish --group wiki-pair --expected-config-revision <digest> --output json
   agent-dispatch sync reconcile --group wiki-pair --output json
+  agent-dispatch sync service render --group wiki-pair --output json
+  agent-dispatch sync service inspect --group wiki-pair --output json
 
 Next safe command: agent-dispatch sync status --group <id> --output json`,
 	"version": `version — print the product version

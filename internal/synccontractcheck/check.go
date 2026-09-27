@@ -25,7 +25,7 @@ var expectedArtifacts = []string{
 // allowlisted path and its bytes in bundle order. SHA256SUMS supports ordinary
 // corruption detection; this pin ensures the checksum regeneration command
 // cannot silently bless coordinated schema/fixture drift.
-const expectedArtifactSetDigest = "75c29977d43c20c9e369c9bfca4b09bc247e2a606b90354ab6cb2f285d0305e9"
+const expectedArtifactSetDigest = "619016094caf876b863e271a0e979ae393af268b8853e0b069deca8ad318dac5"
 
 type bundle struct {
 	SchemaVersion  string   `json:"schema_version"`
@@ -67,7 +67,7 @@ var expectedCommandTuples = []commandTuple{
 }
 
 var expectedCommandFlags = [][]string{
-	{"--output"}, {"--config", "--group", "--output"}, {"--group", "--expected-config-revision", "--output"}, {"--group", "--output"}, {"--group", "--output"}, {"--group", "--config", "--managed"}, {"--group", "--expected-control-revision", "--output"}, {"--group", "--expected-control-revision", "--output"},
+	{"--output"}, {"--config", "--group", "--output"}, {"--group", "--expected-config-revision", "--output"}, {"--group", "--output"}, {"--group", "--output"}, {"--group", "--config", "--managed"}, {"--group", "--config", "--expected-control-revision", "--output"}, {"--group", "--config", "--expected-control-revision", "--output"},
 	{"--group", "--change", "--instance", "--output"}, {"--group", "--plan", "--expected-membership-predecessor", "--output"}, {"--group", "--target-commit", "--kind", "--output"}, {"--group", "--plan", "--output"},
 	{"--group", "--config", "--output"}, {"--group", "--config", "--output"}, {"--group", "--config", "--output"}, {"--group", "--config", "--output"}, {"--group", "--config", "--output"}, {"--group", "--config", "--output"},
 }

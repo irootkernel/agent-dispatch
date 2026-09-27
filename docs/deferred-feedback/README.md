@@ -11,6 +11,9 @@ postponed from current work.
 | [DF-004](004-e22-final-observation-integration.md) | Final verification recheck needs a timed two-node integration case | 2026-09-27 |
 | [DF-005](005-e22-endpoint-operations-hardening.md) | Endpoint diagnostics and regression coverage can be strengthened | 2026-09-28 |
 | [DF-006](006-doc-manifest-inventory-hardening.md) | Manifest regeneration should exclude incidental files | 2026-09-28 |
+| [DF-007](007-e22-verification-saturation-and-deadline.md) | Verification deadline and saturated-queue reporting need hardening | 2026-09-28 |
+| [DF-008](008-e22-service-structure-hardening.md) | Verification and managed-service structure needs hardening | 2026-09-28 |
+| [DF-009](009-e22-contract-usage-drift-guard.md) | Sync contract usage needs a flag-drift guard | 2026-09-28 |
 
 An entry here must name the affected authority, the bounded concern, and
 the condition for reconsideration. Oversized work is promoted to one TODO candidate

@@ -18,13 +18,13 @@ cannot override them.
 
 ```text
 agent-dispatch sync capabilities --output json
-agent-dispatch sync status --group GROUP --output json
+agent-dispatch sync status --group GROUP [--config PATH] --output json
 agent-dispatch sync publish --group GROUP --expected-config-revision REV --output json
 agent-dispatch sync reconcile --group GROUP --output json
 agent-dispatch sync verify --group GROUP --output json
-agent-dispatch sync serve --group GROUP
-agent-dispatch sync pause --group GROUP --expected-control-revision REV --output json
-agent-dispatch sync resume --group GROUP --expected-control-revision REV --output json
+agent-dispatch sync serve --group GROUP [--config PATH]
+agent-dispatch sync pause --group GROUP --expected-control-revision REV [--config PATH] --output json
+agent-dispatch sync resume --group GROUP --expected-control-revision REV [--config PATH] --output json
 agent-dispatch sync membership plan --group GROUP --change KIND [--instance INSTANCE] --output json
 agent-dispatch sync membership apply --group GROUP --plan FILE --expected-membership-predecessor OID|none --output json
 agent-dispatch sync checkpoint plan --group GROUP --target-commit OID --kind KIND --output json

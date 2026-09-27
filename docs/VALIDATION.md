@@ -6,9 +6,9 @@ certify the current HEAD. For the current documentation roles and checks, use
 the [documentation index](README.md); for delivery status use the
 [roadmap](roadmap/roadmap.md).
 
-> **Current validation snapshot:** 2026-09-21 (E21-T5 and gate G17 completed;
+> **Historical validation snapshot:** 2026-09-21 (E21-T5 and gate G17 completed;
 > 111 of 116 roadmap tasks are complete and five are planned)
-> **Package target:** Agent Dispatch SOT 1.8.0 / shipped implementation v0.1.8
+> **Package target at that snapshot:** Agent Dispatch SOT 1.8.0 / shipped implementation v0.1.8
 > plus the qualified E21 v0.2.0 local sync runtime
 
 ## Completed Checks
@@ -39,7 +39,7 @@ the [documentation index](README.md); for delivery status use the
 
 ## Package Statistics at Validation
 
-- Markdown files: 97 on the current package basis
+- Markdown files: 97 on the 2026-09-21 package basis
 - JSON Schemas: 31
 - Example files: 64 (33 top-level JSON examples, 30 registered invalid JSON fixtures, and one YAML configuration example)
 - Integration reports: 4 (Hermes public interface E0-T4, Watchman public interface E0-T5, real-Hermes G11 evidence E15-T4, cold-validation evidence E17-T2)
@@ -735,9 +735,8 @@ claimed here.
 
 The capability matrix remains exact against
 `docs/contracts/sync-provider-v1/commands.json`: publication, reconciliation,
-control, membership, checkpoint, and peer serve commands are implemented;
-peer verify and managed service commands remain reserved and return
-`sync_capability_unavailable`. Enabled status now exposes the latest durable
+control, membership, checkpoint, peer serve, pair verification, and managed
+service commands are implemented. Enabled status now exposes the latest durable
 publication, delivery, and import outcomes separately, including unresolved
 signed, pending, deferred, or uncertain work. Full repository verification and
 the final cold-review disposition are recorded in the E21-T5 roadmap evidence.

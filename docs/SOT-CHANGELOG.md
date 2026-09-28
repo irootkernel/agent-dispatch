@@ -12,9 +12,10 @@ explicit publication, checkpoints, and guarded local import. E22-T1 adds
 authenticated peer admission over an owner-only local socket. E22-T2 adds
 periodic configured-ref recovery with persisted backoff. E22-T3 adds locally
 verified pair-status and nonce-bound convergence behavior. E22-T4 adds
-managed user-service lifecycle and bounded sync diagnostics. Real two-node
-qualification has a disposable Mac/Oracle Cloud Linux matrix, while final
-release gates remain incomplete. Private `.ts.net` HTTPS endpoints may name an
+managed user-service lifecycle and bounded sync diagnostics. G18 passed on the
+committed code revision in a disposable Mac/Oracle Cloud Linux matrix, with
+three-platform verification and reproducible `v0.2.0` release artifacts. The
+release target remains unpublished. Private `.ts.net` HTTPS endpoints may name an
 explicit Serve port in configuration and signed membership.
 The frozen provider bundle's artifact-set golden was re-pinned after reviewing
 the membership schema change; its protocol digest and other artifacts remain
@@ -66,6 +67,9 @@ terminating a running instance.
   expiry without promoting historical delivery to convergence.
 - E22-T4 manages the exact launchd or systemd user-service definition and
   reports bounded sync health reasons for status and doctor.
+- E22-T5 qualifies G18 on the final code revision with a disposable Mac/OCI
+  two-node replay, three-platform verification, and reproducible `v0.2.0`
+  handoff artifacts. Release and activation remain separate decisions.
 - Validation remediation makes schema v23 a compatibility marker while current
   writers retain blocked obligations with their matching hold, and adds schema
   v24 causal journal sequencing. Same-base push rejection preserves the signed

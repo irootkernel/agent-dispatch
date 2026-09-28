@@ -11,9 +11,9 @@
 | Field | Value |
 |---|---|
 | Shipped release | v0.1.8 (published 2026-09-10) |
-| Current SOT baseline | 1.8.0 ([D-030](../specs/decision-log.md); G17 complete, G18 open) |
+| Current SOT baseline | 1.8.0 ([D-030](../specs/decision-log.md); G17 and G18 complete) |
 | Release target | v0.2.0 (Two-Node Wiki Sync MVP) |
-| Current epic | E22 Peer Recovery, Verification, and Operations (In Progress) |
+| Current epic | None (E22 completed) |
 | Current active task | None |
 | Next task | None |
 | Completed tasks | 116 / 116 |
@@ -58,7 +58,7 @@
 | E19 | Official Linux Support (darwin/arm64 + linux/amd64 + linux/arm64) | **Completed** | 10 | G15 |
 | E20 | Two-Node Sync Contracts and Admission | **Completed** | 5 | G16 |
 | E21 | Signed Publication and Guarded Import | **Completed** | 5 | G17 |
-| E22 | Peer Recovery, Verification, and Operations | **In Progress** | 5 | G18 |
+| E22 | Peer Recovery, Verification, and Operations | **Completed** | 5 | G18 |
 
 ## 3. Task Status Index
 
@@ -5488,7 +5488,7 @@ E21-T4 Completed.
 
 # E22: Peer Recovery, Verification, and Operations
 
-**Epic status:** In Progress
+**Epic status:** Completed
 
 **Purpose:** Add authenticated low-latency nudges, periodic correctness,
 fresh pair verification, service management, and real two-node qualification.
@@ -5660,7 +5660,7 @@ E22-T4 Completed.
 
 ### Evidence
 
-- [Disposable two-node qualification](../integrations/e22t5-two-node-qualification.md) records real signed publication, private-port nudge, guarded import, lost-nudge Git recovery, conflict stop, pair verification, and both service-manager lifecycles on fixed `v0.2.0` corrected binaries. The source digest, passing three-platform gates, bound matrix, and synthetic maintenance-receipt boundary are recorded there. Two release builds from the same explicit pre-closeout revision were reproducible and checksum-verified. Independent hardening risks are owned by [DF-004](../deferred-feedback/004-e22-final-observation-integration.md), [DF-005](../deferred-feedback/005-e22-endpoint-operations-hardening.md), and [DF-006](../deferred-feedback/006-doc-manifest-inventory-hardening.md). Final commit-stamped release rehearsal remains open.
+- [Disposable two-node qualification](../integrations/e22t5-two-node-qualification.md#final-committed-revision-replay-2026-09-28) records signed publication, private-port nudge and import, lost-nudge Git recovery, conflict stop, fresh pair verification, and both service-manager lifecycles on the reviewed final code commit `6b1c78b19f4cdb69dfd070ea016430f03075b73d`. The [G18 validation record](../VALIDATION.md#g18-committed-revision-closeout-2026-09-28) gives the three-platform deterministic gates, synthetic maintenance-receipt boundary, whole-epic review disposition, and checksum-verified reproducible `v0.2.0` artifacts. Independent hardening risks have owners in the [deferred-feedback inventory](../deferred-feedback/README.md). The release target remains unpublished; tag, push, production installation, and Plugin activation have separate authorization boundaries.
 
 # 4. Deferred Future Work
 

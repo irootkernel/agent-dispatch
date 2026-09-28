@@ -10,9 +10,9 @@ Start with [`architecture-overview.md`](architecture-overview.md). For the multi
 then the source, persistence, reconciliation, Hermes, observability, and
 security documents for the owning subsystem.
 
-For the partially implemented v0.2.0 two-node Git sync loop, read
-[`wiki-sync.md`](wiki-sync.md). E21 provides local control, membership, signed
-publication, checkpoints, and guarded import. E22-T1 adds authenticated peer
-admission, and E22-T2 adds periodic configured-ref recovery. Pair verification
-is implemented locally in E22-T3; E22-T4 manages the peer service on macOS and
-Linux. Real two-node qualification remains E22-T5.
+For the v0.2.0 two-node Git sync loop, read [`wiki-sync.md`](wiki-sync.md).
+E21 provides local control, membership, signed publication, checkpoints, and
+guarded import. E22 adds authenticated peer admission, periodic configured-ref
+recovery, fresh pair verification, and managed peer services on macOS and Linux.
+E22-T5 qualified the disposable two-node system on the final committed code
+revision; the release target remains unpublished.

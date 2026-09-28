@@ -1,8 +1,10 @@
 # Two-Node Wiki Sync Contract
 
 This contract defines the v0.2.0 Agent Dispatch sync surface. E20 froze the
-schemas and capability reporting; E21 and E22 implemented the local commands.
-The real two-node qualification remains E22-T5 work.
+schemas and capability reporting; E21 and E22 implemented the sync commands
+and managed peer service. E22-T5 qualified the disposable two-node system on
+the final committed code revision. Publication and production activation
+require separate authorization.
 
 ## Scope
 

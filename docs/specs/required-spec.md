@@ -4,7 +4,7 @@
 
 This document is normative. Each requirement has a stable ID used by the
 roadmap and acceptance matrix. v0.1.8 is the shipped baseline. D-030 admits the
-v0.2.0 two-node Wiki sync target under `SYN-*`; E20 through E22 own that planned
+v0.2.0 two-node Wiki sync target under `SYN-*`; E20 through E22 completed that
 work. Every unamended earlier requirement remains binding in v0.2.0 whether
 sync is enabled or disabled.
 

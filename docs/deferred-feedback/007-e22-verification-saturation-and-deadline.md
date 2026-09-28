@@ -19,6 +19,10 @@ status` still exposes the unresolved obligations and admission refusal. This
 requires sustained degradation and is separate from the normal dirty,
 pending, stale, or uncertain verification paths already tested.
 
+The test suite covers membership movement during collection but does not
+directly assert refusal of a stale remote membership ref before verification
+admits a job. The entry guard currently rejects that state.
+
 **Reconsideration condition.** When verification admission, the shared queue,
 or the command deadline next changes, add a stalling-transport test with a
 short injected deadline and preserve the planned/expired record behavior.
@@ -26,3 +30,6 @@ Evaluate a reserved verification slot or separate observation capacity under
 the queue limit, with a saturated-queue integration case and an explicit
 operator-visible result. Do not allow queue pressure to produce a false
 `complete` verdict.
+
+When the entry guard or membership fixture next changes, assert the stale-ref
+refusal and absence of a newly admitted verification job.

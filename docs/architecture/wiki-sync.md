@@ -1,11 +1,13 @@
 # Two-Node Wiki Sync Architecture
 
-> **Status:** Partially implemented for v0.2.0 under D-030. E21 provides
+> **Status:** Implemented for the v0.2.0 two-node scope under D-030. E21 provides
 > qualified durable jobs and control, restricted Git and membership, explicit
 > signed publication, signed checkpoints, guarded local import, and exact
 > attribution. E22-T1 adds authenticated peer admission; E22-T2 adds periodic
 > recovery; E22-T3 adds local pair verification; E22-T4 adds managed user-service
-> lifecycle and bounded diagnostics. Real two-node release qualification remains open.
+> lifecycle and bounded diagnostics. E22-T5 qualified the disposable two-node
+> system on the final committed code revision; publication and production
+> activation remain separate decisions.
 
 Agent Dispatch extends the existing maintenance loop with an explicit Git
 publication step and a peer import loop. Hermes still owns Wiki semantics.

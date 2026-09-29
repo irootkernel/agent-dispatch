@@ -16,10 +16,11 @@ runtime changes.
 
 Finalize the Core source commit, version, build time, and artifact SHA values
 before the Plugin release owner updates its exact provider allowance and
-qualifies that pair. The current Plugin allowance names the earlier reviewed
-`6b1c78b` binaries, not every build labelled v0.2.0. A final commit/build-stamp
-change can change the binary even when Go source is unchanged. Neither this
-plan nor editing documentation updates that allowance automatically.
+qualifies that pair. The earlier EPIC-007 qualification used the reviewed
+`6b1c78b` binaries; its evidence does not admit every build labelled v0.2.0.
+A final commit/build-stamp change can change the binary even when Go source
+is unchanged. Reconcile the allowance with the exact release artifacts and
+qualify the final pair before publication.
 
 Keep production on the released binaries and pinned Plugin source. E23
 testing uses separate config, state, group, Git refs/remotes, and disposable
@@ -32,8 +33,9 @@ Record the explicitly selected version, full Git commit, and documentation scope
 Use the [roadmap](../roadmap/roadmap.md) for delivery status, the
 [acceptance criteria](../specs/acceptance-criteria.md) for gates, and
 [validation records](../VALIDATION.md) for evidence tied to an exact snapshot.
-The current release is [v0.1.8 - 2026-09-10](../../CHANGELOG.md#v018---2026-09-10),
-including E19 Official Linux Support after v0.1.7.
+The selected release is [v0.2.0 - 2026-09-30](../../CHANGELOG.md#v020---2026-09-30),
+adding the E20-E22 two-node sync scope to the v0.1.8 baseline. The dated
+notes identify the candidate; publication requires the final gates below.
 
 Reconcile public usage, contracts, compatibility, packaged skill versions, and
 the root [changelog](../../CHANGELOG.md) with the candidate. Do not advance a versioned skill's compatibility

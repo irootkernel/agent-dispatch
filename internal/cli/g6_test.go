@@ -463,7 +463,7 @@ func TestG6FreshDatabaseMigration(t *testing.T) {
 	if code := Run([]string{"version", "--json"}, &out, &errb); code != 0 {
 		t.Fatalf("version: %s", errb.String())
 	}
-	if out.String() != "{\"name\":\"agent-dispatch\",\"version\":\"v0.1.8\"}\n" {
+	if out.String() != "{\"name\":\"agent-dispatch\",\"version\":\"v0.2.0\"}\n" {
 		t.Fatalf("G6: the version surface must report the compact product identity: %s", out.String())
 	}
 }

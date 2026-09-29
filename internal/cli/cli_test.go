@@ -23,10 +23,10 @@ func TestVersionJSONSummary(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &summary); err != nil {
 		t.Fatalf("stdout is not valid JSON (%v): %s", err, out.String())
 	}
-	if len(summary) != 2 || summary["name"] != "agent-dispatch" || summary["version"] != "v0.1.8" {
+	if len(summary) != 2 || summary["name"] != "agent-dispatch" || summary["version"] != "v0.2.0" {
 		t.Fatalf("unexpected version summary: %#v", summary)
 	}
-	if got := out.String(); got != "{\"name\":\"agent-dispatch\",\"version\":\"v0.1.8\"}\n" {
+	if got := out.String(); got != "{\"name\":\"agent-dispatch\",\"version\":\"v0.2.0\"}\n" {
 		t.Fatalf("version JSON bytes = %q", got)
 	}
 }
@@ -40,7 +40,7 @@ func TestVersionHumanOutputIsNotJSON(t *testing.T) {
 	if json.Valid(out.Bytes()) {
 		t.Errorf("human output must not be a JSON document: %q", out.String())
 	}
-	if got := out.String(); got != "agent-dispatch v0.1.8\n" {
+	if got := out.String(); got != "agent-dispatch v0.2.0\n" {
 		t.Errorf("human output = %q", got)
 	}
 }

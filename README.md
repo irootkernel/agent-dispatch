@@ -12,17 +12,20 @@ processing every save as a separate job.
   serialization groups controlling which tasks may run together.
 - Keep protected paths and large batches for review, and reconcile missed events.
 - Inspect task delivery, work receipts, and optional completion notifications.
+- Synchronize maintained Markdown between two explicitly configured nodes,
+  with signed publication, guarded imports, and fresh pair verification.
 
 Watchman detects changes; Agent Dispatch records and coordinates work in a
-local SQLite database; Hermes runs the agent tasks. Each Agent Dispatch
-command does bounded work and exits. Watchman and the platform scheduler
+local SQLite database; Hermes runs the agent tasks. Ordinary Agent Dispatch
+commands do bounded work and exit. Watchman and the platform scheduler
 (launchd on macOS; managed systemd user units on Linux)
-provide the ongoing triggers and scheduling.
+provide the ongoing triggers and scheduling. The optional sync peer service
+is long-lived and has separate managed launchd and systemd controls.
 
 ## Requirements
 
 - **Supported platforms** are `darwin/arm64`, `linux/amd64`, and `linux/arm64`
-  ([D-029](docs/specs/decision-log.md)). The v0.1.8 release provides binaries
+  ([D-029](docs/specs/decision-log.md)). The v0.2.0 release provides binaries
   for all three platform and architecture pairs.
 - Watchman, and Hermes **0.20.5 or newer** with the public Kanban interface.
   Version eligibility is checked separately from the capabilities of your
@@ -43,9 +46,9 @@ commands. Install and select skills explicitly in Hermes; setup does not do this
 
 ### Build this checkout
 
-This README describes v0.1.8, including the v0.1.7 absolute watch-root fix and
-official Linux support. See [v0.1.8](CHANGELOG.md#v018---2026-09-10) for the
-release changes.
+This README describes v0.2.0, including opt-in two-node Markdown sync and
+the existing Hermes dispatch workflow. See [v0.2.0](CHANGELOG.md#v020---2026-09-30)
+for the release changes.
 
 From the repository root:
 
@@ -57,7 +60,7 @@ install -m 755 bin/agent-dispatch "$HOME/.local/bin/agent-dispatch"
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-The default build reports `agent-dispatch v0.1.8`. The install command replaces any
+The default build reports `agent-dispatch v0.2.0`. The install command replaces any
 binary at the destination; retain the previous binary and back up an existing
 installation before upgrading. Add the PATH entry to your shell configuration
 if needed. Keep the installed path stable because managed triggers and schedules
@@ -67,13 +70,14 @@ refer to the executable.
 
 Choose a version from the repository's
 [GitHub Releases](https://github.com/irootkernel/agent-dispatch/releases), and read
-that version's section in the [changelog](CHANGELOG.md). Download and install
-the published v0.1.8 binary for the current supported host as follows; no Go
-toolchain is needed. Watchman and Hermes remain separate requirements.
+that version's section in the [changelog](CHANGELOG.md). Once v0.2.0 is
+published, download and install its binary for the current supported host
+as follows. No Go toolchain is needed. Watchman and Hermes remain separate
+requirements.
 
 ```sh
 set -eu
-release_version=v0.1.8
+release_version=v0.2.0
 case "$(uname -s)/$(uname -m)" in
   Darwin/arm64) platform=darwin-arm64 ;;
   Linux/x86_64) platform=linux-amd64 ;;
@@ -205,6 +209,40 @@ agent-dispatch receipts list --route wiki-maintenance
 After an eligible Markdown edit, inspect the dispatch and its Hermes task.
 Delivery acceptance and completed agent work are separate states. `watchman test`
 checks fixture normalization; it does not prove that a live edit reached Hermes.
+
+## Two-node Markdown sync
+
+Sync is disabled by default and supports exactly two active nodes in one
+configured group. It synchronizes governed Markdown content; attachments,
+Hermes runtime state, and local SQLite databases are outside that content
+scope. Publication requires current maintenance evidence. A nudge being
+accepted does not mean an import completed, and equal Git heads alone do not
+establish fresh convergence.
+
+Begin with the [manual sync runbook](docs/ops/runbook.md#3a-normal-manual-sync-flow)
+for Git refs and remotes, signing keys, reviewed membership and checkpoints,
+private Tailscale HTTPS endpoints, and explicit configuration acknowledgement.
+The [managed-service runbook](docs/ops/runbook.md#3b-managed-sync-service)
+covers the peer listener and native service controls. Inspect capabilities
+without enabling sync:
+
+```sh
+agent-dispatch sync capabilities --output json
+```
+
+The [inspection-only Hermes plugin](https://github.com/irootkernel/agent-dispatch-plugin)
+adds three sync reads once its matching v0.2.0 release admits the exact Core
+binaries on Darwin arm64 and Linux arm64. Its v0.2.0 Linux amd64 sync
+qualification remains deferred. Core's Linux amd64 binary does not establish
+Plugin qualification. Install
+and enable the Plugin separately using its matching release instructions.
+
+Upgrading from v0.1.8 applies forward-only SQLite migrations from schema 20
+to 27 when `status` or another migrating command opens the store. Back up the
+database and matching
+configuration before even running diagnostics with the new binary. Follow the
+[v0.2.0 upgrade procedure](docs/ops/installation.md#5a-v020-two-node-sync-upgrade)
+for backup and rollback. Upgrading does not enable sync automatically.
 
 ## Everyday commands
 

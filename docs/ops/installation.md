@@ -20,7 +20,7 @@ Hermes access and shared Watchman topology changes belong to their host owners.
 Build the current checkout or install a verified published binary using the
 [README](../../README.md#install). Artifact names follow
 `agent-dispatch-<version>-<os>-<arch>` plus `SHA256SUMS`. `make release` emits
-darwin/arm64, linux/amd64, and linux/arm64 (E19-T4). The published v0.1.8 set
+darwin/arm64, linux/amd64, and linux/arm64 (E19-T4). The v0.2.0 artifact set
 contains one binary for each supported platform and architecture. Verify downloaded bytes
 before copying the binary onto
 PATH (`shasum -a 256 -c SHA256SUMS`, or `sha256sum -c SHA256SUMS` on Linux).
@@ -236,6 +236,35 @@ If validation fails, leave submissions disabled. Preserve the upgraded database
 and use the verified pre-upgrade database/configuration with its matching binary
 for rollback. Never point an older binary at the upgraded database expecting a
 reverse migration.
+
+## 5a. v0.2.0 Two-Node Sync Upgrade
+
+The v0.1.8 binary supports SQLite schemas 1-20; v0.2.0 supports 1-27.
+Configuration remains version 1. New sync settings are optional and disabled
+by default. The upgrade preserves the existing dispatch workflow and does
+not acknowledge a sync configuration, install a peer service, or enable a
+Hermes Plugin.
+
+Before the new binary opens the store, stop the old installation's writers
+and schedules, take a verified backup with the old binary (§6), and retain
+the matching configuration and old executable. `status` opens the store and
+applies migrations; `doctor` reports `migration_pending` without advancing
+the schema. Use a disposable copy to rehearse
+the schema 20-to-27 upgrade and integrity check before changing operating
+state.
+
+After replacement, validate configuration, inspect diagnostics and existing
+route revisions, and resume only the reviewed schedules and submissions.
+For a sync deployment, separately follow the
+[manual sync flow](runbook.md#3a-normal-manual-sync-flow) and
+[managed-service procedure](runbook.md#3b-managed-sync-service).
+
+There is no down migration. If rollback is needed, stop all relevant
+commands and services, preserve the upgraded database, and restore the
+verified pre-upgrade database and configuration with the v0.1.8 binary.
+Verify integrity before resuming. Restoring local SQLite state does not undo
+published Git history or peer imports; handle those through the sync recovery
+procedure rather than rewinding a remote ref.
 
 ## 6. Backup
 

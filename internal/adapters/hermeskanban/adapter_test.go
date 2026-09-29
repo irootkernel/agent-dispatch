@@ -160,7 +160,7 @@ func TestRealHermesProbeIfAvailable(t *testing.T) {
 		return perr == nil && ver.Eligible(MinimumEligibleVersion)
 	})
 	adapter, err := New("hermes-local", sandbox.Binary, "", ProcessLimits{
-		LookupTimeout:        10 * time.Second,
+		LookupTimeout:        DefaultLookupTimeout,
 		SubmitTimeout:        20 * time.Second,
 		EnvironmentAllowlist: sandbox.EnvironmentAllowlist(),
 	})

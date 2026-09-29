@@ -20,7 +20,7 @@ make build
 ```
 
 Building creates `bin/agent-dispatch`; it does not install or activate an instance.
-The default version is `v0.1.8`; use `make build VERSION=<version>` to override
+The default version is `v0.2.0`; use `make build VERSION=<version>` to override
 that metadata for a candidate build.
 
 ## Understand One Change Path

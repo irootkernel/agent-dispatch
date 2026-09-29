@@ -371,6 +371,23 @@ func TestG5AC506ReleaseArtifactsPresent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AC-506: %v", err)
 	}
+	if version != buildversion.Version {
+		t.Fatalf("AC-506: changelog version %s differs from source default %s", version, buildversion.Version)
+	}
+	makefile, err := os.ReadFile(filepath.Join(root, "Makefile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var makeVersion string
+	for _, line := range strings.Split(string(makefile), "\n") {
+		if strings.HasPrefix(line, "VERSION ?= ") {
+			makeVersion = strings.TrimSpace(strings.TrimPrefix(line, "VERSION ?= "))
+			break
+		}
+	}
+	if makeVersion != version {
+		t.Fatalf("AC-506: Makefile version %q differs from changelog %s", makeVersion, version)
+	}
 	// The documented artifact set exists in the repository (paths
 	// relative to the repository root the release builds from).
 	for _, rel := range []string{

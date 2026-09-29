@@ -2,79 +2,39 @@
 
 This file records concise shipped outcomes and pending changes.
 
-## Unreleased
+## v0.2.0 - 2026-09-30
 
 ### Added
 
-- Add the disabled-by-default two-node sync configuration contract plus
-  side-effect-free `sync capabilities` and disabled `sync status` inspection.
-- Add schema v21 durable sync jobs, append-only recovery journals, fenced
-  claims, bounded retention, and revision-fenced `sync pause`/`sync resume`.
-- Add schema v24 explicit sync-journal sequencing and schema v25 durable
-  membership posture and sync-job sequencing for causal recovery order.
-- Add bounded restricted Git operations and reviewed, administrator-signed
-  `sync membership plan`/`apply` with emergency revocation holds.
-- Add explicit signed `sync publish`, frozen Markdown snapshots, atomic peer
-  delivery admission, and reviewed administrator-signed checkpoints.
-- Add guarded fast-forward `sync reconcile`, durable pre-apply import effects,
-  path-disjoint live application, crash uncertainty, and exact one-use Watchman
-  attribution for imported writes, renames, and deletions.
-- Add truthful sync status projections for the latest publication, peer-delivery,
-  and import outcomes, including unresolved signed and pending work.
-- Add authenticated local peer service over an owner-only Unix socket with a durable idempotent nudge inbox,
-  bounded conservative status responses, and configured HTTPS delivery retries.
-- Add startup and periodic configured-ref recovery with durable retry timing,
-  missed-nudge catch-up, and recovery of already-signed publication work.
-- Add pair status and fresh two-node verification with explicit incomplete
-  and changed-target results for unsafe or shifting evidence.
-- Add managed launchd and systemd peer-service controls with bounded sync
-  health diagnostics and recovery guidance.
+- Add opt-in, signed two-node Markdown sync for one group, with reviewed
+  membership and checkpoints, explicit publication, and guarded imports.
+- Add durable sync jobs, recovery journals, authenticated peer delivery,
+  configured-ref recovery, and offline catch-up.
+- Add sync status, fresh pair verification, pause/resume, health diagnostics,
+  and managed launchd and systemd peer-service controls.
 
 ### Changed
 
-- Accept an explicit port on private Tailscale HTTPS peer endpoints for signed
-  membership, delivery, and pair verification.
-- Build and verify with Go 1.27.1, update pinned dependencies and Staticcheck,
-  and require macOS 13 or newer when building from source on Darwin.
+- Accept explicit ports on private Tailscale HTTPS peer endpoints.
+- Build with Go 1.27.1 and updated pinned dependencies and Staticcheck;
+  building from source on Darwin requires macOS 13 or newer.
+- Advance SQLite from schema 20 to 27; back up state and configuration before
+  the first new-binary command, and restore the backup with the old binary to roll back.
 
 ### Fixed
 
-- Start a loaded macOS sync service after a clean exit when install is rerun,
-  without terminating an already-running executor.
-- Preserve staged Markdown changes and independent controller files during
-  publication and checkpoint advancement, and reject a detached or different
-  checked-out content branch before push.
-- Retain blocked sync obligations until exact remote confirmation, a membership
-  replacement, or an administrator checkpoint records the applicable recovery,
-  and keep attributed observations through the linked sync evidence horizon
-  without foreign-key prune failures.
-- Preserve signed candidates after same-base push rejection, settle exact
-  remote-confirmed terminal jobs, and report retryable rejection at exit 10.
-- Preserve emergency membership through pause and stronger holds, classify
-  unapproved remote bindings as trust failures, and keep confirmed status from
-  inheriting stale retry evidence.
-- Preserve stronger sync holds across emergency membership changes and report
-  emergency adoption as a trust-blocked result in the adopting command.
-- Normalize policy and sync alias comparisons with NFC, apply Unicode case
-  folding to portable aliases and excluded/protected/immutable sync paths on
-  every host, refuse protected or immutable deletions and metadata aliases,
-  and reject effective URL rewrite rules before remote access.
-- Apply fetched emergency membership before any protected effect, reopen safe
-  checkpoint and controller-only retries through stronger holds, preserve the
-  emergency latch after checkpoint recovery, and distinguish active writers
-  from unstable Git.
-- Cover publication no-op, confirmed-candidate recovery, and fast-forward-loss
-  behavior through the public sync commands.
-- Isolate real-Watchman test legs on a disposable daemon so repeated test runs
-  cannot exhaust or modify the operator's long-lived Watchman process.
-- Classify Watchman watcher-startup failures as target unavailable with
-  state-preserving restart guidance instead of unrelated parent-watch advice.
-- Harden guarded import around active maintenance writers, concurrent Watchman
-  arrivals, ignored-file collisions, cross-host path aliases, controller-only
-  checkpoints, and nonzero blocked or uncertain outcomes.
-- Keep the checked-out content ref, index, and controller records coherent after
-  local publication and checkpoint advances so a node can later apply its
-  peer's publication without a false dirty-controller or overlap fence.
+- Preserve staged Markdown, independent controller files, and content-ref
+  coherence during publication, checkpoints, and later peer imports.
+- Retain signed candidates, blocked obligations, and linked recovery evidence
+  through retryable push rejection and exact remote confirmation.
+- Preserve emergency membership and stronger holds across pause, resume, and
+  checkpoint recovery, and reject unapproved or rewritten remote bindings.
+- Normalize policy aliases with NFC and apply Unicode case folding to portable
+  aliases and sync path protections on every host.
+- Guard imports against protected paths, Unicode aliases, ignored-file
+  collisions, active writers, concurrent Watchman arrivals, and uncertain effects.
+- Restart a loaded macOS sync service after a clean exit when install is rerun,
+  and report Watchman startup failures with state-preserving recovery guidance.
 
 ## v0.1.8 - 2026-09-10
 

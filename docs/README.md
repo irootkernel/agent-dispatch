@@ -9,16 +9,15 @@ and everyday use, start with the [project README](../README.md).
 
 **Language:** English.
 
-**Documentation basis:** shipped v0.1.8 plus the unreleased v0.2.0 two-node Wiki
-sync work / SOT 1.8.0. The shipped baseline is tracked
-under [v0.1.8 - 2026-09-10](../CHANGELOG.md#v018---2026-09-10). E21 provides
-qualified local runtime control, membership, signed publication, checkpoints,
-and guarded import. E22 adds authenticated peer admission, periodic recovery,
-fresh pair verification, managed user-service lifecycle, and bounded diagnostics.
-G18 has a disposable Mac/Oracle Cloud Linux qualification on the reviewed
-committed code and reproducible `v0.2.0` artifacts; the target remains
-unpublished. The [validation record](VALIDATION.md#g18-committed-revision-closeout-2026-09-28)
-states the fixture and release boundaries.
+**Documentation basis:** v0.2.0 two-node Wiki sync / SOT 1.8.0, selected in
+[v0.2.0 - 2026-09-30](../CHANGELOG.md#v020---2026-09-30). E21 provides local
+runtime control, membership, signed publication, checkpoints, and guarded
+import. E22 adds authenticated peer admission, periodic recovery, fresh pair
+verification, managed user-service lifecycle, and bounded diagnostics.
+The [historical G18 validation record](VALIDATION.md#g18-committed-revision-closeout-2026-09-28)
+qualifies its reviewed disposable Mac/Linux fixture and artifacts. Final
+release artifacts and the matching Plugin allowance require fresh qualification
+before publication.
 
 E23 is a planned successor for constrained local sync management. Its
 [requirements](specs/required-spec.md#20-post-v020-constrained-sync-management),

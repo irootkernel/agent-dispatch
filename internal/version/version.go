@@ -5,7 +5,7 @@
 package version
 
 // Version is the semantic version of the binary.
-var Version = "v0.1.8"
+var Version = "v0.2.0"
 
 // Commit is the source revision the binary was built from.
 var Commit = "unknown"

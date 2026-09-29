@@ -241,6 +241,29 @@ linear-history verification.
 | AC-1807 | Given active, paused, blocked, and safely quiesced work, when `sync pause`, `sync resume`, `sync reconcile`, and managed service lifecycle commands run, then they respect control revisions and safe boundaries, preserve state on stop/disable/uninstall, and never clear a conflict or revocation without its required signed evidence. |
 | AC-1808 | Given any configured queue, retry, payload, history, subprocess, evidence-retention, concurrency, or shutdown bound is exhausted, when work is admitted or advanced, then the exact obligation remains visible and incomplete or blocked without truncating the pair, dropping work, or reporting convergence. |
 
+### G19: Constrained Sync Management Provider (Post-v0.2.0)
+
+G19 is planned for E23's successor provider. It is not an additional v0.2.0
+release or deployment gate and none of its rows is evidence of implementation.
+The [management contract](../contracts/sync-management-contract.md) owns the
+proposed request boundaries. E23-T6 owns deterministic qualification;
+E23-T7 owns the exact-candidate native paired handoff.
+
+| ID | Given / When / Then |
+|---|---|
+| AC-1901 | Given absent/disabled management, a forbidden action, wrong group, stale policy/config binding, or obsolete incarnation, when prepare/submit/execution is attempted, then Core refuses new effects while existing sync and authorized historical lookup retain their documented behavior. Claimed actors and confirmation text grant no authority. |
+| AC-1902 | Given a valid allowed action, when preparation succeeds or its response is lost, then only an expiring immutable draft exists, with no queued execution, control change, remote call, signing, or live content effect. Missing/expired handles cannot be submitted into existence. |
+| AC-1903 | Given one prepared handle, when concurrent submitters race or a reply is lost after acceptance, then one logical request is accepted; lookup and same-handle resubmission return that identity without another execution. Changed action/precondition inputs fail closed. |
+| AC-1904 | Given accepted long-running work, when the submitting process terminates or the service is stopped/restarted, then work remains visible and the existing worker resumes it under evidence-checked claims/fences without an implicit service install or a second scheduler. |
+| AC-1905 | Given request A and a later request B, when A is queried, then its result comes from A's durable job/target associations, even if B is the latest successful job. Query success, acceptance, action completion, and fresh convergence remain distinct. |
+| AC-1906 | Given a paused/stopped worker or saturated data-plane queue, when local pause/resume and lookup run, then reserved bounded control remains available. Acceptance, control revision mutation, and control result commit atomically. Stale revisions and safety holds refuse; pause intent never claims unobserved quiescence or remote-node control. |
+| AC-1907 | Given a retryable prior management request, when explicit retry runs, then only its recorded eligible obligations reuse their identity, target, and cumulative budgets. Already-settled, exhausted, pre-signature, unassociated, revoked, stale, or held work cannot become a fresh action. |
+| AC-1908 | Given crash injection before and after acceptance, claim, external effect, journal completion, and response, when recovery or lookup runs, then known results survive and ambiguous effects remain uncertain until evidence settles them. Timeout or an expired lease alone cannot authorize repetition. |
+| AC-1909 | Given a healthy pair, when a management verification runs, then its harmless self-bookkeeping does not make completion impossible. Given unrelated content-affecting requests, dirtiness, stale membership/evidence, pending work, or uncertainty, it remains incomplete. A moving target and injected stalled transport preserve truthful target-changed/deadline outcomes. |
+| AC-1910 | Given preparation, queue, control-reserve, evidence-size, attempt, and execution bounds, when each is exhausted and management competes with peer/periodic work, then refusal is bounded, accepted obligations remain durable, lookup remains available, and periodic recovery is not starved. Terminal pruning preserves unresolved request/job/retry lineage. |
+| AC-1911 | Given existing v0.2.0 state, when the additive upgrade and supported stopped-service rollback/restore are exercised, then existing jobs remain valid, incompatible old binaries refuse upgraded state, and obsolete or absent handles cannot execute. Restoring a pre-submission snapshot cannot reactivate its old-incarnation prepared request. |
+| AC-1912 | Given one exact successor source and its reproducible binaries, when the public Core CLI matrix runs without a Plugin on disposable native Darwin arm64/Linux arm64 hosts, then the five actions, lost responses, restart/recovery, control, and fresh pair evidence satisfy the frozen contract. Three-platform deterministic evidence, artifact/schema/fixture identities, and a bounded review are handed to Plugin TASK-028 without authorizing mutation or publication. |
+
 ## 3. Automatic-Write Gate
 
 Automatic Hermes writes to the real vault are prohibited until all scenarios in gates G0 through G14 pass in a test vault and the operator explicitly enables the production route. Dry-run, audit-only, baseline-only, or no-write Hermes profiles may be used earlier. Historical v0.1.5 evidence remains valid for its shipped scope but does not satisfy the new G10-G13 requirements; G14's live re-binding evidence (AC-1403) runs on the operator-enabled production route under D-028's bounded waiver.
@@ -250,3 +273,8 @@ G18 pass on disposable repositories, the listener and real-vault security
 reviews are accepted, and the operator acknowledges the exact group's
 cooperative-import policy. Publication, production activation, and release
 publication remain separate authorizations.
+
+For the later management release only, G19 must pass before management is
+advertised for production. The operator must explicitly enable its local
+allowlist after the existing sync activation prerequisites are satisfied.
+This does not retroactively alter v0.2.0's G16-G18 activation boundary.

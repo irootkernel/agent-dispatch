@@ -29,6 +29,7 @@ Accepted ADRs are normative below `required-spec.md` and above general architect
 | [0023](0023-two-node-git-sync-mvp.md) | v0.2.0 targets one two-node Markdown sync group | Accepted |
 | [0024](0024-signed-membership-and-peer-authentication.md) | Membership and publication use pinned SSH identities; peer requests use directed credentials | Accepted |
 | [0025](0025-cooperative-import-and-conflict-stop.md) | Automatic import requires cooperative-editing acknowledgement and stops on conflict | Accepted |
+| [0026](0026-constrained-sync-management-requests.md) | Post-v0.2.0 local constrained management requests over the existing sync worker; E23-T1 owns acceptance | Proposed |
 
 ## ADR Lifecycle
 

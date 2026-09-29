@@ -8,7 +8,13 @@ v0.2.0 two-node Wiki sync target under `SYN-*`; E20 through E22 completed that
 work. Every unamended earlier requirement remains binding in v0.2.0 whether
 sync is enabled or disabled.
 
-- **MUST** requirements block the applicable release, including v0.2.0.
+Section 20 defines planned successor requirements for E23. `SMR-*` applies
+only to the later management-provider release, whose version is not yet
+selected. It neither reopens completed E20-E22 work nor adds a v0.2.0 release
+condition. Current v0.2.0 configurations and capabilities remain unchanged.
+
+- **MUST** requirements block their explicitly applicable release. `SMR-*`
+  does not block the current v0.2.0 release.
 - **SHOULD** requirements require an explicit recorded exception if not met.
 - **MAY** requirements are optional.
 
@@ -342,3 +348,29 @@ sync is enabled or disabled.
 | SYN-013 | Fresh pair verification **MUST** pin and recheck group, membership revision, content ref, target commit, scope and contract digests, both node identities, and both incarnations. Equal commits **MUST NOT** produce success when either node has governed dirtiness, pending work, stale evidence, or unresolved uncertainty. |
 | SYN-014 | The sync CLI **MUST** expose truthful `capabilities`, `status`, `publish`, `reconcile`, `verify`, `serve`, `pause`, and `resume` commands; two-phase membership `plan` and `apply` and checkpoint `plan` and `apply` administrator commands; and service `render`, `install`, `inspect`, `stop`, `disable`, and `uninstall` lifecycle commands through versioned machine contracts. Reserved but unimplemented capabilities **MUST** fail closed without Git, network, filesystem, or activation side effects. |
 | SYN-015 | Sync queues, retries, payloads, history inspection, subprocess time and output, retained evidence, service concurrency, and shutdown **MUST** have documented tested bounds. Exhaustion **MUST** remain visible and **MUST NOT** silently discard a publication, import, peer, or verification obligation. |
+
+## 20. Post-v0.2.0 Constrained Sync Management
+
+These are planned E23 requirements, not implemented v0.2.0 behavior. The
+[management contract](../contracts/sync-management-contract.md) specifies the
+proposed boundaries; E23-T1 freezes its executable contract before runtime
+work. Plugin EPIC-008 consumes the qualified provider later and is not a Core
+correctness dependency.
+
+| ID | Requirement |
+|---|---|
+| SMR-001 | The successor management provider **MUST** be independently opt-in, disabled by default, and restricted to the current local node and configured two-node group. Its absence or disablement **MUST** preserve ordinary sync and existing CLI behavior. |
+| SMR-002 | Core **MUST** enforce an operator-owned action allowlist and relevant configuration, policy, group, and state-incarnation bindings at preparation, submission, and execution/recovery boundaries. Model text, claimed identities, request IDs, and caller-supplied confirmation **MUST NOT** confer authority. Revocation **MUST** prevent new effects without deleting accepted evidence. |
+| SMR-003 | The admitted actions **MUST** be limited to `sync-now`, `verify-all`, `retry`, local `pause`, and local `resume`. Management **MUST NOT** create/sign publications, change membership/checkpoints, configure services or Tailscale, control a remote node, or accept arbitrary paths, executables, refs, remotes, profiles, credentials, force flags, or note bodies. |
+| SMR-004 | A caller **MUST** obtain a durable prepared request handle before submission can execute an action. Preparation **MUST** bind immutable action inputs and preconditions and **MUST NOT** enqueue executable work or cause sync, control, network, or signing effects. Expiring unsubmitted drafts **MUST** have bounded storage. |
+| SMR-005 | Submission **MUST** require an existing current handle, persist acceptance before effects, and return the same identity/result for duplicate or concurrent submissions. Missing, expired, retired, altered, wrong-group, or obsolete-incarnation handles **MUST NOT** create or restamp a request. |
+| SMR-006 | Long-running requests **MUST** execute through the existing Core sync worker and shared application paths independently of the submitting process. Core **MUST** own durable request/job associations, claims, fencing, outcomes, and recovery without a second scheduler, general job framework, Plugin database, or alternative Git implementation. |
+| SMR-007 | Exact-ID lookup **MUST** remain a bounded non-mutating read even when new management submissions are disabled. It **MUST** report that request's actual acceptance, execution and linked outcomes rather than infer them from latest status. Accepted, action-finished, publication, delivery, import, and fresh pair convergence **MUST** remain distinct. |
+| SMR-008 | Response loss, caller termination, output rejection, timeout, or lease expiry **MUST NOT** establish no effect, success, or safe takeover. Recovery **MUST** inspect durable effect evidence under the same identities. A missing lookup after retention or restore **MUST NOT** authorize automatic creation of a replacement request. |
+| SMR-009 | Local pause/resume request acceptance, the expected-revision control mutation, and its result **MUST** be atomic and use the operator CLI's safety rules. A bounded control reserve and exact lookup **MUST** remain usable during data-plane saturation and while the worker is paused/stopped. Pause acknowledgement **MUST** distinguish committed intent from observed quiescence; resume **MUST NOT** clear a safety or membership hold. |
+| SMR-010 | Explicit retry **MUST** reference an earlier management request and reuse only its verified retry-eligible underlying obligations. It **MUST** preserve targets, logical identities, policy checks, and aggregate attempt limits. It **MUST NOT** recreate a fresh action, reset budgets, retry arbitrary jobs, or resolve pre-signature or safety-held work without existing operator authority. |
+| SMR-011 | Management verification **MUST** preserve the existing pinned two-node target and freshness rules. Its own harmless request bookkeeping **MUST NOT** prevent convergence, while unrelated content-affecting pending work, stale evidence, dirtiness, or uncertainty **MUST** still prevent `complete`. No caller-controlled pending-work exemption is allowed. |
+| SMR-012 | Preparation lifetime, queues, the control reserve, associated evidence, request execution, retry, shutdown, and result size **MUST** have frozen tested bounds. Fair service dispatch **MUST** preserve periodic and peer recovery. Saturation **MUST** refuse before acceptance or retain a visible existing obligation, never silently discard work or report success. |
+| SMR-013 | An additive migration and retention rules **MUST** preserve existing sync state, unresolved request/job/retry lineage, and request-to-effect evidence. Old binaries **MUST** refuse unsupported upgraded state. Supported destructive restore **MUST** disable management and establish a fresh local state incarnation before new effects so old prepared handles cannot execute. |
+| SMR-014 | The provider **MUST** expose a separately versioned management capability and closed command/input/result/error contract, consistently accepting trusted config selection. It **MUST** preserve identity fields safely without exposing secrets and **MUST NOT** advertise the new contract in the frozen v0.2.0 artifact set. |
+| SMR-015 | E23 **MUST** pass G19 through the public Core CLI without a Plugin implementation, retain SCP-008 deterministic platform verification, and provide native Darwin arm64/Linux arm64 paired evidence plus exact artifact/schema/fixture identities to Plugin TASK-028. Core completion **MUST NOT** imply Plugin mutation admission, release, installation, or production activation. |

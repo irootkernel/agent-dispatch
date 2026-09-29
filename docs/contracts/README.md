@@ -19,8 +19,13 @@ than a separate lifecycle authority.
 - [`source-adapter-contract.md`](source-adapter-contract.md)
 - [`sink-adapter-contract.md`](sink-adapter-contract.md)
 - [`sync-contract.md`](sync-contract.md)
+- [`sync-management-contract.md`](sync-management-contract.md), the planned E23 successor contract, not an available v0.2.0 interface
 
 The sync contract defines the v0.2.0 command and protocol identities. The v1
 command identities are implemented through E22-T4; the capability surface
 continues to report future behavior as unavailable until its owning task
 delivers it.
+
+E23 keeps management capabilities, schemas, and checksums separate from the
+frozen v0.2.0 provider bundle. Its draft becomes an executable contract only
+at E23-T1; completion and Plugin admission are separate later gates.

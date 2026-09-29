@@ -6,6 +6,26 @@ The [release checklist](release-checklist.md) is a dated v0.1.6 evidence record;
 its checked boxes do not certify another candidate. Runtime upgrade and rollback
 belong to [operations](../ops/installation.md#5-upgrade-ops-009).
 
+## Current release and planned successor
+
+E23, `SMR-*`, and G19 are planned work after the current v0.2.0 two-node
+release. Their presence in the roadmap/specification does not add a v0.2.0
+release blocker or make the planned management commands available. Freeze
+and qualify the current Core/inspection-Plugin pair separately from E23
+runtime changes.
+
+Finalize the Core source commit, version, build time, and artifact SHA values
+before the Plugin release owner updates its exact provider allowance and
+qualifies that pair. The current Plugin allowance names the earlier reviewed
+`6b1c78b` binaries, not every build labelled v0.2.0. A final commit/build-stamp
+change can change the binary even when Go source is unchanged. Neither this
+plan nor editing documentation updates that allowance automatically.
+
+Keep production on the released binaries and pinned Plugin source. E23
+testing uses separate config, state, group, Git refs/remotes, and disposable
+vaults. Do not run development migrations on the operating database. Real
+vault activation remains separate from release and from E23 development.
+
 ## Select the Candidate
 
 Record the explicitly selected version, full Git commit, and documentation scope.

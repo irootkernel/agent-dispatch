@@ -20,6 +20,15 @@ committed code and reproducible `v0.2.0` artifacts; the target remains
 unpublished. The [validation record](VALIDATION.md#g18-committed-revision-closeout-2026-09-28)
 states the fixture and release boundaries.
 
+E23 is a planned successor for constrained local sync management. Its
+[requirements](specs/required-spec.md#20-post-v020-constrained-sync-management),
+[contract draft](contracts/sync-management-contract.md), and
+[execution dossier](todo/TODO-SYNC-MANAGEMENT.md) are separate from the current
+v0.2.0 implementation and release gates. The intended order is the current
+Core/inspection-Plugin release, Core E23, then Plugin EPIC-008. The latter
+remains Deferred in its own roadmap until provider qualification and a
+separate Plugin scope amendment.
+
 ## Start Here
 
 1. [Contributor setup](implementation-tips/getting-started.md): build, locate code,

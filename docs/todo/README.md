@@ -11,6 +11,15 @@ Future work is not permission to partially implement these features during
 roadmap tasks. Each priority candidate requires a new roadmap, requirement
 changes, and where noted a new ADR/security review.
 
+## Adopted execution dossiers
+
+| Epic | Dossier | Scope |
+|---|---|---|
+| E23 | [Constrained sync management](TODO-SYNC-MANAGEMENT.md) | Planned successor provider after the current v0.2.0 paired release; Plugin EPIC-008 consumes its qualified contract |
+
+E23's status and task order belong to the roadmap. This planning entry does
+not start runtime work or change current release/production authority.
+
 ## Priority Candidates
 
 | Candidate | Value | Entry condition | Key risk |
@@ -30,11 +39,17 @@ changes, and where noted a new ADR/security review.
 | Multiple sync groups or governed working copies | More resources under sync governance | E22 two-node evidence accepted; a successor to D-030 admits ownership and isolation rules | cross-group locking, configuration authority, and failure isolation |
 | Attachment, binary, LFS, submodule, or symlink sync | Extend beyond the admitted Markdown scope | E22 two-node evidence accepted; a successor to D-030 defines content and path safety | data loss, storage bounds, and unsafe repository features |
 | Automatic conflict merge or semantic resolution | Reduce operator conflict work | E22 conflict-stop evidence accepted; a successor to D-030 admits a deterministic resolution authority | silent content loss and split-brain history |
-| Plugin sync inspection and management tools | Native Hermes sync operations | E22 contracts and evidence accepted; a later Plugin admission decision assigns cross-repository ownership | version skew, lifecycle coupling, and split authority |
+| Additional Plugin management beyond the E23/EPIC-008 action set | Broader Hermes operations | E23's constrained provider and a separate Plugin scope decision | version skew, lifecycle coupling, and split authority |
 | Local dashboard | Operator convenience | stable status/management API exists | unnecessary daemon/network surface |
 | Hermes management plugin | Native Hermes UI | public authenticated Agent Dispatch management API or MCP stable | lifecycle coupling and split authority |
 
 ## Future Hermes Plugin Constraints
+
+Plugin EPIC-007 inspection is completed in `agent-dispatch-plugin`. Core E23
+now owns the successor constrained sync management provider; Plugin EPIC-008
+remains Deferred until E23-T7 and its own TASK-028 admission. The broader
+possibilities below are not the admitted E23 action set and do not authorize
+release/discard, publication, or other extra mutations.
 
 A future plugin may:
 

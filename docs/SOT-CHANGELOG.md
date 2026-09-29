@@ -5,6 +5,23 @@ SOT snapshots, not product releases. Product release notes and pending user-faci
 changes belong to the root [changelog](../CHANGELOG.md). Historical entries below
 retain their recorded scope; migrated document pointers use their current paths.
 
+## Planned successor: constrained sync management - 2026-09-30
+
+- Register E23 and E23-T1 through E23-T7 for a release after v0.2.0, with
+  `SMR-001` through `SMR-015`, planned G19, Proposed ADR-0026, and the
+  management contract and execution dossier. No runtime implementation or
+  acceptance evidence is claimed.
+- Plan operator-preauthorized local actions, preparation before submission,
+  exact request lookup, shared-worker execution, atomic local controls, and
+  identity-preserving recovery. Publication/signing and remote administration
+  remain excluded.
+- Link the future provider to Plugin EPIC-008/TASK-028 while preserving the
+  current v0.2.0 release target, frozen provider artifacts, and independent
+  release, installation, and activation decisions.
+- Extend roadmap traceability for the planned successor. The implemented
+  specification baseline below remains 1.8.0; the successor product version
+  and executable contract are selected at E23-T1.
+
 ## 1.8.0 - Unreleased
 
 E21 implements and qualifies the durable local substrate, signed membership,

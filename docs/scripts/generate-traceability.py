@@ -44,6 +44,7 @@ FINAL_VERIFICATION = {
     "FAN": "E12-T4, E13-T4, E17-T3",
     "NTF": "E13-T3, E13-T4, E16-T4, E17-T3",
     "SYN": "E20-T5, E21-T5, E22-T5",
+    "SMR": "E23-T7 (planned successor gate, not v0.2.0)",
 }
 
 EPIC_CONTRIBUTION = """\
@@ -71,7 +72,8 @@ EPIC_CONTRIBUTION = """\
 | E19 | Reopens official linux/amd64 and linux/arm64 support beside darwin/arm64. |
 | E20 | Freezes the two-node sync contracts, disabled configuration, and capability boundary. |
 | E21 | Implements signed manual publication and guarded fast-forward import. |
-| E22 | Adds authenticated nudges, periodic recovery, pair verification, service operations, and real two-node evidence. |"""
+| E22 | Adds authenticated nudges, periodic recovery, pair verification, service operations, and real two-node evidence. |
+| E23 | Plans a post-v0.2.0 constrained management provider for later Plugin EPIC-008 admission; no implementation or acceptance is claimed. |"""
 
 
 def load_spec_groups() -> dict[str, list[int]]:
@@ -165,9 +167,12 @@ def main() -> None:
 
     lines += [
         "",
-        "E6-T4 additionally cites every requirement group as the release gate",
+        "E6-T4 additionally cites its then-current requirement groups as the release gate",
         "(\"All `BND-*` through `WHK-*` requirements\"); that blanket citation is",
         "covered by the Final verification column and is not expanded above.",
+        "",
+        "Task citations identify coverage ownership, not implementation evidence.",
+        "E23 and SMR-* are planned successor work outside the v0.2.0 gate set.",
         "",
         "## Epic Contribution to Required State",
         "",

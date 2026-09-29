@@ -1,10 +1,10 @@
 # Agent Dispatch Implementation Roadmap
 
-> **Roadmap version:** 1.6
+> **Roadmap version:** 1.7
 > **Release target:** v0.2.0 (Two-Node Wiki Sync MVP)
 > **Execution model:** Strictly linear, one active task globally  
-> **Epics:** 23
-> **Tasks:** 116
+> **Epics:** 24
+> **Tasks:** 123
 
 ## 1. Current State
 
@@ -15,13 +15,22 @@
 | Release target | v0.2.0 (Two-Node Wiki Sync MVP) |
 | Current epic | None (E22 completed) |
 | Current active task | None |
-| Next task | None |
-| Completed tasks | 116 / 116 |
-| Planned tasks | 0 / 116 |
+| Next task | E23-T1 (follow-up contract planning; runtime work follows the frozen v0.2.0 paired release) |
+| Completed tasks | 116 / 123 |
+| Planned tasks | 7 / 123 |
 | In progress tasks | 0 |
 | In review tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tracked tasks | 0 |
+
+E23 is Planned for a successor management-provider release. It does not add
+requirements to v0.2.0 or reopen E20-E22. Master requested its documentation
+on 2026-09-30; no runtime task, release, installation, or production activation
+is started by this registration. The intended delivery order is the current
+Core/inspection-Plugin release, Core E23, then Plugin EPIC-008. Contract
+planning may proceed before publication, but keep new runtime work out of the
+current release candidate. Real-vault activation remains an independent
+operator decision. The successor version is selected in E23-T1.
 
 ### Historical evidence
 
@@ -59,6 +68,7 @@
 | E20 | Two-Node Sync Contracts and Admission | **Completed** | 5 | G16 |
 | E21 | Signed Publication and Guarded Import | **Completed** | 5 | G17 |
 | E22 | Peer Recovery, Verification, and Operations | **Completed** | 5 | G18 |
+| E23 | Constrained Sync Management Request Provider | **Planned** | 7 | G19, post-v0.2.0 provider handoff |
 
 ## 3. Task Status Index
 
@@ -180,6 +190,13 @@
 | 114 | E22-T3 | Completed | Pair status and fresh verification |
 | 115 | E22-T4 | Completed | Managed service lifecycle and diagnostics |
 | 116 | E22-T5 | Completed | Real two-node qualification and v0.2.0 handoff |
+| 117 | E23-T1 | Planned | Successor management scope, authority, and executable contract freeze |
+| 118 | E23-T2 | Planned | Durable request ledger, immutable bindings, and additive migration |
+| 119 | E23-T3 | Planned | Bounded preparation, idempotent admission, and exact lookup |
+| 120 | E23-T4 | Planned | Shared worker execution and atomic local controls |
+| 121 | E23-T5 | Planned | Identity-preserving retry, recovery, retention, and restore |
+| 122 | E23-T6 | Planned | Management security, fault, saturation, and regression qualification |
+| 123 | E23-T7 | Planned | Exact-provider paired qualification and Plugin handoff |
 
 ---
 
@@ -5662,20 +5679,324 @@ E22-T4 Completed.
 
 - [Disposable two-node qualification](../integrations/e22t5-two-node-qualification.md#final-committed-revision-replay-2026-09-28) records signed publication, private-port nudge and import, lost-nudge Git recovery, conflict stop, fresh pair verification, and both service-manager lifecycles on the reviewed final code commit `6b1c78b19f4cdb69dfd070ea016430f03075b73d`. The [G18 validation record](../VALIDATION.md#g18-committed-revision-closeout-2026-09-28) gives the three-platform deterministic gates, synthetic maintenance-receipt boundary, whole-epic review disposition, and checksum-verified reproducible `v0.2.0` artifacts. Independent hardening risks have owners in the [deferred-feedback inventory](../deferred-feedback/README.md). The release target remains unpublished; tag, push, production installation, and Plugin activation have separate authorization boundaries.
 
+# E23: Constrained Sync Management Request Provider
+
+**Status:** Planned
+
+**Release scope:** Successor to v0.2.0; version selection belongs to E23-T1.
+
+**Detailed SOT:** [TODO-SYNC-MANAGEMENT.md](../todo/TODO-SYNC-MANAGEMENT.md)
+
+**Dependencies:** E22 Completed; current paired-release identity and runtime isolation boundary recorded before E23 runtime changes.
+
+**Consumer:** `agent-dispatch-plugin` EPIC-008, starting with TASK-028 after E23-T7.
+
+Deliver a local management request provider over the existing sync engine.
+The successor requirements are `SMR-001` through `SMR-015`; G19 is not a
+v0.2.0 release gate. The proposed [management contract](../contracts/sync-management-contract.md)
+and [ADR-0026](../architecture-decision-records/0026-constrained-sync-management-requests.md)
+require E23-T1 freeze before runtime implementation. Task order is strictly
+E23-T1 -> E23-T2 -> E23-T3 -> E23-T4 -> E23-T5 -> E23-T6 -> E23-T7.
+
+## E23-T1: Freeze Management Authority and the Successor Contract
+
+**Status:** Planned
+
+### Objective
+
+Turn the planning contract into an approved, bounded provider contract without
+modifying the current v0.2.0 runtime or its frozen provider artifact set.
+
+### Deliverables
+
+- [ ] Record the current paired-release candidate identities and the successor product version.
+- [ ] Accept or replace ADR-0026; define operator preauthorization, five allowed actions, local-only control, and no management signing.
+- [ ] Freeze prepare/submit/show/capabilities argv, config selection, handle grammar, immutable fingerprints, policy/revision/incarnation checks, states, receipts, and error/exit mappings.
+- [ ] Add closed schemas, positive/negative fixtures, and an independently checksummed management bundle with tested numeric limits.
+- [ ] Define service-stopped/paused behavior, reserved control admission, request/job associations, verification bookkeeping, retention, and supported restore semantics.
+
+### Requirements
+
+`SMR-001` through `SMR-015`
+
+### Dependencies
+
+E22-T5 Completed. Planning is authorized; runtime admission remains a separate
+reviewed boundary. The current v0.2.0 release must remain independently usable.
+
+### Do Not
+
+- [ ] Do not add live commands, broaden Plugin pins, authorize mutations, or select an unverified Hermes actor/call-ID dependency.
+- [ ] Do not make G19 or SMR requirements prerequisites for v0.2.0 publication.
+
+### Verification and Acceptance
+
+- [ ] Contract validation covers every action/phase, malformed input, duplicate keys, forbidden parameters, result/exit combination, and binding failure.
+- [ ] Every SMR requirement maps to a task and G19 scenario; numeric ceilings and lifecycle edges are explicit rather than left for implementation guessing.
+- [ ] The review resolves preparation versus submission, lost responses, control under saturation, and retry lineage; no unresolved authority decision remains.
+
+### Evidence
+
+Not executed. Retain the reviewed contract/ADR decision and deterministic
+schema/fixture results when this task closes.
+
+## E23-T2: Add the Durable Management Request Ledger
+
+**Status:** Planned
+
+### Objective
+
+Persist immutable request handles and their lifecycle while preserving existing
+sync state and providing transactional primitives for later commands.
+
+### Deliverables
+
+- [ ] Add a forward migration for prepared requests, immutable fingerprints/bindings, acceptance and execution records, and request/job/retry associations.
+- [ ] Implement transactional duplicate handling, conditional state changes, claims/fences, lookup, expiry, and bounded admission primitives.
+- [ ] Add shared transaction support for later atomic request/control results and reserve enforcement without duplicating operator safety rules.
+- [ ] Preserve existing sync jobs; do not invent request lineage for historical work.
+
+### Requirements
+
+`SMR-004`, `SMR-005`, `SMR-006`, `SMR-007`, `SMR-009`, `SMR-012`, `SMR-013`
+
+### Dependencies
+
+E23-T1 Completed and the current paired-release/runtime-isolation boundary
+recorded. Use disposable configuration, database, group, refs, and vault.
+
+### Do Not
+
+- [ ] Do not add a Plugin database, general job framework, second sync scheduler, or production migration.
+- [ ] Do not advertise runtime management support from storage completion alone.
+
+### Verification and Acceptance
+
+- [ ] Upgrade fixtures preserve all preexisting jobs and ordinary disabled-management behavior; unsupported old binaries fail closed on newer state.
+- [ ] Concurrent duplicate writes create one immutable request; changed fingerprints and stale fences fail without partial writes.
+- [ ] Transaction rollback, queue/control reserve limits, referential integrity, and unresolved lineage retention are behavior-tested.
+
+### Evidence
+
+Not executed. Retain migration, concurrency, and storage test identities/results.
+
+## E23-T3: Implement Preparation, Admission, and Exact Lookup
+
+**Status:** Planned
+
+### Objective
+
+Expose short bounded request operations with durable handles and truthful
+capabilities, without coupling submission to long-running sync effects.
+
+### Deliverables
+
+- [ ] Implement the frozen CLI family with trusted config handling and closed input validation.
+- [ ] Prepare expiring immutable drafts; submit only existing current handles; make concurrent/duplicate submissions return the same durable identity.
+- [ ] Implement exact non-mutating lookup with lifecycle, associations, bounded reasons, and explicit executor availability.
+- [ ] Distinguish disabled authority, unsupported execution, missing/expired handles, stale bindings, and capacity refusal in the frozen error model.
+
+### Requirements
+
+`SMR-001` through `SMR-008`, `SMR-012`, `SMR-014`
+
+### Dependencies
+
+E23-T2 Completed.
+
+### Do Not
+
+- [ ] Do not run Git/network/content/control effects during preparation or long work during data-plane submission.
+- [ ] Do not upsert missing handles or advertise enabled actions before execution/recovery is ready. Test admission through isolated fixtures until that boundary is satisfied.
+
+### Verification and Acceptance
+
+- [ ] Preparation with a lost response leaves only expiring inert state; unknown or expired submit handles cannot enqueue work.
+- [ ] Repeated/concurrent submit and fingerprint conflicts meet the contract; a later unrelated request cannot replace exact-ID lookup evidence.
+- [ ] Post-submit response loss retains the handle and records a caller-unknown outcome without manufacturing a new request.
+- [ ] Existing inspection/ordinary sync commands and config defaults pass regressions.
+
+### Evidence
+
+Not executed. Retain CLI-produced schema fixtures and admission/lookup tests.
+
+## E23-T4: Connect Worker Execution and Local Control
+
+**Status:** Planned
+
+### Objective
+
+Run accepted sync and verification work through shared Core services, and
+process local control without depending on a running or unpaused worker.
+
+### Deliverables
+
+- [ ] Connect `sync-now` and `verify-all` to the existing worker with bounded fairness beside peer and periodic recovery.
+- [ ] Persist exact request-to-execution/job associations and the actual verified target/outcome.
+- [ ] Commit pause/resume acceptance, expected-revision mutation, and request result atomically through shared operator control rules.
+- [ ] Preserve signing isolation, resource guards, import acknowledgement, configured-remote binding, and membership/freshness checks.
+- [ ] Exclude only the verification request's harmless bookkeeping from its pending-work test; retain unrelated content-affecting work.
+
+### Requirements
+
+`SMR-001`, `SMR-002`, `SMR-003`, `SMR-006`, `SMR-007`, `SMR-009`, `SMR-011`, `SMR-012`
+
+### Dependencies
+
+E23-T3 Completed. Keep unqualified retry/recovery actions unavailable until
+E23-T5 completes their implementation contract.
+
+### Do Not
+
+- [ ] Do not sign, add a listener/scheduler, control the peer, or bypass existing blocked-state and revision checks.
+- [ ] Do not infer request success from latest status or claim quiescence from pause-intent acknowledgement.
+
+### Verification and Acceptance
+
+- [ ] Killing the submitter after acceptance does not discard work; a stopped executor is reported without implicit service installation.
+- [ ] Paused/saturated-worker cases still permit reserved local control and lookup; resume cannot clear safety or membership holds.
+- [ ] One healthy management verification can complete; dirty, pending, stale, uncertain, and moving-target cases remain incomplete or target-changed.
+- [ ] Parallel periodic work and repeated management submissions preserve fencing, fairness, and exact result association.
+
+### Evidence
+
+Not executed. Retain worker/control transaction and real-command result tests.
+
+## E23-T5: Complete Retry and Interrupted-Request Recovery
+
+**Status:** Planned
+
+### Objective
+
+Recover uncertain work and permit bounded explicit retry without changing its
+underlying identity, target, authority, or attempt budget.
+
+### Deliverables
+
+- [ ] Implement retry requests linked to earlier management requests and their verified retry-eligible obligations only.
+- [ ] Recover process loss and expired claims from effect evidence before another attempt; recognize work already settled by periodic recovery.
+- [ ] Apply authorization revocation and binding changes before new effects while retaining accepted evidence.
+- [ ] Complete expiry/pruning and supported migration/rollback/restore behavior, including obsolete-incarnation handles.
+
+### Requirements
+
+`SMR-002`, `SMR-005`, `SMR-006`, `SMR-007`, `SMR-008`, `SMR-010`, `SMR-012`, `SMR-013`
+
+### Dependencies
+
+E23-T4 Completed.
+
+### Do Not
+
+- [ ] Do not treat timeout as no effect, create a fresh target on retry, reset underlying attempts, or resolve pre-signature and safety-held work through management.
+- [ ] Do not prune unresolved lineage or execute a restored prepared handle from an old incarnation.
+
+### Verification and Acceptance
+
+- [ ] Inject loss before/after acceptance, claim, effect, journal completion, and response; replay does not duplicate logical effects.
+- [ ] Already-settled, exhausted, revoked, stale, wrong-request, and no-recoverable-obligation retry cases return their exact bounded outcome.
+- [ ] Expiry/retention boundaries and supported restore prove that absent/obsolete handles cannot start work; old binaries cannot open unsupported upgraded state.
+
+### Evidence
+
+Not executed. Retain crash-boundary, retry-lineage, pruning, and restore evidence.
+
+## E23-T6: Prove Management Security and Fault Acceptance
+
+**Status:** Planned
+
+### Objective
+
+Close deterministic G19 behavior and security coverage before native paired
+qualification, including the legacy surfaces that management must preserve.
+
+### Deliverables
+
+- [ ] Run the G19 matrix with real public CLI emissions and disposable state.
+- [ ] Cover forbidden inputs, secrets/redaction, policy bypass attempts, direct command invocation, saturated queues, control reserve, and service fairness.
+- [ ] Add DF-007's stalling-transport/injected-deadline and verification-saturation cases for touched paths.
+- [ ] Address applicable DF-002/003/008 recovery, shared-helper, and result-boundary concerns without importing unrelated deferred work.
+- [ ] Run the full Core verification gates and obtain the required bounded independent review; settle acceptance blockers.
+
+### Requirements
+
+`SMR-001` through `SMR-015`, `SCP-008`
+
+### Dependencies
+
+E23-T5 Completed.
+
+### Do Not
+
+- [ ] Do not substitute text-matching tests or hand-written envelopes for behavior and actual producer/consumer contract checks.
+- [ ] Do not use real production state, public endpoints, credentials in tracked evidence, or an unbounded review/retry loop.
+
+### Verification and Acceptance
+
+- [ ] Every deterministic G19 case has inspected results, not only a test name; unsupported environments and skipped legs are reported separately.
+- [ ] Management disabled preserves the existing CLI/sync regression behavior and all current safety boundaries.
+- [ ] No accepted request or unresolved obligation disappears under saturation, timeout, restart, or pruning.
+
+### Evidence
+
+Not executed. Retain bounded G19 evidence and review dispositions; native
+paired qualification remains E23-T7's responsibility.
+
+## E23-T7: Qualify and Hand Off the Exact Provider
+
+**Status:** Planned
+
+### Objective
+
+Finish G19 on one exact provider revision and provide Plugin TASK-028 with
+sufficient public evidence to admit management without guessing Core semantics.
+
+### Deliverables
+
+- [ ] Freeze the final source/version, management and base-sync contract identities, artifact checksums, schemas, fixtures, errors, and limits.
+- [ ] Run native Darwin arm64/Linux arm64 paired requests, interruption/recovery, control, verification, and service availability through the public CLI.
+- [ ] Retain SCP-008 deterministic verification on all three Core platforms and clearly label any emulated evidence.
+- [ ] Document release/upgrade/rollback/restore and local production/development isolation; complete whole-Epic review and the Plugin handoff.
+
+### Requirements
+
+`SMR-001` through `SMR-015`, `SCP-008`
+
+### Dependencies
+
+E23-T6 Completed. Qualified disposable native hosts and reproducible final
+artifacts are required; no Plugin implementation is required.
+
+### Do Not
+
+- [ ] Do not mark Plugin EPIC-008 complete, activate Plugin mutations, broaden its pins, claim native amd64 Plugin support, or publish/install without separate authorization.
+- [ ] Do not replace the frozen operating v0.2.0 pair with a development executable or share its production database.
+
+### Verification and Acceptance
+
+- [ ] G19 has exact-candidate deterministic and native paired evidence with no unresolved acceptance blocker.
+- [ ] Handoff artifacts let TASK-028 verify version, SHA, capability, schemas, result identity, and failure handling through public interfaces only.
+- [ ] Plugin TASK-028 is the next consumer admission gate; TASK-029 starts only after that amendment is approved. EPIC-009 stays independent.
+
+### Evidence
+
+Not executed. Final evidence belongs to `docs/VALIDATION.md` and a bounded
+integration/handoff record; do not fabricate a candidate, SHA, or pass result.
+
 # 4. Deferred Future Work
 
-Official Linux Support is tracked on-roadmap as **E19** and two-node Wiki sync
-as **E20-E22**. E18 remains Absolute Watch-Root Binding (Completed 2026-09-08
-under D-028).
+Official Linux Support is tracked on-roadmap as **E19**, two-node Wiki sync
+as **E20-E22**, and the planned constrained management provider as **E23**.
+E18 remains Absolute Watch-Root Binding (Completed 2026-09-08 under D-028).
 
-The following do not count toward the 116 tracked roadmap tasks and remain
+The following do not count toward the 123 tracked roadmap tasks and remain
 Deferred until a later roadmap opens them:
 
 - N-member sync beyond the admitted two-node group;
 - more than one sync group or governed working copy;
 - attachment, binary, LFS, submodule, or symlink synchronization;
 - automatic conflict merge or semantic conflict resolution;
-- Plugin sync inspection or management tools;
+- Plugin-side management implementation, owned separately by Plugin EPIC-008 after Core E23 (Plugin EPIC-007 inspection is already completed in its own repository);
 - general daemon responsibilities beyond the bounded sync service;
 - multi-vault production certification and global budgets;
 - MCP server for work receipts and status;

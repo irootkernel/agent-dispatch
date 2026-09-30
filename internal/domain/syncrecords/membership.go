@@ -96,6 +96,9 @@ func DecodeMembership(raw []byte) (Membership, error) {
 	if len(fields.Predecessor) == 0 {
 		return out, fmt.Errorf("%w: predecessor is required", ErrInvalidRecord)
 	}
+	if out.HistoricalMembers == nil {
+		return out, fmt.Errorf("%w: historical_members must be an array", ErrInvalidRecord)
+	}
 	if err := out.Validate(); err != nil {
 		return out, err
 	}
@@ -122,6 +125,9 @@ func DecodePlan(raw []byte) (MembershipPlan, error) {
 	}
 	if len(fields.ProposedMembership.Predecessor) == 0 {
 		return out, fmt.Errorf("%w: proposed_membership.predecessor is required", ErrInvalidRecord)
+	}
+	if out.ProposedMembership.HistoricalMembers == nil {
+		return out, fmt.Errorf("%w: proposed_membership.historical_members must be an array", ErrInvalidRecord)
 	}
 	if err := out.Validate(); err != nil {
 		return out, err
@@ -452,7 +458,23 @@ func validHistorical(m HistoricalMember) bool {
 }
 
 func validContentRef(ref string) bool {
-	return strings.HasPrefix(ref, "refs/heads/") && len(ref) > len("refs/heads/") && !strings.Contains(ref, "..") && !strings.ContainsAny(ref, " ~^:?*[\\") && !strings.HasSuffix(ref, "/")
+	if !strings.HasPrefix(ref, "refs/heads/") || len(ref) <= len("refs/heads/") ||
+		strings.HasSuffix(ref, "/") || strings.HasSuffix(ref, ".") ||
+		strings.Contains(ref, "..") || strings.Contains(ref, "@{") ||
+		strings.Contains(ref, "//") || strings.ContainsAny(ref, " ~^:?*[\\") {
+		return false
+	}
+	for _, r := range ref {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	for _, component := range strings.Split(ref, "/") {
+		if strings.HasPrefix(component, ".") || strings.HasSuffix(component, ".lock") {
+			return false
+		}
+	}
+	return true
 }
 
 func validChange(kind string) bool {

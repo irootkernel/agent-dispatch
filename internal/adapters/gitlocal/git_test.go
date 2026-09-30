@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,32 @@ import (
 	"github.com/irootkernel/agent-dispatch/internal/adapters/secretresolver"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 )
+
+func TestImportOverlapPathAncestry(t *testing.T) {
+	for _, tc := range []struct {
+		target, local string
+		collision     bool
+	}{
+		{"zblocked/leaf.md", "zblocked", true},
+		{"zblocked", "zblocked/leaf.md", true},
+		{"Wiki/leaf.md", "wiki", true},
+		{"Café/leaf.md", "Cafe\u0301", true},
+		{"note.md", "note.md", true},
+		{"wiki/leaf.md", "wiki2", false},
+		{"wiki/leaf.md", "wiki/local.md", false},
+	} {
+		t.Run(tc.target+"/"+tc.local, func(t *testing.T) {
+			overlap, collisions := ImportOverlap([]string{tc.target}, []string{tc.local}, []string{tc.local})
+			var want []string
+			if tc.collision {
+				want = []string{tc.local}
+			}
+			if !reflect.DeepEqual(overlap, want) || !reflect.DeepEqual(collisions, want) {
+				t.Fatalf("overlap=%v collisions=%v want=%v", overlap, collisions, want)
+			}
+		})
+	}
+}
 
 func TestRestrictedGitInspectCompareAndMissingRef(t *testing.T) {
 	repo := initRepository(t)

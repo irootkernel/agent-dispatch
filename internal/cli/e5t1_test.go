@@ -12,6 +12,7 @@ import (
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/platformpaths"
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
 // e5t1Store opens the fixture's durable store directly for assertions.
@@ -439,6 +440,29 @@ func TestWorkCompleteFullDocumentReceipt(t *testing.T) {
 	var resultRevision string
 	if err := store.QueryRow(`SELECT result_revision FROM work_receipts WHERE dispatch_id = ? AND run_id = 'run-1'`, dispatchID).Scan(&resultRevision); err != nil || resultRevision != "git:def456" {
 		t.Fatalf("result revision must persist: %q %v", resultRevision, err)
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"receipts", "list", "--config", configPath, "--dispatch", dispatchID, "--kind", "work"}, &out, &errb); code != 0 {
+		t.Fatalf("receipts list: %s", errb.String())
+	}
+	listed := decodeEnvelope(t, &out)
+	rows := listed["receipts"].([]any)
+	if len(rows) != 1 {
+		t.Fatalf("expected one completed work receipt: %v", listed)
+	}
+	row := rows[0].(map[string]any)
+	if row["schema_version"] != ports.ReceiptRecordSchemaVersion || row["execution_state"] != "succeeded" || row["receipt_kind"] != "work" {
+		t.Fatalf("unversioned or incomplete receipt: %v", row)
+	}
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{"receipts", "show", "--config", configPath, row["receipt_id"].(string)}, &out, &errb); code != 0 {
+		t.Fatalf("receipts show: %s", errb.String())
+	}
+	shown := decodeEnvelope(t, &out)
+	if shown["schema_version"] != ports.ReceiptRecordSchemaVersion || shown["execution_state"] != "succeeded" || shown["validation_state"] != "valid" || shown["dispatch_id"] != dispatchID {
+		t.Fatalf("completed receipt detail is inconsistent: %v", shown)
 	}
 }
 

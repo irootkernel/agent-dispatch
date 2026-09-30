@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
 	"github.com/irootkernel/agent-dispatch/internal/domain/state"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
+	driver "modernc.org/sqlite"
 )
 
 // ErrOptimisticConcurrency is returned when a conditional update matched
@@ -47,6 +49,11 @@ func (s *Store) SaveObservation(tx *sql.Tx, o ObservationRecord) error {
 		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		o.ObservationID, o.SchemaVersion, o.SourceType, o.SourceID, nullString(o.SourceEventKey), o.TriggerName, o.ResourceID,
 		o.ObservedAt, o.ReceivedAt, o.RawPayloadDigest, o.IngestStatus, o.FlagsJSON, nullString(o.PositionJSON)); err != nil {
+		var constraint *driver.Error
+		if errors.As(err, &constraint) && isUniqueConstraint(constraint) &&
+			strings.Contains(constraint.Error(), "source_observations.source_id, source_observations.source_event_key") {
+			return ports.ErrSourceRetransmission
+		}
 		return err
 	}
 	for _, c := range o.Changes {

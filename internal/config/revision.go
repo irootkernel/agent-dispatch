@@ -48,7 +48,7 @@ func RemoteRepositoryDigest(raw string) (string, string, error) {
 	if scheme != "https" && scheme != "ssh" {
 		return "", "", fmt.Errorf("remote repository URI scheme must be https or ssh")
 	}
-	if u.RawQuery != "" || u.Fragment != "" {
+	if strings.ContainsAny(raw, "?#") {
 		return "", "", fmt.Errorf("remote repository URI must not contain a query or fragment")
 	}
 	username := ""

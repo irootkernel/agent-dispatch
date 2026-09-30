@@ -298,6 +298,9 @@ type RecoveredLease struct {
 // pair rejected by the uniqueness constraint.
 var ErrIdempotencyConflict = errors.New("duplicate target idempotency key")
 
+// ErrSourceRetransmission identifies an already recorded source occurrence.
+var ErrSourceRetransmission = errors.New("source occurrence already recorded")
+
 // ErrRouteSlotHeld reports the route already has one active dispatch
 // (CON-001: a route cannot hold two active dispatch IDs).
 var ErrRouteSlotHeld = errors.New("route already has an active dispatch")

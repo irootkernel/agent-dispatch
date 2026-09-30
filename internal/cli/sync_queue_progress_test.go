@@ -19,17 +19,38 @@ import (
 // Exercise real signed history, Git import, and inbox settlement. The only
 // remote transport is a fixture that measures refs and exposes local objects.
 func TestSyncQueuePolicyInboxImportsBeforeSettlingNudge(t *testing.T) {
-	testSyncQueueInboxImport(t, false)
+	testSyncQueueInboxImport(t, syncImportFixtureOptions{})
 }
 
 func TestSyncQueuePolicyDeferredImportReopensAfterWriterIdle(t *testing.T) {
-	testSyncQueueInboxImport(t, true)
+	testSyncQueueInboxImport(t, syncImportFixtureOptions{deferForWriter: true})
 }
 
-func testSyncQueueInboxImport(t *testing.T, deferForWriter bool) {
+func TestSyncImportDefersUntrackedAncestorBeforeEffects(t *testing.T) {
+	testSyncQueueInboxImport(t, syncImportFixtureOptions{ancestorCollision: true})
+}
+
+func TestSyncImportAdministratorCheckpointCoversOrdinaryHistory(t *testing.T) {
+	for _, history := range []string{"checkpoint", "reviewed_snapshot", "publication_after_checkpoint", "uncovered_publication", "unsigned_tail", "wrong_target", "wrong_predecessor", "wrong_signer", "history_bound"} {
+		t.Run(history, func(t *testing.T) {
+			testSyncQueueInboxImport(t, syncImportFixtureOptions{history: history})
+		})
+	}
+}
+
+type syncImportFixtureOptions struct {
+	deferForWriter, ancestorCollision bool
+	history                           string
+}
+
+func testSyncQueueInboxImport(t *testing.T, options syncImportFixtureOptions) {
 	t.Helper()
+	deferForWriter := options.deferForWriter
 	f := newResumeFixture(t)
 	f.cfg.Sync.Bounds.Queue = 2
+	if options.history == "history_bound" {
+		f.cfg.Sync.Bounds.HistoryCommits = 1
+	}
 	peerKey, peerFingerprint := e21t3Key(t, t.TempDir(), "queue-peer")
 	f.cfg.Sync.Nodes[1].PublisherKey = peerFingerprint
 	client, err := membershipGitClient(f.cfg, f.cfg.Sync)
@@ -73,6 +94,9 @@ func testSyncQueueInboxImport(t *testing.T, deferForWriter bool) {
 	}
 	gitTestRun(t, f.git, f.repo, "reset", "--hard", base)
 	after := map[string][]byte{"note.md": []byte("imported\n")}
+	if options.ancestorCollision {
+		after["zblocked/leaf.md"] = []byte("remote child\n")
+	}
 	peer := f.cfg.Sync.Nodes[1]
 	publication, err := syncrecords.NewPublication(syncrecords.PublicationBinding{
 		GroupID: f.cfg.Sync.GroupID, Publisher: peer.InstanceID, StateIncarnationID: peer.StateIncarnationID,
@@ -87,15 +111,104 @@ func testSyncQueueInboxImport(t *testing.T, deferForWriter bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tree, err = client.SnapshotTree(context.Background(), base, map[string][]byte{
+	publicationWrites := map[string][]byte{
 		"note.md": after["note.md"], ".agent-dispatch-sync/publications/" + publication.PublicationID + ".json": pubRaw,
-	})
+	}
+	if options.ancestorCollision {
+		publicationWrites["zblocked/leaf.md"] = after["zblocked/leaf.md"]
+	}
+	tree, err = client.SnapshotTree(context.Background(), base, publicationWrites)
 	if err != nil {
 		t.Fatal(err)
 	}
 	target, err := client.CreateSignedContentCommit(context.Background(), tree, peerKey, base, time.Now(), "publisher", "Queue test publication")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if options.history != "" {
+		tree, err = client.SnapshotTree(context.Background(), base, after)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ordinary := gitTestOutput(t, f.git, f.repo, "-c", "commit.gpgsign=false", "commit-tree", tree, "-p", base, "-m", "Ordinary reviewed resolution")
+		checkpointTarget := ordinary
+		if options.history == "wrong_target" {
+			checkpointTarget = base
+		} else if options.history == "reviewed_snapshot" {
+			checkpointTarget = target
+		}
+		digest, err := snapshotDigestFromFiles(after)
+		if err != nil {
+			t.Fatal(err)
+		}
+		predecessor := ordinary
+		if options.history == "wrong_predecessor" {
+			predecessor = base
+		}
+		resolution, err := syncrecords.NewCheckpointPlan(f.cfg.Sync.GroupID, "conflict_resolution", checkpointTarget, digest,
+			config.SyncScopeDigest(f.cfg, f.cfg.Sync.Resource), config.SyncContractDigest(), membership, predecessor, f.cfg.Sync.AdministratorKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		checkpointRaw, err := syncrecords.CanonicalCheckpoint(resolution.ProposedCheckpoint)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resolutionRaw, err := syncrecords.CanonicalCheckpointPlan(resolution)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tree, err = client.SnapshotTree(context.Background(), ordinary, map[string][]byte{
+			".agent-dispatch-sync/checkpoints/" + resolution.ProposedCheckpoint.CheckpointID + ".json": checkpointRaw,
+			".agent-dispatch-sync/checkpoint-plans/" + resolution.PlanID + ".json":                     resolutionRaw,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		key := f.adminKey
+		if options.history == "wrong_signer" {
+			key = peerKey
+		}
+		target, err = client.CreateSignedContentCommit(context.Background(), tree, key, ordinary, time.Now(), "administrator", "Reviewed resolution checkpoint")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if options.history == "unsigned_tail" {
+			tree, err = client.SnapshotTree(context.Background(), target, map[string][]byte{"note.md": []byte("uncovered\n")})
+			if err != nil {
+				t.Fatal(err)
+			}
+			target = gitTestOutput(t, f.git, f.repo, "-c", "commit.gpgsign=false", "commit-tree", tree, "-p", target, "-m", "Uncovered tail")
+		} else if options.history == "publication_after_checkpoint" || options.history == "uncovered_publication" {
+			parent := target
+			if options.history == "uncovered_publication" {
+				parent = ordinary
+			}
+			after["note.md"] = []byte("published after resolution\n")
+			publication, err = syncrecords.NewPublication(syncrecords.PublicationBinding{
+				GroupID: f.cfg.Sync.GroupID, Publisher: peer.InstanceID, StateIncarnationID: peer.StateIncarnationID,
+				MembershipRevision: membership, ContentRef: f.cfg.Sync.ContentRef, BaseCommit: parent,
+				ScopeDigest: config.SyncScopeDigest(f.cfg, f.cfg.Sync.Resource), ContractDigest: config.SyncContractDigest(),
+				SourceRevision: 2, ReceiptIDs: []string{"receipt-after-resolution"},
+			}, syncrecords.SnapshotFiles(after))
+			if err != nil {
+				t.Fatal(err)
+			}
+			pubRaw, err = syncrecords.CanonicalPublication(publication)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tree, err = client.SnapshotTree(context.Background(), parent, map[string][]byte{
+				"note.md": after["note.md"], ".agent-dispatch-sync/publications/" + publication.PublicationID + ".json": pubRaw,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			target, err = client.CreateSignedContentCommit(context.Background(), tree, peerKey, parent, time.Now(), "publisher", "Publication after resolution")
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 	revision, _ := config.SyncRevision(f.cfg)
 	f.cfg.Sync.ImportAcknowledgement = &config.SyncImportAcknowledgement{
@@ -143,6 +256,59 @@ exec %s "$@"
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("SYNC_NODE_B_TO_A", "test-inbound-credential")
+	if options.ancestorCollision || options.history != "" {
+		if options.ancestorCollision {
+			if err := os.WriteFile(filepath.Join(f.repo, "zblocked"), []byte("local blocker\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		gitTestRun(t, f.git, f.repo, "update-index", "--refresh")
+		indexBefore := mustRead(t, filepath.Join(f.repo, ".git", "index"))
+		var stdout, stderr bytes.Buffer
+		code := Run([]string{"sync", "reconcile", "--group", f.cfg.Sync.GroupID}, &stdout, &stderr)
+		if options.history == "checkpoint" || options.history == "reviewed_snapshot" || options.history == "publication_after_checkpoint" {
+			if code != 0 || !bytes.Contains(stdout.Bytes(), []byte(`"state":"applied"`)) {
+				t.Fatalf("checkpoint catch-up: %d out=%s err=%s", code, stdout.String(), stderr.String())
+			}
+			if got := gitTestOutput(t, f.git, f.repo, "rev-parse", f.cfg.Sync.ContentRef); got != target {
+				t.Fatalf("checkpoint target not imported: %s", got)
+			}
+			if got := mustRead(t, filepath.Join(f.repo, "note.md")); !bytes.Equal(got, after["note.md"]) {
+				t.Fatalf("checkpoint snapshot not imported: %q", got)
+			}
+			return
+		}
+		wantCode, reason := 30, "trust_failed"
+		if options.ancestorCollision {
+			wantCode, reason = 0, "untracked_collision"
+		} else if options.history == "history_bound" {
+			reason = "bound_exhausted"
+		}
+		if code != wantCode || !bytes.Contains(stdout.Bytes(), []byte(`"reason":"`+reason+`"`)) {
+			t.Fatalf("unsafe import: %d out=%s err=%s", code, stdout.String(), stderr.String())
+		}
+		if got := gitTestOutput(t, f.git, f.repo, "rev-parse", f.cfg.Sync.ContentRef); got != base {
+			t.Fatalf("ref changed before admission: %s", got)
+		}
+		if !bytes.Equal(indexBefore, mustRead(t, filepath.Join(f.repo, ".git", "index"))) || !bytes.Equal(before["note.md"], mustRead(t, filepath.Join(f.repo, "note.md"))) {
+			t.Fatal("refused import changed index or Markdown")
+		}
+		if options.ancestorCollision {
+			if got := string(mustRead(t, filepath.Join(f.repo, "zblocked"))); got != "local blocker\n" {
+				t.Fatalf("local blocker changed: %q", got)
+			}
+			var applied int
+			if err := f.store.QueryRow(`SELECT COUNT(*) FROM sync_import_effects WHERE applied_at IS NOT NULL`).Scan(&applied); err != nil || applied != 0 {
+				t.Fatalf("admission refusal applied effects: %d %v", applied, err)
+			}
+			var fence int
+			var state string
+			if err := f.store.QueryRow(`SELECT fence,state FROM sync_jobs WHERE kind='import'`).Scan(&fence, &state); err != nil || fence != 0 || state != "deferred" {
+				t.Fatalf("admission refusal claimed import: %d %s %v", fence, state, err)
+			}
+		}
+		return
+	}
 	deferredJobID := ""
 	if deferForWriter {
 		routeID := ""

@@ -28,12 +28,21 @@ This file records concise shipped outcomes and pending changes.
 - Recover interrupted imports after their controller records and index are
   installed, while preserving unrelated local edits.
 - Accept standard OpenSSH signing keys resolved through `file:` references.
-- Include dispatch receipt schema versions in list/show output and emit empty
-  drain and dispatch list collections as arrays.
+- Include dispatch and work receipt schema versions in list/show output,
+  and emit empty drain and dispatch list collections as arrays.
 - Resume imports deferred before their first claim when participating writers
   become idle, preserving the import identity and bounded queue.
-- Reject membership documents without an explicit predecessor and peer status
-  responses with missing or null safety fields.
+- Reject membership documents without an explicit predecessor or historical
+  member array, invalid Git branch refs, and remote URIs with query or fragment
+  delimiters. Reject peer status responses with missing or null safety fields.
+- Report positioned Watchman retransmissions as duplicate arrivals while
+  preserving the original observation and lineage.
+- Direct unregistered routes to guided setup before dispatch.
+- Defer imports when a local path is an ancestor or descendant of a target
+  path, before applying any file changes.
+- Accept ordinary Git history covered by a later administrator checkpoint,
+  verify its reviewed snapshot and predecessor, and reject uncovered later
+  commits.
 - Preserve staged Markdown, independent controller files, and content-ref
   coherence during publication, checkpoints, and later peer imports.
 - Retain signed candidates, blocked obligations, and linked recovery evidence

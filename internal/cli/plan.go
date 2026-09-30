@@ -327,8 +327,8 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	}
 	if !registered {
 		return planErr(stderr, command, "transition_invalid", "conflict",
-			fmt.Sprintf("route %q has no trusted registration yet; run 'agent-dispatch setup wiki' or 'reconcile --route %s --reason initial --baseline-only' first — nothing was persisted",
-				artifacts.opts.routeID, artifacts.opts.routeID), 14)
+			fmt.Sprintf("route %q has no trusted registration yet; run 'agent-dispatch setup wiki' first — nothing was persisted",
+				artifacts.opts.routeID), 14)
 	}
 	// Structural dispositions never reach the coordinator's dispatch
 	// path: quarantine holds durably (PTH-008), reconcile marks the
@@ -559,7 +559,7 @@ func persistThroughCoordinator(command string, artifacts *planArtifacts, stderr 
 	if err != nil {
 		closer.Close()
 		switch {
-		case errors.Is(err, ports.ErrIdempotencyConflict):
+		case errors.Is(err, ports.ErrIdempotencyConflict), errors.Is(err, ports.ErrSourceRetransmission):
 			writeError(stderr, command, "dispatch_duplicate", "conflict", err.Error())
 			return persistOutcome{}, 14
 		case errors.Is(err, ports.ErrRouteSlotHeld):
@@ -636,8 +636,7 @@ func persistQuarantine(command string, a *planArtifacts, stdout, stderr io.Write
 		return 40
 	}
 	if err := store.CommitQuarantineLineage(requestCtx(), lin, item); err != nil {
-		writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
-		return 20
+		return writeArrivalError(stderr, command, err)
 	}
 	return writeEnvelope(stdout, command, map[string]any{
 		"route_id": a.opts.routeID, "disposition": "quarantine",
@@ -661,8 +660,7 @@ func persistReconcileArrival(command string, a *planArtifacts, stdout, stderr io
 		return 40
 	}
 	if err := store.CommitReconcileLineage(requestCtx(), lin, a.env.Clock); err != nil {
-		writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
-		return 20
+		return writeArrivalError(stderr, command, err)
 	}
 	return writeEnvelope(stdout, command, map[string]any{
 		"route_id": a.opts.routeID, "disposition": "reconcile",
@@ -684,13 +682,21 @@ func persistDrop(command string, a *planArtifacts, stdout, stderr io.Writer) int
 		return 40
 	}
 	if err := store.CommitDropLineage(requestCtx(), lin); err != nil {
-		writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
-		return 20
+		return writeArrivalError(stderr, command, err)
 	}
 	return writeEnvelope(stdout, command, map[string]any{
 		"route_id": a.opts.routeID, "disposition": "drop",
 		"reason_codes": a.plan.ReasonCodes,
 	})
+}
+
+func writeArrivalError(stderr io.Writer, command string, err error) int {
+	if errors.Is(err, ports.ErrSourceRetransmission) {
+		writeError(stderr, command, "dispatch_duplicate", "conflict", err.Error())
+		return 14
+	}
+	writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
+	return 20
 }
 
 // buildHeldLineage assembles the observation, batch, and decision of a

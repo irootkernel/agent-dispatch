@@ -680,8 +680,13 @@ func TestSourceEventKeyUniquePerSource(t *testing.T) {
 		t.Fatalf("per-source event key must allow different sources: %v", err)
 	}
 	// Same source, same event key is a retransmission and must collide.
-	if err := s.SaveObservation(nil, mk("0192e6c6-4d7f-7abc-8def-012345678903", "src-a", "event-1")); err == nil {
-		t.Fatal("duplicate (source, event key) must be rejected")
+	if err := s.SaveObservation(nil, mk("0192e6c6-4d7f-7abc-8def-012345678903", "src-a", "event-1")); !errors.Is(err, ports.ErrSourceRetransmission) {
+		t.Fatalf("duplicate (source, event key) must be typed: %v", err)
+	}
+	for _, id := range []string{"0192e6c6-4d7f-7abc-8def-012345678904", "0192e6c6-4d7f-7abc-8def-012345678905"} {
+		if err := s.SaveObservation(nil, mk(id, "src-a", "")); err != nil {
+			t.Fatalf("unpositioned deliveries must remain distinct: %v", err)
+		}
 	}
 }
 

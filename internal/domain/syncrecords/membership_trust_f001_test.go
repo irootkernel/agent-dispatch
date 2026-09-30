@@ -8,6 +8,84 @@ import (
 	"testing"
 )
 
+func TestMembershipRequiredHistoricalArray(t *testing.T) {
+	plan, err := NewPlan("bootstrap", "", nil, nil, testMembers(), testBinding())
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := CanonicalMembership(plan.ProposedMembership)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range []string{"missing", "null", "[]"} {
+		t.Run(value, func(t *testing.T) {
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(raw, &fields); err != nil {
+				t.Fatal(err)
+			}
+			if value == "missing" {
+				delete(fields, "historical_members")
+			} else {
+				fields["historical_members"] = json.RawMessage(value)
+			}
+			membershipRaw, _ := json.Marshal(fields)
+			decoded, err := DecodeMembership(membershipRaw)
+			if value != "[]" {
+				if !errors.Is(err, ErrInvalidRecord) {
+					t.Fatalf("invalid historical_members accepted: %v", err)
+				}
+			} else {
+				canonical, canonicalErr := CanonicalMembership(decoded)
+				if err != nil || canonicalErr != nil || !bytes.Equal(raw, canonical) {
+					t.Fatalf("empty array changed membership: %v %v", err, canonicalErr)
+				}
+			}
+			planRaw, _ := CanonicalPlan(plan)
+			var planFields map[string]json.RawMessage
+			if err := json.Unmarshal(planRaw, &planFields); err != nil {
+				t.Fatal(err)
+			}
+			planFields["proposed_membership"] = membershipRaw
+			invalidPlan, _ := json.Marshal(planFields)
+			decodedPlan, err := DecodePlan(invalidPlan)
+			if value != "[]" {
+				if !errors.Is(err, ErrInvalidRecord) {
+					t.Fatalf("invalid proposed historical_members accepted: %v", err)
+				}
+			} else if err != nil || decodedPlan.PlanID != plan.PlanID {
+				t.Fatalf("empty array changed plan identity: %v", err)
+			}
+		})
+	}
+}
+
+func TestMembershipRejectsInvalidGitRefs(t *testing.T) {
+	plan, err := NewPlan("bootstrap", "", nil, nil, testMembers(), testBinding())
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := CanonicalMembership(plan.ProposedMembership)
+	for _, ref := range []string{"refs/heads/wiki.lock", "refs/heads/wiki//main", "refs/heads/wiki\nmain", "refs/heads/.wiki", "refs/heads/wiki/part.lock", "refs/heads/wiki."} {
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			t.Fatal(err)
+		}
+		fields["content_ref"], _ = json.Marshal(ref)
+		malformed, _ := json.Marshal(fields)
+		if _, err := DecodeMembership(malformed); !errors.Is(err, ErrInvalidRecord) {
+			t.Errorf("invalid Git ref %q accepted: %v", ref, err)
+		}
+	}
+	plan.ProposedMembership.ContentRef = "refs/heads/wiki/main-v1.0"
+	raw, err = CanonicalMembership(plan.ProposedMembership)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DecodeMembership(raw); err != nil {
+		t.Fatalf("valid nested Git ref rejected: %v", err)
+	}
+}
+
 func TestDecodeMembershipRequiredPredecessor(t *testing.T) {
 	parent := strings.Repeat("1", 40)
 	for _, predecessor := range []*string{nil, &parent} {

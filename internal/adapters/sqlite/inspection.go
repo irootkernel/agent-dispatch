@@ -920,6 +920,7 @@ func (s *Store) loadWorkReceipt(ctx context.Context, receiptID string) (ports.Re
 		}
 		return detail, err
 	}
+	detail.SchemaVersion = ports.ReceiptRecordSchemaVersion
 	detail.ReceiptKind = "work"
 	detail.ExternalRef = nullPtr(external)
 	switch status.String {
@@ -973,6 +974,7 @@ func (s *Store) listWorkReceipts(ctx context.Context, f ports.ReceiptFilter) ([]
 		if err := rows.Scan(&rec.ReceiptID, &rec.DispatchID, &status, &external, &rec.ReceivedAt, &rec.DestinationID); err != nil {
 			return nil, err
 		}
+		rec.SchemaVersion = ports.ReceiptRecordSchemaVersion
 		rec.ReceiptKind = "work"
 		rec.ExternalRef = nullPtr(external)
 		// The work-receipt status is the agent run's execution outcome;

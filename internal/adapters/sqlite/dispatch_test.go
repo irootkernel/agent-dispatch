@@ -87,6 +87,28 @@ func TestCommitLineagePersistsWholeChain(t *testing.T) {
 	}
 }
 
+func TestReconcileSourceRetransmissionRollsBack(t *testing.T) {
+	s := openTestStore(t)
+	first := lineage("dispatch-1", "first")
+	first.Observation.SourceEventKey = "watchman:source:since:clock:digest"
+	first.Decision.Disposition = "reconcile"
+	if err := s.CommitReconcileLineage(context.Background(), first, "clock"); err != nil {
+		t.Fatal(err)
+	}
+	replay := lineage("dispatch-2", "second")
+	replay.Observation.SourceEventKey = first.Observation.SourceEventKey
+	replay.Decision.Disposition = "reconcile"
+	if err := s.CommitReconcileLineage(context.Background(), replay, "clock"); !errors.Is(err, ports.ErrSourceRetransmission) {
+		t.Fatalf("retransmission must be typed: %v", err)
+	}
+	for _, table := range []string{"source_observations", "change_batches", "policy_decisions"} {
+		var n int
+		if err := s.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&n); err != nil || n != 1 {
+			t.Fatalf("%s changed on retransmission: %d %v", table, n, err)
+		}
+	}
+}
+
 // TestCommitLineageDuplicateIdempotency proves the target/idempotency
 // uniqueness constraint is enforced through the port error.
 func TestCommitLineageDuplicateIdempotency(t *testing.T) {

@@ -265,10 +265,8 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 		}
 		return blockReconcile(stdout, stderr, store, s.GroupID, revision, "trust_failure", reason, err)
 	}
-	for _, commit := range commits {
-		if err := verifyContentHead(client, remoteHistory, cfg, s, commit); err != nil {
-			return blockReconcile(stdout, stderr, store, s.GroupID, revision, "trust_failure", "trust_failed", err)
-		}
+	if err := verifyImportRange(client, remoteHistory, cfg, s, commits); err != nil {
+		return blockReconcile(stdout, stderr, store, s.GroupID, revision, "trust_failure", "trust_failed", err)
 	}
 	beforeFiles, err := client.ReadContentFiles(requestCtx(), from)
 	if err != nil {
@@ -882,6 +880,21 @@ func contentHeadAddsCheckpoint(client *gitlocal.Client, head string) bool {
 		return false
 	}
 	return len(current) == len(prior)+1
+}
+
+// FirstParentRange has already bounded and proved the linear range. Walk it
+// backwards: a verified administrator checkpoint covers its exact parent and
+// earlier ancestors, while every commit after it needs its own publication.
+func verifyImportRange(client *gitlocal.Client, history syncmembership.History, cfg *config.Config, s *config.Sync, commits []string) error {
+	for i := len(commits) - 1; i >= 0; i-- {
+		if err := verifyContentHead(client, history, cfg, s, commits[i]); err != nil {
+			return err
+		}
+		if contentHeadAddsCheckpoint(client, commits[i]) {
+			return nil
+		}
+	}
+	return nil
 }
 
 func verifyImportBase(client *gitlocal.Client, history syncmembership.History, cfg *config.Config, s *config.Sync, from string, limit int) error {

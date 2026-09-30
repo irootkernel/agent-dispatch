@@ -354,22 +354,41 @@ func (c *Client) activeOperation(ctx context.Context) (string, error) {
 	return "", nil
 }
 
-// ImportOverlap returns exact or Unicode/case aliases between target effects
-// and dirty paths. Case folding is intentionally conservative on every host:
+// ImportOverlap returns exact, ancestor, or Unicode/case aliases between target
+// effects and dirty paths. Case folding is conservative on every host:
 // a plan safe under this rule is also safe if the vault later moves to a
 // case-insensitive filesystem.
 func ImportOverlap(targets, dirty, untracked []string) (overlap, collisions []string) {
-	target := map[string]string{}
+	target := map[string]bool{}
+	ancestors := map[string]bool{}
 	for _, path := range targets {
-		target[records.PortablePathIdentity(path)] = path
+		identity := records.PortablePathIdentity(path)
+		target[identity] = true
+		for i := strings.LastIndexByte(identity, '/'); i >= 0; i = strings.LastIndexByte(identity, '/') {
+			identity = identity[:i]
+			ancestors[identity] = true
+		}
+	}
+	intersects := func(path string) bool {
+		identity := records.PortablePathIdentity(path)
+		if target[identity] || ancestors[identity] {
+			return true
+		}
+		for i := strings.LastIndexByte(identity, '/'); i >= 0; i = strings.LastIndexByte(identity, '/') {
+			identity = identity[:i]
+			if target[identity] {
+				return true
+			}
+		}
+		return false
 	}
 	for _, path := range dirty {
-		if _, ok := target[records.PortablePathIdentity(path)]; ok {
+		if intersects(path) {
 			overlap = append(overlap, path)
 		}
 	}
 	for _, path := range untracked {
-		if _, ok := target[records.PortablePathIdentity(path)]; ok {
+		if intersects(path) {
 			collisions = append(collisions, path)
 		}
 	}

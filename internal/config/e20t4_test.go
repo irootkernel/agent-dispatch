@@ -140,6 +140,9 @@ func TestE20T4RemoteRepositoryDigestContract(t *testing.T) {
 		"ssh://git@@github.com/RootKernel/wiki",
 		"ssh://git:secret@github.com/RootKernel/wiki", "git@github.com:RootKernel/wiki.git",
 		"https://github.com/RootKernel/../wiki", "https://github.com:8443/RootKernel/wiki",
+		"https://github.com/RootKernel/wiki?", "https://github.com/RootKernel/wiki#",
+		"ssh://git@github.com/RootKernel/wiki?", "ssh://git@github.com/RootKernel/wiki#",
+		"https://github.com/RootKernel/wiki?query", "ssh://git@github.com/RootKernel/wiki#fragment",
 	} {
 		if _, _, err := RemoteRepositoryDigest(raw); err == nil {
 			t.Errorf("unsafe remote repository URI accepted: %q", raw)

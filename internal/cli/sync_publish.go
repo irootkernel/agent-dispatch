@@ -689,11 +689,19 @@ func verifyContentHead(client *gitlocal.Client, history syncmembership.History, 
 		if planErr != nil {
 			return planErr
 		}
-		if planPath != ".agent-dispatch-sync/checkpoint-plans/"+plan.PlanID+".json" || plan.ProposedCheckpoint != checkpoint {
+		if planPath != ".agent-dispatch-sync/checkpoint-plans/"+plan.PlanID+".json" || plan.ProposedCheckpoint != checkpoint || plan.ExpectedContentPredecessor != parent {
 			return fmt.Errorf("checkpoint plan does not match its signed checkpoint")
 		}
 		if checkpoint.GroupID != s.GroupID || checkpoint.SnapshotDigest != digest || checkpoint.ScopeDigest != config.SyncScopeDigest(cfg, s.Resource) || checkpoint.ContractDigest != config.SyncContractDigest() || checkpoint.AdministratorKey != s.AdministratorKey {
 			return fmt.Errorf("content checkpoint binding does not match its commit")
+		}
+		targetFiles, err := client.ReadContentFiles(requestCtx(), checkpoint.TargetCommit)
+		if err != nil {
+			return err
+		}
+		targetDigest, err := snapshotDigestFromFiles(targetFiles)
+		if err != nil || targetDigest != checkpoint.SnapshotDigest || (checkpoint.Kind == "initial_baseline" && checkpoint.TargetCommit != parent) {
+			return fmt.Errorf("checkpoint target snapshot does not match its signed binding")
 		}
 		if _, ok := history.Revisions[checkpoint.MembershipRevision]; !ok {
 			return fmt.Errorf("checkpoint membership revision is not verified")

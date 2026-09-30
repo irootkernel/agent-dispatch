@@ -2,6 +2,7 @@ package syncmembership
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -64,6 +65,32 @@ func TestLoadHistoryVerifiesLinearPinnedTransitions(t *testing.T) {
 	repo[childOID] = bad
 	if _, err := LoadHistory(context.Background(), repo, childOID, binding, 10); !errors.Is(err, gitlocal.ErrInvalidSignature) {
 		t.Fatalf("invalid signature: %v", err)
+	}
+}
+
+func TestLoadHistoryRequiresBootstrapDocumentPredecessor(t *testing.T) {
+	plan, err := syncrecords.NewPlan("bootstrap", "", nil, nil, historyMembers(), historyBinding())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const oid = "1111111111111111111111111111111111111111"
+	revision := encodedRevision(t, plan, nil)
+	repo := fakeRepository{oid: revision}
+	if _, err := LoadHistory(context.Background(), repo, oid, historyBinding(), 10); err != nil {
+		t.Fatalf("explicit null bootstrap rejected: %v", err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(revision.document, &fields); err != nil {
+		t.Fatal(err)
+	}
+	delete(fields, "predecessor")
+	revision.document, err = json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo[oid] = revision
+	if _, err := LoadHistory(context.Background(), repo, oid, historyBinding(), 10); !errors.Is(err, syncrecords.ErrInvalidRecord) {
+		t.Fatalf("bootstrap document without predecessor accepted: %v", err)
 	}
 }
 

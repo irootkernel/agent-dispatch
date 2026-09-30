@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -170,9 +171,106 @@ func TestE21T4DeferredValidatedImportCanReopenAfterFenceClears(t *testing.T) {
 	if err := s.FinishSyncJob(ctx, job.JobID, "owner-reopen", job.Fence, "deferred", SyncJobResolve, SyncJournalEntry{JournalID: "journal-deferred", JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "deferred", EvidenceJSON: `{}`, RecordedAt: syncT1}, syncT1); err != nil {
 		t.Fatal(err)
 	}
-	reopened, err := s.ReopenDeferredImport(ctx, job.JobID, "revision-1", SyncJournalEntry{JournalID: "journal-reopen", JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: `{}`, RecordedAt: syncT2}, syncT2)
+	reopened, err := s.ReopenDeferredImport(ctx, job.JobID, "revision-1", 10, SyncJournalEntry{JournalID: "journal-reopen", JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: `{}`, RecordedAt: syncT2}, syncT2)
 	if err != nil || reopened.State != "validated" || reopened.ResolvedAt != "" {
 		t.Fatalf("reopened=%+v err=%v", reopened, err)
+	}
+	var recoveredFence int64
+	if err := s.QueryRow(`SELECT fence FROM sync_journal_entries WHERE journal_id='journal-reopen'`).Scan(&recoveredFence); err != nil || recoveredFence != job.Fence {
+		t.Fatalf("claimed deferral lost fenced proof: %d %v", recoveredFence, err)
+	}
+	next, err := s.ClaimSyncJob(ctx, job.JobID, "owner-next", "revision-1", syncT2, syncT3)
+	if err != nil || next.Fence != job.Fence+1 || next.Attempts != job.Attempts+1 {
+		t.Fatalf("retry did not advance claim generation: %+v %v", next, err)
+	}
+}
+
+func TestDeferredImportReopenPreservesQueueAndClaimBoundaries(t *testing.T) {
+	ctx := context.Background()
+	for _, claimed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("claimed=%v", claimed), func(t *testing.T) {
+			s := openTestStore(t)
+			if _, err := s.EnsureSyncControl(ctx, "wiki-pair", "revision-1", syncT0); err != nil {
+				t.Fatal(err)
+			}
+			record := validE21T4Import(t, false)
+			payload, err := syncrecords.CanonicalImport(record)
+			if err != nil {
+				t.Fatal(err)
+			}
+			state := "deferred"
+			if claimed {
+				state = "validated"
+			}
+			job, _, err := s.AdmitSyncJob(ctx, SyncJobInput{JobID: "deferred-import", GroupID: "wiki-pair", Kind: "import", LogicalKey: record.ImportID, InitialState: state, PayloadJSON: string(payload), ConfigRevision: "revision-1", QueueLimit: 2, Now: syncT0})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if claimed {
+				job, err = s.ClaimSyncJob(ctx, job.JobID, "owner", "revision-1", syncT0, syncT3)
+				if err != nil {
+					t.Fatal(err)
+				}
+				err = s.FinishSyncJob(ctx, job.JobID, "owner", job.Fence, "deferred", SyncJobResolve, SyncJournalEntry{JournalID: "defer", JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "deferred", EvidenceJSON: `{}`, RecordedAt: syncT1}, syncT1)
+			} else {
+				err = s.ResolveImportDeferral(ctx, job.JobID, syncT1)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			before, err := loadSyncJob(ctx, s.DB, job.JobID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			nudge := peerF003Nudge("reopen-hint", 2)
+			if _, err := s.AdmitPeerNudge(ctx, nudge); err != nil {
+				t.Fatal(err)
+			}
+			fill := peerF003Job("fill", "verification", "planned", 2)
+			fill.ConfigRevision = "revision-1"
+			if _, _, err := s.AdmitSyncJob(ctx, fill); err != nil {
+				t.Fatal(err)
+			}
+			journal := SyncJournalEntry{JournalID: "reopen", JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: `{}`, RecordedAt: syncT2}
+			if _, err := s.ReopenDeferredImport(ctx, job.JobID, "revision-1", 2, journal, syncT2); !errors.Is(err, ErrSyncQueueFull) {
+				t.Fatalf("mixed full queue must refuse reactivation: %v", err)
+			}
+			after, err := loadSyncJob(ctx, s.DB, job.JobID)
+			if err != nil || after != before {
+				t.Fatalf("refusal changed durable import: %+v %v", after, err)
+			}
+			var journals int
+			if err := s.QueryRow(`SELECT COUNT(*) FROM sync_journal_entries WHERE journal_id='reopen'`).Scan(&journals); err != nil || journals != 0 {
+				t.Fatalf("capacity refusal wrote recovery evidence: %d %v", journals, err)
+			}
+			if _, err := s.Exec(`UPDATE sync_jobs SET state='incomplete',resolved_at=? WHERE job_id='fill'`, syncT2); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.ReopenDeferredImport(ctx, job.JobID, "obsolete-revision", 2, journal, syncT2); !errors.Is(err, ErrSyncPrecondition) {
+				t.Fatalf("stale revision reopened import: %v", err)
+			}
+			wrong := journal
+			wrong.Fence++
+			if _, err := s.ReopenDeferredImport(ctx, job.JobID, "revision-1", 2, wrong, syncT2); err == nil {
+				t.Fatal("wrong fence reopened import")
+			}
+			reopened, err := s.ReopenDeferredImport(ctx, job.JobID, "revision-1", 2, journal, syncT2)
+			if err != nil || reopened.State != "validated" || reopened.ResolvedAt != "" || reopened.PayloadJSON != before.PayloadJSON || reopened.Fence != before.Fence || reopened.Attempts != before.Attempts {
+				t.Fatalf("reactivation changed identity or claim history: %+v %v", reopened, err)
+			}
+			wantJournals := 0
+			if claimed {
+				wantJournals = 1
+			}
+			if err := s.QueryRow(`SELECT COUNT(*) FROM sync_journal_entries WHERE journal_id='reopen'`).Scan(&journals); err != nil || journals != wantJournals {
+				t.Fatalf("only previously claimed deferrals need recovery journals: %d %v", journals, err)
+			}
+			next, err := s.ClaimSyncJob(ctx, job.JobID, "next-owner", "revision-1", syncT2, syncT3)
+			if err != nil || next.Fence != before.Fence+1 || next.Attempts != before.Attempts+1 {
+				t.Fatalf("claim did not advance fence and attempts: %+v %v", next, err)
+			}
+			peerF003Counts(t, s, 1, 1)
+		})
 	}
 }
 
@@ -234,7 +332,7 @@ func TestE21T4DeferredControllerImportReopensThroughCheckpointHold(t *testing.T)
 	if err != nil || control.Reason != "conflict" || control.MembershipMode != "blocked_emergency" {
 		t.Fatalf("emergency stronger hold=%+v err=%v", control, err)
 	}
-	reopened, err := s.ReopenDeferredImport(ctx, job.JobID, "revision-1", SyncJournalEntry{JournalID: "controller-reopened", JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: `{}`, RecordedAt: syncT2}, syncT2)
+	reopened, err := s.ReopenDeferredImport(ctx, job.JobID, "revision-1", 10, SyncJournalEntry{JournalID: "controller-reopened", JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: `{}`, RecordedAt: syncT2}, syncT2)
 	if err != nil || reopened.State != "validated" || reopened.ResolvedAt != "" {
 		t.Fatalf("controller reopen=%+v err=%v", reopened, err)
 	}

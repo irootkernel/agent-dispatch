@@ -87,6 +87,15 @@ func DecodeMembership(raw []byte) (Membership, error) {
 	if err := decodeStrict(raw, &out); err != nil {
 		return out, err
 	}
+	var fields struct {
+		Predecessor json.RawMessage `json:"predecessor"`
+	}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return out, fmt.Errorf("%w: %v", ErrInvalidRecord, err)
+	}
+	if len(fields.Predecessor) == 0 {
+		return out, fmt.Errorf("%w: predecessor is required", ErrInvalidRecord)
+	}
 	if err := out.Validate(); err != nil {
 		return out, err
 	}

@@ -1060,10 +1060,13 @@ func (s *Store) ResolveImportDeferral(ctx context.Context, jobID, now string) er
 	return nil
 }
 
-// ReopenDeferredImport revives a validated plan that was deferred only after
-// it had been claimed. Admission-time deferrals use a different immutable
-// logical identity and are never reopened by this transition.
-func (s *Store) ReopenDeferredImport(ctx context.Context, jobID, expectedConfigRevision string, journal SyncJournalEntry, now string) (SyncJobRow, error) {
+// ReopenDeferredImport revives the same immutable validated plan after its
+// deferral clears. Only previously claimed plans have fenced recovery evidence;
+// admission-time deferrals obtain their first fence when subsequently claimed.
+func (s *Store) ReopenDeferredImport(ctx context.Context, jobID, expectedConfigRevision string, queueLimit int, journal SyncJournalEntry, now string) (SyncJobRow, error) {
+	if queueLimit < 1 || queueLimit > 1000 {
+		return SyncJobRow{}, fmt.Errorf("sync queue limit must be 1..1000")
+	}
 	tx, err := s.BeginTx(ctx, nil)
 	if err != nil {
 		return SyncJobRow{}, err
@@ -1091,8 +1094,20 @@ func (s *Store) ReopenDeferredImport(ctx context.Context, jobID, expectedConfigR
 	if journal.JobID != jobID || journal.Fence != row.Fence || journal.Phase != "claim_recovery" || journal.Outcome != "effect_not_started" || journal.RecordedAt != now || journal.JournalID == "" {
 		return SyncJobRow{}, fmt.Errorf("deferred import reopen journal does not bind the job")
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO sync_journal_entries(journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES(?,?,?,?,?,?,?)`, journal.JournalID, journal.JobID, journal.Fence, journal.Phase, journal.Outcome, journal.EvidenceJSON, journal.RecordedAt); err != nil {
+	if row.Fence == 0 && row.Attempts != 0 {
+		return SyncJobRow{}, ErrSyncPrecondition
+	}
+	pending, err := countUnresolvedSyncObligations(ctx, tx, row.GroupID)
+	if err != nil {
 		return SyncJobRow{}, err
+	}
+	if pending >= queueLimit {
+		return SyncJobRow{}, fmt.Errorf("group %s has %d unresolved obligations (limit %d): %w", row.GroupID, pending, queueLimit, ErrSyncQueueFull)
+	}
+	if row.Fence > 0 {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO sync_journal_entries(journal_id,job_id,fence,phase,outcome,evidence_json,recorded_at) VALUES(?,?,?,?,?,?,?)`, journal.JournalID, journal.JobID, journal.Fence, journal.Phase, journal.Outcome, journal.EvidenceJSON, journal.RecordedAt); err != nil {
+			return SyncJobRow{}, err
+		}
 	}
 	res, err := tx.ExecContext(ctx, `UPDATE sync_jobs SET state='validated',retain_until_resolved=1,resolved_at=NULL,updated_at=? WHERE job_id=? AND state='deferred' AND resolved_at IS NOT NULL AND claim_owner IS NULL`, now, jobID)
 	if err != nil {

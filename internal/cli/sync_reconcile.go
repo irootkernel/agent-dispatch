@@ -369,7 +369,7 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 			}
 			if job.State == "deferred" {
 				reopenedAt := time.Now().UTC().Format(time.RFC3339Nano)
-				job, err = store.ReopenDeferredImport(requestCtx(), job.JobID, revision, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: mustJSON(map[string]any{"reason": "retry_after_deferred_fence", "controller_only": true}), RecordedAt: reopenedAt}, reopenedAt)
+				job, err = store.ReopenDeferredImport(requestCtx(), job.JobID, revision, s.Bounds.Queue, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: mustJSON(map[string]any{"reason": "retry_after_deferred_fence", "controller_only": true}), RecordedAt: reopenedAt}, reopenedAt)
 				if err != nil {
 					return syncStoreError(stderr, command, err)
 				}
@@ -474,7 +474,7 @@ func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
 		}
 		if job.State == "deferred" && job.ClaimOwner == "" {
 			reopenedAt := time.Now().UTC().Format(time.RFC3339Nano)
-			job, err = store.ReopenDeferredImport(requestCtx(), job.JobID, revision, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: mustJSON(map[string]any{"reason": "retry_after_deferred_fence"}), RecordedAt: reopenedAt}, reopenedAt)
+			job, err = store.ReopenDeferredImport(requestCtx(), job.JobID, revision, s.Bounds.Queue, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: mustJSON(map[string]any{"reason": "retry_after_deferred_fence"}), RecordedAt: reopenedAt}, reopenedAt)
 			if err != nil {
 				return syncStoreError(stderr, command, err)
 			}

@@ -19,6 +19,15 @@ import (
 // Exercise real signed history, Git import, and inbox settlement. The only
 // remote transport is a fixture that measures refs and exposes local objects.
 func TestSyncQueuePolicyInboxImportsBeforeSettlingNudge(t *testing.T) {
+	testSyncQueueInboxImport(t, false)
+}
+
+func TestSyncQueuePolicyDeferredImportReopensAfterWriterIdle(t *testing.T) {
+	testSyncQueueInboxImport(t, true)
+}
+
+func testSyncQueueInboxImport(t *testing.T, deferForWriter bool) {
+	t.Helper()
 	f := newResumeFixture(t)
 	f.cfg.Sync.Bounds.Queue = 2
 	peerKey, peerFingerprint := e21t3Key(t, t.TempDir(), "queue-peer")
@@ -134,6 +143,66 @@ exec %s "$@"
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("SYNC_NODE_B_TO_A", "test-inbound-credential")
+	deferredJobID := ""
+	if deferForWriter {
+		routeID := ""
+		for id, route := range f.cfg.Routes {
+			if route.Source.Resource == f.cfg.Sync.Resource {
+				revision, _ := config.RouteRevision(f.cfg, id)
+				if err := f.store.RegisterRoute(nil, id, revision, config.PolicyRevision(route), f.cfg.Sync.Resource, route.Destinations[0].Target, "{}", time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+					t.Fatal(err)
+				}
+				if err := f.store.InitializeRouteState(nil, id); err != nil {
+					t.Fatal(err)
+				}
+				routeID = id
+				break
+			}
+		}
+		if routeID == "" {
+			t.Fatal("fixture has no writer route")
+		}
+		seedE21T3Eligibility(t, f.cfg, f.path, before["note.md"])
+		if _, err := f.store.Exec(`UPDATE destination_lane_state SET active_dispatch_id=NULL WHERE route_id=?`, routeID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.store.Exec(`UPDATE route_runtime_state SET active_dispatch_id=? WHERE route_id=?`, "dispatch-"+routeID, routeID); err != nil {
+			t.Fatal(err)
+		}
+		headBefore := gitTestOutput(t, f.git, f.repo, "rev-parse", "HEAD")
+		gitTestRun(t, f.git, f.repo, "update-index", "--refresh")
+		indexBefore := mustRead(t, filepath.Join(f.repo, ".git", "index"))
+		for attempt := 0; attempt < 2; attempt++ {
+			var stdout, stderr bytes.Buffer
+			if code := Run([]string{"sync", "reconcile", "--group", f.cfg.Sync.GroupID}, &stdout, &stderr); code != 0 || !bytes.Contains(stdout.Bytes(), []byte(`"reason":"resource_busy"`)) {
+				t.Fatalf("writer deferral: %d out=%s err=%s", code, stdout.String(), stderr.String())
+			}
+			var fence, attempts int
+			var state, resolved, payload string
+			if err := f.store.QueryRow(`SELECT job_id,state,fence,attempts,resolved_at,payload_json FROM sync_jobs WHERE kind='import'`).Scan(&deferredJobID, &state, &fence, &attempts, &resolved, &payload); err != nil {
+				t.Fatal(err)
+			}
+			if state != "deferred" || fence != 0 || attempts != 0 || resolved == "" {
+				t.Fatalf("admission deferral claimed or unresolved: %s %d %d %q", state, fence, attempts, resolved)
+			}
+			record, err := syncrecords.DecodeImport([]byte(payload))
+			if err != nil || record.State != "validated" || record.Reason != "none" {
+				t.Fatalf("immutable import changed: %+v %v", record, err)
+			}
+			if got := gitTestOutput(t, f.git, f.repo, "rev-parse", "HEAD"); got != headBefore {
+				t.Fatalf("deferred HEAD moved: %s", got)
+			}
+			if !bytes.Equal(indexBefore, mustRead(t, filepath.Join(f.repo, ".git", "index"))) || !bytes.Equal(before["note.md"], mustRead(t, filepath.Join(f.repo, "note.md"))) {
+				t.Fatal("deferral changed index or Markdown")
+			}
+		}
+		if _, err := f.store.Exec(`UPDATE route_runtime_state SET active_dispatch_id=NULL WHERE route_id=?`, routeID); err != nil {
+			t.Fatal(err)
+		}
+		if idle, err := f.store.ResourceWritersIdle(context.Background(), f.cfg.Sync.Resource); err != nil || !idle {
+			t.Fatalf("writer did not become idle: %v %v", idle, err)
+		}
+	}
 	svc := &peerService{
 		cfg: f.cfg, configPath: f.path, store: f.store,
 		slots: make(chan struct{}, 2), rate: map[string]peerRate{},
@@ -164,6 +233,7 @@ exec %s "$@"
 			t.Fatalf("reconcile: %d out=%s err=%s", code, stdout.String(), stderr.String())
 		}
 		state, target := parseReconcileResult(stdout.Bytes())
+		t.Logf("reconcile result: %s", stdout.String())
 		return settledReconcileResult(state, target)
 	}
 	rows, err := f.store.LoadPendingPeerNudges(context.Background(), f.cfg.Sync.GroupID, 2)
@@ -193,6 +263,23 @@ exec %s "$@"
 	var imports int
 	if err := f.store.QueryRow(`SELECT COUNT(*) FROM sync_jobs WHERE kind='import' AND state='applied' AND resolved_at IS NOT NULL`).Scan(&imports); err != nil || imports != 1 {
 		t.Fatalf("durable applied import count=%d err=%v", imports, err)
+	}
+	if deferForWriter {
+		var jobID string
+		var fence, attempts int
+		if err := f.store.QueryRow(`SELECT job_id,fence,attempts FROM sync_jobs WHERE kind='import' AND state='applied'`).Scan(&jobID, &fence, &attempts); err != nil {
+			t.Fatal(err)
+		}
+		if jobID != deferredJobID || fence != 1 || attempts != 1 {
+			t.Fatalf("resume must reuse job and obtain its first claim: %s fence=%d attempts=%d", jobID, fence, attempts)
+		}
+		var recoveryJournals, totalImports int
+		if err := f.store.QueryRow(`SELECT COUNT(*) FROM sync_journal_entries WHERE job_id=? AND phase='claim_recovery'`, jobID).Scan(&recoveryJournals); err != nil || recoveryJournals != 0 {
+			t.Fatalf("unclaimed deferral invented a recovery journal: %d %v", recoveryJournals, err)
+		}
+		if err := f.store.QueryRow(`SELECT COUNT(*) FROM sync_jobs WHERE kind='import'`).Scan(&totalImports); err != nil || totalImports != 1 {
+			t.Fatalf("deferral replay duplicated the import: %d %v", totalImports, err)
+		}
 	}
 	t.Logf("queue=2: reserved import completed; content_ref=%s; nudge covered; fingerprint=sha256:%x", target, sha256.Sum256(raw))
 }

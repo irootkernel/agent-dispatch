@@ -286,6 +286,7 @@ func e22t3AssertPairVerification(t *testing.T, cfg *config.Config, contentState,
 	t.Helper()
 	t.Setenv("SYNC_NODE_A_TO_B", "outbound-secret")
 	var peerOverride func(*syncrecords.StatusResponse)
+	var peerFieldsOverride func(map[string]json.RawMessage)
 	transport := e22t3RoundTrip(func(r *http.Request) (*http.Response, error) {
 		var request syncrecords.StatusRequest
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -303,6 +304,14 @@ func e22t3AssertPairVerification(t *testing.T, cfg *config.Config, contentState,
 			peerOverride(&response)
 		}
 		raw, _ := json.Marshal(response)
+		if peerFieldsOverride != nil {
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(raw, &fields); err != nil {
+				t.Fatal(err)
+			}
+			peerFieldsOverride(fields)
+			raw, _ = json.Marshal(fields)
+		}
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(raw)), Header: http.Header{}}, nil
 	})
 	interruptedStore, err := openStateStore(resolveConfigPath(""))
@@ -374,6 +383,23 @@ func e22t3AssertPairVerification(t *testing.T, cfg *config.Config, contentState,
 		}
 	}
 	peerOverride = nil
+	for _, value := range []string{"missing", "null"} {
+		peerFieldsOverride = func(fields map[string]json.RawMessage) {
+			for _, name := range []string{"governed_dirty", "pending_work", "uncertain", "evidence_age_seconds"} {
+				if value == "missing" {
+					delete(fields, name)
+				} else {
+					fields[name] = json.RawMessage("null")
+				}
+			}
+		}
+		out.Reset()
+		errOut.Reset()
+		if code := runSyncVerifyWithHTTP([]string{"--group", cfg.Sync.GroupID, "--output", "json"}, &out, &errOut, &http.Client{Transport: transport}); code != 0 || json.Unmarshal(out.Bytes(), &envelope) != nil || envelope.Result.Result != "incomplete" || len(envelope.Result.Nodes) != 1 || !containsString(envelope.Warnings, "peer_unavailable") || envelope.Result.Validate() != nil {
+			t.Fatalf("%s peer safety fields passed verification: code=%d result=%+v warnings=%v err=%s", value, code, envelope.Result, envelope.Warnings, errOut.String())
+		}
+	}
+	peerFieldsOverride = nil
 	assertLocalIncomplete := func(label string) {
 		t.Helper()
 		out.Reset()

@@ -195,6 +195,9 @@ func runDispatchesList(command string, args []string, stdout, stderr io.Writer) 
 	if err != nil {
 		return planErr(stderr, command, "sqlite_query_failed", "storage", err.Error(), 20)
 	}
+	if intents == nil {
+		intents = []ports.IntentSummary{}
+	}
 	return writeEnvelope(stdout, command, map[string]any{"dispatches": intents, "count": len(intents), "offset": offset})
 }
 

@@ -29,7 +29,11 @@ This file records concise shipped outcomes and pending changes.
   installed, while preserving unrelated local edits.
 - Accept standard OpenSSH signing keys resolved through `file:` references.
 - Include dispatch receipt schema versions in list/show output and emit empty
-  drain collections as arrays.
+  drain and dispatch list collections as arrays.
+- Resume imports deferred before their first claim when participating writers
+  become idle, preserving the import identity and bounded queue.
+- Reject membership documents without an explicit predecessor and peer status
+  responses with missing or null safety fields.
 - Preserve staged Markdown, independent controller files, and content-ref
   coherence during publication, checkpoints, and later peer imports.
 - Retain signed candidates, blocked obligations, and linked recovery evidence

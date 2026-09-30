@@ -129,6 +129,29 @@ func TestDispatchesListAndShow(t *testing.T) {
 	}
 }
 
+func TestDispatchesListEmptyArray(t *testing.T) {
+	cfgPath, _ := cliStoreFixture(t)
+	for _, filter := range [][]string{{"--offset", "50"}, {"--external-ref", "missing"}} {
+		var out, stderr bytes.Buffer
+		args := append([]string{"dispatches", "list", "--config", cfgPath, "--output", "json"}, filter...)
+		if code := Run(args, &out, &stderr); code != 0 {
+			t.Fatalf("empty list: %d %s", code, stderr.String())
+		}
+		var envelope struct {
+			Result struct {
+				Dispatches json.RawMessage `json:"dispatches"`
+				Count      int             `json:"count"`
+			} `json:"result"`
+		}
+		if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
+			t.Fatal(err)
+		}
+		if string(envelope.Result.Dispatches) != "[]" || envelope.Result.Count != 0 {
+			t.Fatalf("empty collection must be an array with count zero: %s", out.String())
+		}
+	}
+}
+
 func TestRouteEnableListShowDisable(t *testing.T) {
 	cfgPath, _ := cliStoreFixture(t)
 	var out, errb bytes.Buffer

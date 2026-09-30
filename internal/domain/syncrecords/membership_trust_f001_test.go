@@ -4,8 +4,45 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 )
+
+func TestDecodeMembershipRequiredPredecessor(t *testing.T) {
+	parent := strings.Repeat("1", 40)
+	for _, predecessor := range []*string{nil, &parent} {
+		plan, err := NewPlan("bootstrap", "", nil, nil, testMembers(), testBinding())
+		if err != nil {
+			t.Fatal(err)
+		}
+		document := plan.ProposedMembership
+		document.Predecessor = predecessor
+		raw, err := CanonicalMembership(document)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded, err := DecodeMembership(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		canonical, err := CanonicalMembership(decoded)
+		if err != nil || !bytes.Equal(raw, canonical) {
+			t.Fatalf("predecessor or canonical bytes changed: %v", err)
+		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			t.Fatal(err)
+		}
+		delete(fields, "predecessor")
+		omitted, err := json.Marshal(fields)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := DecodeMembership(omitted); !errors.Is(err, ErrInvalidRecord) {
+			t.Fatalf("missing required predecessor accepted: %v", err)
+		}
+	}
+}
 
 func TestDecodePlanTrustF001RequiredPredecessors(t *testing.T) {
 	bootstrap, err := NewPlan("bootstrap", "", nil, nil, testMembers(), testBinding())

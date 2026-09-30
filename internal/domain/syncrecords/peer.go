@@ -1,6 +1,9 @@
 package syncrecords
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 const (
 	StatusRequestSchema  = "agent-dispatch.sync-status-request/v1"
@@ -86,6 +89,24 @@ func DecodeStatusResponse(raw []byte) (StatusResponse, error) {
 	}
 	if err := decodeStrict(raw, &r); err != nil {
 		return r, err
+	}
+	// Required safety fields must be explicit: JSON omission and null cannot
+	// stand in for a clean observation or zero cache age.
+	var fields struct {
+		EvidenceGeneration *int64 `json:"evidence_generation"`
+		EvidenceAgeSeconds *int64 `json:"evidence_age_seconds"`
+		GovernedDirty      *bool  `json:"governed_dirty"`
+		PendingWork        *bool  `json:"pending_work"`
+		MembershipCurrent  *bool  `json:"membership_current"`
+		Uncertain          *bool  `json:"uncertain"`
+	}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return r, fmt.Errorf("%w: %v", ErrInvalidRecord, err)
+	}
+	if fields.EvidenceGeneration == nil || fields.EvidenceAgeSeconds == nil ||
+		fields.GovernedDirty == nil || fields.PendingWork == nil ||
+		fields.MembershipCurrent == nil || fields.Uncertain == nil {
+		return r, fmt.Errorf("%w: peer status safety fields are required and cannot be null", ErrInvalidRecord)
 	}
 	return r, r.Validate()
 }

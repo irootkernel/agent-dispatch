@@ -33,24 +33,14 @@ func TestRealHermesDisposableBoardSubmitDedupLookup(t *testing.T) {
 	client := NewClient(sandbox.Binary, limits)
 	version, err := client.DiscoverVersion(context.Background())
 	if err != nil {
-		t.Skipf("hermes not usable: %v", err)
+		t.Fatalf("eligible Hermes not usable: %v", err)
 	}
 	if err := CheckVersionEligible(version, MinimumEligibleVersion); err != nil {
 		t.Skipf("installed hermes %s below the eligibility floor: %v", version, err)
 	}
-	// The client still implements the frozen mutex-capable create surface; a
-	// newer Hermes that dropped one of its flags (0.20.5 removed
-	// --mutex-key) is exactly the capability drift the E11-T2 probe
-	// detects. Until it lands, this end-to-end test runs only against
-	// interfaces whose create surface matches what the client submits
-	// (TST-007 environment-dependent evidence gap otherwise).
-	if help, herr := runHermes(t, sandbox.Binary, "kanban", "create", "-h"); herr != nil || !strings.Contains(help, "--mutex-key") {
-		t.Skipf("installed hermes %s create surface drifted from the frozen mutex-capable flags; the E11-T2 capability probe owns shape detection: %s", version, strings.Join(strings.Split(strings.TrimSpace(help), "\n")[:1], ""))
-	}
-
 	board := fmt.Sprintf("agent-dispatch-e4t3-test-%d", time.Now().UnixNano())
 	if out, err := runHermes(t, sandbox.Binary, "kanban", "boards", "create", board); err != nil {
-		t.Skipf("boards create unavailable (%v): %s", err, out)
+		t.Fatalf("boards create unavailable (%v): %s", err, out)
 	}
 	defer func() {
 		// Hard-delete the disposable board exactly as the E0-T4 probe
@@ -60,6 +50,24 @@ func TestRealHermesDisposableBoardSubmitDedupLookup(t *testing.T) {
 		}
 	}()
 
+	req := loadGoldenRequest(t)
+	for _, argv := range [][]string{
+		{"profile", "create", req.Assignment.Profile},
+		{"profile", "use", req.Assignment.Profile},
+		{"config", "set", "default_model", "gpt-5.2", "--force"},
+	} {
+		if out, err := runHermes(t, sandbox.Binary, argv...); err != nil {
+			t.Fatalf("disposable profile setup %v: %v: %s", argv, err, out)
+		}
+	}
+	prober, err := NewProber("hermes-real", sandbox.Binary, "", board, req.Assignment.Profile, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	capabilities, err := prober.Probe(context.Background())
+	if err != nil || !capabilities.AllRequiredPassed() {
+		t.Fatalf("real capability probe: %+v err=%v", capabilities, err)
+	}
 	sink, err := NewSink("hermes-real", sandbox.Binary, "", board, limits, 262144)
 	if err != nil {
 		t.Fatalf("sink construction against the eligibility floor: %v", err)
@@ -67,8 +75,8 @@ func TestRealHermesDisposableBoardSubmitDedupLookup(t *testing.T) {
 	if _, err := sink.Probe(context.Background()); err != nil {
 		t.Fatalf("probe: %v", err)
 	}
+	sink.SetResourceMutexSupported(capabilities.EffectiveSerializationMode() == SerializationModeGroupPlusTargetMutex)
 
-	req := loadGoldenRequest(t)
 	first, err := sink.Submit(context.Background(), req)
 	if err != nil {
 		t.Fatalf("real submit: %v", err)

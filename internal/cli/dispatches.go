@@ -537,11 +537,7 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 		return exit
 	}
 	defer closer.Close()
-	sink, err := resolveSink(cfg, routeID, opsLogger(stderr, cfg))
-	if err != nil {
-		return writeSinkError(stderr, command, err)
-	}
-	rt := newSubmitRuntime(store, sink, cfg, submitTimeoutOf(resolved), backoff, "drain", stderr)
+	rt := newSubmitRuntime(store, nil, cfg, submitTimeoutOf(resolved), backoff, "drain", stderr)
 	// Expired submitting leases are recovered before unknown
 	// reconciliation so the DUR-006 lookup ordering covers them (DUR-010,
 	// E7-T2/B-1): a process that died mid-submit leaves submitting work
@@ -550,7 +546,7 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 	// The YAML key half of the two-key gate (E7-T6/M-2): a route whose
 	// configuration key is off never submits automatically even when the
 	// store activation was previously acknowledged; recovery and
-	// reconciliation still run.
+	// recovery still runs.
 	if !route.Enabled {
 		recovered, recErr := rt.Recover(requestCtx(), routeID)
 		if recErr != nil {
@@ -561,6 +557,11 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 			"processed": 0, "skipped": 0, "recovered": append([]ports.RecoveredLease{}, recovered...), "reconciled": []map[string]any{},
 		}, warnings)
 	}
+	sink, err := resolveSink(cfg, routeID, opsLogger(stderr, cfg))
+	if err != nil {
+		return writeSinkError(stderr, command, err)
+	}
+	rt.Sink = sink
 	recovered, err := rt.Recover(requestCtx(), routeID)
 	if err != nil {
 		return intentErr(stderr, command, err)

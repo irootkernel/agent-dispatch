@@ -868,24 +868,18 @@ func TestG8RealHermesTwoDestinationWalkthrough(t *testing.T) {
 		return perr == nil && ver.Eligible(hermeskanban.MinimumEligibleVersion)
 	})
 	bin := sandbox.Binary
-	// The frozen mutex-capable create surface: a drifted surface is the E11-T2
-	// capability probe's detection, not this walkthrough's (same posture
-	// as the adapter's realboard test).
-	if help, herr := g3Hermes(t, bin, "kanban", "create", "-h"); herr != nil || !strings.Contains(help, "--mutex-key") {
-		t.Skipf("installed hermes create surface drifted from the frozen mutex-capable flags; the capability probe owns shape detection: %s", help)
-	}
 	// The disposable board is uniquely generated (nanosecond tag) and the
 	// cleanup deletes exactly that one board by name inside the per-test
 	// Kanban root — never a wildcard or the user's active selection.
 	board := fmt.Sprintf("agent-dispatch-g8-%d", time.Now().UnixNano())
 	if out, err := g3Hermes(t, bin, "kanban", "boards", "create", board); err != nil {
-		t.Skipf("boards create unavailable (%v): %s", err, out)
+		t.Fatalf("boards create unavailable (%v): %s", err, out)
 	}
 	t.Logf("disposable walkthrough board: %s", board)
 	defer func() {
 		out, err := g3Hermes(t, bin, "kanban", "boards", "rm", board, "--delete")
 		if err != nil {
-			t.Logf("best-effort cleanup of sandbox board %s failed (%v): %s", board, err, out)
+			t.Errorf("cleanup of sandbox board %s failed (%v): %s", board, err, out)
 		}
 	}()
 
@@ -980,6 +974,11 @@ routes:
 
 	setPlanEnv(t, vault, false)
 	var out, errb bytes.Buffer
+	if code := Run([]string{"hermes", "probe", "--config", cfgPath, "--target", "hermes-main", "--profile", "default"}, &out, &errb); code != 0 {
+		t.Fatalf("real capability probe: %s", errb.String())
+	}
+	out.Reset()
+	errb.Reset()
 	rev := func() string {
 		cfg, err := config.Load(cfgPath)
 		if err != nil {
@@ -991,6 +990,7 @@ routes:
 	if code := Run([]string{"route", "enable", "--config", cfgPath, "--route", "wiki", "--acknowledge-production-gate", rev, "--yes"}, &out, &errb); code != 0 {
 		t.Fatalf("real enable: %s", errb.String())
 	}
+	t.Setenv("WATCHMAN_TRIGGER", "agent-dispatch.wiki.g8")
 	out.Reset()
 	errb.Reset()
 	withStdin(t, `[{"name":"Inbox/g8.md","exists":true,"new":true,"size":16,"type":"f"}]`, func() {

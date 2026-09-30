@@ -47,7 +47,7 @@ commands. Install and select skills explicitly in Hermes; setup does not do this
 ### Build this checkout
 
 This README describes v0.2.0, including opt-in two-node Markdown sync and
-the existing Hermes dispatch workflow. See [v0.2.0](CHANGELOG.md#v020---2026-09-30)
+the existing Hermes dispatch workflow. See [v0.2.0](CHANGELOG.md#v020---2026-10-01)
 for the release changes.
 
 From the repository root:

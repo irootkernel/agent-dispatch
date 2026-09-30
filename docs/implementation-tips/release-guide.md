@@ -33,7 +33,7 @@ Record the explicitly selected version, full Git commit, and documentation scope
 Use the [roadmap](../roadmap/roadmap.md) for delivery status, the
 [acceptance criteria](../specs/acceptance-criteria.md) for gates, and
 [validation records](../VALIDATION.md) for evidence tied to an exact snapshot.
-The selected release is [v0.2.0 - 2026-09-30](../../CHANGELOG.md#v020---2026-09-30),
+The selected release is [v0.2.0 - 2026-10-01](../../CHANGELOG.md#v020---2026-10-01),
 adding the E20-E22 two-node sync scope to the v0.1.8 baseline. The dated
 notes identify the candidate; publication requires the final gates below.
 

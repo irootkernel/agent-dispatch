@@ -105,9 +105,12 @@ an unchanged predecessor records no-effect recovery evidence and resumes the
 same candidate.
 
 `sync reconcile --group <id>` is the guarded import surface. It fetches into
-controller-owned tracking refs, verifies every first-parent content commit,
-persists the exact effect set before mutation, updates only affected worktree
-and index paths, advances the configured content ref with expected-old fencing,
+controller-owned tracking refs and verifies first-parent content history through
+signed publications or administrator checkpoints. A verified checkpoint covers
+its exact parent and earlier ancestors; later commits require their own verified
+publication or checkpoint. Reconcile persists the exact effect set before mutation,
+updates only affected worktree and index paths, advances the configured content
+ref with expected-old fencing,
 and commits path facts plus import provenance atomically. Schema v22 stores the
 effects separately from work receipts; the first exact Watchman observation
 consumes an effect, while mismatches and later edits remain ordinary dirty work.

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irootkernel/agent-dispatch/internal/adapters/hermeskanban"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
 	"github.com/irootkernel/agent-dispatch/internal/config"
@@ -135,7 +136,8 @@ func g3Setup(t *testing.T) *g3 {
 	t.Helper()
 	testenv.RequireRealWatchman(t)
 	sandbox := hermesenv.NewSandbox(t, func(firstLine string) bool {
-		return strings.Contains(firstLine, "v0.20.5")
+		ver, err := hermeskanban.ParseVersionOutput(firstLine)
+		return err == nil && ver.Eligible(hermeskanban.MinimumEligibleVersion)
 	})
 
 	dir := t.TempDir()

@@ -139,7 +139,7 @@ func decodeStrict(raw []byte, out any) error {
 	if len(raw) == 0 || len(raw) > MaxRecordBytes || !utf8.Valid(raw) {
 		return fmt.Errorf("%w: JSON is empty, oversized, or invalid UTF-8", ErrInvalidRecord)
 	}
-	if err := rejectDuplicateKeys(raw); err != nil {
+	if err := validateJSONKeys(raw, reflect.TypeOf(out)); err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalidRecord, err)
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
@@ -154,11 +154,16 @@ func decodeStrict(raw []byte, out any) error {
 	return nil
 }
 
-func rejectDuplicateKeys(raw []byte) error {
+// Sync record objects are closed and use explicit JSON tags. Check those exact
+// names before encoding/json can match a case-insensitive alias to a field.
+func validateJSONKeys(raw []byte, typ reflect.Type) error {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
-	var walk func() error
-	walk = func() error {
+	var walk func(reflect.Type) error
+	walk = func(typ reflect.Type) error {
+		for typ.Kind() == reflect.Pointer {
+			typ = typ.Elem()
+		}
 		tok, err := dec.Token()
 		if err != nil {
 			return err
@@ -169,6 +174,17 @@ func rejectDuplicateKeys(raw []byte) error {
 		}
 		switch delim {
 		case '{':
+			if typ.Kind() != reflect.Struct {
+				return fmt.Errorf("unexpected JSON object for %s", typ)
+			}
+			fields := make(map[string]reflect.Type, typ.NumField())
+			for i := 0; i < typ.NumField(); i++ {
+				field := typ.Field(i)
+				name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
+				if field.IsExported() && name != "" && name != "-" {
+					fields[name] = field.Type
+				}
+			}
 			seen := map[string]bool{}
 			for dec.More() {
 				keyToken, err := dec.Token()
@@ -180,15 +196,22 @@ func rejectDuplicateKeys(raw []byte) error {
 					return fmt.Errorf("duplicate or non-string object key %q", key)
 				}
 				seen[key] = true
-				if err := walk(); err != nil {
+				fieldType, ok := fields[key]
+				if !ok {
+					return fmt.Errorf("unknown JSON field %q", key)
+				}
+				if err := walk(fieldType); err != nil {
 					return err
 				}
 			}
 			_, err := dec.Token()
 			return err
 		case '[':
+			if typ.Kind() != reflect.Slice && typ.Kind() != reflect.Array {
+				return fmt.Errorf("unexpected JSON array for %s", typ)
+			}
 			for dec.More() {
-				if err := walk(); err != nil {
+				if err := walk(typ.Elem()); err != nil {
 					return err
 				}
 			}
@@ -198,7 +221,7 @@ func rejectDuplicateKeys(raw []byte) error {
 			return fmt.Errorf("unexpected JSON delimiter")
 		}
 	}
-	if err := walk(); err != nil {
+	if err := walk(typ); err != nil {
 		return err
 	}
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {

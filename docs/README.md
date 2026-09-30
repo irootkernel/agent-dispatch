@@ -10,7 +10,7 @@ and everyday use, start with the [project README](../README.md).
 **Language:** English.
 
 **Documentation basis:** v0.2.0 two-node Wiki sync / SOT 1.8.0, selected in
-[v0.2.0 - 2026-09-30](../CHANGELOG.md#v020---2026-09-30). E21 provides local
+[v0.2.0 - 2026-10-01](../CHANGELOG.md#v020---2026-10-01). E21 provides local
 runtime control, membership, signed publication, checkpoints, and guarded
 import. E22 adds authenticated peer admission, periodic recovery, fresh pair
 verification, managed user-service lifecycle, and bounded diagnostics.

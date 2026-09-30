@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -67,7 +68,18 @@ func TestE9T4UngatedRecoveryOnDisabledRoute(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(configPath, bytes.Replace(body, []byte("enabled: true"), []byte("enabled: false"), 1), 0o600); err != nil {
+	probeMarker := filepath.Join(t.TempDir(), "probe-called")
+	unavailable := filepath.Join(t.TempDir(), "hermes-unavailable")
+	if err := os.WriteFile(unavailable, []byte(fmt.Sprintf("#!/bin/sh\nprintf called > %q\nexit 1\n", probeMarker)), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(string(bytes.Replace(body, []byte("enabled: true"), []byte("enabled: false"), 1)), "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(line, "    executable: ") {
+			lines[i] = "    executable: " + unavailable
+		}
+	}
+	if err := os.WriteFile(configPath, []byte(strings.Join(lines, "\n")), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -82,6 +94,9 @@ func TestE9T4UngatedRecoveryOnDisabledRoute(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "disabled in configuration") {
 		t.Fatalf("the operator must see why nothing was submitted: %s", out.String())
+	}
+	if _, err := os.Stat(probeMarker); !os.IsNotExist(err) {
+		t.Fatalf("disabled recovery must not probe or call Hermes: %v", err)
 	}
 	healed := e5t1Store(t, configPath)
 	defer healed.Close()

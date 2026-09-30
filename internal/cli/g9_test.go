@@ -16,6 +16,7 @@ import (
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/platformpaths"
+	"github.com/irootkernel/agent-dispatch/internal/testenv"
 	"github.com/irootkernel/agent-dispatch/internal/testsupport/hermesenv"
 )
 
@@ -326,6 +327,7 @@ func TestG9SkillsVersionedValidatedAndInstallable(t *testing.T) {
 // no supported Hermes is installed; the deterministic leg above owns
 // the gate.
 func TestG9RealHermesNotificationWalkthrough(t *testing.T) {
+	testenv.RequireRealWatchman(t)
 	sandbox := hermesenv.NewSandbox(t, func(firstLine string) bool {
 		ver, perr := hermeskanban.ParseVersionOutput(firstLine)
 		return perr == nil && ver.Eligible(hermeskanban.MinimumEligibleVersion)
@@ -344,17 +346,14 @@ func TestG9RealHermesNotificationWalkthrough(t *testing.T) {
 		out, err := cmd.CombinedOutput()
 		return strings.TrimSpace(string(out)), err
 	}
-	if help, herr := runIsolated("kanban", "create", "-h"); herr != nil || !strings.Contains(help, "--mutex-key") {
-		t.Skipf("installed hermes create surface drifted from the frozen 0.20.5 flags: %s", help)
-	}
 	board := fmt.Sprintf("agent-dispatch-g9-%d", time.Now().UnixNano())
 	if out, err := runIsolated("kanban", "boards", "create", board); err != nil {
-		t.Skipf("boards create unavailable (%v): %s", err, out)
+		t.Fatalf("boards create unavailable (%v): %s", err, out)
 	}
 	t.Logf("disposable walkthrough board: %s", board)
 	defer func() {
 		if out, err := runIsolated("kanban", "boards", "rm", board, "--delete"); err != nil {
-			t.Logf("best-effort cleanup of sandbox board %s failed (%v): %s", board, err, out)
+			t.Errorf("cleanup of sandbox board %s failed (%v): %s", board, err, out)
 		}
 	}()
 
@@ -457,6 +456,11 @@ routes:
 
 	setPlanEnv(t, vault, false)
 	var out, errb bytes.Buffer
+	if code := Run([]string{"hermes", "probe", "--config", cfgPath, "--target", "hermes-main", "--profile", "default"}, &out, &errb); code != 0 {
+		t.Fatalf("real capability probe: %s", errb.String())
+	}
+	out.Reset()
+	errb.Reset()
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		t.Fatal(err)
@@ -470,8 +474,9 @@ routes:
 	out.Reset()
 	errb.Reset()
 	if code := Run([]string{"watchman", "install", "--config", cfgPath, "--route", "wiki"}, &out, &errb); code != 0 {
-		t.Skipf("real watchman binding unavailable in this environment: %s", errb.String())
+		t.Fatalf("real watchman binding unavailable in the isolated harness: %s", errb.String())
 	}
+	t.Setenv("WATCHMAN_TRIGGER", "agent-dispatch.wiki.g9")
 	// Detection: the event feed the managed trigger would carry.
 	out.Reset()
 	errb.Reset()

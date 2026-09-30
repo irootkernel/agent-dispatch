@@ -27,7 +27,8 @@ func Load(path string) (*Config, error) {
 
 // Parse decodes configuration bytes. It applies, in order: a raw-node
 // scan that refuses retired v0.1.4 shapes with the exact regeneration
-// path (OPS-014), strict YAML decoding with duplicate-key rejection and
+// path (OPS-014), raw sync.enabled presence and boolean validation,
+// strict YAML decoding with duplicate-key rejection and
 // fail-closed unknown fields, JSON Schema validation against the SOT
 // config schema, and semantic validation.
 func Parse(data []byte) (*Config, error) {
@@ -37,6 +38,9 @@ func Parse(data []byte) (*Config, error) {
 	}
 	if legacy := detectLegacyShape(&probe); legacy != nil {
 		return nil, legacy
+	}
+	if err := validateRawSyncEnabled(&probe); err != nil {
+		return nil, err
 	}
 	var cfg Config
 	dec := yaml.NewDecoder(bytes.NewReader(data))
@@ -56,9 +60,9 @@ func Parse(data []byte) (*Config, error) {
 }
 
 // ParseDecoded decodes configuration bytes through the same retired-
-// shape refusal and strict YAML decoding as Parse, but defers the
-// schema and semantic gates to the caller: the bounded repair path for
-// a document whose current floor predates the 0.20.5 product floor
+// shape refusal, raw sync.enabled gate, and strict YAML decoding as Parse,
+// but defers the schema and semantic gates to the caller: the bounded repair
+// path for a document whose current floor predates the 0.20.5 product floor
 // (E15-T2 round-1 F005, CLI-019's remediation purpose). The mutation
 // that follows must re-validate the CANDIDATE against every gate before
 // any write, so a candidate that still fails leaves the original
@@ -71,6 +75,9 @@ func ParseDecoded(data []byte) (*Config, error) {
 	if legacy := detectLegacyShape(&probe); legacy != nil {
 		return nil, legacy
 	}
+	if err := validateRawSyncEnabled(&probe); err != nil {
+		return nil, err
+	}
 	var cfg Config
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
@@ -78,6 +85,32 @@ func ParseDecoded(data []byte) (*Config, error) {
 		return nil, fmt.Errorf("yaml: %w", err)
 	}
 	return &cfg, nil
+}
+
+// validateRawSyncEnabled checks the input before typed decoding can turn
+// missing or null values into false. Let YAML resolve aliases and merges
+// at both levels so the gate sees the same effective sync block as Config.
+func validateRawSyncEnabled(root *yaml.Node) error {
+	var top map[string]yaml.Node
+	if err := root.Decode(&top); err != nil {
+		return fmt.Errorf("yaml: %w", err)
+	}
+	syncNode, exists := top["sync"]
+	if !exists {
+		return nil
+	}
+	var sync map[string]any
+	if err := syncNode.Decode(&sync); err != nil {
+		return fmt.Errorf("yaml: sync: %w", err)
+	}
+	// YAML serialization of a legacy Config with no sync emits sync: null.
+	if sync == nil {
+		return nil
+	}
+	if _, ok := sync["enabled"].(bool); !ok {
+		return fmt.Errorf("yaml: sync.enabled is required and must be a boolean")
+	}
+	return nil
 }
 
 func joinErrors(errs []error) string {

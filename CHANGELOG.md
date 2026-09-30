@@ -2,7 +2,7 @@
 
 This file records concise shipped outcomes and pending changes.
 
-## v0.2.0 - 2026-09-30
+## v0.2.0 - 2026-10-01
 
 ### Added
 
@@ -25,6 +25,9 @@ This file records concise shipped outcomes and pending changes.
 
 ### Fixed
 
+- Require an explicit boolean `sync.enabled` and exact JSON field names in signed
+  sync records, rejecting omitted enablement and ambiguous case aliases.
+- Recover expired submissions on disabled routes even when Hermes is unavailable.
 - Recover interrupted imports after their controller records and index are
   installed, while preserving unrelated local edits.
 - Accept standard OpenSSH signing keys resolved through `file:` references.

@@ -995,6 +995,15 @@ func (c *Client) VerifySSHSignature(ctx context.Context, oid, expectedFingerprin
 	return nil
 }
 
+// sshSigningKey restores the terminal LF required by OpenSSH key files after
+// the secret resolver strips a conventional credential newline.
+func sshSigningKey(key []byte) []byte {
+	if len(key) > 0 && key[len(key)-1] != '\n' {
+		return append(key, '\n')
+	}
+	return key
+}
+
 // CreateSignedMembershipCommit writes immutable objects through a private
 // index and creates one SSH-signed commit. It does not update a ref.
 func (c *Client) CreateSignedMembershipCommit(ctx context.Context, document, plan, privateKey []byte, predecessor string, now time.Time) (string, error) {
@@ -1007,7 +1016,7 @@ func (c *Client) CreateSignedMembershipCommit(ctx context.Context, document, pla
 	}
 	defer os.RemoveAll(tmp)
 	keyPath := filepath.Join(tmp, "administrator_key")
-	if err := os.WriteFile(keyPath, privateKey, 0o600); err != nil {
+	if err := os.WriteFile(keyPath, sshSigningKey(privateKey), 0o600); err != nil {
 		return "", fmt.Errorf("writing ephemeral signing key: %w", err)
 	}
 	env := map[string]string{
@@ -1684,7 +1693,7 @@ func (c *Client) CreateSignedContentCommit(ctx context.Context, tree string, pri
 	}
 	defer os.RemoveAll(tmp)
 	keyPath := filepath.Join(tmp, "signing_key")
-	if err := os.WriteFile(keyPath, privateKey, 0o600); err != nil {
+	if err := os.WriteFile(keyPath, sshSigningKey(privateKey), 0o600); err != nil {
 		return "", err
 	}
 	name := "Agent Dispatch Publisher"

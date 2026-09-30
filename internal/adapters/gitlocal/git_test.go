@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irootkernel/agent-dispatch/internal/adapters/secretresolver"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 )
 
@@ -336,7 +337,11 @@ func TestSignedMembershipUsesPinnedEd25519AndClosedTree(t *testing.T) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("ssh-keygen: %v: %s", err, out)
 	}
-	privateKey, err := os.ReadFile(key)
+	ref, err := config.ParseSecretRef("file:" + key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	privateKey, err := secretresolver.Resolve(context.Background(), ref)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -348,7 +353,7 @@ func TestSignedMembershipUsesPinnedEd25519AndClosedTree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oid, err := client.CreateSignedMembershipCommit(context.Background(), []byte(`{"membership":true}`), []byte(`{"plan":true}`), privateKey, "", time.Unix(1_700_000_000, 0))
+	oid, err := client.CreateSignedMembershipCommit(context.Background(), []byte(`{"membership":true}`), []byte(`{"plan":true}`), []byte(privateKey), "", time.Unix(1_700_000_000, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -377,7 +382,11 @@ func TestSignedContentSnapshotPreservesLateWorkingTreeEdit(t *testing.T) {
 	if out, err := exec.Command("ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", key).CombinedOutput(); err != nil {
 		t.Fatalf("ssh-keygen: %v: %s", err, out)
 	}
-	privateKey, err := os.ReadFile(key)
+	ref, err := config.ParseSecretRef("file:" + key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	privateKey, err := secretresolver.Resolve(context.Background(), ref)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -393,7 +402,7 @@ func TestSignedContentSnapshotPreservesLateWorkingTreeEdit(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, "note.md"), []byte("late\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	candidate, err := client.CreateSignedContentCommit(context.Background(), tree, privateKey, base, time.Unix(1_700_000_001, 0), "publisher", "Publish publication-a")
+	candidate, err := client.CreateSignedContentCommit(context.Background(), tree, []byte(privateKey), base, time.Unix(1_700_000_001, 0), "publisher", "Publish publication-a")
 	if err != nil {
 		t.Fatal(err)
 	}

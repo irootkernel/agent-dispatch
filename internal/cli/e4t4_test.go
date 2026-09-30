@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/irootkernel/agent-dispatch/internal/ports"
 	"github.com/irootkernel/agent-dispatch/internal/testsupport/stubhermes"
 )
 
@@ -41,6 +42,12 @@ func TestReceiptsListShowAndRefresh(t *testing.T) {
 	listing := decodeEnvelope(t, &out)
 	if listing["count"].(float64) != 1 {
 		t.Fatalf("expected one acceptance receipt: %v", listing)
+	}
+
+	for _, row := range listing["receipts"].([]any) {
+		if row.(map[string]any)["schema_version"] != ports.ReceiptRecordSchemaVersion {
+			t.Fatalf("listed acceptance receipt must carry its schema: %v", row)
+		}
 	}
 
 	// Refresh persists the execution projection.
@@ -105,7 +112,7 @@ func TestReceiptsListShowAndRefresh(t *testing.T) {
 		}
 	}
 	detail := decodeEnvelope(t, &out)
-	if detail["receipt_kind"] == "" || detail["bounded_payload"] == "" {
+	if detail["schema_version"] != ports.ReceiptRecordSchemaVersion || detail["receipt_kind"] == "" || detail["bounded_payload"] == "" {
 		t.Fatalf("receipt detail wrong: %v", detail)
 	}
 

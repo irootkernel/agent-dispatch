@@ -736,7 +736,15 @@ func recoverPendingImport(stdout, stderr io.Writer, cfg *config.Config, s *confi
 			return true, syncStoreError(stderr, "sync reconcile", idleErr)
 		}
 		recoveryGit, gitErr := client.InspectImport(requestCtx(), s.ContentRef)
-		if gitErr != nil || !idle || recoveryGit.ActiveOperation != "" {
+		stableGit := recoveryGit.ActiveOperation == ""
+		if gitErr == nil && recoveryGit.ActiveOperation == "controller_dirty" {
+			// An interrupted import may have installed its exact controller records
+			// and index before advancing the ref. Validate both sides of that stored
+			// transition; unrelated controller edits and Git operations stay fenced.
+			gitErr = client.CheckAdvanceContentRef(requestCtx(), s.ContentRef, record.FromCommit, record.TargetCommit)
+			stableGit = gitErr == nil
+		}
+		if gitErr != nil || !idle || !stableGit {
 			detail := "recovery is waiting for idle participating writers and stable Git state"
 			if gitErr != nil {
 				detail = "recovery is waiting for stable Git state: " + gitErr.Error()

@@ -547,7 +547,7 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 		}
 		warnings := []string{fmt.Sprintf("route %q is disabled in configuration (routes.%s.enabled: false); nothing was submitted", routeID, routeID)}
 		return writeEnvelopeWithWarnings(stdout, command, map[string]any{
-			"processed": 0, "skipped": 0, "recovered": recovered, "reconciled": nil,
+			"processed": 0, "skipped": 0, "recovered": append([]ports.RecoveredLease{}, recovered...), "reconciled": []map[string]any{},
 		}, warnings)
 	}
 	recovered, err := rt.Recover(requestCtx(), routeID)
@@ -577,7 +577,7 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 	warnings = append(warnings, report.Warnings...)
 	return writeEnvelopeWithWarnings(stdout, command, map[string]any{
 		"processed": report.Processed, "skipped": report.Skipped,
-		"reports": report.Reports, "reconciled": reconciled, "recovered": recovered,
+		"reports": append([]dispatch.SubmitReport{}, report.Reports...), "reconciled": append([]map[string]any{}, reconciled...), "recovered": append([]ports.RecoveredLease{}, recovered...),
 	}, warnings)
 }
 

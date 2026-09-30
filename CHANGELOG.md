@@ -23,6 +23,11 @@ This file records concise shipped outcomes and pending changes.
 
 ### Fixed
 
+- Recover interrupted imports after their controller records and index are
+  installed, while preserving unrelated local edits.
+- Accept standard OpenSSH signing keys resolved through `file:` references.
+- Include dispatch receipt schema versions in list/show output and emit empty
+  drain collections as arrays.
 - Preserve staged Markdown, independent controller files, and content-ref
   coherence during publication, checkpoints, and later peer imports.
 - Retain signed candidates, blocked obligations, and linked recovery evidence

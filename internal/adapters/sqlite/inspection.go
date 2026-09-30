@@ -894,6 +894,7 @@ func (s *Store) listDispatchReceipts(ctx context.Context, f ports.ReceiptFilter,
 		if err := rows.Scan(&rec.ReceiptID, &rec.DispatchID, &rec.ReceiptKind, &acceptance, &execution, &durable, &external, &observed, &rec.ReceivedAt); err != nil {
 			return nil, err
 		}
+		rec.SchemaVersion = ports.ReceiptRecordSchemaVersion
 		rec.AcceptanceState = records.AcceptanceState(acceptance.String)
 		rec.ExecutionState = records.ExecutionState(execution.String)
 		rec.Durable = durable.Int64 == 1
@@ -1008,6 +1009,7 @@ func (s *Store) LoadReceipt(ctx context.Context, receiptID string) (ports.Receip
 		}
 		return detail, err
 	}
+	detail.SchemaVersion = ports.ReceiptRecordSchemaVersion
 	detail.AcceptanceState = records.AcceptanceState(acceptance.String)
 	detail.ExecutionState = records.ExecutionState(execution.String)
 	detail.Durable = durable.Int64 == 1

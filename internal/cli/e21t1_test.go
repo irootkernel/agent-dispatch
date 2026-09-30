@@ -395,6 +395,15 @@ func TestE21PartialEffectGateExcludesValidatedNoEffectFence(t *testing.T) {
 }
 
 func TestE21RecoverPendingImportConvergesCoherentPartialState(t *testing.T) {
+	for _, stage := range []string{"worktree_only", "index_before_ref"} {
+		t.Run(stage, func(t *testing.T) {
+			testRecoverPendingImportCoherentPartialState(t, stage)
+		})
+	}
+}
+
+func testRecoverPendingImportCoherentPartialState(t *testing.T, stage string) {
+	t.Helper()
 	dir := t.TempDir()
 	repo := filepath.Join(dir, "repo")
 	if err := os.Mkdir(repo, 0o700); err != nil {
@@ -434,7 +443,14 @@ func TestE21RecoverPendingImportConvergesCoherentPartialState(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, "other.md"), afterOther, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	gitTestRun(t, gitPath, repo, "add", "note.md", "other.md")
+	controller := filepath.Join(repo, ".agent-dispatch-sync", "publications", "publication-recovery.json")
+	if err := os.MkdirAll(filepath.Dir(controller), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(controller, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitTestRun(t, gitPath, repo, "add", "note.md", "other.md", ".agent-dispatch-sync")
 	gitTestRun(t, gitPath, repo, "commit", "-q", "-m", "after")
 	target := gitTestOutput(t, gitPath, repo, "rev-parse", "HEAD")
 	gitTestRun(t, gitPath, repo, "reset", "--hard", from)
@@ -511,6 +527,36 @@ func TestE21RecoverPendingImportConvergesCoherentPartialState(t *testing.T) {
 	if err := syncimport.Apply(repo, record.Paths[:1], map[string][]byte{"note.md": afterBytes}); err != nil {
 		t.Fatal(err)
 	}
+	if stage == "index_before_ref" {
+		if err := syncimport.Apply(repo, record.Paths, map[string][]byte{"note.md": afterBytes, "other.md": afterOther}); err != nil {
+			t.Fatal(err)
+		}
+		shimDir := filepath.Join(dir, "ref-fault")
+		if err := os.Mkdir(shimDir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		script := fmt.Sprintf("#!/bin/sh\nfor arg in \"$@\"; do\n if [ \"$arg\" = update-ref ]; then exit 1; fi\ndone\nexec %q \"$@\"\n", gitPath)
+		if err := os.WriteFile(filepath.Join(shimDir, "git"), []byte(script), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		originalPath := os.Getenv("PATH")
+		t.Setenv("PATH", shimDir+string(os.PathListSeparator)+originalPath)
+		faultClient, err := gitlocal.New(repo, gitlocal.Limits{Timeout: 30 * time.Second, MaxOutput: 1 << 20})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := faultClient.ApplyImportIndex(requestCtx(), cfg.Sync.ContentRef, from, target, map[string][]byte{"note.md": afterBytes, "other.md": afterOther}, nil); err == nil {
+			t.Fatal("expected post-index ref fault")
+		}
+		t.Setenv("PATH", originalPath)
+		state, err := client.InspectImport(requestCtx(), cfg.Sync.ContentRef)
+		if err != nil || state.ActiveOperation != "controller_dirty" || state.Head != from {
+			t.Fatalf("interrupted index state: %+v %v", state, err)
+		}
+		if got := gitTestOutput(t, gitPath, repo, "rev-parse", target+"^{tree}"); got != state.IndexTree {
+			t.Fatalf("index=%s target tree=%s", state.IndexTree, got)
+		}
+	}
 	if err := store.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -528,6 +574,33 @@ func TestE21RecoverPendingImportConvergesCoherentPartialState(t *testing.T) {
 		t.Fatalf("resource effect fence did not survive restart: %+v %v", pending, err)
 	}
 	var stdout, stderr bytes.Buffer
+	if stage == "index_before_ref" {
+		foreign := filepath.Join(repo, ".agent-dispatch-sync", "publications", "publication-unexplained.json")
+		if err := os.WriteFile(foreign, []byte("local-only\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		gitTestRun(t, gitPath, repo, "add", ".agent-dispatch-sync/publications/publication-unexplained.json")
+		beforeIndex := gitTestOutput(t, gitPath, repo, "write-tree")
+		handled, code := recoverPendingImport(&stdout, &stderr, cfg, cfg.Sync, revision, store, client, syncmembership.History{}, membership, target)
+		if !handled || code != 0 || !bytes.Contains(stdout.Bytes(), []byte(`"state":"deferred"`)) {
+			t.Fatalf("unexplained controller recovery handled=%v code=%d out=%s err=%s", handled, code, stdout.String(), stderr.String())
+		}
+		if got := gitTestOutput(t, gitPath, repo, "write-tree"); got != beforeIndex {
+			t.Fatal("unsafe recovery changed index")
+		}
+		if got := gitTestOutput(t, gitPath, repo, "rev-parse", cfg.Sync.ContentRef); got != from {
+			t.Fatal("unsafe recovery advanced ref")
+		}
+		if raw, err := os.ReadFile(foreign); err != nil || string(raw) != "local-only\n" {
+			t.Fatalf("unsafe recovery changed foreign controller: %q %v", raw, err)
+		}
+		gitTestRun(t, gitPath, repo, "rm", "--cached", ".agent-dispatch-sync/publications/publication-unexplained.json")
+		if err := os.Remove(foreign); err != nil {
+			t.Fatal(err)
+		}
+		stdout.Reset()
+		stderr.Reset()
+	}
 	handled, code := recoverPendingImport(&stdout, &stderr, cfg, cfg.Sync, revision, store, client, syncmembership.History{}, membership, target)
 	if !handled || code != 0 || !bytes.Contains(stdout.Bytes(), []byte(`"state":"recovered"`)) {
 		t.Fatalf("recovery handled=%v code=%d out=%s err=%s", handled, code, stdout.String(), stderr.String())
@@ -592,4 +665,5 @@ func TestE21RecoverPendingImportConvergesCoherentPartialState(t *testing.T) {
 	if err != nil || len(journals) != 1 || journals[0].Outcome != "effect_not_started" || !strings.Contains(journals[0].EvidenceJSON, `"basis":"durable_state_invariant"`) {
 		t.Fatalf("obsolete-plan journals=%+v err=%v", journals, err)
 	}
+
 }

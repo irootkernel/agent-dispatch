@@ -38,6 +38,12 @@ func TestDisabledRouteNeverAutoSubmits(t *testing.T) {
 	if code := Run([]string{"dispatches", "drain", "--route", "wiki", "--config", configPath}, &out, &errb); code != 0 {
 		t.Fatalf("drain on a disabled route must succeed without submitting: %s", errb.String())
 	}
+	res := decodeEnvelope(t, &out)
+	for _, key := range []string{"recovered", "reconciled"} {
+		if rows, ok := res[key].([]any); !ok || len(rows) != 0 {
+			t.Fatalf("empty disabled drain %s must be an array: %v", key, res)
+		}
+	}
 	if strings.Contains(out.String(), `"submitted"`) || strings.Contains(out.String(), `"accepted"`) {
 		t.Fatalf("a disabled route must never submit automatically: %s", out.String())
 	}
@@ -166,5 +172,20 @@ func TestReprocessMatchesPlannerDisposition(t *testing.T) {
 	}
 	if res := decodeEnvelope(t, &out); res["disposition"] != "quarantine" {
 		t.Fatalf("an over-limit batch must record the planner bulk action (quarantine): %v", res["disposition"])
+	}
+}
+
+func TestEmptyEnabledDrainCollections(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	e4t4Accepted(t, configPath, vault)
+	var out, errb bytes.Buffer
+	if code := Run([]string{"dispatches", "drain", "--route", "wiki", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("empty drain: code=%d %s", code, errb.String())
+	}
+	res := decodeEnvelope(t, &out)
+	for _, key := range []string{"recovered", "reconciled", "reports"} {
+		if rows, ok := res[key].([]any); !ok || len(rows) != 0 {
+			t.Fatalf("empty enabled drain %s must be an array: %v", key, res)
+		}
 	}
 }

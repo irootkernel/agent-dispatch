@@ -7,6 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/gitlocal"
@@ -20,6 +23,13 @@ import (
 )
 
 func runSyncReconcile(args []string, stdout, stderr io.Writer) int {
+	ctx, stop := signal.NotifyContext(requestCtx(), os.Interrupt, syscall.SIGTERM)
+	previousContext := globalRequestContext
+	globalRequestContext = ctx
+	defer func() {
+		stop()
+		globalRequestContext = previousContext
+	}()
 	const command = "sync reconcile"
 	v, ok := parseClosedSyncFlags(args, map[string]bool{"--group": true})
 	if !ok || v["--group"] == "" {

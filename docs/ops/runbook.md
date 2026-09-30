@@ -104,6 +104,29 @@ be confirmed after reconciliation; inspect that ref and the peer inbox.
 retained reason and retry after resolving the cause. The managed service
 definition is operated through `sync service`.
 
+Queue configuration and recovery:
+
+- `sync.bounds.queue` accepts integers from 2 to 1000. An existing value of 1
+  now fails configuration loading and requires an explicit edit to at least 2;
+  the CLI does not rewrite it automatically.
+- New admission limits pending nudges to `sync.bounds.queue - 1` and combined
+  unresolved jobs plus pending nudges to `sync.bounds.queue`. Existing logical
+  identities replay before capacity checks. A nudge remains pending until
+  guarded reconciliation establishes its resolution; never settle it early
+  to free capacity.
+- Existing saturated queues and obligations above a lowered limit are retained.
+  Inspect `sync status`, the peer inbox, and unresolved job reasons. If safe,
+  increase the configured queue within the hard ceiling of 1000 to provide
+  capacity for recovery. Changing the queue changes `import_bounds_digest`
+  and the acknowledgement configuration revision. Refresh the node's
+  cooperative-import acknowledgement using the procedure below before
+  automatic live-tree import, run `sync reconcile` to refresh the control
+  binding, and restart `sync serve` to load the configuration.
+- A full queue at 1000 requires an operator recovery decision based on the
+  retained obligations and their causes. Do not purge state, delete replay
+  evidence, or drop obligations to manufacture capacity. These limits do not
+  guarantee progress for every combination of unresolved jobs and nudges.
+
 Before enabling import on a node:
 
 1. Start from that node's normalized, validated configuration and its current

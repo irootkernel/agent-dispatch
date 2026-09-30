@@ -11,7 +11,7 @@ import (
 func peerNudge(id string) PeerNudgeInput {
 	return PeerNudgeInput{
 		GroupID: "pair-a", PublicationID: id, Fingerprint: "sha256:" + id,
-		PayloadJSON: `{"publication_id":"` + id + `"}`, QueueLimit: 2, ReceivedAt: syncT0,
+		PayloadJSON: `{"publication_id":"` + id + `"}`, QueueLimit: 3, ReceivedAt: syncT0,
 	}
 }
 
@@ -87,7 +87,7 @@ func TestPeerNudgeRetainedLedgerBoundKeepsExactReplay(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	first := peerNudge("pub-first")
-	first.QueueLimit = 1
+	first.QueueLimit = 2
 	if _, err := s.admitPeerNudge(ctx, first, 2); err != nil {
 		t.Fatal(err)
 	}
@@ -95,12 +95,12 @@ func TestPeerNudgeRetainedLedgerBoundKeepsExactReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	second := peerNudge("pub-second")
-	second.QueueLimit = 1
+	second.QueueLimit = 2
 	if _, err := s.admitPeerNudge(ctx, second, 2); err != nil {
 		t.Fatal(err)
 	}
 	third := peerNudge("pub-third")
-	third.QueueLimit = 1
+	third.QueueLimit = 2
 	if _, err := s.admitPeerNudge(ctx, third, 2); !errors.Is(err, ErrSyncQueueFull) {
 		t.Fatalf("new identity after retained bound: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestPeerNudgeRecoveryAndFencedCompletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	first := peerNudge("pub-1")
-	first.QueueLimit = 1
+	first.QueueLimit = 2
 	if _, err := s.AdmitPeerNudge(ctx, first); err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestPeerNudgeRecoveryAndFencedCompletion(t *testing.T) {
 		t.Fatalf("processed replay must retain identity: duplicate=%v err=%v", duplicate, err)
 	}
 	second := peerNudge("pub-2")
-	second.QueueLimit = 1
+	second.QueueLimit = 2
 	if duplicate, err := s.AdmitPeerNudge(ctx, second); err != nil || duplicate {
 		t.Fatalf("processed row must free pending capacity: duplicate=%v err=%v", duplicate, err)
 	}
@@ -249,7 +249,7 @@ func TestPeerNudgeConcurrentAdmissionKeepsBound(t *testing.T) {
 			defer wg.Done()
 			<-start
 			in := peerNudge([]string{"pub-a", "pub-b"}[i])
-			in.QueueLimit = 1
+			in.QueueLimit = 2
 			_, err := store.AdmitPeerNudge(ctx, in)
 			results <- err
 		}(i, store)

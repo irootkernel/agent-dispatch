@@ -34,9 +34,17 @@ var knownDispatchesSubcommands = map[string]bool{
 // (cli-spec §1): a bounded command deadline for store operations.
 var globalRequestTimeout time.Duration
 
+// Reconciliation installs its signal-bound command context so nested recovery
+// helpers share cancellation with every Git subprocess they start.
+var globalRequestContext context.Context
+
 func requestCtx() context.Context {
+	base := globalRequestContext
+	if base == nil {
+		base = context.Background()
+	}
 	if globalRequestTimeout > 0 {
-		ctx, cancel := context.WithTimeout(context.Background(), globalRequestTimeout)
+		ctx, cancel := context.WithTimeout(base, globalRequestTimeout)
 		// The deadline covers the command's store operations; the
 		// process exits with the command, so the cancel is a safety
 		// valve for the goroutine leak checker rather than control
@@ -44,7 +52,7 @@ func requestCtx() context.Context {
 		_ = cancel
 		return ctx
 	}
-	return context.Background()
+	return base
 }
 
 // dispatchesFlags is the parsed common flag set plus the first bare

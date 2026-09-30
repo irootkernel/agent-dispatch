@@ -117,7 +117,10 @@ func validateSync(cfg *Config) []error {
 	if !local {
 		errs = append(errs, fmt.Errorf("sync.local_instance_id must name one configured node"))
 	}
-	if s.Bounds.Queue < 1 || s.Bounds.Queue > 1000 || s.Bounds.HistoryCommits < 1 || s.Bounds.HistoryCommits > 1000 || s.Bounds.SubprocessSeconds < 1 || s.Bounds.SubprocessSeconds > 120 || s.Bounds.SubprocessBytes < 1024 || s.Bounds.SubprocessBytes > 1048576 {
+	if s.Bounds.Queue < 2 || s.Bounds.Queue > 1000 {
+		errs = append(errs, fmt.Errorf("sync.bounds.queue must be between 2 and 1000 (got %d)", s.Bounds.Queue))
+	}
+	if s.Bounds.HistoryCommits < 1 || s.Bounds.HistoryCommits > 1000 || s.Bounds.SubprocessSeconds < 1 || s.Bounds.SubprocessSeconds > 120 || s.Bounds.SubprocessBytes < 1024 || s.Bounds.SubprocessBytes > 1048576 {
 		errs = append(errs, fmt.Errorf("sync.bounds exceed the E20 contract ceilings"))
 	}
 	return errs

@@ -124,8 +124,8 @@ func (s *peerService) processInboxRows(ctx context.Context, rows []sqlite.PeerNu
 }
 
 // Reconcile in a cancellable child of the service, preserving the operator
-// command's guard and outcome contract. Cancellation kills its Git children
-// with the command so a stopped service cannot leave an import running.
+// command's guard and outcome contract. Cancellation asks the child to stop
+// and waits for its Git groups before reporting successful service shutdown.
 func (s *peerService) runReconcile(ctx context.Context) (bool, string) {
 	if s.reconcile != nil {
 		return s.reconcile(ctx)
@@ -136,16 +136,27 @@ func (s *peerService) runReconcile(ctx context.Context) (bool, string) {
 	}
 	// A full bounded history can outlive any single claim lease. Let the
 	// operator command's per-operation limits bound its work, while service
-	// cancellation still kills the child and its Git process group.
+	// cancellation still reaches the child and each Git operation's context.
 	for attempt := 0; attempt < 2; attempt++ {
 		cmd := exec.CommandContext(ctx, executable, "sync", "reconcile", "--state-dir="+stateDirOf(s.cfg), "--group", s.cfg.Sync.GroupID)
 		cmd.Env = append(os.Environ(), "AGENT_DISPATCH_CONFIG="+s.configPath)
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-		cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+		cmd.Cancel = func() error {
+			// Reconciliation cancels and waits for Git's separate process
+			// groups before exiting; killing only this group cannot clean up
+			// those descendants.
+			return syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+		}
+		cmd.WaitDelay = 5 * time.Second
 		cmd.Stderr = io.Discard
 		stdout := boundedReconcileOutput{limit: s.cfg.Sync.Bounds.SubprocessBytes}
 		cmd.Stdout = &stdout
 		if err := cmd.Run(); err != nil {
+			var exitErr *exec.ExitError
+			if ctx.Err() != nil && (errors.Is(err, exec.ErrWaitDelay) ||
+				(errors.As(err, &exitErr) && exitErr.ProcessState.Sys().(syscall.WaitStatus).Signal() == syscall.SIGKILL)) {
+				s.reconcileShutdownErr = errors.New("reconciliation did not reach its shutdown boundary")
+			}
 			return false, ""
 		}
 		state, target := parseReconcileResult(stdout.buffer.Bytes())

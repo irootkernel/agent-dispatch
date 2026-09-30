@@ -533,8 +533,8 @@ func (s *Store) admitSyncJobOnce(ctx context.Context, in SyncJobInput) (SyncJobR
 	if in.Kind == "publication" && in.PublicationResourceID != "" && (state != "active" || membershipMode != "normal") {
 		return SyncJobRow{}, false, fmt.Errorf("sync group %s is %s: %w", in.GroupID, state, ErrSyncControlHeld)
 	}
-	var pending int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sync_jobs WHERE group_id = ? AND resolved_at IS NULL`, in.GroupID).Scan(&pending); err != nil {
+	pending, err := countUnresolvedSyncObligations(ctx, tx, in.GroupID)
+	if err != nil {
 		return SyncJobRow{}, false, err
 	}
 	if pending >= in.QueueLimit {
@@ -561,6 +561,17 @@ func (s *Store) admitSyncJobOnce(ctx context.Context, in SyncJobInput) (SyncJobR
 		return SyncJobRow{}, false, err
 	}
 	return row, false, nil
+}
+
+// countUnresolvedSyncObligations shares one group queue between jobs and peer
+// nudges. Admission reads this count in the same transaction as its insert.
+func countUnresolvedSyncObligations(ctx context.Context, tx *sql.Tx, groupID string) (int, error) {
+	var pending int
+	err := tx.QueryRowContext(ctx, `SELECT
+		(SELECT COUNT(*) FROM sync_jobs WHERE group_id=? AND resolved_at IS NULL) +
+		(SELECT COUNT(*) FROM sync_peer_nudges WHERE group_id=? AND processed_at IS NULL)`,
+		groupID, groupID).Scan(&pending)
+	return pending, err
 }
 
 // ClaimSyncJob obtains a new fencing generation. An expired lease permits a

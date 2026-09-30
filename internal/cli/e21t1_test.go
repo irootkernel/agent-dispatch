@@ -53,7 +53,7 @@ func syncResult(t *testing.T, args ...string) (int, map[string]any, string) {
 }
 
 func TestE21T1SyncPauseResumeAndStatus(t *testing.T) {
-	configPath := enabledSyncConfig(t)
+	configPath := newResumeFixture(t).path
 	code, envelope, stderr := syncResult(t, "status", "--group", "wiki-pair", "--config", configPath, "--output", "json")
 	if code != 0 {
 		t.Fatalf("initial status: %d %s", code, stderr)

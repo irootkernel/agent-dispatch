@@ -4,10 +4,11 @@ This guide is for the operator of a local installation on a supported platform
 (`darwin/arm64`, `linux/amd64`, or `linux/arm64` under [D-029](../specs/decision-log.md),
 E19; superseding the D-023/E9-T8 darwin/arm64-only exclusivity). The operator
 owns the configuration, vault/board selection, backups, and authority to install
-binaries, triggers, or schedules. Agent Dispatch runs one-shot commands:
+binaries, triggers, or schedules. Agent Dispatch runs one-shot maintenance commands:
 Watchman owns event sensing and the platform scheduler owns scheduling
-(launchd on macOS; managed `--platform systemd` user units on Linux); there is no Agent Dispatch
-daemon. Start with the [public quick start](../../README.md#quick-start) for a new instance.
+(launchd on macOS; managed `--platform systemd` user units on Linux). Optional
+`sync serve` runs a bounded peer service for configured sync groups. Start with
+the [public quick start](../../README.md#quick-start) for a new instance.
 
 Before changing an existing installation, record `agent-dispatch version --json`,
 its configuration path, route status, Watchman binding, and managed schedule state.

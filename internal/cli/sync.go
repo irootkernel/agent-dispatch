@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/gitlocal"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/resourceguard"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/domain/syncrecords"
@@ -155,6 +156,26 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		}
 		target := "paused"
 		if args[0] == "resume" {
+			// Refuse stale requests and standing holds before any Git inspection.
+			// SetSyncControl repeats these checks inside the control transaction.
+			if current.Revision != expected {
+				return syncStoreError(stderr, command, fmt.Errorf("control revision is %d, expected %d: %w", current.Revision, expected, sqlite.ErrSyncPrecondition))
+			}
+			if current.State == "blocked" {
+				return syncStoreError(stderr, command, fmt.Errorf("control is blocked for %s and requires its recovery evidence: %w", current.Reason, sqlite.ErrSyncControlHeld))
+			}
+			// An adopted emergency posture must still re-arm its block, even
+			// while the operator pause owns the visible control state.
+			if current.MembershipMode != "blocked_emergency" {
+				guard, err := resourceguard.Acquire(stateDirOf(cfg), cfg.Sync.Resource)
+				if err != nil {
+					return syncMembershipError(stderr, command, err, 14)
+				}
+				defer guard.Close()
+				if code := validateSyncResume(cfg, concrete, stderr); code != 0 {
+					return code
+				}
+			}
 			target = "active"
 		}
 		control, err := store.SetSyncControl(requestCtx(), group, expected, target, revision, time.Now().UTC().Format(time.RFC3339Nano))
@@ -186,6 +207,50 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 	default:
 		return usageError(stderr, "sync", "unknown or incomplete sync command")
 	}
+}
+
+// validateSyncResume uses the publication and peer-admission guards without
+// requiring import acknowledgement or resolving any signing/peer secret.
+// The caller holds the resource guard through the fenced control mutation.
+func validateSyncResume(cfg *config.Config, store *sqlite.Store, stderr io.Writer) int {
+	const command = "sync resume"
+	s := cfg.Sync
+	client, err := membershipGitClient(cfg, s)
+	if err != nil {
+		return syncMembershipError(stderr, command, err, 14)
+	}
+	head, err := client.ResolveRef(requestCtx(), s.MembershipRef)
+	if err != nil {
+		return syncMembershipError(stderr, command, err, 30)
+	}
+	remote, err := client.RemoteRef(requestCtx(), s.RemoteName, s.MembershipRef, s.RemoteRepositoryDigest)
+	if err != nil {
+		if errors.Is(err, gitlocal.ErrRemoteBinding) || errors.Is(err, gitlocal.ErrMissingRef) {
+			return syncMembershipError(stderr, command, err, 30)
+		}
+		return syncRetryableError(stderr, command, err)
+	}
+	if remote != head {
+		return syncMembershipError(stderr, command, errors.New("local membership revision is not current on the approved remote"), 30)
+	}
+	if _, err := loadConfiguredMembers(requestCtx(), cfg, client, head); err != nil {
+		return syncMembershipError(stderr, command, err, 30)
+	}
+	state, err := client.InspectImport(requestCtx(), s.ContentRef)
+	if err != nil {
+		return syncMembershipError(stderr, command, err, 14)
+	}
+	if state.ActiveOperation != "" {
+		return syncMembershipError(stderr, command, fmt.Errorf("local Git operation prevents resume: %s", state.ActiveOperation), 14)
+	}
+	idle, err := store.ResourceWritersIdle(requestCtx(), s.Resource)
+	if err != nil {
+		return syncStoreError(stderr, command, err)
+	}
+	if !idle {
+		return syncMembershipError(stderr, command, errors.New("participating resource writer is not idle"), 14)
+	}
+	return 0
 }
 
 type syncStatusEvidence struct {

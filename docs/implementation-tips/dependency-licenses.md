@@ -26,7 +26,7 @@ v0.1.1 review is recorded in the release checklist (§1, M-27).
 | golang.org/x/sync (indirect) | BSD-3-Clause | compatible |
 | golang.org/x/sys (indirect) | BSD-3-Clause | compatible |
 | golang.org/x/telemetry (indirect) | BSD-3-Clause | compatible |
-| golang.org/x/text (indirect) | BSD-3-Clause | compatible |
+| golang.org/x/text (direct) | BSD-3-Clause | compatible |
 | golang.org/x/tools (indirect) | BSD-3-Clause | compatible |
 | golang.org/x/tools/go/expect (indirect) | BSD-3-Clause | compatible |
 | gopkg.in/check.v1 (indirect) | BSD-2-Clause | compatible |

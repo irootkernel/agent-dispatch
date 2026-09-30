@@ -284,7 +284,7 @@
           "properties": {
             "queue": {
               "type": "integer",
-              "minimum": 1,
+              "minimum": 2,
               "maximum": 1000
             },
             "history_commits": {

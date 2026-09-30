@@ -16,6 +16,8 @@ This file records concise shipped outcomes and pending changes.
 ### Changed
 
 - Accept explicit ports on private Tailscale HTTPS peer endpoints.
+- Require sync queues of 2 to 1000 and reserve one slot from pending nudges
+  for job admission, while preserving the combined queue bound and replay.
 - Build with Go 1.27.1 and updated pinned dependencies and Staticcheck;
   building from source on Darwin requires macOS 13 or newer.
 - Advance SQLite from schema 20 to 27; back up state and configuration before

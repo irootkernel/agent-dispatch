@@ -254,7 +254,31 @@ func syncVerificationTargetChanged(ctx context.Context, cfg *config.Config, clie
 	}
 	oldRevision, _ := config.SyncRevision(cfg)
 	currentRevision, _ := config.SyncRevision(currentCfg)
-	return oldRevision != currentRevision, false
+	if oldRevision != currentRevision || currentCfg.Sync == nil {
+		return true, false
+	}
+	return syncVerificationPairChanged(s.Nodes, currentCfg.Sync.Nodes), false
+}
+
+// SYN-013 pins identities and incarnations independently of the cooperative
+// acknowledgement revision, which deliberately excludes roster movement.
+func syncVerificationPairChanged(pinned, current []config.SyncNode) bool {
+	if len(pinned) != len(current) {
+		return true
+	}
+	for _, node := range pinned {
+		found := false
+		for _, candidate := range current {
+			if node.InstanceID == candidate.InstanceID && node.StateIncarnationID == candidate.StateIncarnationID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return true
+		}
+	}
+	return false
 }
 
 func querySyncPeer(ctx context.Context, cfg *config.Config, client *http.Client, rawEndpoint string, request syncrecords.StatusRequest) (syncrecords.StatusResponse, error) {

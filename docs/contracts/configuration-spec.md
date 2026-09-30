@@ -466,8 +466,14 @@ Tailscale HTTPS route separately. The endpoint may include a canonical decimal
 HTTPS port from 1 to 65535 configured for a private Tailscale Serve route. Use
 the same endpoint string in configuration and signed membership, including its
 port, trailing slash, and host spelling. The grammar requires lowercase
-`https://` and a lowercase `.ts.net` suffix. `sync.bounds.queue` limits all unresolved
-group obligations, including nudges, publications, imports, and verifications.
+`https://` and a lowercase `.ts.net` suffix. `sync.bounds.queue` must be an
+integer from 2 to 1000, inclusive, even when sync is disabled. It limits the
+combined unresolved jobs and pending nudges per group, including publication,
+delivery, import, and verification jobs. Admission also limits pending nudges
+to `sync.bounds.queue - 1`, leaving room for a job when only nudges occupy the
+queue. Existing logical identities replay before capacity checks. A nudge
+remains pending until guarded reconciliation establishes its resolution;
+capacity pressure never settles it early.
 The [operator runbook](../ops/runbook.md) describes the macOS Serve-to-socket
 HTTP 502 case and its loopback-only bridge disposition.
 A fixed 100,000-row cap limits retained nudge identities per group.
@@ -517,8 +523,11 @@ therefore invalidates live-tree application without
 blocking publication, status, or later fetch-and-validate reconciliation.
 Local or remote membership movement, endpoint/credential rotation, and signing
 key-reference changes are rechecked at their protected effects and are not
-local acknowledgement inputs. A local state-incarnation change still
-invalidates through the record's separately compared incarnation binding. E21
+local acknowledgement inputs. Changing `sync.bounds.queue` changes both the
+`import_bounds_digest` and acknowledgement configuration revision; automatic
+live-tree import requires a refreshed cooperative-import acknowledgement.
+A local state-incarnation change still invalidates through the record's
+separately compared incarnation binding. E21
 also recomputes the configured repository
 identity digest from the actual Git remote immediately before each protected
 effect; changing a remote URL under the same name invalidates currentness.

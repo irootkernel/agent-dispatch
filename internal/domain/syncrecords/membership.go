@@ -98,6 +98,22 @@ func DecodePlan(raw []byte) (MembershipPlan, error) {
 	if err := decodeStrict(raw, &out); err != nil {
 		return out, err
 	}
+	// Required nullable fields must be present even when bootstrap names no predecessor.
+	var fields struct {
+		ExpectedPredecessor json.RawMessage `json:"expected_predecessor"`
+		ProposedMembership  struct {
+			Predecessor json.RawMessage `json:"predecessor"`
+		} `json:"proposed_membership"`
+	}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return out, fmt.Errorf("%w: %v", ErrInvalidRecord, err)
+	}
+	if len(fields.ExpectedPredecessor) == 0 {
+		return out, fmt.Errorf("%w: expected_predecessor is required", ErrInvalidRecord)
+	}
+	if len(fields.ProposedMembership.Predecessor) == 0 {
+		return out, fmt.Errorf("%w: proposed_membership.predecessor is required", ErrInvalidRecord)
+	}
 	if err := out.Validate(); err != nil {
 		return out, err
 	}

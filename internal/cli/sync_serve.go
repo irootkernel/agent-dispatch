@@ -35,22 +35,23 @@ type peerRequest struct {
 }
 
 type peerService struct {
-	cfg        *config.Config
-	configPath string
-	store      *sqlite.Store
-	members    func(context.Context) (string, [2]syncrecords.ActiveMember, error)
-	reconcile  func(context.Context) (bool, string)
-	wake       chan struct{}
-	slots      chan struct{}
-	rateMu     sync.Mutex
-	rate       map[string]peerRate
-	stderr     io.Writer
-	managed    bool
-	warnMu     sync.Mutex
-	warnedAt   map[string]time.Time
-	memberMu   sync.Mutex
-	memberHead string
-	memberPair [2]syncrecords.ActiveMember
+	cfg                  *config.Config
+	configPath           string
+	store                *sqlite.Store
+	members              func(context.Context) (string, [2]syncrecords.ActiveMember, error)
+	reconcile            func(context.Context) (bool, string)
+	reconcileShutdownErr error // read only after the inbox worker has stopped
+	wake                 chan struct{}
+	slots                chan struct{}
+	rateMu               sync.Mutex
+	rate                 map[string]peerRate
+	stderr               io.Writer
+	managed              bool
+	warnMu               sync.Mutex
+	warnedAt             map[string]time.Time
+	memberMu             sync.Mutex
+	memberHead           string
+	memberPair           [2]syncrecords.ActiveMember
 }
 
 type peerRate struct {
@@ -230,10 +231,36 @@ func (s *peerService) configurationProblem() string {
 	}
 	loadedRevision, _ := config.SyncRevision(s.cfg)
 	currentRevision, _ := config.SyncRevision(current)
-	if loadedRevision != currentRevision {
+	if loadedRevision != currentRevision || syncServiceBindingsChanged(s.cfg.Sync, current.Sync) {
 		return "configuration changed"
 	}
 	return ""
+}
+
+// Service freshness includes bindings deliberately excluded from the
+// cooperative-import acknowledgement revision. Node order has no meaning.
+func syncServiceBindingsChanged(loaded, current *config.Sync) bool {
+	if loaded.PublisherSigningKeyRef != current.PublisherSigningKeyRef ||
+		loaded.AdministratorSigningKeyRef != current.AdministratorSigningKeyRef ||
+		len(loaded.Nodes) != len(current.Nodes) {
+		return true
+	}
+	for _, node := range loaded.Nodes {
+		found := false
+		for _, candidate := range current.Nodes {
+			if node.InstanceID == candidate.InstanceID {
+				if node != candidate {
+					return true
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			return true
+		}
+	}
+	return false
 }
 
 func servePeer(ctx context.Context, listener net.Listener, svc *peerService) error {
@@ -248,16 +275,19 @@ func servePeer(ctx context.Context, listener net.Listener, svc *peerService) err
 	go func() { defer workers.Done(); svc.deliveryLoop(serviceCtx) }()
 	go func() { defer workers.Done(); svc.inboxLoop(serviceCtx) }()
 	shutdownDone := make(chan struct{})
+	var shutdownErr error
 	go func() {
 		<-serviceCtx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		_ = server.Shutdown(shutdownCtx)
+		shutdownErr = server.Shutdown(shutdownCtx)
 		workerDone := make(chan struct{})
 		go func() { workers.Wait(); close(workerDone) }()
 		select {
 		case <-workerDone:
+			shutdownErr = errors.Join(shutdownErr, svc.reconcileShutdownErr)
 		case <-shutdownCtx.Done():
+			shutdownErr = errors.Join(shutdownErr, shutdownCtx.Err())
 		}
 		close(shutdownDone)
 	}()
@@ -267,7 +297,7 @@ func servePeer(ctx context.Context, listener net.Listener, svc *peerService) err
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
-	return nil
+	return shutdownErr
 }
 
 // A managed user service shares the operator's UID. Only absent environment

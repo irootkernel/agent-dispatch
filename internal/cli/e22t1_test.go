@@ -97,7 +97,7 @@ func e22t1Service(t *testing.T) (*peerService, func()) {
 		t.Fatal(err)
 	}
 	cfg.Sync.Enabled = true
-	cfg.Sync.Bounds.Queue = 1
+	cfg.Sync.Bounds.Queue = 2
 	cfg.Instance.StateDir = t.TempDir()
 	configPath := filepath.Join(t.TempDir(), "config.json")
 	raw, err := json.Marshal(cfg)
@@ -462,6 +462,7 @@ func TestE22T1DeliveryUsesConfiguredPeerAndSettlesOnlyOn202(t *testing.T) {
 	svc, closeStore := e22t1Service(t)
 	defer closeStore()
 	svc.cfg.Sync.Nodes[1].Endpoint = "https://node-b.example.ts.net:8448"
+	syncFreshnessWriteConfig(t, svc.configPath, svc.cfg)
 	t.Setenv("SYNC_NODE_A_TO_B", "test-outbound-credential")
 	nudge := e22t1Nudge()
 	nudge.Sender, nudge.Receiver = nudge.Receiver, nudge.Sender
@@ -1041,7 +1042,7 @@ func TestE22T1StaleNudgeDoesNotBlockLaterInboxRow(t *testing.T) {
 	current := commit("current")
 	svc, closeStore := e22t1Service(t)
 	defer closeStore()
-	svc.cfg.Sync.Bounds.Queue = 3
+	svc.cfg.Sync.Bounds.Queue = 4
 	svc.cfg.Sync.Bounds.HistoryCommits = 1
 	resource := svc.cfg.Resources[svc.cfg.Sync.Resource]
 	resource.Root = repo
@@ -1060,7 +1061,7 @@ func TestE22T1StaleNudgeDoesNotBlockLaterInboxRow(t *testing.T) {
 	svc.reconcile = func(context.Context) (bool, string) { return true, old }
 	if _, err := svc.store.AdmitPeerNudge(context.Background(), sqlite.PeerNudgeInput{
 		GroupID: svc.cfg.Sync.GroupID, PublicationID: "invalid-persisted", Fingerprint: "sha256:invalid-persisted",
-		PayloadJSON: `{}`, ReceivedAt: time.Now().UTC().Format(time.RFC3339Nano), QueueLimit: 3,
+		PayloadJSON: `{}`, ReceivedAt: time.Now().UTC().Format(time.RFC3339Nano), QueueLimit: 4,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1075,7 +1076,7 @@ func TestE22T1StaleNudgeDoesNotBlockLaterInboxRow(t *testing.T) {
 		fingerprint := fmt.Sprintf("sha256:%x", sha256.Sum256(raw))
 		if _, err := svc.store.AdmitPeerNudge(context.Background(), sqlite.PeerNudgeInput{
 			GroupID: nudge.GroupID, PublicationID: nudge.PublicationID, Fingerprint: fingerprint,
-			PayloadJSON: string(raw), ReceivedAt: time.Now().UTC().Format(time.RFC3339Nano), QueueLimit: 3,
+			PayloadJSON: string(raw), ReceivedAt: time.Now().UTC().Format(time.RFC3339Nano), QueueLimit: 4,
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -1128,7 +1129,7 @@ func TestE22T1StaleNudgeDoesNotBlockLaterInboxRow(t *testing.T) {
 	if _, err := svc.store.AdmitPeerNudge(context.Background(), sqlite.PeerNudgeInput{
 		GroupID: nudge.GroupID, PublicationID: nudge.PublicationID,
 		Fingerprint: fmt.Sprintf("sha256:%x", sha256.Sum256(raw)), PayloadJSON: string(raw),
-		ReceivedAt: time.Now().UTC().Format(time.RFC3339Nano), QueueLimit: 3,
+		ReceivedAt: time.Now().UTC().Format(time.RFC3339Nano), QueueLimit: 4,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1151,7 +1152,7 @@ func TestE22T1InboxRetainsFailedReconcile(t *testing.T) {
 	fingerprint := fmt.Sprintf("sha256:%x", sha256.Sum256(raw))
 	if _, err := svc.store.AdmitPeerNudge(context.Background(), sqlite.PeerNudgeInput{
 		GroupID: nudge.GroupID, PublicationID: nudge.PublicationID, Fingerprint: fingerprint,
-		PayloadJSON: string(raw), ReceivedAt: time.Now().UTC().Format(time.RFC3339Nano), QueueLimit: 1,
+		PayloadJSON: string(raw), ReceivedAt: time.Now().UTC().Format(time.RFC3339Nano), QueueLimit: 2,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1175,7 +1176,7 @@ func TestE22T1PausedInboxRetainsWorkWithoutFailure(t *testing.T) {
 	if _, err := svc.store.AdmitPeerNudge(context.Background(), sqlite.PeerNudgeInput{
 		GroupID: nudge.GroupID, PublicationID: nudge.PublicationID,
 		Fingerprint: fmt.Sprintf("sha256:%x", sha256.Sum256(raw)), PayloadJSON: string(raw),
-		ReceivedAt: time.Now().UTC().Format(time.RFC3339Nano), QueueLimit: 1,
+		ReceivedAt: time.Now().UTC().Format(time.RFC3339Nano), QueueLimit: 2,
 	}); err != nil {
 		t.Fatal(err)
 	}

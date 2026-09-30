@@ -89,7 +89,14 @@ credential after checking the current locally signed membership. Strict JSON
 and HTTP bounds precede an idempotent SQLite inbox transaction. HTTP 202 means
 that transaction committed. A separate worker wakes the existing guarded
 `sync reconcile` path; the nudge never supplies its remote, ref, path, or
-executable. Delivery jobs use the configured `.ts.net` HTTPS origin with
+executable. Admission checks existing logical identities before capacity,
+limits pending nudges to `sync.bounds.queue - 1`, and keeps unresolved jobs
+plus pending nudges within `sync.bounds.queue` (2 to 1000). The nudge limit
+leaves room for a job when only nudges occupy the queue; other jobs can still
+exhaust capacity. Saturated queues and obligations above a lowered limit remain
+durable.
+The worker never settles a nudge early to free capacity for reconciliation.
+Delivery jobs use the configured `.ts.net` HTTPS origin with
 certificate verification, no ambient proxy, and no redirects. A lost response
 retains an unknown delivery attempt and replays the same logical request under
 a new fence. The service has no signing-key resolution path and refuses startup

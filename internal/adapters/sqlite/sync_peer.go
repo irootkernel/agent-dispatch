@@ -70,8 +70,8 @@ func validatePeerNudge(in PeerNudgeInput) error {
 		in.Fingerprint == "" || len(in.Fingerprint) > 128 {
 		return fmt.Errorf("invalid peer nudge identity or fingerprint")
 	}
-	if in.QueueLimit < 1 || in.QueueLimit > 1000 {
-		return fmt.Errorf("peer nudge queue limit must be 1..1000")
+	if in.QueueLimit < 2 || in.QueueLimit > 1000 {
+		return fmt.Errorf("peer nudge queue limit must be 2..1000")
 	}
 	if len(in.PayloadJSON) == 0 || len(in.PayloadJSON) > 16384 || !json.Valid([]byte(in.PayloadJSON)) {
 		return fmt.Errorf("peer nudge payload must be valid JSON of at most 16384 bytes")
@@ -103,13 +103,22 @@ func (s *Store) admitPeerNudgeOnce(ctx context.Context, in PeerNudgeInput, ledge
 	if !errors.Is(err, sql.ErrNoRows) {
 		return false, err
 	}
-	var pending int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sync_peer_nudges
-		WHERE group_id=? AND processed_at IS NULL`, in.GroupID).Scan(&pending); err != nil {
+	pending, err := countUnresolvedSyncObligations(ctx, tx, in.GroupID)
+	if err != nil {
 		return false, err
 	}
 	if pending >= in.QueueLimit {
-		return false, fmt.Errorf("peer group %q has %d pending nudges (limit %d): %w", in.GroupID, pending, in.QueueLimit, ErrSyncQueueFull)
+		return false, fmt.Errorf("peer group %q has %d unresolved obligations (limit %d): %w", in.GroupID, pending, in.QueueLimit, ErrSyncQueueFull)
+	}
+	// Keep a pure nudge inbox from consuming the slot that reconciliation
+	// needs to admit its import. Existing jobs still share the aggregate bound.
+	var pendingNudges int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sync_peer_nudges
+		WHERE group_id=? AND processed_at IS NULL`, in.GroupID).Scan(&pendingNudges); err != nil {
+		return false, err
+	}
+	if pendingNudges >= in.QueueLimit-1 {
+		return false, fmt.Errorf("peer group %q has %d pending nudges; one work slot is reserved (limit %d): %w", in.GroupID, pendingNudges, in.QueueLimit, ErrSyncQueueFull)
 	}
 	var retained int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sync_peer_nudges WHERE group_id=?`, in.GroupID).Scan(&retained); err != nil {

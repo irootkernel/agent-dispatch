@@ -166,7 +166,12 @@ has a stable logical identity, bounded attempts, claim ownership, a fencing
 generation, and an explicit ambiguous outcome.
 The peer inbox retains at most 100,000 logical nudge identities per group.
 At that bound it refuses a new identity before HTTP 202, while the sender keeps
-its delivery obligation. Exact replays of retained identities remain idempotent.
+its delivery obligation. Exact replays of retained identities remain idempotent
+and are checked before queue or retained-identity capacity checks. The pending
+nudge limit is `sync.bounds.queue - 1`; unresolved jobs and pending nudges
+together must fit within `sync.bounds.queue` for new admission. A pending nudge
+is never settled early to make space for a job. Guarded reconciliation must
+establish its historical resolution first.
 
 The service recovers already-signed publication, delivery, and import work at
 startup and during periodic reconciliation. The schedule is durable in schema
@@ -389,11 +394,26 @@ The v1 contract caps active members at two, historical membership entries at
 1,000, import paths at 1,000, publication, delivery, and import attempts at 20, peer
 payloads at 256 KiB, retained-record pages at 100 items, Git history inspection
 at 1,000 commits, subprocess output at 1 MiB per stream, and subprocess runtime
-at 120 seconds. Sync work queues hold at most 1,000 obligations per group,
-service concurrency is one protected effect per group plus two peer reads, and
-graceful shutdown has 30 seconds to reach a safe boundary before leaving the
-obligation pending. Runtime configuration may lower but not raise these
+at 120 seconds. `sync.bounds.queue` ranges from 2 to 1000, inclusive. New
+admission keeps the combined unresolved jobs and pending nudges within that
+bound, with at most `sync.bounds.queue - 1` pending nudges. This reserves room
+for a job when only nudges occupy the queue; other unresolved jobs can still
+exhaust capacity. Service concurrency is one protected effect per group plus
+two peer reads, and graceful shutdown has 30 seconds to reach a safe boundary
+before leaving the obligation pending. Runtime configuration may lower but not raise these
 ceilings.
+
+Existing saturated queues and obligations above a lowered bound remain
+durable. Admission refuses new identities while a bound is exhausted; existing
+identities still replay before capacity checks. After assessing safety, an
+operator may increase the queue within the 1000 ceiling. A queue edit changes
+the acknowledgement's bounds digest and configuration revision, requiring a
+refreshed acknowledgement before automatic live-tree import. A full queue at
+1000 requires an operator recovery decision. The limits do not guarantee
+progress for every combination of unresolved jobs and
+nudges. Recovery must preserve obligations and replay evidence without purging
+or silently dropping work. Configuration using queue 1 requires an explicit
+correction before it can load; see the [runbook](../ops/runbook.md).
 
 Resolved publication, delivery, import, and verification jobs use the
 configured completed-receipt retention horizon, which defaults to 180 days.

@@ -1,6 +1,7 @@
 package syncrecords
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 )
@@ -124,6 +125,70 @@ func TestMembershipPlanIDMatchesLexicallySortedProjection(t *testing.T) {
 			}
 			if decoded, err := DecodePlan(raw); err != nil || decoded.PlanID != tc.want {
 				t.Fatalf("canonical plan roundtrip: %+v %v", decoded, err)
+			}
+		})
+	}
+}
+
+func TestEmergencyMembershipWireRequiresActiveArray(t *testing.T) {
+	binding := testBinding()
+	root, err := NewPlan("bootstrap", "", nil, nil, testMembers(), binding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	predecessor := "1111111111111111111111111111111111111111"
+	first, err := NewPlan("emergency_revocation", "node-a", &root.ProposedMembership, &predecessor, testMembers(), binding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nextPredecessor := "2222222222222222222222222222222222222222"
+	empty, err := NewPlan("emergency_revocation", "node-b", &first.ProposedMembership, &nextPredecessor, testMembers(), binding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	membership, err := CanonicalMembership(empty.ProposedMembership)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := CanonicalPlan(empty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name   string
+		raw    []byte
+		decode func([]byte) error
+	}{
+		{"membership", membership, func(raw []byte) error { _, err := DecodeMembership(raw); return err }},
+		{"plan", plan, func(raw []byte) error { _, err := DecodePlan(raw); return err }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.decode(tc.raw); err != nil {
+				t.Fatalf("explicit empty active array rejected: %v", err)
+			}
+			for _, variant := range []string{"null", "missing"} {
+				t.Run(variant, func(t *testing.T) {
+					var object map[string]any
+					if err := json.Unmarshal(tc.raw, &object); err != nil {
+						t.Fatal(err)
+					}
+					roster := object
+					if tc.name == "plan" {
+						roster = object["proposed_membership"].(map[string]any)
+					}
+					if variant == "missing" {
+						delete(roster, "active_members")
+					} else {
+						roster["active_members"] = nil
+					}
+					raw, err := json.Marshal(object)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if err := tc.decode(raw); !errors.Is(err, ErrInvalidRecord) {
+						t.Fatalf("%s active_members accepted: %v", variant, err)
+					}
+				})
 			}
 		})
 	}

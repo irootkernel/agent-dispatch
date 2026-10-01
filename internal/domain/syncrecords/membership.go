@@ -96,6 +96,9 @@ func DecodeMembership(raw []byte) (Membership, error) {
 	if len(fields.Predecessor) == 0 {
 		return out, fmt.Errorf("%w: predecessor is required", ErrInvalidRecord)
 	}
+	if out.ActiveMembers == nil {
+		return out, fmt.Errorf("%w: active_members must be an array", ErrInvalidRecord)
+	}
 	if out.HistoricalMembers == nil {
 		return out, fmt.Errorf("%w: historical_members must be an array", ErrInvalidRecord)
 	}
@@ -125,6 +128,9 @@ func DecodePlan(raw []byte) (MembershipPlan, error) {
 	}
 	if len(fields.ProposedMembership.Predecessor) == 0 {
 		return out, fmt.Errorf("%w: proposed_membership.predecessor is required", ErrInvalidRecord)
+	}
+	if out.ProposedMembership.ActiveMembers == nil {
+		return out, fmt.Errorf("%w: proposed_membership.active_members must be an array", ErrInvalidRecord)
 	}
 	if out.ProposedMembership.HistoricalMembers == nil {
 		return out, fmt.Errorf("%w: proposed_membership.historical_members must be an array", ErrInvalidRecord)

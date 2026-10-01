@@ -1,6 +1,7 @@
 package syncrecords
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -286,6 +287,17 @@ func checkpointKind(v string) bool {
 }
 func framedDigest(domain string, v any) (string, error) {
 	raw, err := json.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+	// Re-encode objects with lexical keys at every depth without rounding integers.
+	var projection any
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&projection); err != nil {
+		return "", err
+	}
+	raw, err = json.Marshal(projection)
 	if err != nil {
 		return "", err
 	}

@@ -57,8 +57,13 @@ Exit codes: 0 success; 2 usage; 3 configuration; 4 input rejected;
 13 acceptance unknown; 14 conflict; 20 storage; 21 migration;
 30 security; 40 internal.
 
-Side effects and approvals: only ` + "`dispatch`" + `, ` + "`dispatches drain`" + `,
-` + "`reconcile --submit`" + `, explicit sync apply/publish/reconcile commands, and the watchman lifecycle touch the outside world;
+Side effects and approvals: ` + "`dispatch`" + `, ` + "`dispatches drain`" + `, and
+` + "`reconcile --submit`" + ` may call external integrations.
+Explicit sync apply/publish/reconcile commands read approved Git remotes and
+may write Git or local state. Sync verify reads Git and peer endpoints and
+writes verification state. Sync serve listens and runs recovery/delivery workers.
+Sync service install/stop/disable/uninstall changes the managed user service.
+The watchman lifecycle manages the external trigger.
 sync checkpoint plan performs an approved-remote read without a write;
 ` + "`route enable`" + ` additionally requires the two-key production gate
 (--acknowledge-production-gate <computed-revision> --yes).

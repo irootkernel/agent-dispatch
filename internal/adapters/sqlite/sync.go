@@ -1004,10 +1004,10 @@ func (s *Store) FinishRecoveredControllerImportJob(ctx context.Context, jobID st
 }
 
 // PrepareControllerImportRecovery records exact controller-only inspection
-// after process loss. A clean original state is retryable; every other
-// non-target state remains explicit uncertainty.
+// after process loss. A clean original state is retryable; an exact partial
+// transition is claimable for recovery. Unexplained state remains uncertain.
 func (s *Store) PrepareControllerImportRecovery(ctx context.Context, jobID string, expectedFence int64, state string, journal SyncJournalEntry, now string) error {
-	if state != "validated" && state != "uncertain" {
+	if state != "validated" && state != "recovering" && state != "uncertain" {
 		return fmt.Errorf("unsupported controller import recovery state %q", state)
 	}
 	tx, err := s.BeginTx(ctx, nil)
@@ -1023,7 +1023,11 @@ func (s *Store) PrepareControllerImportRecovery(ctx context.Context, jobID strin
 	if err != nil || !record.ControllerOnly || row.Kind != "import" || row.Fence != expectedFence || (row.State != "applying" && row.State != "recovering" && row.State != "uncertain") || (row.ClaimOwner != "" && !timeBefore(row.ClaimExpiresAt, now)) {
 		return ErrSyncPrecondition
 	}
-	if err := requireSyncTransition(row.Kind, row.State, state); err != nil {
+	if row.State == "uncertain" && state == "recovering" {
+		if err := requireSyncRecoveryTransition(row.Kind, row.State, state); err != nil {
+			return err
+		}
+	} else if err := requireSyncTransition(row.Kind, row.State, state); err != nil {
 		return err
 	}
 	wantOutcome := "effect_unknown"

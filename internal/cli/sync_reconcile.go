@@ -626,10 +626,61 @@ func recoverPendingImport(stdout, stderr io.Writer, cfg *config.Config, s *confi
 		if record.ControllerOnly {
 			stateNow, stateErr := client.InspectImport(requestCtx(), s.ContentRef)
 			refNow, refErr := client.ResolveRef(requestCtx(), s.ContentRef)
+			recoveredWithClaim := false
+			if stateErr == nil && refErr == nil && stateNow.ActiveOperation == "controller_dirty" && refNow == record.FromCommit && client.CheckAdvanceContentRef(requestCtx(), s.ContentRef, record.FromCommit, record.TargetCommit) == nil {
+				// Resume only the exact stored controller/index transition. Take a
+				// fresh fence before retrying the expected-old ref update.
+				if control.State == "paused" {
+					return true, reconcileEnvelope(stdout, "deferred", "operator_pause", map[string]any{"import_job_id": job.JobID})
+				}
+				if !config.SyncAcknowledgementCurrent(cfg, localSyncIncarnation(cfg)) || control.ConfigRevision != revision {
+					return true, reconcileEnvelope(stdout, "deferred", "acknowledgement_stale", map[string]any{"import_job_id": job.JobID})
+				}
+				idle, idleErr := store.ResourceWritersIdle(requestCtx(), s.Resource)
+				if idleErr != nil {
+					return true, syncStoreError(stderr, "sync reconcile", idleErr)
+				}
+				if !idle {
+					return true, reconcileEnvelope(stdout, "deferred", "resource_busy", map[string]any{"import_job_id": job.JobID})
+				}
+				now := time.Now().UTC().Format(time.RFC3339Nano)
+				if err := store.PrepareControllerImportRecovery(requestCtx(), job.JobID, job.Fence, "recovering", sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_unknown", EvidenceJSON: mustJSON(map[string]any{"controller_only": true, "ref": refNow, "target_commit": record.TargetCommit, "exact_transition": true}), RecordedAt: now}, now); err != nil {
+					return true, syncStoreError(stderr, "sync reconcile", err)
+				}
+				owner := randomSyncID("import-recovery-owner")
+				claimAt := time.Now().UTC()
+				if strongerHold {
+					job, err = store.ClaimSyncAdministrationJob(requestCtx(), job.JobID, owner, revision, claimAt.Format(time.RFC3339Nano), claimAt.Add(time.Duration(s.Bounds.SubprocessSeconds*4+60)*time.Second).Format(time.RFC3339Nano))
+				} else {
+					job, err = store.ClaimSyncJob(requestCtx(), job.JobID, owner, revision, claimAt.Format(time.RFC3339Nano), claimAt.Add(time.Duration(s.Bounds.SubprocessSeconds*4+60)*time.Second).Format(time.RFC3339Nano))
+				}
+				if err != nil {
+					return true, syncStoreError(stderr, "sync reconcile", err)
+				}
+				started := time.Now().UTC().Format(time.RFC3339Nano)
+				if err := store.BeginControllerImportApply(requestCtx(), job.JobID, owner, job.Fence, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "started", EvidenceJSON: mustJSON(map[string]any{"controller_only": true, "recovered": true, "target_commit": record.TargetCommit}), RecordedAt: started}, started); err != nil {
+					return true, syncStoreError(stderr, "sync reconcile", err)
+				}
+				if err := client.ApplyImportIndex(requestCtx(), s.ContentRef, record.FromCommit, record.TargetCommit, nil, nil); err != nil {
+					return true, finishImportUncertain(stdout, stderr, store, job, owner, err)
+				}
+				stateNow, stateErr = client.InspectImport(requestCtx(), s.ContentRef)
+				refNow, refErr = client.ResolveRef(requestCtx(), s.ContentRef)
+				if stateErr != nil || refErr != nil || stateNow.ActiveOperation != "" || refNow != record.TargetCommit {
+					return true, finishImportUncertain(stdout, stderr, store, job, owner, errors.New("controller-only recovery did not reach its exact target"))
+				}
+				finished := time.Now().UTC().Format(time.RFC3339Nano)
+				if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "applied", sqlite.SyncJobResolve, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "applied", EvidenceJSON: mustJSON(map[string]any{"controller_only": true, "recovered": true, "target_commit": record.TargetCommit}), RecordedAt: finished}, finished); err != nil {
+					return true, syncStoreError(stderr, "sync reconcile", err)
+				}
+				recoveredWithClaim = true
+			}
 			if stateErr == nil && refErr == nil && stateNow.ActiveOperation == "" && refNow == record.TargetCommit {
 				now := time.Now().UTC().Format(time.RFC3339Nano)
-				if err := store.FinishRecoveredControllerImportJob(requestCtx(), job.JobID, job.Fence, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "applied", EvidenceJSON: mustJSON(map[string]any{"controller_only": true, "recovered": true, "target_commit": record.TargetCommit}), RecordedAt: now}, now); err != nil {
-					return true, syncStoreError(stderr, "sync reconcile", err)
+				if !recoveredWithClaim {
+					if err := store.FinishRecoveredControllerImportJob(requestCtx(), job.JobID, job.Fence, sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "import", Outcome: "applied", EvidenceJSON: mustJSON(map[string]any{"controller_only": true, "recovered": true, "target_commit": record.TargetCommit}), RecordedAt: now}, now); err != nil {
+						return true, syncStoreError(stderr, "sync reconcile", err)
+					}
 				}
 				checkpointReconciled := false
 				control, loadErr := store.LoadSyncControl(requestCtx(), s.GroupID)

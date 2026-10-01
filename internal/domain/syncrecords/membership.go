@@ -435,6 +435,16 @@ func planID(p MembershipPlan) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// Decode the closed projection into objects so json.Marshal sorts keys at
+	// every depth instead of preserving Go struct field order.
+	var projection map[string]any
+	if err := json.Unmarshal(raw, &projection); err != nil {
+		return "", err
+	}
+	raw, err = json.Marshal(projection)
+	if err != nil {
+		return "", err
+	}
 	h := sha256.New()
 	_, _ = h.Write([]byte("agent-dispatch.sync-membership-plan-id/v1\x00"))
 	_, _ = h.Write(raw)

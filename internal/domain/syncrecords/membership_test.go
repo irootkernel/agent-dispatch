@@ -92,6 +92,43 @@ func TestPlanIDAndStrictDecodeRejectTampering(t *testing.T) {
 	}
 }
 
+func TestMembershipPlanIDMatchesLexicallySortedProjection(t *testing.T) {
+	bootstrap, err := NewPlan("bootstrap", "", nil, nil, testMembers(), testBinding())
+	if err != nil {
+		t.Fatal(err)
+	}
+	predecessor := "1111111111111111111111111111111111111111"
+	desired := mutate(testMembers(), "node-a", func(m *ActiveMember) {
+		m.Endpoint = "https://node-a-next.example.ts.net"
+	})
+	update, err := NewPlan("endpoint_update", "node-a", &bootstrap.ProposedMembership, &predecessor, desired, testBinding())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Independently calculated SHA-256 vectors use lexical object keys at every
+	// depth, the empty plan_id, required bootstrap nulls, and domain/NUL/JSON/LF.
+	for _, tc := range []struct {
+		plan MembershipPlan
+		want string
+	}{
+		{bootstrap, "membership-31c7b5b731ec4547455c6ccfb099d93988275df0c263095fc7cd338af3282d46"},
+		{update, "membership-a2b6ea765ae76b07f384013d49654e7c13264e6ed4c9c6ba57957ee87588fb07"},
+	} {
+		t.Run(tc.plan.ChangeKind, func(t *testing.T) {
+			if tc.plan.PlanID != tc.want {
+				t.Fatalf("plan_id=%s want=%s", tc.plan.PlanID, tc.want)
+			}
+			raw, err := CanonicalPlan(tc.plan)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if decoded, err := DecodePlan(raw); err != nil || decoded.PlanID != tc.want {
+				t.Fatalf("canonical plan roundtrip: %+v %v", decoded, err)
+			}
+		})
+	}
+}
+
 func TestRemovedKeyFirstSeenRequiresAdministratorCheckpoint(t *testing.T) {
 	at := Membership{ActiveMembers: testMembers()}
 	current := Membership{ActiveMembers: testMembers()[1:]}

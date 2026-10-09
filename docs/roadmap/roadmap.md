@@ -1,7 +1,7 @@
 # Agent Dispatch Implementation Roadmap
 
 > **Roadmap version:** 1.7
-> **Release target:** v0.2.0 (Two-Node Wiki Sync MVP)
+> **Release target:** v0.3.0 (Constrained Sync Management)
 > **Execution model:** Strictly linear, one active task globally  
 > **Epics:** 24
 > **Tasks:** 123
@@ -10,27 +10,26 @@
 
 | Field | Value |
 |---|---|
-| Shipped release | v0.1.8 (published 2026-09-10) |
+| Shipped release | v0.2.0 (published 2026-10-01; frozen Core/inspection-Plugin pair) |
 | Current SOT baseline | 1.8.0 ([D-030](../specs/decision-log.md); G17 and G18 complete) |
-| Release target | v0.2.0 (Two-Node Wiki Sync MVP) |
-| Current epic | None (E22 completed) |
-| Current active task | None |
-| Next task | E23-T1 (follow-up contract planning; runtime work follows the frozen v0.2.0 paired release) |
-| Completed tasks | 116 / 123 |
-| Planned tasks | 7 / 123 |
+| Release target | v0.3.0 (constrained sync management successor) |
+| Current epic | E23 |
+| Current active task | none |
+| Next task | E23-T2 |
+| Completed tasks | 117 / 123 |
+| Planned tasks | 6 / 123 |
 | In progress tasks | 0 |
 | In review tasks | 0 |
 | Blocked tasks | 0 |
 | Deferred tracked tasks | 0 |
 
-E23 is Planned for a successor management-provider release. It does not add
-requirements to v0.2.0 or reopen E20-E22. Master requested its documentation
-on 2026-09-30; no runtime task, release, installation, or production activation
-is started by this registration. The intended delivery order is the current
-Core/inspection-Plugin release, Core E23, then Plugin EPIC-008. Contract
-planning may proceed before publication, but keep new runtime work out of the
-current release candidate. Real-vault activation remains an independent
-operator decision. The successor version is selected in E23-T1.
+E23 is In Progress for the v0.3.0 management-provider successor. The published
+Core/inspection-Plugin v0.2.0 pair remains frozen and independently usable;
+E20-E22 retain their completion state. Master approved E23 execution on
+2026-10-09. T1 freezes the contract without runtime changes; later runtime
+work uses disposable development fixtures. Plugin EPIC-008 follows the exact
+qualified provider handoff. Publication, installation, and real-vault activation
+remain separate operator decisions.
 
 ### Historical evidence
 
@@ -68,7 +67,7 @@ operator decision. The successor version is selected in E23-T1.
 | E20 | Two-Node Sync Contracts and Admission | **Completed** | 5 | G16 |
 | E21 | Signed Publication and Guarded Import | **Completed** | 5 | G17 |
 | E22 | Peer Recovery, Verification, and Operations | **Completed** | 5 | G18 |
-| E23 | Constrained Sync Management Request Provider | **Planned** | 7 | G19, post-v0.2.0 provider handoff |
+| E23 | Constrained Sync Management Request Provider | **In Progress** | 7 | G19, post-v0.2.0 provider handoff |
 
 ## 3. Task Status Index
 
@@ -190,7 +189,7 @@ operator decision. The successor version is selected in E23-T1.
 | 114 | E22-T3 | Completed | Pair status and fresh verification |
 | 115 | E22-T4 | Completed | Managed service lifecycle and diagnostics |
 | 116 | E22-T5 | Completed | Real two-node qualification and v0.2.0 handoff |
-| 117 | E23-T1 | Planned | Successor management scope, authority, and executable contract freeze |
+| 117 | E23-T1 | In Review | Successor management scope, authority, and executable contract freeze |
 | 118 | E23-T2 | Planned | Durable request ledger, immutable bindings, and additive migration |
 | 119 | E23-T3 | Planned | Bounded preparation, idempotent admission, and exact lookup |
 | 120 | E23-T4 | Planned | Shared worker execution and atomic local controls |
@@ -5677,13 +5676,13 @@ E22-T4 Completed.
 
 ### Evidence
 
-- [Disposable two-node qualification](../integrations/e22t5-two-node-qualification.md#final-committed-revision-replay-2026-09-28) records signed publication, private-port nudge and import, lost-nudge Git recovery, conflict stop, fresh pair verification, and both service-manager lifecycles on the reviewed final code commit `6b1c78b19f4cdb69dfd070ea016430f03075b73d`. The [G18 validation record](../VALIDATION.md#g18-committed-revision-closeout-2026-09-28) gives the three-platform deterministic gates, synthetic maintenance-receipt boundary, whole-epic review disposition, and checksum-verified reproducible `v0.2.0` artifacts. Independent hardening risks have owners in the [deferred-feedback inventory](../deferred-feedback/README.md). The release target remains unpublished; tag, push, production installation, and Plugin activation have separate authorization boundaries.
+- [Disposable two-node qualification](../integrations/e22t5-two-node-qualification.md#final-committed-revision-replay-2026-09-28) records signed publication, private-port nudge and import, lost-nudge Git recovery, conflict stop, fresh pair verification, and both service-manager lifecycles on the reviewed final code commit `6b1c78b19f4cdb69dfd070ea016430f03075b73d`. The [G18 validation record](../VALIDATION.md#g18-committed-revision-closeout-2026-09-28) gives the three-platform deterministic gates, synthetic maintenance-receipt boundary, whole-epic review disposition, and checksum-verified reproducible `v0.2.0` artifacts. Independent hardening risks have owners in the [deferred-feedback inventory](../deferred-feedback/README.md). At E22-T5 closeout on 2026-09-28, the release target was unpublished; v0.2.0 was subsequently published on 2026-10-01. Production installation and Plugin activation retain separate authorization boundaries.
 
 # E23: Constrained Sync Management Request Provider
 
-**Status:** Planned
+**Status:** In Progress
 
-**Release scope:** Successor to v0.2.0; version selection belongs to E23-T1.
+**Release scope:** v0.3.0 successor to the frozen published v0.2.0 pair.
 
 **Detailed SOT:** [TODO-SYNC-MANAGEMENT.md](../todo/TODO-SYNC-MANAGEMENT.md)
 
@@ -5693,14 +5692,14 @@ E22-T4 Completed.
 
 Deliver a local management request provider over the existing sync engine.
 The successor requirements are `SMR-001` through `SMR-015`; G19 is not a
-v0.2.0 release gate. The proposed [management contract](../contracts/sync-management-contract.md)
+v0.2.0 release gate. The frozen [management contract](../contracts/sync-management-contract.md)
 and [ADR-0026](../architecture-decision-records/0026-constrained-sync-management-requests.md)
-require E23-T1 freeze before runtime implementation. Task order is strictly
+govern runtime implementation after E23-T1 review. Task order is strictly
 E23-T1 -> E23-T2 -> E23-T3 -> E23-T4 -> E23-T5 -> E23-T6 -> E23-T7.
 
 ## E23-T1: Freeze Management Authority and the Successor Contract
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -5709,11 +5708,11 @@ modifying the current v0.2.0 runtime or its frozen provider artifact set.
 
 ### Deliverables
 
-- [ ] Record the current paired-release candidate identities and the successor product version.
-- [ ] Accept or replace ADR-0026; define operator preauthorization, five allowed actions, local-only control, and no management signing.
-- [ ] Freeze prepare/submit/show/capabilities argv, config selection, handle grammar, immutable fingerprints, policy/revision/incarnation checks, states, receipts, and error/exit mappings.
-- [ ] Add closed schemas, positive/negative fixtures, and an independently checksummed management bundle with tested numeric limits.
-- [ ] Define service-stopped/paused behavior, reserved control admission, request/job associations, verification bookkeeping, retention, and supported restore semantics.
+- [x] Record the current paired-release candidate identities and the successor product version.
+- [x] Accept or replace ADR-0026; define operator preauthorization, five allowed actions, local-only control, and no management signing.
+- [x] Freeze prepare/submit/show/capabilities argv, config selection, handle grammar, immutable fingerprints, policy/revision/incarnation checks, states, receipts, and error/exit mappings.
+- [x] Add closed schemas, positive/negative fixtures, and an independently checksummed management bundle with tested numeric limits.
+- [x] Define service-stopped/paused behavior, reserved control admission, request/job associations, verification bookkeeping, retention, and supported restore semantics.
 
 ### Requirements
 
@@ -5726,19 +5725,26 @@ reviewed boundary. The current v0.2.0 release must remain independently usable.
 
 ### Do Not
 
-- [ ] Do not add live commands, broaden Plugin pins, authorize mutations, or select an unverified Hermes actor/call-ID dependency.
-- [ ] Do not make G19 or SMR requirements prerequisites for v0.2.0 publication.
+- [x] Do not add live commands, broaden Plugin pins, authorize mutations, or select an unverified Hermes actor/call-ID dependency.
+- [x] Do not make G19 or SMR requirements prerequisites for v0.2.0 publication.
 
 ### Verification and Acceptance
 
-- [ ] Contract validation covers every action/phase, malformed input, duplicate keys, forbidden parameters, result/exit combination, and binding failure.
-- [ ] Every SMR requirement maps to a task and G19 scenario; numeric ceilings and lifecycle edges are explicit rather than left for implementation guessing.
-- [ ] The review resolves preparation versus submission, lost responses, control under saturation, and retry lineage; no unresolved authority decision remains.
+- [x] Contract validation covers every action/phase, malformed input, duplicate keys, forbidden parameters, result/exit combination, and binding failure.
+- [x] Every SMR requirement maps to a task and G19 scenario; numeric ceilings and lifecycle edges are explicit rather than left for implementation guessing.
+- [x] The review resolves preparation versus submission, lost responses, control under saturation, and retry lineage; no unresolved authority decision remains.
 
 ### Evidence
 
-Not executed. Retain the reviewed contract/ADR decision and deterministic
-schema/fixture results when this task closes.
+The frozen contract has 231 JSON fixtures, 69 argv fixtures, and seven digest
+vectors. Focused unit/race tests, both contract checks, document checks, and
+default `make verify` pass with the in-tree 30-minute test deadline. Authority
+decisions are resolved. Two completed six-role Mulgae assessments support all
+T1 criteria; the final seven Low findings were fixed and verified locally.
+The final default gate passed on Darwin arm64, including unit and race tests;
+systemd unit lint remains unperformed because this host lacks systemd-analyze.
+Completed 2026-10-10 under delegated Task acceptance. No management runtime,
+G19 result, or native paired qualification is claimed.
 
 ## E23-T2: Add the Durable Management Request Ledger
 

@@ -351,10 +351,10 @@ condition. Current v0.2.0 configurations and capabilities remain unchanged.
 
 ## 20. Post-v0.2.0 Constrained Sync Management
 
-These are planned E23 requirements, not implemented v0.2.0 behavior. The
+These requirements govern E23's v0.3.0 successor, not implemented v0.2.0 behavior. The
 [management contract](../contracts/sync-management-contract.md) specifies the
-proposed boundaries; E23-T1 freezes its executable contract before runtime
-work. Plugin EPIC-008 consumes the qualified provider later and is not a Core
+frozen boundaries and independent management v1 bundle. Runtime work follows
+E23-T1 contract freeze. Plugin EPIC-008 consumes the qualified provider later and is not a Core
 correctness dependency.
 
 | ID | Requirement |

@@ -1,9 +1,10 @@
 # ADR-0026: Local constrained sync management requests
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-09-30
 - Delivery owner: E23-T1
-- Scope: A successor release after v0.2.0, not the current release candidate
+- Accepted: 2026-10-09 under E23-T1
+- Scope: The v0.3.0 successor; v0.2.0 runtime and provider bundle remain frozen
 
 ## Context
 
@@ -17,9 +18,12 @@ do not yet form a public management request contract.
 Master requested a follow-up Core epic and corresponding Plugin planning on
 2026-09-30 after discussing release of the current pair. This records that
 planning request, not approval of a new runtime capability or its exact wire
-schema. E23-T1 must accept or supersede this proposal before implementation.
+schema. E23-T1 accepts this decision with the exact
+[management v1 bundle](../contracts/sync-management-v1/bundle.json) and frozen
+[management contract](../contracts/sync-management-contract.md). Runtime and
+G19 completion remain the later Tasks' responsibility.
 
-## Proposed decision
+## Decision
 
 Add a local, independently disabled management provider over the existing sync
 worker and application services. Use operator preauthorization for a closed
@@ -45,7 +49,7 @@ request. Do not make `retry` a fresh execution against whatever target exists
 now. Exact request outcomes, actual sync job evidence, and fresh convergence
 remain separate facts.
 
-The [planned management contract](../contracts/sync-management-contract.md)
+The [frozen management contract](../contracts/sync-management-contract.md)
 owns detailed semantics. `SMR-*` owns successor requirements, and the roadmap
 owns delivery status. The v0.2.0 sync contract and Plugin artifact pins remain
 unchanged until a separately qualified successor is admitted.

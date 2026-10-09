@@ -5,6 +5,24 @@ SOT snapshots, not product releases. Product release notes and pending user-faci
 changes belong to the root [changelog](../CHANGELOG.md). Historical entries below
 retain their recorded scope; migrated document pointers use their current paths.
 
+## Successor contract freeze - 2026-10-09
+
+- Select product v0.3.0 for E23 and accept ADR-0026. Pin the published
+  Core/inspection-Plugin v0.2.0 pair while preserving its runtime and provider
+  artifact bytes. The published release's incomplete final verification
+  remains historical evidence; E23 requires fresh checks.
+- Freeze closed management commands, opt-in allowlist, immutable draft
+  bindings, lifecycle, exact results, errors, capacity and time limits,
+  control reserve, verification bookkeeping, retry lineage, and restore rules.
+- Add the independent management v1 schemas, positive/refusal fixtures,
+  digest vectors, ordered checksums, and `make management-contract-check`
+  to the required verification entrypoint. This is contract/developer-tool
+  delivery; management runtime, G19, and the Plugin handoff remain pending.
+- Check declarative/schema coherence, coordinated tampering, exact JSON depth,
+  control-character refusal, verification outcome closure, byte bounds, and
+  unsorted digest projections. Set the default unit/race verification gate to a
+  30-minute per-package deadline.
+
 ## Planned successor: constrained sync management - 2026-09-30
 
 - Register E23 and E23-T1 through E23-T7 for a release after v0.2.0, with

@@ -1,0 +1,980 @@
+{
+  "schema_version": "agent-dispatch.sync-management.argv-fixtures/v1",
+  "fixtures": [
+    {
+      "name": "argv-capabilities",
+      "argv": [
+        "capabilities",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json"
+      ],
+      "valid": true
+    },
+    {
+      "name": "argv-forbidden-capabilities---state-dir",
+      "argv": [
+        "capabilities",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--state-dir",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-capabilities---force",
+      "argv": [
+        "capabilities",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--force",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-capabilities---endpoint",
+      "argv": [
+        "capabilities",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--endpoint",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-capabilities---ref",
+      "argv": [
+        "capabilities",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--ref",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-capabilities---confirmed",
+      "argv": [
+        "capabilities",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--confirmed",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-capabilities---actor",
+      "argv": [
+        "capabilities",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--actor",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-capabilities---profile",
+      "argv": [
+        "capabilities",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--profile",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-capabilities---note-body",
+      "argv": [
+        "capabilities",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--note-body",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-duplicate-capabilities",
+      "argv": [
+        "capabilities",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--group",
+        "other"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-human-capabilities",
+      "argv": [
+        "capabilities",
+        "--group",
+        "wiki",
+        "--output",
+        "human"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-positional-capabilities",
+      "argv": [
+        "capabilities",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "extra"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-prepare-sync-now",
+      "argv": [
+        "prepare",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--action",
+        "sync-now"
+      ],
+      "valid": true
+    },
+    {
+      "name": "argv-prepare-verify-all",
+      "argv": [
+        "prepare",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--action",
+        "verify-all"
+      ],
+      "valid": true
+    },
+    {
+      "name": "argv-prepare-retry",
+      "argv": [
+        "prepare",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--action",
+        "retry",
+        "--target-request-id",
+        "mgr_22222222222222222222222222222222"
+      ],
+      "valid": true
+    },
+    {
+      "name": "argv-prepare-pause",
+      "argv": [
+        "prepare",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--action",
+        "pause"
+      ],
+      "valid": true
+    },
+    {
+      "name": "argv-prepare-resume",
+      "argv": [
+        "prepare",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--action",
+        "resume"
+      ],
+      "valid": true
+    },
+    {
+      "name": "argv-forbidden-prepare---state-dir",
+      "argv": [
+        "prepare",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--state-dir",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-prepare---force",
+      "argv": [
+        "prepare",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--force",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-prepare---endpoint",
+      "argv": [
+        "prepare",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--endpoint",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-prepare---ref",
+      "argv": [
+        "prepare",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--ref",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-prepare---confirmed",
+      "argv": [
+        "prepare",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--confirmed",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-prepare---actor",
+      "argv": [
+        "prepare",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--actor",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-prepare---profile",
+      "argv": [
+        "prepare",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--profile",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-prepare---note-body",
+      "argv": [
+        "prepare",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--note-body",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-duplicate-prepare",
+      "argv": [
+        "prepare",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--group",
+        "other"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-human-prepare",
+      "argv": [
+        "prepare",
+        "--group",
+        "wiki",
+        "--output",
+        "human"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-positional-prepare",
+      "argv": [
+        "prepare",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "extra"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-submit",
+      "argv": [
+        "submit",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--request-id",
+        "mgr_11111111111111111111111111111111"
+      ],
+      "valid": true
+    },
+    {
+      "name": "argv-forbidden-submit---state-dir",
+      "argv": [
+        "submit",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--request-id",
+        "mgr_11111111111111111111111111111111",
+        "--state-dir",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-submit---force",
+      "argv": [
+        "submit",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--request-id",
+        "mgr_11111111111111111111111111111111",
+        "--force",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-submit---endpoint",
+      "argv": [
+        "submit",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--request-id",
+        "mgr_11111111111111111111111111111111",
+        "--endpoint",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-submit---ref",
+      "argv": [
+        "submit",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--request-id",
+        "mgr_11111111111111111111111111111111",
+        "--ref",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-submit---confirmed",
+      "argv": [
+        "submit",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--request-id",
+        "mgr_11111111111111111111111111111111",
+        "--confirmed",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-submit---actor",
+      "argv": [
+        "submit",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--request-id",
+        "mgr_11111111111111111111111111111111",
+        "--actor",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-submit---profile",
+      "argv": [
+        "submit",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--request-id",
+        "mgr_11111111111111111111111111111111",
+        "--profile",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-submit---note-body",
+      "argv": [
+        "submit",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--request-id",
+        "mgr_11111111111111111111111111111111",
+        "--note-body",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-duplicate-submit",
+      "argv": [
+        "submit",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--request-id",
+        "mgr_11111111111111111111111111111111",
+        "--group",
+        "other"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-human-submit",
+      "argv": [
+        "submit",
+        "--group",
+        "wiki",
+        "--output",
+        "human"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-positional-submit",
+      "argv": [
+        "submit",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--request-id",
+        "mgr_11111111111111111111111111111111",
+        "extra"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-show",
+      "argv": [
+        "show",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--request-id",
+        "mgr_11111111111111111111111111111111"
+      ],
+      "valid": true
+    },
+    {
+      "name": "argv-forbidden-show---state-dir",
+      "argv": [
+        "show",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--request-id",
+        "mgr_11111111111111111111111111111111",
+        "--state-dir",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-show---force",
+      "argv": [
+        "show",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--request-id",
+        "mgr_11111111111111111111111111111111",
+        "--force",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-show---endpoint",
+      "argv": [
+        "show",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--request-id",
+        "mgr_11111111111111111111111111111111",
+        "--endpoint",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-show---ref",
+      "argv": [
+        "show",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--request-id",
+        "mgr_11111111111111111111111111111111",
+        "--ref",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-show---confirmed",
+      "argv": [
+        "show",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--request-id",
+        "mgr_11111111111111111111111111111111",
+        "--confirmed",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-show---actor",
+      "argv": [
+        "show",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--request-id",
+        "mgr_11111111111111111111111111111111",
+        "--actor",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-show---profile",
+      "argv": [
+        "show",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--request-id",
+        "mgr_11111111111111111111111111111111",
+        "--profile",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-forbidden-show---note-body",
+      "argv": [
+        "show",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--request-id",
+        "mgr_11111111111111111111111111111111",
+        "--note-body",
+        "forbidden"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-duplicate-show",
+      "argv": [
+        "show",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--request-id",
+        "mgr_11111111111111111111111111111111",
+        "--group",
+        "other"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-human-show",
+      "argv": [
+        "show",
+        "--group",
+        "wiki",
+        "--output",
+        "human"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-positional-show",
+      "argv": [
+        "show",
+        "--group",
+        "wiki",
+        "--config",
+        "/trusted/config.yaml",
+        "--output",
+        "json",
+        "--request-id",
+        "mgr_11111111111111111111111111111111",
+        "extra"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-retry-missing-target",
+      "argv": [
+        "prepare",
+        "--group",
+        "wiki",
+        "--action",
+        "retry"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-nonretry-target",
+      "argv": [
+        "prepare",
+        "--group",
+        "wiki",
+        "--action",
+        "pause",
+        "--target-request-id",
+        "mgr_22222222222222222222222222222222"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-invent-handle",
+      "argv": [
+        "submit",
+        "--group",
+        "wiki",
+        "--action",
+        "sync-now"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-equals",
+      "argv": [
+        "prepare",
+        "--group=wiki",
+        "--action=pause",
+        "--output=json"
+      ],
+      "valid": true
+    },
+    {
+      "name": "argv-equals-duplicate",
+      "argv": [
+        "prepare",
+        "--group=wiki",
+        "--action=pause",
+        "--group",
+        "wiki"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-traversal-handle",
+      "argv": [
+        "show",
+        "--group",
+        "wiki",
+        "--request-id",
+        "../escape"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-control-byte",
+      "argv": [
+        "show",
+        "--group",
+        "wiki\n",
+        "--request-id",
+        "mgr_11111111111111111111111111111111"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-unknown-phase",
+      "argv": [
+        "serve",
+        "--group",
+        "wiki"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-empty-phase",
+      "argv": [],
+      "valid": false
+    },
+    {
+      "name": "argv-flag-looking-value",
+      "argv": [
+        "prepare",
+        "--group",
+        "--action",
+        "pause"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-submit-missing-handle",
+      "argv": [
+        "submit",
+        "--group",
+        "wiki"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-show-missing-handle",
+      "argv": [
+        "show",
+        "--group",
+        "wiki"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-config-control-tab",
+      "argv": [
+        "capabilities",
+        "--group",
+        "wiki",
+        "--config",
+        "/operator/\tconfig.yaml"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-config-control-soh",
+      "argv": [
+        "capabilities",
+        "--group",
+        "wiki",
+        "--config",
+        "/operator/\u0001config.yaml"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-config-control-escape",
+      "argv": [
+        "capabilities",
+        "--group",
+        "wiki",
+        "--config",
+        "/operator/\u001bconfig.yaml"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-config-control-del",
+      "argv": [
+        "capabilities",
+        "--group",
+        "wiki",
+        "--config",
+        "/operator/config.yaml"
+      ],
+      "valid": false
+    },
+    {
+      "name": "argv-config-control-c1",
+      "argv": [
+        "capabilities",
+        "--group",
+        "wiki",
+        "--config",
+        "/operator/config.yaml"
+      ],
+      "valid": false
+    }
+  ]
+}

@@ -246,7 +246,7 @@ linear-history verification.
 G19 is planned for E23's successor provider. It is not an additional v0.2.0
 release or deployment gate and none of its rows is evidence of implementation.
 The [management contract](../contracts/sync-management-contract.md) owns the
-proposed request boundaries. E23-T6 owns deterministic qualification;
+frozen successor request boundaries. E23-T6 owns deterministic qualification;
 E23-T7 owns the exact-candidate native paired handoff.
 
 | ID | Given / When / Then |

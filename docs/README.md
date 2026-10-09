@@ -19,12 +19,12 @@ qualifies its reviewed disposable Mac/Linux fixture and artifacts. Final
 release artifacts and the matching Plugin allowance require fresh qualification
 before publication.
 
-E23 is a planned successor for constrained local sync management. Its
+E23 develops the v0.3.0 successor for constrained local sync management. Its
 [requirements](specs/required-spec.md#20-post-v020-constrained-sync-management),
-[contract draft](contracts/sync-management-contract.md), and
+[frozen implementation contract](contracts/sync-management-contract.md), and
 [execution dossier](todo/TODO-SYNC-MANAGEMENT.md) are separate from the current
-v0.2.0 implementation and release gates. The intended order is the current
-Core/inspection-Plugin release, Core E23, then Plugin EPIC-008. The latter
+v0.2.0 implementation and release gates. The published Core/inspection-Plugin
+v0.2.0 pair is pinned in that contract. Core E23 precedes Plugin EPIC-008. The latter
 remains Deferred in its own roadmap until provider qualification and a
 separate Plugin scope amendment.
 
@@ -150,7 +150,9 @@ Binding (D-028 / G14), not the Linux epic. Source builds with the current Go
 
 Run `make verify` at the repository root. It covers build, format, vet,
 staticcheck, import direction, unit and race tests, manifest verification,
-schema/example validation, traceability regeneration, and scheduling artifacts.
+schema/example validation, provider and management contract bundles, traceability
+regeneration, and scheduling artifacts. Unit and race tests use a 30-minute
+per-package deadline so the complete CLI scenario suite fits the default gate.
 The [contributor guide](../CONTRIBUTING.md) explains generated-file handling.
 Review Markdown links, anchors, command examples, and version claims as well:
 checksums and schema validation do not prove prose correctness.

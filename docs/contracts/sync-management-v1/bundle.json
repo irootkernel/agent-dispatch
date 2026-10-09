@@ -1,0 +1,19 @@
+{
+  "schema_version": "agent-dispatch.sync-management-bundle/v1",
+  "bundle_id": "agent-dispatch-sync-management-v1",
+  "contract_digest": "sha256:77dba7fac82cf1e627ad29ab89057c18d4d5c2c380251112579e551d1122cf39",
+  "artifacts": [
+    "commands.json",
+    "policy.json",
+    "lifecycle.json",
+    "errors.json",
+    "config.schema.json",
+    "input.schema.json",
+    "result.schema.json",
+    "envelope.schema.json",
+    "fixtures.json",
+    "argv-fixtures.json",
+    "traceability.json",
+    "digest-vectors.json"
+  ]
+}

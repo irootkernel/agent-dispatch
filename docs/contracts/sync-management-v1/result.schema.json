@@ -1,0 +1,964 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agent-dispatch:schema:sync-management-result:v1",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "agent-dispatch.sync-management/v1"
+        },
+        "kind": {
+          "const": "request"
+        },
+        "phase": {
+          "type": "string",
+          "enum": [
+            "prepare",
+            "submit",
+            "show"
+          ]
+        },
+        "request_id": {
+          "type": "string",
+          "pattern": "^mgr_[0-9a-f]{32}$",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "group_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,62}$",
+          "maxLength": 63
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "sync-now",
+            "verify-all",
+            "retry",
+            "pause",
+            "resume"
+          ]
+        },
+        "target_request_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^mgr_[0-9a-f]{32}$",
+              "minLength": 36,
+              "maxLength": 36
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bindings": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "instance_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$",
+              "maxLength": 128
+            },
+            "state_incarnation_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$",
+              "maxLength": 128
+            },
+            "policy_revision": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "minLength": 71,
+              "maxLength": 71
+            },
+            "config_revision": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "minLength": 71,
+              "maxLength": 71
+            },
+            "expected_control_revision": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "instance_id",
+            "state_incarnation_id",
+            "policy_revision",
+            "config_revision",
+            "expected_control_revision"
+          ]
+        },
+        "fingerprint": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "minLength": 71,
+          "maxLength": 71
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "prepared",
+            "expired",
+            "queued",
+            "running",
+            "blocked",
+            "uncertain",
+            "finished"
+          ]
+        },
+        "accepted_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "Z$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "attempts": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20
+        },
+        "claim_fence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "jobs": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "job_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$",
+                "maxLength": 128
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "publication",
+                  "delivery",
+                  "import",
+                  "verification"
+                ]
+              },
+              "association_reason": {
+                "type": "string",
+                "enum": [
+                  "observed_reconciliation",
+                  "already_signed_recovery",
+                  "verification_target",
+                  "retry_obligation"
+                ]
+              },
+              "target_commit": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "attempts": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 20
+              },
+              "state": {
+                "type": "string",
+                "pattern": "^[a-z][a-z_]{0,63}$",
+                "maxLength": 64
+              }
+            },
+            "required": [
+              "job_id",
+              "kind",
+              "association_reason",
+              "target_commit",
+              "attempts",
+              "state"
+            ]
+          }
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "intent_committed",
+                    "complete",
+                    "incomplete",
+                    "target_changed",
+                    "expired",
+                    "already_settled",
+                    "no_op",
+                    "failed",
+                    "refused",
+                    "blocked",
+                    "uncertain"
+                  ]
+                },
+                "target_commit": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "verification_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$",
+                      "maxLength": 128
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "control_revision": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "quiescence": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "observed",
+                        "not_observed",
+                        "unknown"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "maxLength": 256,
+                  "$comment": "maxLength is a code-point bound. Wire conformance additionally requires the policy reason_bytes UTF-8 byte bound, checked by managementcontractcheck and required in runtime consumers."
+                }
+              },
+              "required": [
+                "status",
+                "target_commit",
+                "verification_id",
+                "control_revision",
+                "quiescence",
+                "reason"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "binding_current": {
+          "type": "boolean"
+        },
+        "executor": {
+          "type": "string",
+          "enum": [
+            "available",
+            "stopped",
+            "unknown"
+          ]
+        },
+        "side_effects": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 3,
+          "items": {
+            "type": "string",
+            "enum": [
+              "request_draft_write",
+              "request_acceptance_write",
+              "local_control_write"
+            ]
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "kind",
+        "phase",
+        "request_id",
+        "group_id",
+        "action",
+        "target_request_id",
+        "bindings",
+        "fingerprint",
+        "created_at",
+        "expires_at",
+        "state",
+        "accepted_at",
+        "attempts",
+        "claim_fence",
+        "jobs",
+        "outcome",
+        "binding_current",
+        "executor",
+        "side_effects"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "retry"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "target_request_id": {
+                "type": "string",
+                "pattern": "^mgr_[0-9a-f]{32}$",
+                "minLength": 36,
+                "maxLength": 36
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "target_request_id": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "enum": [
+                  "pause",
+                  "resume"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "bindings": {
+                "properties": {
+                  "expected_control_revision": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "bindings": {
+                "properties": {
+                  "expected_control_revision": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "enum": [
+                  "prepared",
+                  "expired"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "accepted_at": {
+                "type": "null"
+              },
+              "attempts": {
+                "const": 0
+              },
+              "claim_fence": {
+                "const": 0
+              },
+              "jobs": {
+                "maxItems": 0
+              },
+              "outcome": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "accepted_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "Z$"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "finished"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "outcome": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "intent_committed",
+                      "complete",
+                      "incomplete",
+                      "target_changed",
+                      "expired",
+                      "already_settled",
+                      "no_op",
+                      "failed",
+                      "refused",
+                      "blocked",
+                      "uncertain"
+                    ]
+                  },
+                  "target_commit": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "verification_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$",
+                        "maxLength": 128
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "control_revision": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "quiescence": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "observed",
+                          "not_observed",
+                          "unknown"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 256
+                  }
+                },
+                "required": [
+                  "status",
+                  "target_commit",
+                  "verification_id",
+                  "control_revision",
+                  "quiescence",
+                  "reason"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "phase": {
+                "const": "show"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "side_effects": {
+                "maxItems": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "phase": {
+                "const": "prepare"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "state": {
+                "const": "prepared"
+              },
+              "side_effects": {
+                "const": [
+                  "request_draft_write"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "finished"
+              },
+              "action": {
+                "enum": [
+                  "pause",
+                  "resume"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "outcome": {
+                "properties": {
+                  "status": {
+                    "const": "intent_committed"
+                  },
+                  "control_revision": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "quiescence": {
+                    "type": "string",
+                    "enum": [
+                      "observed",
+                      "not_observed",
+                      "unknown"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "enum": [
+                  "sync-now",
+                  "verify-all",
+                  "retry"
+                ]
+              }
+            },
+            "required": [
+              "action"
+            ]
+          },
+          "then": {
+            "properties": {
+              "outcome": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "properties": {
+                      "control_revision": {
+                        "type": "null"
+                      },
+                      "quiescence": {
+                        "type": "null"
+                      },
+                      "status": {
+                        "not": {
+                          "const": "intent_committed"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "verify-all"
+              },
+              "state": {
+                "const": "finished"
+              },
+              "outcome": {
+                "properties": {
+                  "status": {
+                    "enum": [
+                      "complete",
+                      "incomplete",
+                      "target_changed"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "outcome": {
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "complete",
+                      "incomplete",
+                      "target_changed",
+                      "expired",
+                      "failed"
+                    ]
+                  },
+                  "verification_id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$",
+                    "maxLength": 128
+                  },
+                  "target_commit": {
+                    "type": "string",
+                    "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "running"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "attempts": {
+                "minimum": 1
+              },
+              "claim_fence": {
+                "minimum": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "verify-all"
+              },
+              "state": {
+                "const": "finished"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "outcome": {
+                "properties": {
+                  "status": {
+                    "enum": [
+                      "complete",
+                      "incomplete",
+                      "target_changed",
+                      "expired",
+                      "failed"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "agent-dispatch.sync-management/v1"
+        },
+        "kind": {
+          "const": "capabilities"
+        },
+        "group_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,62}$",
+          "maxLength": 63
+        },
+        "contract_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "minLength": 71,
+          "maxLength": 71
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "configured_actions": {
+          "type": "array",
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "sync-now",
+              "verify-all",
+              "retry",
+              "pause",
+              "resume"
+            ]
+          }
+        },
+        "available_actions": {
+          "type": "array",
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "sync-now",
+              "verify-all",
+              "retry",
+              "pause",
+              "resume"
+            ]
+          }
+        },
+        "executor": {
+          "type": "string",
+          "enum": [
+            "available",
+            "stopped",
+            "unknown"
+          ]
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "preparation_ttl_seconds": {
+              "const": 600
+            },
+            "expired_draft_retention_seconds": {
+              "const": 86400
+            },
+            "prepared_data_limit": {
+              "const": 256
+            },
+            "prepared_control_limit": {
+              "const": 16
+            },
+            "unresolved_data_min": {
+              "const": 2
+            },
+            "unresolved_data_max": {
+              "const": 1000
+            },
+            "unresolved_control_limit": {
+              "const": 16
+            },
+            "terminal_data_limit": {
+              "const": 10000
+            },
+            "terminal_control_limit": {
+              "const": 1000
+            },
+            "association_limit": {
+              "const": 1000
+            },
+            "result_bytes": {
+              "const": 1048576
+            },
+            "reason_bytes": {
+              "const": 256
+            },
+            "call_deadline_seconds": {
+              "const": 5
+            },
+            "execution_deadline_seconds": {
+              "const": 240
+            },
+            "claim_lease_seconds": {
+              "const": 30
+            },
+            "claim_renewal_seconds": {
+              "const": 10
+            },
+            "executor_freshness_seconds": {
+              "const": 60
+            },
+            "shutdown_seconds": {
+              "const": 30
+            },
+            "cumulative_attempts": {
+              "const": 20
+            },
+            "minimum_terminal_retention_days": {
+              "const": 180
+            },
+            "management_per_recovery_pass": {
+              "const": 1
+            }
+          },
+          "required": [
+            "preparation_ttl_seconds",
+            "expired_draft_retention_seconds",
+            "prepared_data_limit",
+            "prepared_control_limit",
+            "unresolved_data_min",
+            "unresolved_data_max",
+            "unresolved_control_limit",
+            "terminal_data_limit",
+            "terminal_control_limit",
+            "association_limit",
+            "result_bytes",
+            "reason_bytes",
+            "call_deadline_seconds",
+            "execution_deadline_seconds",
+            "claim_lease_seconds",
+            "claim_renewal_seconds",
+            "executor_freshness_seconds",
+            "shutdown_seconds",
+            "cumulative_attempts",
+            "minimum_terminal_retention_days",
+            "management_per_recovery_pass"
+          ]
+        },
+        "data_capacity": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 1000
+        },
+        "side_effects": {
+          "type": "array",
+          "maxItems": 0
+        }
+      },
+      "required": [
+        "schema_version",
+        "kind",
+        "group_id",
+        "contract_digest",
+        "enabled",
+        "configured_actions",
+        "available_actions",
+        "executor",
+        "limits",
+        "data_capacity",
+        "side_effects"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "enabled": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "available_actions": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

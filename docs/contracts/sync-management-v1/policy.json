@@ -1,0 +1,79 @@
+{
+  "schema_version": "agent-dispatch.sync-management.policy/v1",
+  "config": {
+    "path": "sync.management",
+    "enabled": "explicit_boolean_when_present",
+    "actions": "unique_subset_of_the_five_actions",
+    "absent": "disabled",
+    "enabled_empty_actions": "invalid"
+  },
+  "actions": [
+    "sync-now",
+    "verify-all",
+    "retry",
+    "pause",
+    "resume"
+  ],
+  "limits": {
+    "preparation_ttl_seconds": 600,
+    "expired_draft_retention_seconds": 86400,
+    "prepared_data_limit": 256,
+    "prepared_control_limit": 16,
+    "unresolved_data_min": 2,
+    "unresolved_data_max": 1000,
+    "unresolved_control_limit": 16,
+    "terminal_data_limit": 10000,
+    "terminal_control_limit": 1000,
+    "association_limit": 1000,
+    "result_bytes": 1048576,
+    "reason_bytes": 256,
+    "call_deadline_seconds": 5,
+    "execution_deadline_seconds": 240,
+    "claim_lease_seconds": 30,
+    "claim_renewal_seconds": 10,
+    "executor_freshness_seconds": 60,
+    "shutdown_seconds": 30,
+    "cumulative_attempts": 20,
+    "minimum_terminal_retention_days": 180,
+    "management_per_recovery_pass": 1
+  },
+  "data_capacity": "configured_sync_bounds_queue",
+  "effect_bounds": "existing_sync_subprocess_queue_and_attempt_bounds_also_apply",
+  "policy_projection": [
+    "enabled",
+    "actions"
+  ],
+  "config_projection": [
+    "sync_revision",
+    "sync_enabled",
+    "bounds",
+    "nodes"
+  ],
+  "node_projection": [
+    "instance_id",
+    "state_incarnation_id",
+    "endpoint",
+    "publisher_key",
+    "credential_ref"
+  ],
+  "projection_order": "actions sorted lexically; nodes sorted by instance_id; all other arrays preserve order",
+  "fingerprint_domain": "agent-dispatch.sync-management.request/v1",
+  "policy_domain": "agent-dispatch.sync-management.policy/v1",
+  "config_domain": "agent-dispatch.sync-management.config/v1",
+  "digest_encoding": "SHA256 of domain UTF-8, NUL, then compact canonical JSON UTF-8 without a trailing newline; lexical object keys recursively, exact integers, no HTML escaping; U+2028 and U+2029 use lowercase JSON unicode escapes even with HTML escaping disabled",
+  "fingerprint_fields": [
+    "group_id",
+    "instance_id",
+    "state_incarnation_id",
+    "action",
+    "target_request_id",
+    "policy_revision",
+    "config_revision",
+    "expected_control_revision"
+  ],
+  "request_id_generation": "mgr_ plus 16 cryptographically random bytes encoded as lowercase hex",
+  "retry_budget": "underlying_job_attempts_never_reset",
+  "terminal_retention": "max(180_days, configured_completed_receipt_retention); refuse_before_admission_when_retained_capacity_is_full",
+  "lookup_expiry": "derive_prepared_expiry_without_mutation",
+  "capacity_order": "lookup_existing_accepted_identity_before_capacity_or_policy_refusal; current_authority_only_gates_new_effects"
+}

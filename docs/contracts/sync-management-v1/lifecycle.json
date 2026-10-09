@@ -1,0 +1,63 @@
+{
+  "schema_version": "agent-dispatch.sync-management.lifecycle/v1",
+  "states": [
+    "prepared",
+    "expired",
+    "queued",
+    "running",
+    "blocked",
+    "uncertain",
+    "finished"
+  ],
+  "transitions": {
+    "prepared": [
+      "expired",
+      "queued",
+      "finished"
+    ],
+    "expired": [],
+    "queued": [
+      "running",
+      "blocked"
+    ],
+    "running": [
+      "queued",
+      "blocked",
+      "uncertain",
+      "finished"
+    ],
+    "blocked": [
+      "queued",
+      "uncertain",
+      "finished"
+    ],
+    "uncertain": [
+      "queued",
+      "blocked",
+      "finished"
+    ],
+    "finished": []
+  },
+  "expiry": "only_unaccepted_prepared_drafts",
+  "local_control": "prepared_to_finished_in_one_acceptance_control_result_transaction",
+  "blocked": "known_authorization_or_safety_hold_before_new_effects",
+  "uncertain": "a_possible_effect_needs_durable_evidence",
+  "retry": "new_request_associating_only_prior_verified_obligations_without_changing_their_identity_or_target",
+  "verification": "pin_actual_membership_and_content_target_once_at_execution",
+  "resume_validation": "nonblocking_resource_guard_and_bounded_existing_safety_validation_before_SQLite_transaction; retain_guard_through_commit; busy_or_deadline_refuses_without_acceptance",
+  "fairness": "at_most_one_management_request_per_existing_recovery_pass; peer_and_periodic_recovery_run_before_next_management_request",
+  "restore": "management_disabled_stopped_service_compatible_backup_fresh_incarnation_then_reauthorization",
+  "never_prune": [
+    "accepted_unresolved_request",
+    "unresolved_job_association",
+    "unresolved_retry_lineage"
+  ],
+  "forbidden_effects": [
+    "new_publication_or_signing",
+    "membership_or_checkpoint_adoption",
+    "remote_control",
+    "service_installation",
+    "arbitrary_git_operation"
+  ],
+  "caller_response_loss": "retain_handle_and_lookup_or_resubmit_same_handle; never_overwrite_Core_evidence_with_caller_uncertainty"
+}

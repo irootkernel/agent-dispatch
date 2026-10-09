@@ -1,0 +1,1466 @@
+{
+  "schema_version": "agent-dispatch.sync-management.fixtures/v1",
+  "fixtures": [
+    {
+      "name": "config-disabled",
+      "schema": "urn:agent-dispatch:schema:sync-management-config:v1",
+      "valid": true,
+      "json": "{\"enabled\":false,\"actions\":[]}"
+    },
+    {
+      "name": "config-enabled",
+      "schema": "urn:agent-dispatch:schema:sync-management-config:v1",
+      "valid": true,
+      "json": "{\"enabled\":true,\"actions\":[\"sync-now\",\"verify-all\",\"retry\",\"pause\",\"resume\"]}"
+    },
+    {
+      "name": "config-enabled-empty",
+      "schema": "urn:agent-dispatch:schema:sync-management-config:v1",
+      "valid": false,
+      "json": "{\"enabled\":true,\"actions\":[]}"
+    },
+    {
+      "name": "config-duplicate",
+      "schema": "urn:agent-dispatch:schema:sync-management-config:v1",
+      "valid": false,
+      "json": "{\"enabled\":true,\"actions\":[\"pause\",\"pause\"]}"
+    },
+    {
+      "name": "config-unknown",
+      "schema": "urn:agent-dispatch:schema:sync-management-config:v1",
+      "valid": false,
+      "json": "{\"enabled\":true,\"actions\":[\"publish\"]}"
+    },
+    {
+      "name": "config-unknown-field",
+      "schema": "urn:agent-dispatch:schema:sync-management-config:v1",
+      "valid": false,
+      "json": "{\"enabled\":true,\"actions\":[\"pause\"],\"confirmed\":true}"
+    },
+    {
+      "name": "input-capabilities",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": true,
+      "json": "{\"phase\":\"capabilities\",\"group_id\":\"wiki\"}"
+    },
+    {
+      "name": "input-submit",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": true,
+      "json": "{\"phase\":\"submit\",\"group_id\":\"wiki\",\"request_id\":\"mgr_11111111111111111111111111111111\"}"
+    },
+    {
+      "name": "input-show",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": true,
+      "json": "{\"phase\":\"show\",\"group_id\":\"wiki\",\"request_id\":\"mgr_11111111111111111111111111111111\"}"
+    },
+    {
+      "name": "input-prepare-sync-now",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": true,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"sync-now\"}"
+    },
+    {
+      "name": "input-forbidden-sync-now-path",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"path\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-sync-now-endpoint",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"endpoint\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-sync-now-ref",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"ref\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-sync-now-force",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"force\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-sync-now-confirmed",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"confirmed\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-sync-now-actor",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"actor\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-sync-now-credential",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"credential\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-sync-now-note_body",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"note_body\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-sync-now-request_id",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"request_id\":\"forbidden\"}"
+    },
+    {
+      "name": "input-prepare-verify-all",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": true,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"verify-all\"}"
+    },
+    {
+      "name": "input-forbidden-verify-all-path",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"path\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-verify-all-endpoint",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"endpoint\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-verify-all-ref",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"ref\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-verify-all-force",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"force\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-verify-all-confirmed",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"confirmed\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-verify-all-actor",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"actor\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-verify-all-credential",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"credential\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-verify-all-note_body",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"note_body\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-verify-all-request_id",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"request_id\":\"forbidden\"}"
+    },
+    {
+      "name": "input-prepare-retry",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": true,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"retry\",\"target_request_id\":\"mgr_22222222222222222222222222222222\"}"
+    },
+    {
+      "name": "input-forbidden-retry-path",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"retry\",\"target_request_id\":\"mgr_22222222222222222222222222222222\",\"path\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-retry-endpoint",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"retry\",\"target_request_id\":\"mgr_22222222222222222222222222222222\",\"endpoint\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-retry-ref",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"retry\",\"target_request_id\":\"mgr_22222222222222222222222222222222\",\"ref\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-retry-force",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"retry\",\"target_request_id\":\"mgr_22222222222222222222222222222222\",\"force\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-retry-confirmed",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"retry\",\"target_request_id\":\"mgr_22222222222222222222222222222222\",\"confirmed\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-retry-actor",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"retry\",\"target_request_id\":\"mgr_22222222222222222222222222222222\",\"actor\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-retry-credential",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"retry\",\"target_request_id\":\"mgr_22222222222222222222222222222222\",\"credential\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-retry-note_body",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"retry\",\"target_request_id\":\"mgr_22222222222222222222222222222222\",\"note_body\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-retry-request_id",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"retry\",\"target_request_id\":\"mgr_22222222222222222222222222222222\",\"request_id\":\"forbidden\"}"
+    },
+    {
+      "name": "input-prepare-pause",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": true,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"pause\"}"
+    },
+    {
+      "name": "input-forbidden-pause-path",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"pause\",\"path\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-pause-endpoint",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"pause\",\"endpoint\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-pause-ref",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"pause\",\"ref\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-pause-force",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"pause\",\"force\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-pause-confirmed",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"pause\",\"confirmed\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-pause-actor",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"pause\",\"actor\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-pause-credential",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"pause\",\"credential\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-pause-note_body",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"pause\",\"note_body\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-pause-request_id",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"pause\",\"request_id\":\"forbidden\"}"
+    },
+    {
+      "name": "input-prepare-resume",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": true,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"resume\"}"
+    },
+    {
+      "name": "input-forbidden-resume-path",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"resume\",\"path\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-resume-endpoint",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"resume\",\"endpoint\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-resume-ref",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"resume\",\"ref\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-resume-force",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"resume\",\"force\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-resume-confirmed",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"resume\",\"confirmed\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-resume-actor",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"resume\",\"actor\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-resume-credential",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"resume\",\"credential\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-resume-note_body",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"resume\",\"note_body\":\"forbidden\"}"
+    },
+    {
+      "name": "input-forbidden-resume-request_id",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"resume\",\"request_id\":\"forbidden\"}"
+    },
+    {
+      "name": "retry-missing-predecessor",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"retry\"}"
+    },
+    {
+      "name": "nonretry-predecessor",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"pause\",\"target_request_id\":\"mgr_22222222222222222222222222222222\"}"
+    },
+    {
+      "name": "unknown-action",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"publish\"}"
+    },
+    {
+      "name": "unknown-handle",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"submit\",\"group_id\":\"wiki\",\"request_id\":\"../escape\"}"
+    },
+    {
+      "name": "duplicate-keys",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"prepare\",\"group_id\":\"wiki\",\"action\":\"pause\",\"action\":\"resume\"}"
+    },
+    {
+      "name": "duplicate-nested-keys",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"bindings\":{\"instance_id\":\"x\",\"instance_id\":\"y\"}}"
+    },
+    {
+      "name": "result-sync-now-prepare",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"prepare\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_draft_write\"]}"
+    },
+    {
+      "name": "envelope-sync-now-prepare",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request prepare\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"prepare\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_draft_write\"]}}"
+    },
+    {
+      "name": "wrong-command-sync-now-prepare",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request capabilities\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"prepare\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_draft_write\"]}}"
+    },
+    {
+      "name": "result-sync-now-submit",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"submit\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"queued\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_acceptance_write\"]}"
+    },
+    {
+      "name": "envelope-sync-now-submit",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"submit\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"queued\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_acceptance_write\"]}}"
+    },
+    {
+      "name": "wrong-command-sync-now-submit",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request capabilities\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"submit\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"queued\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_acceptance_write\"]}}"
+    },
+    {
+      "name": "result-sync-now-show",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "envelope-sync-now-show",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request show\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}}"
+    },
+    {
+      "name": "wrong-command-sync-now-show",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request capabilities\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}}"
+    },
+    {
+      "name": "result-verify-all-prepare",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"prepare\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_draft_write\"]}"
+    },
+    {
+      "name": "envelope-verify-all-prepare",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request prepare\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"prepare\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_draft_write\"]}}"
+    },
+    {
+      "name": "wrong-command-verify-all-prepare",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request capabilities\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"prepare\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_draft_write\"]}}"
+    },
+    {
+      "name": "result-verify-all-submit",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"submit\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"queued\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_acceptance_write\"]}"
+    },
+    {
+      "name": "envelope-verify-all-submit",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"submit\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"queued\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_acceptance_write\"]}}"
+    },
+    {
+      "name": "wrong-command-verify-all-submit",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request capabilities\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"submit\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"queued\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_acceptance_write\"]}}"
+    },
+    {
+      "name": "result-verify-all-show",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "envelope-verify-all-show",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request show\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}}"
+    },
+    {
+      "name": "wrong-command-verify-all-show",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request capabilities\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}}"
+    },
+    {
+      "name": "result-retry-prepare",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"prepare\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"retry\",\"target_request_id\":\"mgr_22222222222222222222222222222222\",\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_draft_write\"]}"
+    },
+    {
+      "name": "envelope-retry-prepare",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request prepare\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"prepare\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"retry\",\"target_request_id\":\"mgr_22222222222222222222222222222222\",\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_draft_write\"]}}"
+    },
+    {
+      "name": "wrong-command-retry-prepare",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request capabilities\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"prepare\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"retry\",\"target_request_id\":\"mgr_22222222222222222222222222222222\",\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_draft_write\"]}}"
+    },
+    {
+      "name": "result-retry-submit",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"submit\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"retry\",\"target_request_id\":\"mgr_22222222222222222222222222222222\",\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"queued\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_acceptance_write\"]}"
+    },
+    {
+      "name": "envelope-retry-submit",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"submit\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"retry\",\"target_request_id\":\"mgr_22222222222222222222222222222222\",\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"queued\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_acceptance_write\"]}}"
+    },
+    {
+      "name": "wrong-command-retry-submit",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request capabilities\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"submit\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"retry\",\"target_request_id\":\"mgr_22222222222222222222222222222222\",\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"queued\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_acceptance_write\"]}}"
+    },
+    {
+      "name": "result-retry-show",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"retry\",\"target_request_id\":\"mgr_22222222222222222222222222222222\",\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "envelope-retry-show",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request show\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"retry\",\"target_request_id\":\"mgr_22222222222222222222222222222222\",\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}}"
+    },
+    {
+      "name": "wrong-command-retry-show",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request capabilities\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"retry\",\"target_request_id\":\"mgr_22222222222222222222222222222222\",\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}}"
+    },
+    {
+      "name": "result-pause-prepare",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"prepare\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"pause\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":1},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_draft_write\"]}"
+    },
+    {
+      "name": "envelope-pause-prepare",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request prepare\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"prepare\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"pause\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":1},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_draft_write\"]}}"
+    },
+    {
+      "name": "wrong-command-pause-prepare",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request capabilities\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"prepare\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"pause\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":1},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_draft_write\"]}}"
+    },
+    {
+      "name": "result-pause-submit",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"submit\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"pause\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":1},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"finished\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":{\"status\":\"intent_committed\",\"target_commit\":null,\"verification_id\":null,\"control_revision\":2,\"quiescence\":\"not_observed\",\"reason\":\"none\"},\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_acceptance_write\",\"local_control_write\"]}"
+    },
+    {
+      "name": "envelope-pause-submit",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"submit\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"pause\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":1},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"finished\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":{\"status\":\"intent_committed\",\"target_commit\":null,\"verification_id\":null,\"control_revision\":2,\"quiescence\":\"not_observed\",\"reason\":\"none\"},\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_acceptance_write\",\"local_control_write\"]}}"
+    },
+    {
+      "name": "wrong-command-pause-submit",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request capabilities\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"submit\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"pause\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":1},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"finished\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":{\"status\":\"intent_committed\",\"target_commit\":null,\"verification_id\":null,\"control_revision\":2,\"quiescence\":\"not_observed\",\"reason\":\"none\"},\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_acceptance_write\",\"local_control_write\"]}}"
+    },
+    {
+      "name": "result-pause-show",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"pause\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":1},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "envelope-pause-show",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request show\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"pause\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":1},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}}"
+    },
+    {
+      "name": "wrong-command-pause-show",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request capabilities\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"pause\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":1},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}}"
+    },
+    {
+      "name": "result-resume-prepare",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"prepare\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"resume\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":1},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_draft_write\"]}"
+    },
+    {
+      "name": "envelope-resume-prepare",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request prepare\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"prepare\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"resume\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":1},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_draft_write\"]}}"
+    },
+    {
+      "name": "wrong-command-resume-prepare",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request capabilities\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"prepare\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"resume\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":1},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_draft_write\"]}}"
+    },
+    {
+      "name": "result-resume-submit",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"submit\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"resume\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":1},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"finished\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":{\"status\":\"intent_committed\",\"target_commit\":null,\"verification_id\":null,\"control_revision\":2,\"quiescence\":\"not_observed\",\"reason\":\"none\"},\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_acceptance_write\",\"local_control_write\"]}"
+    },
+    {
+      "name": "envelope-resume-submit",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"submit\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"resume\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":1},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"finished\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":{\"status\":\"intent_committed\",\"target_commit\":null,\"verification_id\":null,\"control_revision\":2,\"quiescence\":\"not_observed\",\"reason\":\"none\"},\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_acceptance_write\",\"local_control_write\"]}}"
+    },
+    {
+      "name": "wrong-command-resume-submit",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request capabilities\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"submit\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"resume\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":1},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"finished\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":{\"status\":\"intent_committed\",\"target_commit\":null,\"verification_id\":null,\"control_revision\":2,\"quiescence\":\"not_observed\",\"reason\":\"none\"},\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"request_acceptance_write\",\"local_control_write\"]}}"
+    },
+    {
+      "name": "result-resume-show",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"resume\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":1},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "envelope-resume-show",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request show\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"resume\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":1},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}}"
+    },
+    {
+      "name": "wrong-command-resume-show",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request capabilities\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"resume\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":1},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}}"
+    },
+    {
+      "name": "lookup-state-prepared",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "lookup-state-expired",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"expired\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "lookup-state-queued",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"queued\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "lookup-state-running",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"running\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":1,\"claim_fence\":1,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "lookup-state-blocked",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"blocked\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "lookup-state-uncertain",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"uncertain\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "lookup-state-finished",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"finished\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":{\"status\":\"no_op\",\"target_commit\":null,\"verification_id\":null,\"control_revision\":null,\"quiescence\":null,\"reason\":\"none\"},\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "verification-complete",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"finished\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":{\"status\":\"complete\",\"target_commit\":\"ffffffffffffffffffffffffffffffffffffffff\",\"verification_id\":\"verification_123\",\"control_revision\":null,\"quiescence\":null,\"reason\":\"none\"},\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "verification-no-identity-complete",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"finished\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":{\"status\":\"complete\",\"target_commit\":\"ffffffffffffffffffffffffffffffffffffffff\",\"verification_id\":null,\"control_revision\":null,\"quiescence\":null,\"reason\":\"none\"},\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "verification-incomplete",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"finished\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":{\"status\":\"incomplete\",\"target_commit\":\"ffffffffffffffffffffffffffffffffffffffff\",\"verification_id\":\"verification_123\",\"control_revision\":null,\"quiescence\":null,\"reason\":\"none\"},\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "verification-no-identity-incomplete",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"finished\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":{\"status\":\"incomplete\",\"target_commit\":\"ffffffffffffffffffffffffffffffffffffffff\",\"verification_id\":null,\"control_revision\":null,\"quiescence\":null,\"reason\":\"none\"},\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "verification-target_changed",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"finished\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":{\"status\":\"target_changed\",\"target_commit\":\"ffffffffffffffffffffffffffffffffffffffff\",\"verification_id\":\"verification_123\",\"control_revision\":null,\"quiescence\":null,\"reason\":\"none\"},\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "verification-no-identity-target_changed",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"finished\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":{\"status\":\"target_changed\",\"target_commit\":\"ffffffffffffffffffffffffffffffffffffffff\",\"verification_id\":null,\"control_revision\":null,\"quiescence\":null,\"reason\":\"none\"},\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "verification-expired",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"finished\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":{\"status\":\"expired\",\"target_commit\":\"ffffffffffffffffffffffffffffffffffffffff\",\"verification_id\":\"verification_123\",\"control_revision\":null,\"quiescence\":null,\"reason\":\"none\"},\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "error-flag_invalid",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 2,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"flag_invalid\",\"category\":\"usage\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "wrong-exit-flag_invalid",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"flag_invalid\",\"category\":\"usage\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "error-config_invalid",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 3,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"config_invalid\",\"category\":\"configuration\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "wrong-exit-config_invalid",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"config_invalid\",\"category\":\"configuration\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "error-sync_group_not_found",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 3,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_group_not_found\",\"category\":\"configuration\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "wrong-exit-sync_group_not_found",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_group_not_found\",\"category\":\"configuration\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "error-sync_management_disabled",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 3,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_management_disabled\",\"category\":\"configuration\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "wrong-exit-sync_management_disabled",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_management_disabled\",\"category\":\"configuration\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "error-sync_management_unavailable",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 3,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_management_unavailable\",\"category\":\"configuration\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "wrong-exit-sync_management_unavailable",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_management_unavailable\",\"category\":\"configuration\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "error-sync_request_invalid",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 4,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_request_invalid\",\"category\":\"input_rejected\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "wrong-exit-sync_request_invalid",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_request_invalid\",\"category\":\"input_rejected\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "error-sync_request_not_found",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 4,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_request_not_found\",\"category\":\"input_rejected\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "wrong-exit-sync_request_not_found",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_request_not_found\",\"category\":\"input_rejected\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "error-sync_request_expired",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 4,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_request_expired\",\"category\":\"input_rejected\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "wrong-exit-sync_request_expired",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_request_expired\",\"category\":\"input_rejected\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "error-sync_request_obsolete",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 4,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_request_obsolete\",\"category\":\"input_rejected\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "wrong-exit-sync_request_obsolete",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_request_obsolete\",\"category\":\"input_rejected\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "error-sync_request_binding_changed",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 14,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_request_binding_changed\",\"category\":\"conflict\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "wrong-exit-sync_request_binding_changed",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_request_binding_changed\",\"category\":\"conflict\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "error-sync_request_conflict",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 14,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_request_conflict\",\"category\":\"conflict\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "wrong-exit-sync_request_conflict",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_request_conflict\",\"category\":\"conflict\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "error-sync_request_not_retryable",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 14,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_request_not_retryable\",\"category\":\"conflict\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "wrong-exit-sync_request_not_retryable",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_request_not_retryable\",\"category\":\"conflict\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "error-sync_request_capacity",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 10,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_request_capacity\",\"category\":\"transient_local\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "wrong-exit-sync_request_capacity",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_request_capacity\",\"category\":\"transient_local\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "error-sync_request_busy",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 10,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_request_busy\",\"category\":\"transient_local\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "wrong-exit-sync_request_busy",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_request_busy\",\"category\":\"transient_local\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "error-sync_request_deadline",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 10,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_request_deadline\",\"category\":\"transient_local\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "wrong-exit-sync_request_deadline",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_request_deadline\",\"category\":\"transient_local\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "error-sqlite_write_failed",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 20,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sqlite_write_failed\",\"category\":\"storage\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "wrong-exit-sqlite_write_failed",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sqlite_write_failed\",\"category\":\"storage\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "error-sync_trust_failed",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 30,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_trust_failed\",\"category\":\"security\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "wrong-exit-sync_trust_failed",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_trust_failed\",\"category\":\"security\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "error-sync_effect_unknown",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 13,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_effect_unknown\",\"category\":\"acceptance_unknown\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "wrong-exit-sync_effect_unknown",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"sync_effect_unknown\",\"category\":\"acceptance_unknown\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "error-internal_unclassified",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 40,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"internal_unclassified\",\"category\":\"internal\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "wrong-exit-internal_unclassified",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"internal_unclassified\",\"category\":\"internal\",\"message\":\"bounded refusal\",\"retryable\":false}}"
+    },
+    {
+      "name": "capabilities-disabled",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":2,\"side_effects\":[]}"
+    },
+    {
+      "name": "capabilities-envelope",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 0,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request capabilities\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":2,\"side_effects\":[]}}"
+    },
+    {
+      "name": "limit-drift-preparation_ttl_seconds",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":601,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":2,\"side_effects\":[]}"
+    },
+    {
+      "name": "limit-drift-expired_draft_retention_seconds",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86401,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":2,\"side_effects\":[]}"
+    },
+    {
+      "name": "limit-drift-prepared_data_limit",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":257,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":2,\"side_effects\":[]}"
+    },
+    {
+      "name": "limit-drift-prepared_control_limit",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":17,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":2,\"side_effects\":[]}"
+    },
+    {
+      "name": "limit-drift-unresolved_data_min",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":3,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":2,\"side_effects\":[]}"
+    },
+    {
+      "name": "limit-drift-unresolved_data_max",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1001,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":2,\"side_effects\":[]}"
+    },
+    {
+      "name": "limit-drift-unresolved_control_limit",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":17,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":2,\"side_effects\":[]}"
+    },
+    {
+      "name": "limit-drift-terminal_data_limit",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10001,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":2,\"side_effects\":[]}"
+    },
+    {
+      "name": "limit-drift-terminal_control_limit",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1001,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":2,\"side_effects\":[]}"
+    },
+    {
+      "name": "limit-drift-association_limit",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1001,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":2,\"side_effects\":[]}"
+    },
+    {
+      "name": "limit-drift-result_bytes",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048577,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":2,\"side_effects\":[]}"
+    },
+    {
+      "name": "limit-drift-reason_bytes",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":257,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":2,\"side_effects\":[]}"
+    },
+    {
+      "name": "limit-drift-call_deadline_seconds",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":6,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":2,\"side_effects\":[]}"
+    },
+    {
+      "name": "limit-drift-execution_deadline_seconds",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":241,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":2,\"side_effects\":[]}"
+    },
+    {
+      "name": "limit-drift-claim_lease_seconds",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":31,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":2,\"side_effects\":[]}"
+    },
+    {
+      "name": "limit-drift-claim_renewal_seconds",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":11,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":2,\"side_effects\":[]}"
+    },
+    {
+      "name": "limit-drift-executor_freshness_seconds",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":61,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":2,\"side_effects\":[]}"
+    },
+    {
+      "name": "limit-drift-shutdown_seconds",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":31,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":2,\"side_effects\":[]}"
+    },
+    {
+      "name": "limit-drift-cumulative_attempts",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":21,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":2,\"side_effects\":[]}"
+    },
+    {
+      "name": "limit-drift-minimum_terminal_retention_days",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":181,\"management_per_recovery_pass\":1},\"data_capacity\":2,\"side_effects\":[]}"
+    },
+    {
+      "name": "limit-drift-management_per_recovery_pass",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":2},\"data_capacity\":2,\"side_effects\":[]}"
+    },
+    {
+      "name": "binding-invalid-fingerprint",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"SHA256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "binding-invalid-request_id",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\\n\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "binding-invalid-state",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"succeeded\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "binding-invalid-created_at",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"not-a-date\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "binding-invalid-side_effects",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[\"git_write\"]}"
+    },
+    {
+      "name": "bound-attempts",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"running\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":20,\"claim_fence\":1,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "bound-negative-attempts",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"running\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":-1,\"claim_fence\":1,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "bound-over-attempts",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"running\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":21,\"claim_fence\":1,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "bound-claim_fence",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"running\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":1,\"claim_fence\":1,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "bound-negative-claim_fence",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"running\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":1,\"claim_fence\":-1,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "reason-byte-bound",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"finished\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":{\"status\":\"no_op\",\"target_commit\":null,\"verification_id\":null,\"control_revision\":null,\"quiescence\":null,\"reason\":\"éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé\"},\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "reason-over-byte-bound",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"finished\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":{\"status\":\"no_op\",\"target_commit\":null,\"verification_id\":null,\"control_revision\":null,\"quiescence\":null,\"reason\":\"ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé\"},\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "capacity-2",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":2,\"side_effects\":[]}"
+    },
+    {
+      "name": "capacity-1000",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":1000,\"side_effects\":[]}"
+    },
+    {
+      "name": "capacity-1",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":1,\"side_effects\":[]}"
+    },
+    {
+      "name": "capacity-1001",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":1001,\"side_effects\":[]}"
+    },
+    {
+      "name": "group-invalid-201",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"capabilities\",\"group_id\":\"\"}"
+    },
+    {
+      "name": "group-invalid-202",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"capabilities\",\"group_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}"
+    },
+    {
+      "name": "group-invalid-203",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"capabilities\",\"group_id\":\"../wiki\"}"
+    },
+    {
+      "name": "group-invalid-204",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"capabilities\",\"group_id\":\"wiki\\n\"}"
+    },
+    {
+      "name": "trailing-json",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"capabilities\",\"group_id\":\"wiki\"} {}"
+    },
+    {
+      "name": "case-alias",
+      "schema": "urn:agent-dispatch:schema:sync-management-input:v1",
+      "valid": false,
+      "json": "{\"phase\":\"capabilities\",\"group_id\":\"wiki\",\"Group_ID\":\"other\"}"
+    },
+    {
+      "name": "config-duplicate-keys",
+      "schema": "urn:agent-dispatch:schema:sync-management-config:v1",
+      "valid": false,
+      "json": "{\"enabled\":true,\"actions\":[\"pause\"],\"enabled\":false}"
+    },
+    {
+      "name": "binding-invalid-inner-instance_id",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"../node\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "binding-invalid-inner-state_incarnation_id",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch\\n\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "binding-invalid-inner-policy_revision",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:x\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "binding-invalid-inner-config_revision",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"SHA256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "binding-invalid-inner-expected_control_revision",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":1},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "timestamp-not-utc",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00+01:00\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"prepared\",\"accepted_at\":null,\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "running-without-claim",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"running\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "association-duplicate-id",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"running\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":1,\"claim_fence\":1,\"jobs\":[{\"job_id\":\"job-1\",\"kind\":\"import\",\"association_reason\":\"observed_reconciliation\",\"target_commit\":\"ffffffffffffffffffffffffffffffffffffffff\",\"attempts\":1,\"state\":\"imported\"},{\"job_id\":\"job-1\",\"kind\":\"import\",\"association_reason\":\"observed_reconciliation\",\"target_commit\":\"ffffffffffffffffffffffffffffffffffffffff\",\"attempts\":2,\"state\":\"imported\"}],\"outcome\":null,\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "verification-terminal-refuses-no_op",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"finished\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":{\"status\":\"no_op\",\"target_commit\":null,\"verification_id\":null,\"control_revision\":null,\"quiescence\":null,\"reason\":\"none\"},\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "verification-terminal-refuses-already_settled",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"finished\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":{\"status\":\"already_settled\",\"target_commit\":null,\"verification_id\":null,\"control_revision\":null,\"quiescence\":null,\"reason\":\"none\"},\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "verification-terminal-refuses-refused",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"finished\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":{\"status\":\"refused\",\"target_commit\":null,\"verification_id\":null,\"control_revision\":null,\"quiescence\":null,\"reason\":\"none\"},\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "verification-terminal-refuses-blocked",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"finished\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":{\"status\":\"blocked\",\"target_commit\":null,\"verification_id\":null,\"control_revision\":null,\"quiescence\":null,\"reason\":\"none\"},\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "verification-terminal-refuses-uncertain",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": false,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"finished\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":{\"status\":\"uncertain\",\"target_commit\":null,\"verification_id\":null,\"control_revision\":null,\"quiescence\":null,\"reason\":\"none\"},\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "verification-prepin-expired",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"finished\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":{\"status\":\"expired\",\"target_commit\":null,\"verification_id\":null,\"control_revision\":null,\"quiescence\":null,\"reason\":\"none\"},\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "verification-prepin-failed",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"verify-all\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"finished\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":{\"status\":\"failed\",\"target_commit\":null,\"verification_id\":null,\"control_revision\":null,\"quiescence\":null,\"reason\":\"none\"},\"binding_current\":true,\"executor\":\"stopped\",\"side_effects\":[]}"
+    },
+    {
+      "name": "error-message-utf8-128",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 2,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"flag_invalid\",\"category\":\"usage\",\"message\":\"éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé\",\"retryable\":false}}"
+    },
+    {
+      "name": "error-message-utf8-129",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 2,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"flag_invalid\",\"category\":\"usage\",\"message\":\"ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé\",\"retryable\":false}}"
+    },
+    {
+      "name": "error-remediation-utf8-128",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": true,
+      "exit_code": 2,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"flag_invalid\",\"category\":\"usage\",\"message\":\"bounded refusal\",\"retryable\":false,\"remediation\":\"éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé\"}}"
+    },
+    {
+      "name": "error-remediation-utf8-129",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 2,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"flag_invalid\",\"category\":\"usage\",\"message\":\"bounded refusal\",\"retryable\":false,\"remediation\":\"ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé\"}}"
+    },
+    {
+      "name": "lookup-stale-binding",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"request\",\"phase\":\"show\",\"request_id\":\"mgr_11111111111111111111111111111111\",\"group_id\":\"wiki\",\"action\":\"sync-now\",\"target_request_id\":null,\"bindings\":{\"instance_id\":\"node-a\",\"state_incarnation_id\":\"epoch-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":null},\"fingerprint\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":\"2026-01-01T00:00:00Z\",\"expires_at\":\"2026-01-01T00:10:00Z\",\"state\":\"queued\",\"accepted_at\":\"2026-01-01T00:01:00Z\",\"attempts\":0,\"claim_fence\":0,\"jobs\":[],\"outcome\":null,\"binding_current\":false,\"executor\":\"unknown\",\"side_effects\":[]}"
+    },
+    {
+      "name": "capabilities-enabled-available",
+      "schema": "urn:agent-dispatch:schema:sync-management-result:v1",
+      "valid": true,
+      "json": "{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":true,\"configured_actions\":[\"sync-now\",\"pause\",\"resume\"],\"available_actions\":[\"sync-now\",\"pause\"],\"executor\":\"available\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":1000,\"side_effects\":[]}"
+    },
+    {
+      "name": "success-envelope-nonzero-exit",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 2,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request capabilities\",\"ok\":true,\"trace_id\":\"\",\"warnings\":[],\"result\":{\"schema_version\":\"agent-dispatch.sync-management/v1\",\"kind\":\"capabilities\",\"group_id\":\"wiki\",\"contract_digest\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"enabled\":false,\"configured_actions\":[],\"available_actions\":[],\"executor\":\"unknown\",\"limits\":{\"preparation_ttl_seconds\":600,\"expired_draft_retention_seconds\":86400,\"prepared_data_limit\":256,\"prepared_control_limit\":16,\"unresolved_data_min\":2,\"unresolved_data_max\":1000,\"unresolved_control_limit\":16,\"terminal_data_limit\":10000,\"terminal_control_limit\":1000,\"association_limit\":1000,\"result_bytes\":1048576,\"reason_bytes\":256,\"call_deadline_seconds\":5,\"execution_deadline_seconds\":240,\"claim_lease_seconds\":30,\"claim_renewal_seconds\":10,\"executor_freshness_seconds\":60,\"shutdown_seconds\":30,\"cumulative_attempts\":20,\"minimum_terminal_retention_days\":180,\"management_per_recovery_pass\":1},\"data_capacity\":2,\"side_effects\":[]}}"
+    },
+    {
+      "name": "error-envelope-null-result",
+      "schema": "urn:agent-dispatch:schema:sync-management-envelope:v1",
+      "valid": false,
+      "exit_code": 2,
+      "json": "{\"api_version\":\"agent-dispatch.cli/v1\",\"command\":\"sync request submit\",\"ok\":false,\"trace_id\":\"\",\"error\":{\"code\":\"flag_invalid\",\"category\":\"usage\",\"message\":\"bounded refusal\",\"retryable\":false},\"result\":null}"
+    }
+  ]
+}

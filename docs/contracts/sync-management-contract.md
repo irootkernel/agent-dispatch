@@ -2,22 +2,22 @@
 
 ## Status and ownership
 
-This is the planning contract for E23, requested on 2026-09-30. It is not an
-implemented command reference, a change to the v0.2.0 provider bundle, or
-permission to enable management in an installed instance. The normative
-successor requirements are `SMR-001` through `SMR-015` in
+This is E23's frozen implementation contract for the v0.3.0 successor,
+selected by E23-T1 on 2026-10-09. Runtime delivery and G19 qualification remain
+separate requirements; the v0.2.0 executable does not implement this family.
+The successor requirements are `SMR-001` through `SMR-015` in
 [required-spec.md](../specs/required-spec.md#20-post-v020-constrained-sync-management).
 [E23's dossier](../todo/TODO-SYNC-MANAGEMENT.md) maps delivery, and the
 [roadmap](../roadmap/roadmap.md#e23-constrained-sync-management-request-provider)
 alone owns status. [ADR-0026](../architecture-decision-records/0026-constrained-sync-management-requests.md)
-is Proposed until E23-T1 freezes the implementation contract.
+records the accepted architectural decision.
 
-The first provider release must be later than v0.2.0; its version is selected
-at E23-T1, not inferred from this document. Use a separately versioned
+The first provider release is v0.3.0. Use a separately versioned
 `agent-dispatch.sync-management/v1` contract and independent capability digest.
 Do not revise the frozen `sync-provider-v1` bundle to advertise these commands.
-Before implementation, E23-T1 must turn the design below into exact command,
-configuration, result, error, schema, fixture, and checksum authorities.
+The [management v1 bundle](sync-management-v1/bundle.json) owns the exact
+command, policy, lifecycle, schema, fixture, and error descriptors. Run
+`make management-contract-check` to check their independent identity.
 
 ## Scope and authority
 
@@ -55,7 +55,7 @@ Use a small preparation step so a caller learns a durable handle before a
 management action can execute. This avoids requiring a Plugin database or an
 unverified Hermes call-ID persistence guarantee.
 
-The proposed command family is shown for contract design only. These commands
+The frozen command family is shown for successor implementation. These commands
 must not appear as available in v0.2.0 help, examples, or capabilities:
 
 ```text
@@ -69,8 +69,9 @@ All commands accept the trusted config path consistently. All inputs are
 closed. `--target-request-id` is required only for `retry`; other actions
 reject it. Core derives revision preconditions at preparation and returns
 them for inspection. Submission accepts the handle, not replacement action
-parameters. E23-T1 freezes exact option spelling, ID grammar, limits, error
-carriers, and exit codes before runtime implementation.
+parameters. Both `--flag value` and `--flag=value` are accepted. Duplicate
+flags, positionals, unknown flags, empty values, and control bytes are refused.
+Output defaults to JSON; any other output format is refused.
 
 `prepare` validates the policy and local bindings and creates a bounded,
 expiring immutable request draft. It may perform bounded local inspection
@@ -121,16 +122,15 @@ an accepted receipt without its corresponding control result.
 
 `show` is a bounded read by exact request ID. It neither starts recovery nor
 fetches, verifies, submits, or creates missing records. It reports the bound
-action and revisions, lifecycle, executor availability, linked execution
+action and revisions, lifecycle, executor availability, associated execution
 identities, attempts, and bounded reasons. Results must come from that
 request's durable associations, never the group's latest job projection.
 
-The planned lifecycle distinguishes unsubmitted `prepared` and `expired`
+The lifecycle distinguishes unsubmitted `prepared` and `expired`
 records, accepted `queued` and `running` work, recoverable or held work, and
-resolved results. E23-T1 freezes a closed state graph with explicit
-`blocked` and `uncertain` meanings. A wrapper saying the query succeeded does
-not say the action succeeded. Likewise, an accepted request is not a
-publication, delivery acknowledgement, import, or complete verification.
+resolved results, with the closed graph below. Query success says that the
+record was read. Acceptance, publication, delivery acknowledgement, import,
+and complete verification each require their own evidence.
 A finished verification with `incomplete` or `target_changed` is a valid
 verification result, not an adapter failure or fresh convergence claim.
 
@@ -189,13 +189,13 @@ checkpoint/membership recovery retain their existing authority.
 
 ## Limits, retention, and local state upgrades
 
-E23-T1 must freeze tested numeric ceilings for preparation lifetime, retained
+The numeric ceilings below apply to preparation lifetime, retained
 unsubmitted drafts, queued/unresolved requests, the independent control
 reserve, lookup size, associated-job evidence, execution deadlines, retry
 attempts, and retained terminal records. Do not expose an uncapped list or
 serialize every historical job into one tool result. Existing sync job,
 subprocess, concurrency, and retry ceilings remain upper bounds for effects.
-Preparation/acceptance should fit inside the Plugin's normal bounded call;
+Preparation/acceptance must fit inside the five-second call bound;
 long work stays outside that call. Verify this with an injected short CLI
 deadline, not by increasing the Plugin timeout to hide coupling.
 
@@ -217,6 +217,229 @@ state incarnation through the existing identity recovery procedure before
 new management effects. A restored prepared request from an old incarnation
 must never become executable. Unannounced copying of an older live database
 by a same-UID process is outside this supported recovery contract.
+
+## Frozen release pair and development isolation
+
+The current pair was published on 2026-10-01. These public release identities
+remain independently usable while v0.3.0 is developed:
+
+| Provider | Published identity |
+|---|---|
+| [Core v0.2.0](https://github.com/irootkernel/agent-dispatch/releases/tag/v0.2.0) | Source `ffc8715d030ed3978e2c34d700798815975917d9`; base contract `sha256:30cf47b1bd854a0271aa9df3e7b37f0cc14cdd86d3f06a65a2cb787c6741131b` |
+| Core Darwin arm64 | Binary SHA256 `7f9e68f7033ed7750f1d6912d510f617d2a06fd58f5f18400b73d68280604508` |
+| Core Linux amd64 | Binary SHA256 `a749ad083c2028af3b0d500c95d448f5a90af80c5c6e9a70fe950b011393efb2` |
+| Core Linux arm64 | Binary SHA256 `9ca8f030b7763f05c229c5792836ea86ad3f2a8cc97912e47dda8f8a687d2cec` |
+| [Inspection Plugin v0.2.0](https://github.com/irootkernel/agent-dispatch-plugin/releases/tag/v0.2.0) | Source `a060d1363e6861fc113b928f238a39d2f4c11e7d`; source archive SHA256 `10c69ed73dc320d37c77e0918784107d5b51e3430e005dae0290cbe41dd3eb9a` |
+
+The published Core `VALIDATION.json` records `final_verify_verdict: INCOMPLETE`:
+the aggregate race leg reached its 600-second limit and later gates were not
+run in that release qualification. Publication does not turn that result into
+passing verification or waive E23's fresh gates.
+
+T1 adds only contract artifacts and developer verification. It keeps runtime
+commands, runtime version defaults, configuration parsing, and the frozen
+`sync-provider-v1` artifact set unchanged. T2 onward use disposable state,
+repositories, credentials, refs, and service fixtures. No installed binary,
+production configuration, real vault, or Plugin allowance changes as a result
+of contract freeze. v0.3.0 release, installation, and activation need their
+own subsequent authority.
+
+## Exact bindings and wire records
+
+Handles match `^mgr_[0-9a-f]{32}$`: the suffix is 16 cryptographically random
+bytes, generated by Core. Group IDs match `^[a-z][a-z0-9-]{0,62}$`. Local
+instance, incarnation, verification, and job IDs retain the existing ASCII
+grammar `^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$`. Digests use `sha256:` followed
+by 64 lowercase hexadecimal digits. Git commit IDs contain exactly 40 or 64
+lowercase hexadecimal digits. These are whole-string matches; control bytes,
+path traversal, whitespace, aliases, and uppercase digest prefixes are refused.
+Timestamps use RFC3339 UTC. Raw JSON rejects duplicate keys at every depth,
+trailing documents, invalid UTF-8, and more than 64 nested containers before schema
+validation. All objects are closed and property names are case-sensitive.
+
+The successor configuration block `sync.management` has exactly `enabled`
+(boolean) and `actions` (unique array of the five action names). Both fields
+are required when the block is present; an absent block means disabled with
+an empty allowlist. Enabled with no actions is invalid. Ordinary `sync.enabled`
+also has to be true for new management effects. The operator config selector
+is `--config`, then `AGENT_DISPATCH_CONFIG`, then the platform default. No
+management command accepts `--state-dir` or a caller-defined policy. Argv fixtures
+start at the phase token; runtime conformance tests prepend `sync request`.
+Flag values refuse Unicode control characters (C0, DEL, and C1).
+
+Policy revision hashes `{enabled, actions}` with actions sorted lexically.
+Config revision hashes `{sync_revision, sync_enabled, bounds, nodes}`:
+`sync_revision` is the existing cooperative-import `SyncRevision`; `bounds`
+is the complete existing `SyncBounds`; nodes sort by `instance_id` and project
+exactly `instance_id`, `state_incarnation_id`, `endpoint`, `publisher_key`,
+and `credential_ref`. The credential reference is hashed without resolving
+its secret. Private signing-key references and secret values are neither
+resolved nor returned. Management does not change the existing acknowledgement
+projection. The config revision additionally binds endpoint and membership
+changes that the acknowledgement intentionally excludes.
+
+The immutable request fingerprint hashes exactly `group_id`, `instance_id`,
+`state_incarnation_id`, `action`, nullable `target_request_id`, `policy_revision`,
+`config_revision`, and nullable `expected_control_revision`. Control actions
+require a positive expected control revision; other actions carry null.
+Retry requires a predecessor handle; other actions carry null. Preparation
+records creation/expiry time separately. Submission never rewrites these
+bindings. Duplicate accepted submissions return existing evidence before new
+capacity or policy checks, while execution still needs current authority.
+Lookup after incarnation/policy/config movement returns the retained record
+with `binding_current: false`, allowing no new effects under that record.
+
+Revision/fingerprint digests hash domain UTF-8, NUL, and compact canonical JSON
+UTF-8 with recursively sorted object keys, exact integers, no HTML escaping,
+and no final newline. U+2028 and U+2029 use lowercase JSON Unicode escapes,
+including when HTML escaping is disabled. The domains and golden vectors are in
+[policy.json](sync-management-v1/policy.json) and
+[digest-vectors.json](sync-management-v1/digest-vectors.json). Array order is
+preserved except for the specified action/node sorting. A vector's `input`, when
+present, is the unsorted projection; `value` is the sorted projection to encode.
+
+The outer carrier stays `agent-dispatch.cli/v1` in `api_version`. Success
+contains `command`, `ok: true`, `result`, `warnings`, and `trace_id`; errors
+contain `command`, `ok: false`, `error`, and `trace_id`, with an optional
+bounded request view in `result`. Omit `result` when no view is available;
+an explicit null is invalid. Successful records go to stdout; error
+records go to stderr. The inner `schema_version` is
+`agent-dispatch.sync-management/v1`. Exact fields, discriminators, conditional
+constraints, and error/exit pairs are in the closed
+[result schema](sync-management-v1/result.schema.json),
+[envelope schema](sync-management-v1/envelope.schema.json), and
+[error registry](sync-management-v1/errors.json).
+
+Wire conformance also requires the semantic UTF-8 byte limits in
+[policy.json](sync-management-v1/policy.json). JSON Schema `maxLength` counts
+code points and supplies a structural bound; the checker and runtime consumers
+must separately enforce 256 UTF-8 bytes for reason, message, and remediation.
+Only envelope fixtures carry `exit_code`; other fixtures test document validity.
+
+A successful lookup or accepted submit exits 0 even when the action is pending,
+blocked, uncertain, or finished with an incomplete result. Error categories
+retain the existing exit taxonomy: usage 2, configuration 3, input rejection 4,
+transient local 10, acceptance unknown 13, conflict 14, storage 20, security 30,
+internal 40. Output failure exits 40 without undoing committed work. Management
+error records set `retryable: false`; this forbids an adapter's automatic new
+action. Exact lookup and explicitly permitted same-handle resubmission remain
+the response-loss recovery procedure.
+
+Results expose only their own bounded job associations, attempts, claim fence,
+immutable bindings, acceptance time, and outcome. `side_effects` describes the
+current CLI call: preparation writes a draft; a newly accepted submit writes
+acceptance and, for controls, local intent; duplicate submit and lookup do not
+claim a new write. It does not summarize background effects. `executor` is
+`available` only with a worker heartbeat no older than 60 seconds, `stopped`
+with explicit stopped-service evidence, and otherwise `unknown`. Availability
+is an observation, not a completion promise. Disabled or implementation-gated
+actions cannot appear in `available_actions`.
+
+## Closed lifecycle and outcome meaning
+
+| Current state | Allowed next state | Required basis |
+|---|---|---|
+| `prepared` | `expired`, `queued`, `finished` | Expiry without acceptance; durable async admission; or atomic local control/result |
+| `expired` | None | An unaccepted draft's lifetime ended |
+| `queued` | `running`, `blocked` | Fenced worker claim or a known authority/safety hold |
+| `running` | `queued`, `blocked`, `uncertain`, `finished` | Evidence-backed recovery, hold, unresolved possible effect, or persisted result |
+| `blocked` | `queued`, `uncertain`, `finished` | Revalidated removal of the specific hold, effect evidence, or settled obligation |
+| `uncertain` | `queued`, `blocked`, `finished` | Durable effect/journal evidence establishes the appropriate next state |
+| `finished` | None | A retained action result; no automatic re-execution |
+
+Expiry is derived for unaccepted drafts during lookup without writing. Accepted
+work is not turned into draft expiry. Claims increase the fence and request
+attempt count; renewal retains the fence. Expired claims require effect/journal
+inspection before reclaiming. Known holds use `blocked`; ambiguous effects use
+`uncertain`. Neither state is success, and neither lease age nor caller timeout
+is sufficient to queue a repeated effect.
+
+Control results use `intent_committed`, a positive resulting control revision,
+and `quiescence: observed|not_observed|unknown`. Pause never infers quiescence
+from intent alone. Resume performs the existing bounded safety/remote checks
+outside SQLite while retaining the nonblocking resource guard through the
+atomic commit. Guard contention, safety failure, stale revision, or the call
+deadline refuses before acceptance. Pause requires no remote check. Both
+controls use their own draft, unresolved, and terminal capacity reserves and
+work with the sync worker stopped or paused.
+
+Data outcomes keep control revision and quiescence null. `verify-all` reports
+`complete`, `incomplete`, or `target_changed` only with a stored verification
+identity and pinned target. `expired` or `failed` can describe failure before
+target pinning and must not invent a target/verification identity. Execution
+deadline expiry differs from the unaccepted draft's `expired` lifecycle state.
+`complete` requires the existing fresh exact-pair proof. Only this verification's
+own harmless bookkeeping can be excluded from pending-work admission.
+
+Each request/job association records an immutable job ID, kind, pinned target,
+and reason: `observed_reconciliation`, `already_signed_recovery`,
+`verification_target`, or `retry_obligation`. Existing jobs can satisfy work
+through a concurrent periodic pass; association records do not claim exclusive
+execution. Job IDs in one result are distinct; semantic validation supplements
+the closed schema. Reserve association capacity before starting effects; a pass that
+would exceed it remains visibly blocked before another effect.
+
+Retry follows the predecessor's recorded obligations, including flattened
+retry lineage, without changing job identities or targets. Fully settled
+obligations produce `already_settled`. No recoverable obligations refuse with
+`sync_request_not_retryable`. A mixed set may recover eligible obligations,
+retain held/exhausted obligations, and finish `incomplete`; it never clears
+their holds or resets the aggregate 20-attempt job budget. Pre-signature work
+is never eligible. Retry against a stale or obsolete predecessor is refused.
+
+## Tested limits and independent bundle identity
+
+| Limit | Frozen value |
+|---|---|
+| Unaccepted preparation lifetime | 600 seconds |
+| Expired unsubmitted draft retention | 24 hours after expiry |
+| Prepared drafts | 256 data, 16 control |
+| Accepted unresolved requests | Configured `sync.bounds.queue` (2 through 1000) data; 16 control |
+| Retained terminal records | 10,000 data; 1,000 control |
+| Job associations per request | 1,000 |
+| JSON result/envelope | 1,048,576 UTF-8 bytes |
+| Reason/message/remediation text | 256 UTF-8 bytes |
+| Prepare/submit/show/capabilities deadline | 5 seconds |
+| One claimed execution deadline | 240 seconds; existing subprocess bounds also apply |
+| Claim lease / renewal | 30 seconds / every 10 seconds |
+| Worker availability freshness | 60 seconds |
+| Management shutdown | 30 seconds |
+| Cumulative request and underlying-job attempts | 20 each; retry never resets either identity's count |
+| Terminal retention | At least 180 days, or the longer configured completed-receipt horizon |
+| Fair dispatch | At most one management request per existing recovery pass |
+
+Data/control counts are separate; request metadata is not counted again as
+an underlying sync job. Existing sync-job/peer admission limits still apply
+to effects. To ensure retained evidence fits, reserve a terminal slot for
+every accepted unresolved request: admission requires unresolved plus retained
+terminal records below that class's terminal limit. A full terminal reserve
+refuses before acceptance; it never requires deleting young or unresolved
+evidence. Prune accepted terminal records only after the retention horizon
+and after all request/job/retry references are resolved. Keep unresolved
+lineage even when this causes bounded refusal. Expired unaccepted drafts may
+be pruned after their separate 24-hour horizon.
+
+The existing periodic/peer recovery pass runs before the next management
+dispatch. One long management action still obeys existing resource guards,
+subprocess bounds, cancellation, and the one-protected-effect rule. Neither
+a new scheduler nor increasing Plugin timeouts implements fairness. Runtime
+tests in T2 through T6 must exercise the frozen storage, time, and fairness
+bounds; T1 checks the limit descriptors, wire boundaries, and rejection fixtures
+without claiming those runtime gates passed.
+
+The management digest starts with `agent-dispatch.sync-management.bundle/v1`
+and NUL. For each ordered `artifacts` entry in `bundle.json`, hash its UTF-8
+path length (uint64 big-endian), path bytes, file byte length (uint64 big-endian),
+and exact file bytes. `bundle.json` is excluded to avoid a circular digest.
+`SHA256SUMS` covers `bundle.json` and every artifact in that order. No unlisted
+files or symlinks are allowed. The checker pins the reviewed digest independently
+of the base provider. After freeze, a semantic or byte identity change needs a
+reviewed successor bundle; public runtime-output qualification fixtures remain
+separate evidence rather than rewriting these contract fixtures.
+
+[traceability.json](sync-management-v1/traceability.json) maps every SMR to its
+canonical Task owners and G19 cases. This is planning/contract coverage; only
+fresh execution evidence can establish completion of those later gates.
 
 ## Provider handoff and validation boundary
 

@@ -21,7 +21,9 @@ make verify
 
 `make verify` is the single verification entrypoint (D-015): toolchain check,
 build, format check, vet, staticcheck, import direction, unit and race tests,
-docs manifest, schema/example validation, traceability, and scheduling artifacts.
+docs manifest, schema/example validation, provider and management contract bundles,
+traceability, and scheduling artifacts. Unit and race tests use a 30-minute
+per-package deadline, including the complete CLI scenario suite.
 It checks formatting without rewriting source. Traceability rewrites its generated
 file and fails if the previous content was stale. Inspect the diff afterward.
 GitHub Actions is not used; preserve the local verification result and its scope.

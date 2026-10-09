@@ -1,0 +1,80 @@
+{
+  "schema_version": "agent-dispatch.sync-management.commands/v1",
+  "commands": [
+    {
+      "path": "sync request capabilities",
+      "flags": [
+        "--group",
+        "--config",
+        "--output"
+      ],
+      "required_flags": [
+        "--group"
+      ],
+      "output": "json",
+      "default_output": "json"
+    },
+    {
+      "path": "sync request prepare",
+      "flags": [
+        "--group",
+        "--config",
+        "--output",
+        "--action",
+        "--target-request-id"
+      ],
+      "required_flags": [
+        "--group",
+        "--action"
+      ],
+      "output": "json",
+      "default_output": "json"
+    },
+    {
+      "path": "sync request submit",
+      "flags": [
+        "--group",
+        "--config",
+        "--output",
+        "--request-id"
+      ],
+      "required_flags": [
+        "--group",
+        "--request-id"
+      ],
+      "output": "json",
+      "default_output": "json"
+    },
+    {
+      "path": "sync request show",
+      "flags": [
+        "--group",
+        "--config",
+        "--output",
+        "--request-id"
+      ],
+      "required_flags": [
+        "--group",
+        "--request-id"
+      ],
+      "output": "json",
+      "default_output": "json"
+    }
+  ],
+  "config_precedence": [
+    "--config",
+    "AGENT_DISPATCH_CONFIG",
+    "platform_default"
+  ],
+  "flag_value_forms": [
+    "separate",
+    "equals"
+  ],
+  "forbidden_global_overrides": [
+    "--state-dir"
+  ],
+  "duplicate_flags": "reject",
+  "positional_arguments": "reject",
+  "target_request_id": "required_only_for_retry",
+  "human_confirmation": "not_an_authority"
+}

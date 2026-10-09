@@ -1,0 +1,179 @@
+{
+  "schema_version": "agent-dispatch.sync-management.digest-vectors/v1",
+  "vectors": [
+    {
+      "domain": "agent-dispatch.sync-management.policy/v1",
+      "value": {
+        "enabled": false,
+        "actions": []
+      },
+      "canonical": "{\"actions\":[],\"enabled\":false}",
+      "digest": "sha256:ae9b957951ddbc7598aaba97cf8a2a204589d32c3ed6da4d3ca5cb7c9bda1826"
+    },
+    {
+      "domain": "agent-dispatch.sync-management.policy/v1",
+      "value": {
+        "enabled": true,
+        "actions": [
+          "pause",
+          "resume"
+        ]
+      },
+      "canonical": "{\"actions\":[\"pause\",\"resume\"],\"enabled\":true}",
+      "digest": "sha256:57ae169af620a45bc1560fe1d283b16b84d3c131fb47c76d222f6d2531614457"
+    },
+    {
+      "domain": "agent-dispatch.sync-management.config/v1",
+      "value": {
+        "sync_revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sync_enabled": true,
+        "bounds": {
+          "queue": 2,
+          "history_commits": 256,
+          "subprocess_seconds": 5,
+          "subprocess_bytes": 1048576
+        },
+        "nodes": [
+          {
+            "instance_id": "node-a",
+            "state_incarnation_id": "epoch-a",
+            "endpoint": "https://node-a.example.ts.net",
+            "publisher_key": "SHA256:public-a",
+            "credential_ref": "env:PEER_A"
+          },
+          {
+            "instance_id": "node-b",
+            "state_incarnation_id": "epoch-b",
+            "endpoint": "https://node-b.example.ts.net",
+            "publisher_key": "SHA256:public-b",
+            "credential_ref": "env:PEER_B"
+          }
+        ]
+      },
+      "canonical": "{\"bounds\":{\"history_commits\":256,\"queue\":2,\"subprocess_bytes\":1048576,\"subprocess_seconds\":5},\"nodes\":[{\"credential_ref\":\"env:PEER_A\",\"endpoint\":\"https://node-a.example.ts.net\",\"instance_id\":\"node-a\",\"publisher_key\":\"SHA256:public-a\",\"state_incarnation_id\":\"epoch-a\"},{\"credential_ref\":\"env:PEER_B\",\"endpoint\":\"https://node-b.example.ts.net\",\"instance_id\":\"node-b\",\"publisher_key\":\"SHA256:public-b\",\"state_incarnation_id\":\"epoch-b\"}],\"sync_enabled\":true,\"sync_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+      "digest": "sha256:39bd103154fb636de26d3f52694e6a477bce00b874f3e42a53b7e2355566574c"
+    },
+    {
+      "domain": "agent-dispatch.sync-management.request/v1",
+      "value": {
+        "group_id": "wiki",
+        "instance_id": "node-a",
+        "state_incarnation_id": "epoch-a",
+        "action": "pause",
+        "target_request_id": null,
+        "policy_revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "config_revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "expected_control_revision": 1
+      },
+      "canonical": "{\"action\":\"pause\",\"config_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"expected_control_revision\":1,\"group_id\":\"wiki\",\"instance_id\":\"node-a\",\"policy_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"state_incarnation_id\":\"epoch-a\",\"target_request_id\":null}",
+      "digest": "sha256:03ab06711a45065c73e297af5f7abb9286d2252f462717dcc12d7dcd227f135e"
+    },
+    {
+      "domain": "agent-dispatch.sync-management.policy/v1",
+      "value": {
+        "enabled": true,
+        "actions": [
+          "pause",
+          "resume"
+        ]
+      },
+      "canonical": "{\"actions\":[\"pause\",\"resume\"],\"enabled\":true}",
+      "digest": "sha256:57ae169af620a45bc1560fe1d283b16b84d3c131fb47c76d222f6d2531614457",
+      "input": {
+        "enabled": true,
+        "actions": [
+          "resume",
+          "pause"
+        ]
+      }
+    },
+    {
+      "domain": "agent-dispatch.sync-management.config/v1",
+      "value": {
+        "sync_revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sync_enabled": true,
+        "bounds": {
+          "queue": 2,
+          "history_commits": 256,
+          "subprocess_seconds": 5,
+          "subprocess_bytes": 1048576
+        },
+        "nodes": [
+          {
+            "instance_id": "node-a",
+            "state_incarnation_id": "epoch-a",
+            "endpoint": "https://node-a.example.ts.net",
+            "publisher_key": "SHA256:public-a",
+            "credential_ref": "env:PEER_A"
+          },
+          {
+            "instance_id": "node-b",
+            "state_incarnation_id": "epoch-b",
+            "endpoint": "https://node-b.example.ts.net",
+            "publisher_key": "SHA256:public-b",
+            "credential_ref": "env:PEER_B"
+          }
+        ]
+      },
+      "canonical": "{\"bounds\":{\"history_commits\":256,\"queue\":2,\"subprocess_bytes\":1048576,\"subprocess_seconds\":5},\"nodes\":[{\"credential_ref\":\"env:PEER_A\",\"endpoint\":\"https://node-a.example.ts.net\",\"instance_id\":\"node-a\",\"publisher_key\":\"SHA256:public-a\",\"state_incarnation_id\":\"epoch-a\"},{\"credential_ref\":\"env:PEER_B\",\"endpoint\":\"https://node-b.example.ts.net\",\"instance_id\":\"node-b\",\"publisher_key\":\"SHA256:public-b\",\"state_incarnation_id\":\"epoch-b\"}],\"sync_enabled\":true,\"sync_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+      "digest": "sha256:39bd103154fb636de26d3f52694e6a477bce00b874f3e42a53b7e2355566574c",
+      "input": {
+        "sync_revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sync_enabled": true,
+        "bounds": {
+          "queue": 2,
+          "history_commits": 256,
+          "subprocess_seconds": 5,
+          "subprocess_bytes": 1048576
+        },
+        "nodes": [
+          {
+            "instance_id": "node-b",
+            "state_incarnation_id": "epoch-b",
+            "endpoint": "https://node-b.example.ts.net",
+            "publisher_key": "SHA256:public-b",
+            "credential_ref": "env:PEER_B"
+          },
+          {
+            "instance_id": "node-a",
+            "state_incarnation_id": "epoch-a",
+            "endpoint": "https://node-a.example.ts.net",
+            "publisher_key": "SHA256:public-a",
+            "credential_ref": "env:PEER_A"
+          }
+        ]
+      }
+    },
+    {
+      "domain": "agent-dispatch.sync-management.config/v1",
+      "value": {
+        "sync_revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sync_enabled": true,
+        "bounds": {
+          "queue": 2,
+          "history_commits": 256,
+          "subprocess_seconds": 5,
+          "subprocess_bytes": 1048576
+        },
+        "nodes": [
+          {
+            "instance_id": "node-a",
+            "state_incarnation_id": "epoch-a",
+            "endpoint": "https://node-a.example.ts.net",
+            "publisher_key": "SHA256:public-a",
+            "credential_ref": "file:/operator/a b c"
+          },
+          {
+            "instance_id": "node-b",
+            "state_incarnation_id": "epoch-b",
+            "endpoint": "https://node-b.example.ts.net",
+            "publisher_key": "SHA256:public-b",
+            "credential_ref": "env:PEER_B"
+          }
+        ]
+      },
+      "canonical": "{\"bounds\":{\"history_commits\":256,\"queue\":2,\"subprocess_bytes\":1048576,\"subprocess_seconds\":5},\"nodes\":[{\"credential_ref\":\"file:/operator/a\\u2028b\\u2029c\",\"endpoint\":\"https://node-a.example.ts.net\",\"instance_id\":\"node-a\",\"publisher_key\":\"SHA256:public-a\",\"state_incarnation_id\":\"epoch-a\"},{\"credential_ref\":\"env:PEER_B\",\"endpoint\":\"https://node-b.example.ts.net\",\"instance_id\":\"node-b\",\"publisher_key\":\"SHA256:public-b\",\"state_incarnation_id\":\"epoch-b\"}],\"sync_enabled\":true,\"sync_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+      "digest": "sha256:385b7df133723eabfdf35d828dcddf6a9454890de971f5ccc5489947d4539595"
+    }
+  ]
+}

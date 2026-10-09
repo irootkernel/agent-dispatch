@@ -1,0 +1,414 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "api_version": {
+      "const": "agent-dispatch.cli/v1"
+    },
+    "command": {
+      "type": "string",
+      "enum": [
+        "sync request capabilities",
+        "sync request prepare",
+        "sync request submit",
+        "sync request show"
+      ]
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "trace_id": {
+      "type": "string",
+      "maxLength": 128
+    },
+    "warnings": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "string",
+        "maxLength": 256
+      }
+    },
+    "result": {
+      "$ref": "urn:agent-dispatch:schema:sync-management-result:v1"
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 256,
+          "$comment": "maxLength is a code-point bound. Wire conformance additionally requires the policy reason_bytes UTF-8 byte bound, checked by managementcontractcheck and required in runtime consumers."
+        },
+        "retryable": {
+          "const": false
+        },
+        "remediation": {
+          "type": "string",
+          "maxLength": 256,
+          "$comment": "maxLength is a code-point bound. Wire conformance additionally requires the policy reason_bytes UTF-8 byte bound, checked by managementcontractcheck and required in runtime consumers."
+        }
+      },
+      "required": [
+        "code",
+        "category",
+        "message",
+        "retryable"
+      ],
+      "oneOf": [
+        {
+          "properties": {
+            "code": {
+              "const": "flag_invalid"
+            },
+            "category": {
+              "const": "usage"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "config_invalid"
+            },
+            "category": {
+              "const": "configuration"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "sync_group_not_found"
+            },
+            "category": {
+              "const": "configuration"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "sync_management_disabled"
+            },
+            "category": {
+              "const": "configuration"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "sync_management_unavailable"
+            },
+            "category": {
+              "const": "configuration"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "sync_request_invalid"
+            },
+            "category": {
+              "const": "input_rejected"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "sync_request_not_found"
+            },
+            "category": {
+              "const": "input_rejected"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "sync_request_expired"
+            },
+            "category": {
+              "const": "input_rejected"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "sync_request_obsolete"
+            },
+            "category": {
+              "const": "input_rejected"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "sync_request_binding_changed"
+            },
+            "category": {
+              "const": "conflict"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "sync_request_conflict"
+            },
+            "category": {
+              "const": "conflict"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "sync_request_not_retryable"
+            },
+            "category": {
+              "const": "conflict"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "sync_request_capacity"
+            },
+            "category": {
+              "const": "transient_local"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "sync_request_busy"
+            },
+            "category": {
+              "const": "transient_local"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "sync_request_deadline"
+            },
+            "category": {
+              "const": "transient_local"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "sqlite_write_failed"
+            },
+            "category": {
+              "const": "storage"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "sync_trust_failed"
+            },
+            "category": {
+              "const": "security"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "sync_effect_unknown"
+            },
+            "category": {
+              "const": "acceptance_unknown"
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "internal_unclassified"
+            },
+            "category": {
+              "const": "internal"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "required": [
+    "api_version",
+    "command",
+    "ok",
+    "trace_id"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "warnings",
+          "result"
+        ],
+        "not": {
+          "required": [
+            "error"
+          ]
+        }
+      },
+      "else": {
+        "required": [
+          "error"
+        ],
+        "not": {
+          "required": [
+            "warnings"
+          ]
+        },
+        "properties": {}
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "sync request capabilities"
+          },
+          "ok": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "properties": {
+              "kind": {
+                "const": "capabilities"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "sync request prepare"
+          },
+          "ok": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "properties": {
+              "kind": {
+                "const": "request"
+              },
+              "phase": {
+                "const": "prepare"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "sync request submit"
+          },
+          "ok": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "properties": {
+              "kind": {
+                "const": "request"
+              },
+              "phase": {
+                "const": "submit"
+              },
+              "accepted_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "Z$"
+              },
+              "state": {
+                "not": {
+                  "enum": [
+                    "prepared",
+                    "expired"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "sync request show"
+          },
+          "ok": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "properties": {
+              "kind": {
+                "const": "request"
+              },
+              "phase": {
+                "const": "show"
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agent-dispatch:schema:sync-management-envelope:v1"
+}

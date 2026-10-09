@@ -1,0 +1,106 @@
+{
+  "schema_version": "agent-dispatch.sync-management.errors/v1",
+  "errors": [
+    {
+      "code": "flag_invalid",
+      "category": "usage",
+      "exit_code": 2
+    },
+    {
+      "code": "config_invalid",
+      "category": "configuration",
+      "exit_code": 3
+    },
+    {
+      "code": "sync_group_not_found",
+      "category": "configuration",
+      "exit_code": 3
+    },
+    {
+      "code": "sync_management_disabled",
+      "category": "configuration",
+      "exit_code": 3
+    },
+    {
+      "code": "sync_management_unavailable",
+      "category": "configuration",
+      "exit_code": 3
+    },
+    {
+      "code": "sync_request_invalid",
+      "category": "input_rejected",
+      "exit_code": 4
+    },
+    {
+      "code": "sync_request_not_found",
+      "category": "input_rejected",
+      "exit_code": 4
+    },
+    {
+      "code": "sync_request_expired",
+      "category": "input_rejected",
+      "exit_code": 4
+    },
+    {
+      "code": "sync_request_obsolete",
+      "category": "input_rejected",
+      "exit_code": 4
+    },
+    {
+      "code": "sync_request_binding_changed",
+      "category": "conflict",
+      "exit_code": 14
+    },
+    {
+      "code": "sync_request_conflict",
+      "category": "conflict",
+      "exit_code": 14
+    },
+    {
+      "code": "sync_request_not_retryable",
+      "category": "conflict",
+      "exit_code": 14
+    },
+    {
+      "code": "sync_request_capacity",
+      "category": "transient_local",
+      "exit_code": 10
+    },
+    {
+      "code": "sync_request_busy",
+      "category": "transient_local",
+      "exit_code": 10
+    },
+    {
+      "code": "sync_request_deadline",
+      "category": "transient_local",
+      "exit_code": 10
+    },
+    {
+      "code": "sqlite_write_failed",
+      "category": "storage",
+      "exit_code": 20
+    },
+    {
+      "code": "sync_trust_failed",
+      "category": "security",
+      "exit_code": 30
+    },
+    {
+      "code": "sync_effect_unknown",
+      "category": "acceptance_unknown",
+      "exit_code": 13
+    },
+    {
+      "code": "internal_unclassified",
+      "category": "internal",
+      "exit_code": 40
+    }
+  ],
+  "lookup_and_accepted_submit_exit": 0,
+  "lookup_success_does_not_prove_action_success": true,
+  "stdout": "success_envelope_only",
+  "stderr": "error_envelope_only",
+  "output_failure_exit": 40,
+  "response_loss": "caller_unknown_keep_same_handle"
+}

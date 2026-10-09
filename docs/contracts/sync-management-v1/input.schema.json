@@ -1,0 +1,135 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "phase": {
+      "type": "string",
+      "enum": [
+        "capabilities",
+        "prepare",
+        "submit",
+        "show"
+      ]
+    },
+    "group_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,62}$",
+      "maxLength": 63
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "sync-now",
+        "verify-all",
+        "retry",
+        "pause",
+        "resume"
+      ]
+    },
+    "request_id": {
+      "type": "string",
+      "pattern": "^mgr_[0-9a-f]{32}$",
+      "minLength": 36,
+      "maxLength": 36
+    },
+    "target_request_id": {
+      "type": "string",
+      "pattern": "^mgr_[0-9a-f]{32}$",
+      "minLength": 36,
+      "maxLength": 36
+    }
+  },
+  "required": [
+    "phase",
+    "group_id"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "phase": {
+            "const": "prepare"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "action"
+        ],
+        "not": {
+          "required": [
+            "request_id"
+          ]
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "action": {
+                  "const": "retry"
+                }
+              },
+              "required": [
+                "action"
+              ]
+            },
+            "then": {
+              "required": [
+                "target_request_id"
+              ]
+            },
+            "else": {
+              "not": {
+                "required": [
+                  "target_request_id"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "else": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "action"
+              ]
+            },
+            {
+              "required": [
+                "target_request_id"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "phase": {
+            "enum": [
+              "submit",
+              "show"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "request_id"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "request_id"
+          ]
+        }
+      }
+    }
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agent-dispatch:schema:sync-management-input:v1"
+}

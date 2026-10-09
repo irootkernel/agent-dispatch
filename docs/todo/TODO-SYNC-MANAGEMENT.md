@@ -11,15 +11,17 @@ The intended sequence is current Core/inspection-Plugin v0.2.0 release,
 Core E23, then Plugin EPIC-008. Planning may occur before the release; E23
 runtime changes must remain outside the current release candidate. Deployment
 of a real vault is a separate operator action, not a prerequisite to doing
-isolated development. The successor product version is selected in E23-T1.
+isolated development. E23-T1 selects v0.3.0 and records the published pair in
+the canonical management contract; the runtime version stays unchanged during
+contract freeze.
 
 ## Authorities
 
 | Concern | Owner |
 |---|---|
 | Successor requirements | [SMR-001 through SMR-015](../specs/required-spec.md#20-post-v020-constrained-sync-management) |
-| Proposed command and recovery contract | [Sync management contract](../contracts/sync-management-contract.md) |
-| Architectural choice | [Proposed ADR-0026](../architecture-decision-records/0026-constrained-sync-management-requests.md) |
+| Frozen command and recovery contract | [Sync management contract](../contracts/sync-management-contract.md), [management v1 bundle](../contracts/sync-management-v1/bundle.json) |
+| Architectural choice | [Accepted ADR-0026](../architecture-decision-records/0026-constrained-sync-management-requests.md) |
 | Acceptance | [G19](../specs/acceptance-criteria.md#g19-constrained-sync-management-provider-post-v020) |
 | Current sync semantics, preserved | [Two-node sync contract](../contracts/sync-contract.md) |
 | Consumer | `agent-dispatch-plugin`, `docs/todo/TODO-SYNC-MANAGEMENT.md`, EPIC-008/TASK-028 through TASK-032 |
@@ -40,8 +42,10 @@ Use an expiring prepared handle before submission so response-loss recovery
 does not require a Plugin database or unverified Hermes invocation context.
 Core owns exact lookup and request-to-effect evidence. Local control uses a
 bounded separate admission reserve and the shared control transaction; long
-work uses the existing worker. The detailed contract is still subject to
-E23-T1's schema and security review.
+work uses the existing worker. The management contract and its independent
+schemas own the exact bindings, limits, lifecycle, error carriers, and retry
+semantics. T2 through T6 must prove those runtime behaviors; the T1 fixture
+check alone does not establish their acceptance.
 
 ## Sequential work
 
@@ -64,15 +68,15 @@ as a substitute for a missing provider result.
 
 ## Contract-freeze checklist for E23-T1
 
-- [ ] Select the post-v0.2.0 version and record the frozen current release pair.
-- [ ] Accept or replace ADR-0026; keep operator preauthorization distinct from human confirmation.
-- [ ] Freeze prepare/submit/show and capability argv, handle grammar, immutable fingerprints, exact action inputs, and trusted config handling.
-- [ ] Freeze lifecycle states, receipt meanings, caller-unknown outcomes, result-to-exit mappings, and exact request/job associations.
-- [ ] Freeze policy/config/incarnation/control bindings and revocation behavior, including lookup after management is disabled.
-- [ ] Define data-plane and reserved control capacities, preparation expiry, terminal retention, lookup/evidence limits, execution deadlines, and cumulative retry limits.
-- [ ] Specify paused/stopped-service admission, fair worker dispatch, atomic pause/resume results, and no self-blocking verification.
-- [ ] Specify supported migration/rollback/restore and old-handle refusal without retrospective request creation.
-- [ ] Commit closed schemas, positive/negative fixtures, compatibility rules, and an independent management digest/checksum checker outside the frozen v0.2.0 bundle.
+- [x] Select the post-v0.2.0 version and record the frozen current release pair.
+- [x] Accept or replace ADR-0026; keep operator preauthorization distinct from human confirmation.
+- [x] Freeze prepare/submit/show and capability argv, handle grammar, immutable fingerprints, exact action inputs, and trusted config handling.
+- [x] Freeze lifecycle states, receipt meanings, caller-unknown outcomes, result-to-exit mappings, and exact request/job associations.
+- [x] Freeze policy/config/incarnation/control bindings and revocation behavior, including lookup after management is disabled.
+- [x] Define data-plane and reserved control capacities, preparation expiry, terminal retention, lookup/evidence limits, execution deadlines, and cumulative retry limits.
+- [x] Specify paused/stopped-service admission, fair worker dispatch, atomic pause/resume results, and no self-blocking verification.
+- [x] Specify supported migration/rollback/restore and old-handle refusal without retrospective request creation.
+- [x] Commit closed schemas, positive/negative fixtures, compatibility rules, and an independent management digest/checksum checker outside the frozen v0.2.0 bundle.
 
 These are implementation-contract decisions owned by the task, not unanswered
 product questions that require Master to design the storage schema. Return to

@@ -13,6 +13,10 @@ import (
 // every kind listed here uses the completed-receipt horizon once resolved.
 const syncAgePrunableKindsSQL = "('publication','delivery','import','verification')"
 
+// Management lookup keeps its immutable request-to-effect evidence until the
+// request itself is eligible for retention. Plan and execution share the guard.
+const managementJobRetentionSQL = ` NOT IN (SELECT job_id FROM sync_management_jobs)`
+
 // intentStates maps the durable intent-state vocabulary for the
 // operational counters (status, doctor).
 func intentStates() []string {
@@ -239,7 +243,7 @@ func (s *Store) planRemaining(ctx context.Context, plan *PrunePlan, terminal str
 		                  AND bo.batch_id NOT IN (SELECT batch_id FROM prunable_batches))
 		 AND NOT EXISTS (SELECT 1 FROM sync_import_attributions a JOIN sync_jobs j ON j.job_id=a.job_id
 		                  WHERE a.observation_id=o.observation_id
-		                  AND NOT (j.retain_until_resolved=0 AND j.resolved_at IS NOT NULL AND j.resolved_at < ?))`,
+		                  AND NOT (j.retain_until_resolved=0 AND j.resolved_at IS NOT NULL AND j.resolved_at < ? AND j.job_id`+managementJobRetentionSQL+`))`,
 		append(append([]any{}, args...), c.Observations, c.CompletedReceipts)...).Scan(&plan.Counts.Observations); err != nil {
 		return fmt.Errorf("planning observation prune: %w", err)
 	}
@@ -254,12 +258,12 @@ func (s *Store) planRemaining(ctx context.Context, plan *PrunePlan, terminal str
 	}
 	if err := s.QueryRowContext(ctx, `SELECT COUNT(*) FROM sync_journal_entries WHERE job_id IN (
 		SELECT job_id FROM sync_jobs WHERE kind IN `+syncAgePrunableKindsSQL+`
-		AND retain_until_resolved = 0 AND resolved_at IS NOT NULL AND resolved_at < ?)`, c.CompletedReceipts).Scan(&plan.Counts.SyncJournals); err != nil {
+		AND retain_until_resolved = 0 AND resolved_at IS NOT NULL AND resolved_at < ? AND job_id`+managementJobRetentionSQL+`)`, c.CompletedReceipts).Scan(&plan.Counts.SyncJournals); err != nil {
 		return fmt.Errorf("planning sync journal prune: %w", err)
 	}
 	if err := s.QueryRowContext(ctx, `SELECT COUNT(*) FROM sync_jobs
 		WHERE kind IN `+syncAgePrunableKindsSQL+`
-		AND retain_until_resolved = 0 AND resolved_at IS NOT NULL AND resolved_at < ?`, c.CompletedReceipts).Scan(&plan.Counts.SyncJobs); err != nil {
+		AND retain_until_resolved = 0 AND resolved_at IS NOT NULL AND resolved_at < ? AND job_id`+managementJobRetentionSQL, c.CompletedReceipts).Scan(&plan.Counts.SyncJobs); err != nil {
 		return fmt.Errorf("planning sync job prune: %w", err)
 	}
 	return nil
@@ -354,12 +358,12 @@ func (s *Store) ExecutePrune(ctx context.Context, cutoffs PruneCutoffs, actor, r
 	// retention horizon.
 	if counts.SyncJournals, err = exec("sync journals", `DELETE FROM sync_journal_entries WHERE job_id IN (
 		SELECT job_id FROM sync_jobs WHERE kind IN `+syncAgePrunableKindsSQL+`
-		AND retain_until_resolved = 0 AND resolved_at IS NOT NULL AND resolved_at < ?)`, c.CompletedReceipts); err != nil {
+		AND retain_until_resolved = 0 AND resolved_at IS NOT NULL AND resolved_at < ? AND job_id`+managementJobRetentionSQL+`)`, c.CompletedReceipts); err != nil {
 		return counts, err
 	}
 	if counts.SyncJobs, err = exec("sync jobs", `DELETE FROM sync_jobs
 		WHERE kind IN `+syncAgePrunableKindsSQL+`
-		AND retain_until_resolved = 0 AND resolved_at IS NOT NULL AND resolved_at < ?`, c.CompletedReceipts); err != nil {
+		AND retain_until_resolved = 0 AND resolved_at IS NOT NULL AND resolved_at < ? AND job_id`+managementJobRetentionSQL, c.CompletedReceipts); err != nil {
 		return counts, err
 	}
 	if counts.Observations, err = exec("observations",

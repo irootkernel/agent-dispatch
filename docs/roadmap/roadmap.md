@@ -15,9 +15,9 @@
 | Release target | v0.3.0 (constrained sync management successor) |
 | Current epic | E23 |
 | Current active task | none |
-| Next task | E23-T2 |
-| Completed tasks | 117 / 123 |
-| Planned tasks | 6 / 123 |
+| Next task | E23-T3 |
+| Completed tasks | 118 / 123 |
+| Planned tasks | 5 / 123 |
 | In progress tasks | 0 |
 | In review tasks | 0 |
 | Blocked tasks | 0 |
@@ -189,8 +189,8 @@ remain separate operator decisions.
 | 114 | E22-T3 | Completed | Pair status and fresh verification |
 | 115 | E22-T4 | Completed | Managed service lifecycle and diagnostics |
 | 116 | E22-T5 | Completed | Real two-node qualification and v0.2.0 handoff |
-| 117 | E23-T1 | In Review | Successor management scope, authority, and executable contract freeze |
-| 118 | E23-T2 | Planned | Durable request ledger, immutable bindings, and additive migration |
+| 117 | E23-T1 | Completed | Successor management scope, authority, and executable contract freeze |
+| 118 | E23-T2 | Completed | Durable request ledger, immutable bindings, and additive migration |
 | 119 | E23-T3 | Planned | Bounded preparation, idempotent admission, and exact lookup |
 | 120 | E23-T4 | Planned | Shared worker execution and atomic local controls |
 | 121 | E23-T5 | Planned | Identity-preserving retry, recovery, retention, and restore |
@@ -5748,7 +5748,7 @@ G19 result, or native paired qualification is claimed.
 
 ## E23-T2: Add the Durable Management Request Ledger
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -5757,10 +5757,10 @@ sync state and providing transactional primitives for later commands.
 
 ### Deliverables
 
-- [ ] Add a forward migration for prepared requests, immutable fingerprints/bindings, acceptance and execution records, and request/job/retry associations.
-- [ ] Implement transactional duplicate handling, conditional state changes, claims/fences, lookup, expiry, and bounded admission primitives.
-- [ ] Add shared transaction support for later atomic request/control results and reserve enforcement without duplicating operator safety rules.
-- [ ] Preserve existing sync jobs; do not invent request lineage for historical work.
+- [x] Add a forward migration for prepared requests, immutable fingerprints/bindings, acceptance and execution records, and request/job/retry associations.
+- [x] Implement transactional duplicate handling, conditional state changes, claims/fences, lookup, expiry, and bounded admission primitives.
+- [x] Add shared transaction support for later atomic request/control results and reserve enforcement without duplicating operator safety rules.
+- [x] Preserve existing sync jobs; do not invent request lineage for historical work.
 
 ### Requirements
 
@@ -5773,18 +5773,30 @@ recorded. Use disposable configuration, database, group, refs, and vault.
 
 ### Do Not
 
-- [ ] Do not add a Plugin database, general job framework, second sync scheduler, or production migration.
-- [ ] Do not advertise runtime management support from storage completion alone.
+- [x] Do not add a Plugin database, general job framework, second sync scheduler, or production migration.
+- [x] Do not advertise runtime management support from storage completion alone.
 
 ### Verification and Acceptance
 
-- [ ] Upgrade fixtures preserve all preexisting jobs and ordinary disabled-management behavior; unsupported old binaries fail closed on newer state.
-- [ ] Concurrent duplicate writes create one immutable request; changed fingerprints and stale fences fail without partial writes.
-- [ ] Transaction rollback, queue/control reserve limits, referential integrity, and unresolved lineage retention are behavior-tested.
+- [x] Upgrade fixtures preserve all preexisting jobs and ordinary disabled-management behavior; unsupported old binaries fail closed on newer state.
+- [x] Concurrent duplicate writes create one immutable request; changed fingerprints and stale fences fail without partial writes.
+- [x] Transaction rollback, queue/control reserve limits, referential integrity, and unresolved lineage retention are behavior-tested.
 
 ### Evidence
 
-Not executed. Retain migration, concurrency, and storage test identities/results.
+Schema 28 stores immutable drafts, acceptance, fenced execution records and
+exact job associations. Storage tests cover schema-27 preservation and refusal,
+concurrent duplicate/capacity races, control transaction rollback, claim expiry,
+stale writers, draft/terminal/evidence bounds, and unresolved retry/job retention.
+The public management family and worker execution remain later-task scope.
+Focused checks and the final default `make verify` pass on Darwin arm64.
+The published v0.2.0 Darwin binary refuses isolated schema 28 with
+`migration_newer_schema` (exit 21) and leaves the database unchanged.
+Three independent reviewers assessed all nine T2 criteria as met after the
+required corruption, safety-hold and integrity corrections. No actionable
+finding remains. Static review used the coordinator's execution evidence;
+matching staged endpoints do not establish immutable capture. G19 runtime and
+native paired qualification remain later-task gates.
 
 ## E23-T3: Implement Preparation, Admission, and Exact Lookup
 

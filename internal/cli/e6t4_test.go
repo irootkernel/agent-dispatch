@@ -357,8 +357,8 @@ func TestG5AC506ReleaseArtifactsPresent(t *testing.T) {
 		t.Skipf("go toolchain unavailable: %v", err)
 	}
 	dir := t.TempDir()
-	// Dated release headings in root CHANGELOG.md are the single version source.
-	// Pending changes and nested historical headings cannot select a release.
+	// Root CHANGELOG.md must retain a dated release. A selected Unreleased
+	// successor may own the development build without becoming a shipped release.
 	root, err := filepath.Abs("../../")
 	if err != nil {
 		t.Fatal(err)
@@ -367,7 +367,11 @@ func TestG5AC506ReleaseArtifactsPresent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AC-506: product changelog missing: %v", err)
 	}
-	version, err := latestChangelogRelease(string(notesBody))
+	_, err = latestChangelogRelease(string(notesBody))
+	if err != nil {
+		t.Fatalf("AC-506: %v", err)
+	}
+	version, err := latestChangelogVersion(string(notesBody), true)
 	if err != nil {
 		t.Fatalf("AC-506: %v", err)
 	}
@@ -462,8 +466,8 @@ func TestG5AC506ReleaseArtifactsPresent(t *testing.T) {
 			}
 		}
 	}
-	// One reproducible binary built the release way reports the shipped
-	// version.
+	// One reproducible binary built the release way reports the selected
+	// source version, which may still be Unreleased.
 	cmd := exec.Command("go", "build", "-trimpath",
 		"-ldflags", "-X github.com/irootkernel/agent-dispatch/internal/version.Version="+version,
 		"-o", filepath.Join(dir, "agent-dispatch"), "./cmd/agent-dispatch")
@@ -593,6 +597,10 @@ func TestAdapterMetadataNamesDeliveredSurfaces(t *testing.T) {
 // latestChangelogRelease selects dated ## vX.Y.Z - YYYY-MM-DD headings numerically.
 // Unreleased, nested headings, and examples inside fenced code are not releases.
 func latestChangelogRelease(body string) (string, error) {
+	return latestChangelogVersion(body, false)
+}
+
+func latestChangelogVersion(body string, includePending bool) (string, error) {
 	latest := ""
 	var latestParts [3]int
 	seen := map[string]bool{}
@@ -628,9 +636,10 @@ func latestChangelogRelease(body string) (string, error) {
 			numbers[i] = n
 		}
 		if status == "Unreleased" {
-			continue
-		}
-		if _, err := time.Parse("2006-01-02", status); err != nil {
+			if !includePending {
+				continue
+			}
+		} else if _, err := time.Parse("2006-01-02", status); err != nil {
 			return "", fmt.Errorf("invalid changelog release date: %s", line)
 		}
 		if seen[version] {
@@ -647,6 +656,18 @@ func latestChangelogRelease(body string) (string, error) {
 		return "", fmt.Errorf("CHANGELOG.md must contain a dated ## vX.Y.Z - YYYY-MM-DD section")
 	}
 	return latest, nil
+}
+
+func TestChangelogDevelopmentVersion(t *testing.T) {
+	body := "## v0.3.0 - Unreleased\nPending\n```md\n## v9.0.0 - Unreleased\n```\n### v8.0.0 - Unreleased\n## v0.2.0 - 2026-10-01\nShipped"
+	got, err := latestChangelogVersion(body, true)
+	if err != nil || got != "v0.3.0" {
+		t.Fatalf("development version = %q, %v; want v0.3.0", got, err)
+	}
+	got, err = latestChangelogRelease(body)
+	if err != nil || got != "v0.2.0" {
+		t.Fatalf("shipped version = %q, %v; want v0.2.0", got, err)
+	}
 }
 
 func TestLatestChangelogRelease(t *testing.T) {

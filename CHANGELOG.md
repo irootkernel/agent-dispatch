@@ -2,6 +2,13 @@
 
 This file records concise shipped outcomes and pending changes.
 
+## v0.3.0 - Unreleased
+
+### Changed
+
+- Advance SQLite to schema 28 for bounded local management requests; rollback
+  requires a stopped-service backup restore before an older binary can run.
+
 ## v0.2.0 - 2026-10-01
 
 ### Added

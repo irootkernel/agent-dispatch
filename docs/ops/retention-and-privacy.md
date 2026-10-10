@@ -47,6 +47,14 @@ Not stored by default:
 | Unknown, ready, retrying, active, quarantined, dead-lettered | Until resolved |
 | State transition audit required by unresolved lineage | Until lineage resolves |
 
+Schema 28 retains management-associated jobs, their journals, and attributed
+observations until the referencing request can prune. Accepted unresolved
+requests, unresolved associated jobs, and retry descendants preserve that
+lineage. Terminal request leaves retain evidence for at least 180 days or the
+longer configured completed-receipt horizon; ordinary pruning can remove released
+job evidence afterward. The management command family remains unavailable in
+this storage-only development stage.
+
 Schema v23 is a compatibility marker and does not reopen historical blocked
 rows that an older writer already made terminal without a matching group hold.
 The unresolved guarantee applies to obligations created by current writers

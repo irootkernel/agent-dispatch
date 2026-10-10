@@ -218,6 +218,7 @@ func TestE10T1MigrationV8BackfillAndIntegrity(t *testing.T) {
 	// Rewind to the v7-era shape: the v8 column is gone and the ledger
 	// no longer records v8, exactly as a pre-upgrade (or interrupted-
 	// upgrade) database would look.
+	dropManagementSchemaForHarness(t, crashed)
 	for _, stmt := range []string{
 		`DROP TABLE watch_bindings`,
 		`DROP TABLE contract_state`,

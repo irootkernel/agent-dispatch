@@ -746,6 +746,7 @@ func TestE21Migration23PreservesLegacyBlockedFinality(t *testing.T) {
 	if _, err := s.Exec(`UPDATE sync_controls SET state='blocked',reason='membership_emergency' WHERE group_id='wiki-pair'`); err != nil {
 		t.Fatal(err)
 	}
+	dropManagementSchemaForHarness(t, s)
 	if _, err := s.Exec(`DROP TRIGGER sync_jobs_assign_sequence`); err != nil {
 		t.Fatal(err)
 	}

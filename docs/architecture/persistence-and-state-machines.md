@@ -49,8 +49,12 @@ The implementation must verify the resulting journal mode and fail `doctor` if t
 | `sync_import_attributions` | One-use exact Watchman consumption of an applied import effect, separate from work receipts (schema v22) | unique job + fence + path; indexed observation identity |
 | `sync_peer_nudges` | Authenticated peer wake-up inbox (schema v26); HTTP 202 follows its transaction commit | unique group + publication identity; immutable request fingerprint; pending sequence, bounded failure reason, terminal resolution; 100,000 retained rows per group before new admission is refused |
 | `sync_recovery_schedule` | Periodic configured-ref inspection and persisted retry delay (schema v27) | one row per group; reserved attempt token, next due time, consecutive failure count capped at 16, and bounded reason |
+| `sync_management_requests` | Local immutable management drafts and lifecycle heads (schema v28) | handle and fingerprint; policy/config/incarnation binding; bounded data/control capacity; revision and fenced claims |
+| `sync_management_acceptances` | Durable acceptance independent of a submitting process (schema v28) | one immutable acceptance per existing handle |
+| `sync_management_executions` | Request claims and their inspected settlement (schema v28) | request + fence; at most 20 attempts; immutable owner/deadline and closed evidence |
+| `sync_management_jobs` | Exact request-to-effect associations (schema v28) | request + job; immutable kind, pinned target and reason; referenced jobs cannot prune |
 
-Migration v27 is the current schema head. Migration v23 is a compatibility
+Migration v28 is the current schema head. Migration v23 is a compatibility
 marker and does not reopen historical `blocked` rows that older code already
 made terminal without a matching group hold. Current writers retain a new
 blocked obligation together with its hold. Migration v24 makes journal order
@@ -63,6 +67,20 @@ membership replacement, or an exact administrator checkpoint may resolve an
 applicable current blocked obligation. Resolution makes publication and import
 jobs eligible for the completed-receipt horizon; membership and checkpoint jobs and
 journals remain for the life of the sync group.
+
+Migration v28 preserves every existing sync row and creates no historical
+management lineage. Preparation does not initialize `sync_controls`; acceptance
+of local controls shares the operator transition helper within one transaction.
+The [management contract](../contracts/sync-management-contract.md) owns the
+closed lifecycle and limits. Retained expired drafts count toward draft capacity
+until their separate retention horizon passes. Every accepted unresolved request
+reserves a terminal slot. Exact lookup derives draft expiry without writing.
+Pruning removes eligible leaves only after the longer of 180 days and the
+configured completed-receipt horizon; unresolved jobs and retry descendants keep
+their request ancestry and effect evidence. Lease expiry permits inspection,
+never automatic repeated effects. The application owns policy revalidation,
+resume safety checks, protected resource guards, and execution through the
+existing worker; ledger availability alone provides no management CLI capability.
 
 Since E12-T2 the single-active slot, the dirty generation, and the follow-up
 chain are keyed on the dispatch's destination lane (`destination_lane_state`,

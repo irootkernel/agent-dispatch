@@ -8,7 +8,7 @@ belong to [operations](../ops/installation.md#5-upgrade-ops-009).
 
 ## Current release and planned successor
 
-E23, `SMR-*`, and G19 are planned work after the current v0.2.0 two-node
+E23, `SMR-*`, and G19 define successor work after the current v0.2.0 two-node
 release. Their presence in the roadmap/specification does not add a v0.2.0
 release blocker or make the planned management commands available. Freeze
 and qualify the current Core/inspection-Plugin pair separately from E23
@@ -94,7 +94,10 @@ recording publication as complete. Date the published entry as
 `## vX.Y.Z - YYYY-MM-DD` using the actual release date. Open the next version's
 `Unreleased` section only when that version is selected; otherwise keep an
 unnumbered `Unreleased` section. Order versions newest first. The release artifact
-test selects the greatest numeric dated version and ignores unreleased entries.
+test requires a dated released section and distinguishes that identity from the
+newest selected development version, which may have an `Unreleased` heading.
+Passing the development artifact test does not authorize publication or replace
+the dated published-entry requirement above.
 
 If builds or verification disagree, stop the release, retain the evidence, and
 resolve the discrepancy. If a published artifact is wrong, maintainers decide

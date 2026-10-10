@@ -35,6 +35,7 @@ func TestE9ValidationMigrationV7BackfillsAndPropagates(t *testing.T) {
 	// Rewind to the v6-era shape: the v7 columns and indexes are gone and
 	// the ledger no longer records v7, exactly as a pre-upgrade database
 	// would look.
+	dropManagementSchemaForHarness(t, s)
 	for _, stmt := range []string{
 		`DROP INDEX idx_attempts_route_revision`,
 		`DROP INDEX idx_receipts_route_revision`,

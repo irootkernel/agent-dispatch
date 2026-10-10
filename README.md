@@ -60,9 +60,16 @@ install -m 755 bin/agent-dispatch "$HOME/.local/bin/agent-dispatch"
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-The default build reports `agent-dispatch v0.2.0`. The install command replaces any
-binary at the destination; retain the previous binary and back up an existing
-installation before upgrading. Add the PATH entry to your shell configuration
+This checkout builds the `agent-dispatch v0.3.0` development version and migrates
+opened state to schema 28. Its management command family is still unavailable.
+Use the v0.2.0 release tag or a published binary for the released version.
+Before opening existing state with a development build, back up its database
+and matching configuration. An older binary refuses schema 28; rollback requires
+a stopped-service backup restore. See the
+[migration guide](docs/implementation-tips/migration-and-versioning.md).
+
+The install command replaces any binary at the destination; retain the previous
+binary and back up an existing installation before upgrading. Add the PATH entry to your shell configuration
 if needed. Keep the installed path stable because managed triggers and schedules
 refer to the executable.
 
@@ -237,8 +244,8 @@ qualification remains deferred. Core's Linux amd64 binary does not establish
 Plugin qualification. Install
 and enable the Plugin separately using its matching release instructions.
 
-Upgrading from v0.1.8 applies forward-only SQLite migrations from schema 20
-to 27 when `status` or another migrating command opens the store. Back up the
+The published v0.2.0 binary upgrades v0.1.8 state through forward-only SQLite
+migrations from schema 20 to 27 when `status` or another migrating command opens the store. Back up the
 database and matching
 configuration before even running diagnostics with the new binary. Follow the
 [v0.2.0 upgrade procedure](docs/ops/installation.md#5a-v020-two-node-sync-upgrade)

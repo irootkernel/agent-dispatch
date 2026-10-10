@@ -259,14 +259,24 @@ func (s *Store) LoadSyncControl(ctx context.Context, groupID string) (SyncContro
 // SetSyncControl performs the operator active/paused transition under an exact
 // revision. It never rewrites a blocked safety state.
 func (s *Store) SetSyncControl(ctx context.Context, groupID string, expectedRevision int64, targetState, configRevision, now string) (SyncControlRow, error) {
-	if targetState != "active" && targetState != "paused" {
-		return SyncControlRow{}, fmt.Errorf("unsupported sync control target %q", targetState)
-	}
 	tx, err := s.BeginTx(ctx, nil)
 	if err != nil {
 		return SyncControlRow{}, err
 	}
 	defer tx.Rollback()
+	row, err := setSyncControlTx(ctx, tx, groupID, expectedRevision, targetState, configRevision, now)
+	if err != nil {
+		return SyncControlRow{}, err
+	}
+	return row, tx.Commit()
+}
+
+// setSyncControlTx shares operator safety and CAS rules with atomic management
+// admission. It performs only SQLite work; the caller owns the transaction.
+func setSyncControlTx(ctx context.Context, tx *sql.Tx, groupID string, expectedRevision int64, targetState, configRevision, now string) (SyncControlRow, error) {
+	if targetState != "active" && targetState != "paused" {
+		return SyncControlRow{}, fmt.Errorf("unsupported sync control target %q", targetState)
+	}
 	var current SyncControlRow
 	if err := tx.QueryRowContext(ctx, `SELECT group_id, revision, state, reason, membership_mode, config_revision, updated_at
 		FROM sync_controls WHERE group_id = ?`, groupID).Scan(
@@ -316,9 +326,6 @@ func (s *Store) SetSyncControl(ctx context.Context, groupID string, expectedRevi
 	current.Revision++
 	current.State, current.Reason = targetState, reason
 	current.ConfigRevision, current.UpdatedAt = boundConfigRevision, now
-	if err := tx.Commit(); err != nil {
-		return SyncControlRow{}, err
-	}
 	return current, nil
 }
 

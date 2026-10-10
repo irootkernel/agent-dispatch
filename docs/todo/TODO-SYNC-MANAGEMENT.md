@@ -15,6 +15,11 @@ isolated development. E23-T1 selects v0.3.0 and records the published pair in
 the canonical management contract; the runtime version stays unchanged during
 contract freeze.
 
+T2 advances development builds to v0.3.0 and additive SQLite schema 28 while
+keeping the management command family unavailable. Its ledger is exercised only
+through disposable test state. T3 owns public preparation, admission and lookup;
+T4 and T5 own execution/recovery wiring and runtime capability qualification.
+
 ## Authorities
 
 | Concern | Owner |

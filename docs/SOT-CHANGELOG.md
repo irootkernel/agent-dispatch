@@ -5,6 +5,15 @@ SOT snapshots, not product releases. Product release notes and pending user-faci
 changes belong to the root [changelog](../CHANGELOG.md). Historical entries below
 retain their recorded scope; migrated document pointers use their current paths.
 
+## Successor request ledger - 2026-10-10
+
+- Add schema 28 management drafts, immutable bindings and acceptance,
+  bounded fenced executions, exact job associations and retention primitives.
+  Existing sync jobs and the frozen provider bundle remain unchanged.
+- Share the operator control transaction for atomic local admission/results;
+  preserve referenced job evidence during ordinary pruning. Development builds
+  identify v0.3.0; public management commands and G19 remain pending.
+
 ## Successor contract freeze - 2026-10-09
 
 - Select product v0.3.0 for E23 and accept ADR-0026. Pin the published

@@ -52,8 +52,9 @@ observations until the referencing request can prune. Accepted unresolved
 requests, unresolved associated jobs, and retry descendants preserve that
 lineage. Terminal request leaves retain evidence for at least 180 days or the
 longer configured completed-receipt horizon; ordinary pruning can remove released
-job evidence afterward. The management command family remains unavailable in
-this storage-only development stage.
+job evidence afterward. Exact management lookup remains available without
+pruning or recovery, including after management authority is disabled. New
+management actions remain unavailable until execution and recovery qualify.
 
 Schema v23 is a compatibility marker and does not reopen historical blocked
 rows that an older writer already made terminal without a matching group hold.

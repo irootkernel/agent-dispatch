@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -340,6 +341,10 @@ func (m Migration) checksum() string {
 // runs. It performs no external side effects inside the migration
 // transaction (OPS-009).
 func (s *Store) Migrate(backupDir string) error {
+	return s.MigrateContext(context.Background(), backupDir)
+}
+
+func (s *Store) MigrateContext(ctx context.Context, backupDir string) error {
 	if backupDir == "" {
 		return fmt.Errorf("migrations require a backup directory (backup before migration)")
 	}
@@ -358,15 +363,15 @@ func (s *Store) Migrate(backupDir string) error {
 	// process applies the units and the others wait for its completion
 	// and then observe the finished ledger. A crashed holder's lock is
 	// stolen after the bounded staleness window.
-	lockRelease, err := acquireMigrationFileLock(s.Path())
+	lockRelease, err := acquireMigrationFileLockContext(ctx, s.Path())
 	if err != nil {
 		return err
 	}
 	defer lockRelease()
-	if err := s.ensureMigrationLedger(); err != nil {
+	if err := s.ensureMigrationLedgerContext(ctx); err != nil {
 		return err
 	}
-	applied, err := s.appliedMigrations()
+	applied, err := s.appliedMigrationsContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -407,7 +412,7 @@ func (s *Store) Migrate(backupDir string) error {
 		}
 	}
 	if pending > 0 {
-		if err := s.Backup(fmt.Sprintf("%s/agent-dispatch-v%d-to-v%d-%s.backup", backupDir, newest, maxVersion, nowFileTimestamp())); err != nil {
+		if err := s.BackupContext(ctx, fmt.Sprintf("%s/agent-dispatch-v%d-to-v%d-%s.backup", backupDir, newest, maxVersion, nowFileTimestamp())); err != nil {
 			return fmt.Errorf("pre-migration backup: %w", err)
 		}
 	}
@@ -419,7 +424,7 @@ func (s *Store) Migrate(backupDir string) error {
 			}
 			continue
 		}
-		if err := s.applyMigration(m); err != nil {
+		if err := s.applyMigrationContext(ctx, m); err != nil {
 			return fmt.Errorf("migration %d (%s): %w", m.Version, m.Name, err)
 		}
 	}
@@ -427,7 +432,11 @@ func (s *Store) Migrate(backupDir string) error {
 }
 
 func (s *Store) ensureMigrationLedger() error {
-	_, err := s.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+	return s.ensureMigrationLedgerContext(context.Background())
+}
+
+func (s *Store) ensureMigrationLedgerContext(ctx context.Context) error {
+	_, err := s.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
 		version    INTEGER PRIMARY KEY,
 		name       TEXT NOT NULL,
 		checksum   TEXT NOT NULL,
@@ -436,8 +445,8 @@ func (s *Store) ensureMigrationLedger() error {
 	return err
 }
 
-func (s *Store) appliedMigrations() (map[int]string, error) {
-	rows, err := s.Query(`SELECT version, checksum FROM schema_migrations ORDER BY version`)
+func (s *Store) appliedMigrationsContext(ctx context.Context) (map[int]string, error) {
+	rows, err := s.QueryContext(ctx, `SELECT version, checksum FROM schema_migrations ORDER BY version`)
 	if err != nil {
 		return nil, err
 	}
@@ -460,15 +469,19 @@ func (s *Store) appliedMigrations() (map[int]string, error) {
 // is the application-level migration lock for this single-writer design;
 // concurrent processes serialize on busy_timeout instead of interleaving.
 func (s *Store) applyMigration(m Migration) error {
-	tx, err := s.BeginTx(context.Background(), nil)
+	return s.applyMigrationContext(context.Background(), m)
+}
+
+func (s *Store) applyMigrationContext(ctx context.Context, m Migration) error {
+	tx, err := s.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(m.SQL); err != nil {
+	if _, err := tx.ExecContext(ctx, m.SQL); err != nil {
 		return fmt.Errorf("apply: %w", err)
 	}
-	if _, err := tx.Exec(`INSERT INTO schema_migrations (version, name, checksum) VALUES (?, ?, ?)`, m.Version, m.Name, m.checksum()); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations (version, name, checksum) VALUES (?, ?, ?)`, m.Version, m.Name, m.checksum()); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -477,14 +490,16 @@ func (s *Store) applyMigration(m Migration) error {
 // Backup creates an online backup of the database at path using
 // VACUUM INTO, which works concurrently with readers (persistence §9).
 // The backup's parent directory is created owner-only if absent.
-func (s *Store) Backup(path string) error {
+func (s *Store) Backup(path string) error { return s.BackupContext(context.Background(), path) }
+
+func (s *Store) BackupContext(ctx context.Context, path string) error {
 	if _, err := osStatFile(path); err == nil {
 		return fmt.Errorf("backup %s already exists", path)
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	if _, err := s.Exec(`VACUUM INTO ?`, path); err != nil {
+	if _, err := s.ExecContext(ctx, `VACUUM INTO ?`, path); err != nil {
 		return fmt.Errorf("backup %s: %w", path, err)
 	}
 	// VACUUM INTO creates the file with the process umask; database
@@ -493,7 +508,7 @@ func (s *Store) Backup(path string) error {
 		return fmt.Errorf("backup %s permissions: %w", path, err)
 	}
 	// The backup must be a restorable database, not just a file.
-	if err := quickCheckFile(path); err != nil {
+	if err := quickCheckFileContext(ctx, path); err != nil {
 		return fmt.Errorf("backup %s: %w", path, err)
 	}
 	return nil
@@ -501,14 +516,16 @@ func (s *Store) Backup(path string) error {
 
 // quickCheckFile opens a database file read-only and verifies it passes
 // PRAGMA quick_check.
-func quickCheckFile(path string) error {
-	db, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
+func quickCheckFile(path string) error { return quickCheckFileContext(context.Background(), path) }
+
+func quickCheckFileContext(ctx context.Context, path string) error {
+	db, err := sql.Open("sqlite", (&url.URL{Scheme: "file", Path: path}).String()+"?mode=ro")
 	if err != nil {
 		return fmt.Errorf("verify: %w", err)
 	}
 	defer db.Close()
 	var result string
-	if err := db.QueryRow("PRAGMA quick_check").Scan(&result); err != nil {
+	if err := db.QueryRowContext(ctx, "PRAGMA quick_check").Scan(&result); err != nil {
 		return fmt.Errorf("verify: %w", err)
 	}
 	if result != "ok" {
@@ -603,9 +620,16 @@ var migrationLockRefresh = migrationLockStaleness / 3
 // outlives the retryable window surfaces as busy congestion, never a
 // fatal open failure.
 func acquireMigrationFileLock(dbPath string) (func(), error) {
+	return acquireMigrationFileLockContext(context.Background(), dbPath)
+}
+
+func acquireMigrationFileLockContext(ctx context.Context, dbPath string) (func(), error) {
 	lockPath := dbPath + ".migration-lock"
 	deadline := time.Now().Add(2 * time.Minute)
 	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 		if err == nil {
 			fmt.Fprintf(f, "%d\n", os.Getpid())
@@ -657,7 +681,11 @@ func acquireMigrationFileLock(dbPath string) (func(), error) {
 		if time.Now().After(deadline) {
 			return nil, &ports.StoreError{Err: fmt.Errorf("migration lock held by another process past the wait window: %s", lockPath)}
 		}
-		time.Sleep(50 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(50 * time.Millisecond):
+		}
 	}
 }
 

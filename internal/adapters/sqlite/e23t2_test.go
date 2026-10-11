@@ -43,7 +43,7 @@ func prepareManagement(t *testing.T, s *Store, n int, b syncmanagement.Binding) 
 
 func acceptManagement(t *testing.T, s *Store, r ManagementRequest, queue int) ManagementRequest {
 	t.Helper()
-	out, reused, err := s.AcceptManagementRequest(context.Background(), ManagementAdmission{GroupID: r.GroupID, RequestID: r.RequestID, CurrentBinding: r.Binding, Authorized: true, QueueLimit: queue, ControlSyncRevision: "cfg-1", Now: managementT0})
+	out, reused, err := s.AcceptManagementRequest(context.Background(), ManagementAdmission{GroupID: r.GroupID, RequestID: r.RequestID, CurrentBinding: r.Binding, Authorized: true, QueueLimit: queue, ControlSyncRevision: "cfg-1", Clock: func() time.Time { return managementT0 }})
 	if err != nil || reused {
 		t.Fatalf("accept: reused=%v %v", reused, err)
 	}
@@ -115,10 +115,10 @@ func TestE23T2DraftIsInertImmutableAndLookupExpiryDoesNotWrite(t *testing.T) {
 	if _, err := s.Exec(`UPDATE sync_management_requests SET config_revision='changed' WHERE request_id=?`, r.RequestID); err == nil {
 		t.Fatal("binding rewrite admitted")
 	}
-	if _, _, err := s.AcceptManagementRequest(ctx, ManagementAdmission{GroupID: r.GroupID, RequestID: r.RequestID, CurrentBinding: r.Binding, Authorized: true, QueueLimit: 2, Now: managementT0.Add(600 * time.Second)}); !errors.Is(err, ErrManagementExpired) {
+	if _, _, err := s.AcceptManagementRequest(ctx, ManagementAdmission{GroupID: r.GroupID, RequestID: r.RequestID, CurrentBinding: r.Binding, Authorized: true, QueueLimit: 2, Clock: func() time.Time { return managementT0.Add(600 * time.Second) }}); !errors.Is(err, ErrManagementExpired) {
 		t.Fatalf("expired submit: %v", err)
 	}
-	if _, _, err := s.AcceptManagementRequest(ctx, ManagementAdmission{GroupID: r.GroupID, RequestID: managementHandle(2), Now: managementT0}); !errors.Is(err, ErrManagementNotFound) {
+	if _, _, err := s.AcceptManagementRequest(ctx, ManagementAdmission{GroupID: r.GroupID, RequestID: managementHandle(2), Clock: func() time.Time { return managementT0 }}); !errors.Is(err, ErrManagementNotFound) {
 		t.Fatalf("missing handle created: %v", err)
 	}
 }
@@ -159,7 +159,7 @@ func TestE23T2ConcurrentPreparationAndAcceptanceAcrossConnections(t *testing.T) 
 	}
 	for _, store := range stores {
 		wg.Go(func() {
-			_, _, err := store.AcceptManagementRequest(context.Background(), ManagementAdmission{GroupID: b.GroupID, RequestID: managementHandle(1), CurrentBinding: b, Authorized: true, QueueLimit: 2, Now: managementT0})
+			_, _, err := store.AcceptManagementRequest(context.Background(), ManagementAdmission{GroupID: b.GroupID, RequestID: managementHandle(1), CurrentBinding: b, Authorized: true, QueueLimit: 2, Clock: func() time.Time { return managementT0 }})
 			errs <- err
 		})
 	}
@@ -175,14 +175,14 @@ func TestE23T2ConcurrentPreparationAndAcceptanceAcrossConnections(t *testing.T) 
 			t.Fatalf("duplicate %s: %d %v", table, n, err)
 		}
 	}
-	view, reused, err := s.AcceptManagementRequest(context.Background(), ManagementAdmission{GroupID: b.GroupID, RequestID: managementHandle(1), Authorized: false, QueueLimit: 0, Now: managementT0.Add(time.Hour)})
+	view, reused, err := s.AcceptManagementRequest(context.Background(), ManagementAdmission{GroupID: b.GroupID, RequestID: managementHandle(1), Authorized: false, QueueLimit: 0, Clock: func() time.Time { return managementT0.Add(time.Hour) }})
 	if err != nil || !reused || view.State != "queued" {
 		t.Fatalf("duplicate before revoked policy/capacity: %+v %v %v", view, reused, err)
 	}
 	wrong := b
 	wrong.StateIncarnationID = "epoch-restored"
 	draft := prepareManagement(t, s, 2, b)
-	if _, _, err := s.AcceptManagementRequest(context.Background(), ManagementAdmission{GroupID: b.GroupID, RequestID: draft.RequestID, CurrentBinding: wrong, Authorized: true, QueueLimit: 2, Now: managementT0}); !errors.Is(err, ErrManagementUnauthorized) {
+	if _, _, err := s.AcceptManagementRequest(context.Background(), ManagementAdmission{GroupID: b.GroupID, RequestID: draft.RequestID, CurrentBinding: wrong, Authorized: true, QueueLimit: 2, Clock: func() time.Time { return managementT0 }}); !errors.Is(err, ErrManagementUnauthorized) {
 		t.Fatalf("restamped incarnation: %v", err)
 	}
 }
@@ -197,7 +197,7 @@ func TestE23T2QueueReserveAndAtomicControlRollback(t *testing.T) {
 		acceptManagement(t, s, prepareManagement(t, s, n, managementBinding("sync-now")), 2)
 	}
 	third := prepareManagement(t, s, 3, managementBinding("sync-now"))
-	if _, _, err := s.AcceptManagementRequest(ctx, ManagementAdmission{GroupID: third.GroupID, RequestID: third.RequestID, CurrentBinding: third.Binding, Authorized: true, QueueLimit: 2, Now: managementT0}); !errors.Is(err, ErrSyncQueueFull) {
+	if _, _, err := s.AcceptManagementRequest(ctx, ManagementAdmission{GroupID: third.GroupID, RequestID: third.RequestID, CurrentBinding: third.Binding, Authorized: true, QueueLimit: 2, Clock: func() time.Time { return managementT0 }}); !errors.Is(err, ErrSyncQueueFull) {
 		t.Fatalf("data saturation: %v", err)
 	}
 	pause := acceptManagement(t, s, prepareManagement(t, s, 4, managementBinding("pause")), 2)
@@ -214,7 +214,7 @@ func TestE23T2QueueReserveAndAtomicControlRollback(t *testing.T) {
 	if _, err := s.Exec(`CREATE TRIGGER fail_management_acceptance BEFORE INSERT ON sync_management_acceptances BEGIN SELECT RAISE(ABORT,'injected admission failure'); END;`); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := s.AcceptManagementRequest(ctx, ManagementAdmission{GroupID: resume.GroupID, RequestID: resume.RequestID, CurrentBinding: resume.Binding, Authorized: true, QueueLimit: 2, ControlSyncRevision: "cfg-2", Now: managementT0}); err == nil {
+	if _, _, err := s.AcceptManagementRequest(ctx, ManagementAdmission{GroupID: resume.GroupID, RequestID: resume.RequestID, CurrentBinding: resume.Binding, Authorized: true, QueueLimit: 2, ControlSyncRevision: "cfg-2", Clock: func() time.Time { return managementT0 }}); err == nil {
 		t.Fatal("injected acceptance failure ignored")
 	}
 	control, err = s.LoadSyncControl(ctx, "wiki-pair")
@@ -230,7 +230,7 @@ func TestE23T2QueueReserveAndAtomicControlRollback(t *testing.T) {
 	}
 	acceptManagement(t, s, resume, 2)
 	stale := prepareManagement(t, s, 6, resumeBinding)
-	if _, _, err := s.AcceptManagementRequest(ctx, ManagementAdmission{GroupID: stale.GroupID, RequestID: stale.RequestID, CurrentBinding: stale.Binding, Authorized: true, QueueLimit: 2, ControlSyncRevision: "cfg-1", Now: managementT0}); !errors.Is(err, ErrSyncPrecondition) {
+	if _, _, err := s.AcceptManagementRequest(ctx, ManagementAdmission{GroupID: stale.GroupID, RequestID: stale.RequestID, CurrentBinding: stale.Binding, Authorized: true, QueueLimit: 2, ControlSyncRevision: "cfg-1", Clock: func() time.Time { return managementT0 }}); !errors.Is(err, ErrSyncPrecondition) {
 		t.Fatalf("stale control revision %v", err)
 	}
 	control, err = s.HoldSyncControl(ctx, "wiki-pair", "trust_failure", "cfg-1", syncT1)
@@ -240,7 +240,7 @@ func TestE23T2QueueReserveAndAtomicControlRollback(t *testing.T) {
 	held := managementBinding("resume")
 	held.ExpectedControlRevision = &control.Revision
 	r := prepareManagement(t, s, 7, held)
-	if _, _, err := s.AcceptManagementRequest(ctx, ManagementAdmission{GroupID: r.GroupID, RequestID: r.RequestID, CurrentBinding: r.Binding, Authorized: true, QueueLimit: 2, ControlSyncRevision: "cfg-1", Now: managementT0}); !errors.Is(err, ErrSyncControlHeld) {
+	if _, _, err := s.AcceptManagementRequest(ctx, ManagementAdmission{GroupID: r.GroupID, RequestID: r.RequestID, CurrentBinding: r.Binding, Authorized: true, QueueLimit: 2, ControlSyncRevision: "cfg-1", Clock: func() time.Time { return managementT0 }}); !errors.Is(err, ErrSyncControlHeld) {
 		t.Fatalf("resume cleared safety hold %v", err)
 	}
 }
@@ -462,7 +462,7 @@ func TestE23T2TerminalSlotReservationAndControlCapacity(t *testing.T) {
 				t.Fatal("terminal reservation did not retain accepted work")
 			}
 			next := prepareManagement(t, s, 20001, b)
-			if _, _, err := s.AcceptManagementRequest(ctx, ManagementAdmission{GroupID: next.GroupID, RequestID: next.RequestID, CurrentBinding: next.Binding, Authorized: true, QueueLimit: 2, ControlSyncRevision: "cfg-1", Now: managementT0}); !errors.Is(err, ErrSyncQueueFull) {
+			if _, _, err := s.AcceptManagementRequest(ctx, ManagementAdmission{GroupID: next.GroupID, RequestID: next.RequestID, CurrentBinding: next.Binding, Authorized: true, QueueLimit: 2, ControlSyncRevision: "cfg-1", Clock: func() time.Time { return managementT0 }}); !errors.Is(err, ErrSyncQueueFull) {
 				t.Fatalf("terminal reserve overfilled: %v", err)
 			}
 			view, err := s.LoadManagementRequest(ctx, next.GroupID, next.RequestID, managementT0)
@@ -552,7 +552,7 @@ func TestE23T2CapacityRaceAndCanceledAdmission(t *testing.T) {
 	errs := make(chan error, workers)
 	for i, store := range stores {
 		wg.Go(func() {
-			_, _, err := store.AcceptManagementRequest(context.Background(), ManagementAdmission{GroupID: b.GroupID, RequestID: managementHandle(i + 1), CurrentBinding: b, Authorized: true, QueueLimit: 2, Now: managementT0})
+			_, _, err := store.AcceptManagementRequest(context.Background(), ManagementAdmission{GroupID: b.GroupID, RequestID: managementHandle(i + 1), CurrentBinding: b, Authorized: true, QueueLimit: 2, Clock: func() time.Time { return managementT0 }})
 			errs <- err
 		})
 	}
@@ -965,7 +965,7 @@ func TestE23T2QueuedIdentityOrderAndVerifyOutcome(t *testing.T) {
 	}
 	for offset, n := range []int{3, 1, 2} {
 		r := prepareManagement(t, s, n, managementBinding("verify-all"))
-		if _, _, err := s.AcceptManagementRequest(ctx, ManagementAdmission{GroupID: r.GroupID, RequestID: r.RequestID, CurrentBinding: r.Binding, Authorized: true, QueueLimit: 3, Now: managementT0.Add(time.Duration(offset) * time.Second)}); err != nil {
+		if _, _, err := s.AcceptManagementRequest(ctx, ManagementAdmission{GroupID: r.GroupID, RequestID: r.RequestID, CurrentBinding: r.Binding, Authorized: true, QueueLimit: 3, Clock: func() time.Time { return managementT0.Add(time.Duration(offset) * time.Second) }}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1006,7 +1006,7 @@ func TestE23T2AdmissionBoundsAndRetryAuthorityRefuseWithoutWrites(t *testing.T) 
 	ctx := context.Background()
 	r := prepareManagement(t, s, 1, managementBinding("sync-now"))
 	for _, limit := range []int{1, 1001} {
-		if _, _, err := s.AcceptManagementRequest(ctx, ManagementAdmission{GroupID: r.GroupID, RequestID: r.RequestID, CurrentBinding: r.Binding, Authorized: true, QueueLimit: limit, Now: managementT0}); err == nil {
+		if _, _, err := s.AcceptManagementRequest(ctx, ManagementAdmission{GroupID: r.GroupID, RequestID: r.RequestID, CurrentBinding: r.Binding, Authorized: true, QueueLimit: limit, Clock: func() time.Time { return managementT0 }}); err == nil {
 			t.Fatalf("queue limit %d accepted", limit)
 		}
 	}

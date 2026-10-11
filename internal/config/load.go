@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -23,6 +24,42 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	return cfg, nil
+}
+
+// LoadContext bounds trusted configuration inspection. The isolated read/parse
+// worker has no writes or external effects and cannot authorize work after the
+// caller has returned. Non-regular inputs are refused before reading.
+func LoadContext(ctx context.Context, path string) (*Config, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	type result struct {
+		cfg *Config
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		info, err := os.Stat(path)
+		if err != nil {
+			done <- result{err: err}
+			return
+		}
+		if !info.Mode().IsRegular() {
+			done <- result{err: fmt.Errorf("config must be a regular file")}
+			return
+		}
+		cfg, err := Load(path)
+		done <- result{cfg, err}
+	}()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case value := <-done:
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		return value.cfg, value.err
+	}
 }
 
 // Parse decodes configuration bytes. It applies, in order: a raw-node
@@ -110,7 +147,7 @@ func validateRawSyncEnabled(root *yaml.Node) error {
 	if _, ok := sync["enabled"].(bool); !ok {
 		return fmt.Errorf("yaml: sync.enabled is required and must be a boolean")
 	}
-	return nil
+	return validateRawSyncManagement(sync)
 }
 
 func joinErrors(errs []error) string {

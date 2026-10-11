@@ -26,7 +26,13 @@ type Config struct {
 	Warnings []string `yaml:"-" json:"-"`
 }
 
+type SyncManagement struct {
+	Enabled bool     `yaml:"enabled" json:"enabled"`
+	Actions []string `yaml:"actions" json:"actions"`
+}
+
 type Sync struct {
+	Management                 *SyncManagement            `yaml:"management,omitempty" json:"management,omitempty"`
 	Enabled                    bool                       `yaml:"enabled" json:"enabled"`
 	GroupID                    string                     `yaml:"group_id" json:"group_id"`
 	Resource                   string                     `yaml:"resource" json:"resource"`

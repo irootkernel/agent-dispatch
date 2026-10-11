@@ -5,6 +5,15 @@ SOT snapshots, not product releases. Product release notes and pending user-faci
 changes belong to the root [changelog](../CHANGELOG.md). Historical entries below
 retain their recorded scope; migrated document pointers use their current paths.
 
+## Successor request CLI - 2026-10-10
+
+- Expose closed management capabilities and exact retained-handle lookup;
+  keep new actions unavailable until execution and recovery qualify.
+- Parse the optional management authority without null coercion and bind its
+  independent policy/config revisions without changing import acknowledgement.
+- Bound configuration inspection, state initialization and migration waits by
+  one request deadline; inspect existing state without writes or migrations.
+
 ## Successor request ledger - 2026-10-10
 
 - Add schema 28 management drafts, immutable bindings and acceptance,

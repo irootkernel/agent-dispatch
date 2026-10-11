@@ -14,10 +14,10 @@
 | Current SOT baseline | 1.8.0 ([D-030](../specs/decision-log.md); G17 and G18 complete) |
 | Release target | v0.3.0 (constrained sync management successor) |
 | Current epic | E23 |
-| Current active task | none |
-| Next task | E23-T3 |
-| Completed tasks | 118 / 123 |
-| Planned tasks | 5 / 123 |
+| Current active task | None |
+| Next task | E23-T4 |
+| Completed tasks | 119 / 123 |
+| Planned tasks | 4 / 123 |
 | In progress tasks | 0 |
 | In review tasks | 0 |
 | Blocked tasks | 0 |
@@ -191,7 +191,7 @@ remain separate operator decisions.
 | 116 | E22-T5 | Completed | Real two-node qualification and v0.2.0 handoff |
 | 117 | E23-T1 | Completed | Successor management scope, authority, and executable contract freeze |
 | 118 | E23-T2 | Completed | Durable request ledger, immutable bindings, and additive migration |
-| 119 | E23-T3 | Planned | Bounded preparation, idempotent admission, and exact lookup |
+| 119 | E23-T3 | Completed | Bounded preparation, idempotent admission, and exact lookup |
 | 120 | E23-T4 | Planned | Shared worker execution and atomic local controls |
 | 121 | E23-T5 | Planned | Identity-preserving retry, recovery, retention, and restore |
 | 122 | E23-T6 | Planned | Management security, fault, saturation, and regression qualification |
@@ -5800,7 +5800,7 @@ native paired qualification remain later-task gates.
 
 ## E23-T3: Implement Preparation, Admission, and Exact Lookup
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -5809,10 +5809,10 @@ capabilities, without coupling submission to long-running sync effects.
 
 ### Deliverables
 
-- [ ] Implement the frozen CLI family with trusted config handling and closed input validation.
-- [ ] Prepare expiring immutable drafts; submit only existing current handles; make concurrent/duplicate submissions return the same durable identity.
-- [ ] Implement exact non-mutating lookup with lifecycle, associations, bounded reasons, and explicit executor availability.
-- [ ] Distinguish disabled authority, unsupported execution, missing/expired handles, stale bindings, and capacity refusal in the frozen error model.
+- [x] Implement the frozen CLI family with trusted config handling and closed input validation.
+- [x] Prepare expiring immutable drafts; submit only existing current handles; make concurrent/duplicate submissions return the same durable identity.
+- [x] Implement exact non-mutating lookup with lifecycle, associations, bounded reasons, and explicit executor availability.
+- [x] Distinguish disabled authority, unsupported execution, missing/expired handles, stale bindings, and capacity refusal in the frozen error model.
 
 ### Requirements
 
@@ -5824,19 +5824,53 @@ E23-T2 Completed.
 
 ### Do Not
 
-- [ ] Do not run Git/network/content/control effects during preparation or long work during data-plane submission.
-- [ ] Do not upsert missing handles or advertise enabled actions before execution/recovery is ready. Test admission through isolated fixtures until that boundary is satisfied.
+- [x] Do not run Git/network/content/control effects during preparation or long work during data-plane submission.
+- [x] Do not upsert missing handles or advertise enabled actions before execution/recovery is ready. Test admission through isolated fixtures until that boundary is satisfied.
 
 ### Verification and Acceptance
 
-- [ ] Preparation with a lost response leaves only expiring inert state; unknown or expired submit handles cannot enqueue work.
-- [ ] Repeated/concurrent submit and fingerprint conflicts meet the contract; a later unrelated request cannot replace exact-ID lookup evidence.
-- [ ] Post-submit response loss retains the handle and records a caller-unknown outcome without manufacturing a new request.
-- [ ] Existing inspection/ordinary sync commands and config defaults pass regressions.
+- [x] Preparation with a lost response leaves only expiring inert state; unknown or expired submit handles cannot enqueue work.
+- [x] Repeated/concurrent submit and fingerprint conflicts meet the contract; a later unrelated request cannot replace exact-ID lookup evidence.
+- [x] Post-submit response loss retains the handle and records a caller-unknown outcome without manufacturing a new request.
+- [x] Existing inspection/ordinary sync commands and config defaults pass regressions.
 
 ### Evidence
 
-Not executed. Retain CLI-produced schema fixtures and admission/lookup tests.
+Implementation candidate prepared 2026-10-10. The closed request CLI uses the
+trusted configuration, immutable draft bindings, existing-handle admission, and
+exact read-only lookup. Capabilities expose configured policy while keeping
+new runtime actions unavailable until T4/T5 execution and recovery qualify
+them. Isolated fixtures exercise preparation and admission without enabling
+production execution.
+
+Focused CLI/config/SQLite race tests pass, including frozen argv and result
+schemas, concurrent submissions, response loss, stale and expired handles,
+read-only DB/WAL checks, legacy sync configuration, and T2 storage regressions.
+The remaining-call deadline test exposed a SQLite busy-handler wait after
+context cancellation; cancellable writer reservation now passes for bounded
+and ordinary opens and restores ordinary connection settings. Blocked success
+and error output pipes also return within the invocation deadline. Format,
+vet, staticcheck, and import-direction checks pass.
+
+The first independent review found that a draft could expire while waiting for
+the SQLite writer and still be accepted using the earlier invocation time.
+Admission now reads the clock after reserving the writer. Data and control
+regression tests reproduce the former behavior and verify expiry refusal
+without acceptance, control, or job writes.
+
+The earlier default `make verify` timed out in a CLI race integration test;
+that test subsequently passed in the repository's isolated environment. The
+cause of the earlier timeout remains unestablished.
+
+The corrected candidate passed full `make verify` on 2026-10-11, including
+ordinary CLI/configuration regressions and both frozen contract gates.
+Configured Gaori manifest, schema, and traceability checks passed. Three
+independent static reviewers assessed every T3 criterion as met with no
+remaining finding, using source inspection and separately supplied execution
+evidence. Matching staged endpoints do not establish immutable capture.
+Darwin systemd unit lint was skipped because `systemd-analyze` is absent.
+Runtime/G19, native Darwin/Linux pairing, and Plugin integration qualification
+remain with later tasks. T4 remains Planned.
 
 ## E23-T4: Connect Worker Execution and Local Control
 

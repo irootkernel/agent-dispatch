@@ -12,9 +12,11 @@
 package sqlite
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -33,7 +35,13 @@ import (
 // filesystems (SCP-007); where detection is not reliable, placement on
 // network storage remains explicitly unsupported per the roadmap
 // acceptance.
-func Open(path string) (*Store, error) {
+func Open(path string) (*Store, error) { return OpenContext(context.Background(), path) }
+
+// OpenContext bounds initialization with the caller's invocation deadline.
+func OpenContext(ctx context.Context, path string) (*Store, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if !filepath.IsAbs(path) {
 		abs, err := filepath.Abs(path)
 		if err != nil {
@@ -66,7 +74,15 @@ func Open(path string) (*Store, error) {
 	// All connection-scoped pragmas ride the DSN so a replacement pooled
 	// connection re-applies them (L-16, E9-T1); the pragma verification
 	// block below still proves each took effect.
-	db, err := sql.Open("sqlite", path+"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=synchronous(FULL)")
+	busyMS := int64(5000)
+	if _, ok := ctx.Deadline(); ok {
+		// SQLite's busy handler cannot be interrupted by context cancellation.
+		// Bounded invocations retry lock contention in Go instead of retaining
+		// an initialization-time wait budget after that budget has elapsed.
+		busyMS = 0
+	}
+	dsn := (&url.URL{Scheme: "file", Path: path}).String()
+	db, err := sql.Open("sqlite", fmt.Sprintf("%s?_pragma=foreign_keys(1)&_pragma=busy_timeout(%d)&_pragma=synchronous(FULL)", dsn, busyMS))
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
@@ -80,7 +96,7 @@ func Open(path string) (*Store, error) {
 	var walErr error
 	for attempt := 0; attempt < 20; attempt++ {
 		var got string
-		walErr = db.QueryRow("PRAGMA journal_mode = WAL").Scan(&got)
+		walErr = db.QueryRowContext(ctx, "PRAGMA journal_mode = WAL").Scan(&got)
 		if walErr == nil {
 			if got != "wal" {
 				db.Close()
@@ -92,7 +108,14 @@ func Open(path string) (*Store, error) {
 		if !isBusy(walErr) {
 			break
 		}
-		time.Sleep(100 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			walErr = ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+		if ctx.Err() != nil {
+			break
+		}
 	}
 	if walErr != nil {
 		db.Close()
@@ -103,11 +126,11 @@ func Open(path string) (*Store, error) {
 	}
 	// foreign_keys and busy_timeout return no result rows through this
 	// driver; set them and verify through their read forms.
-	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
+	if _, err := db.ExecContext(ctx, "PRAGMA foreign_keys = ON"); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("pragma foreign_keys: %w", err)
 	}
-	if _, err := db.Exec("PRAGMA busy_timeout = 5000"); err != nil {
+	if _, err := db.ExecContext(ctx, fmt.Sprintf("PRAGMA busy_timeout = %d", busyMS)); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("pragma busy_timeout: %w", err)
 	}
@@ -116,11 +139,11 @@ func Open(path string) (*Store, error) {
 		want string
 	}{
 		{"PRAGMA foreign_keys", "1"},
-		{"PRAGMA busy_timeout", "5000"},
+		{"PRAGMA busy_timeout", fmt.Sprint(busyMS)},
 		{"PRAGMA synchronous", "2"}, // FULL
 	} {
 		var got string
-		if err := db.QueryRow(pragma.stmt).Scan(&got); err != nil {
+		if err := db.QueryRowContext(ctx, pragma.stmt).Scan(&got); err != nil {
 			db.Close()
 			return nil, fmt.Errorf("verify %q: %w", pragma.stmt, err)
 		}

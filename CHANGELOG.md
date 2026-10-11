@@ -4,6 +4,11 @@ This file records concise shipped outcomes and pending changes.
 
 ## v0.3.0 - Unreleased
 
+### Added
+
+- Inspect management policy and exact retained requests with
+  `sync request capabilities` and `sync request show`.
+
 ### Changed
 
 - Advance SQLite to schema 28 for bounded local management requests; rollback

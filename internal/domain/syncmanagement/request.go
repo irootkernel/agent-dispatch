@@ -41,6 +41,7 @@ var (
 	commitPattern = regexp.MustCompile(`^(?:[0-9a-f]{40}|[0-9a-f]{64})$`)
 )
 
+func ValidGroup(v string) bool     { return groupPattern.MatchString(v) }
 func ValidHandle(v string) bool    { return handlePattern.MatchString(v) }
 func ValidID(v string) bool        { return idPattern.MatchString(v) }
 func ValidCommit(v string) bool    { return commitPattern.MatchString(v) }

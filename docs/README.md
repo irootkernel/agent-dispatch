@@ -24,7 +24,9 @@ E23 develops the v0.3.0 successor for constrained local sync management. Its
 [frozen implementation contract](contracts/sync-management-contract.md), and
 [execution dossier](todo/TODO-SYNC-MANAGEMENT.md) are separate from the frozen
 v0.2.0 release gates. Development builds use v0.3.0 and schema 28's local request
-ledger; the management command family remains unavailable. The published Core/inspection-Plugin
+ledger. The closed management CLI exposes capabilities and exact retained-handle
+lookup; new actions remain unavailable until execution and recovery qualify.
+The published Core/inspection-Plugin
 v0.2.0 pair is pinned in that contract. Core E23 precedes Plugin EPIC-008. The latter
 remains Deferred in its own roadmap until provider qualification and a
 separate Plugin scope amendment.

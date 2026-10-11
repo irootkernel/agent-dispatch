@@ -447,6 +447,24 @@ disabled or revision-paused.
 
 ## 15. Optional two-node sync block
 
+The optional `sync.management` object contains exactly `enabled` (boolean)
+and `actions` (unique array of `sync-now`, `verify-all`, `retry`, `pause`,
+`resume`). Both properties are required when present; null is refused. An
+absent block means disabled with an empty allowlist. Enabled authority requires
+at least one action and ordinary `sync.enabled` for new effects. Configuring an
+action does not make unqualified execution available. Exact retained lookup
+and accepted duplicate submission remain usable after authority is disabled.
+Raw YAML checks preserve missing/null distinctions through aliases and merges,
+including the bounded configuration-repair parser.
+
+Management policy hashes the sorted allowlist and enabled bit. Its independent
+config revision adds complete sync bounds and the sorted five-field node
+projection to the existing cooperative-import revision. Credential references
+are hashed without resolving values, and private signing references are
+excluded. The acknowledgement projection remains unchanged. See the
+[management contract](sync-management-contract.md#exact-bindings-and-wire-records).
+
+
 `sync` is optional and disabled by default. One block owns one group, one
 existing Markdown resource, one configured remote name, one content ref, one
 membership ref, one local instance, one pinned administrator key, one

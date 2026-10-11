@@ -80,7 +80,9 @@ configured completed-receipt horizon; unresolved jobs and retry descendants keep
 their request ancestry and effect evidence. Lease expiry permits inspection,
 never automatic repeated effects. The application owns policy revalidation,
 resume safety checks, protected resource guards, and execution through the
-existing worker; ledger availability alone provides no management CLI capability.
+existing worker. The management CLI reports policy and exact retained requests
+through a read-only database connection. New preparation/admission remain gated
+by qualified execution and recovery; isolated fixtures exercise those primitives.
 
 Since E12-T2 the single-active slot, the dirty generation, and the follow-up
 chain are keyed on the dispatch's destination lane (`destination_lane_state`,

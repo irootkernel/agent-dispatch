@@ -6,6 +6,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -118,6 +119,9 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	globalRawStateDir = ""
 	globalRawTimeout = ""
 	globalOptionsMu.Unlock()
+	if requestArgs, selected, prefix := managementRawArgs(args); selected {
+		return runSyncRequest(context.Background(), requestArgs, prefix, stdout, stderr)
+	}
 	rest, ok := scanGlobalOptions(args[0], args[1:], stderr)
 	if !ok {
 		return 2

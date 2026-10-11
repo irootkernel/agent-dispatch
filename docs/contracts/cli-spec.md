@@ -233,6 +233,31 @@ descriptor and peer contract bundle is
 contract so independent consumers can bind their records to this exact v1
 semantic contract.
 
+### Local management request commands
+
+The [frozen management contract](sync-management-contract.md) owns the closed
+`sync request capabilities|prepare|submit|show` grammar and error/exit registry.
+Each phase accepts `--group`, the trusted `--config` selector and JSON output.
+`prepare` takes an action and a retry predecessor only for `retry`;
+`submit` and `show` take an existing handle. Flags accept separate and equals
+values; duplicate, positional, unknown and control-character inputs refuse.
+Global overrides and phase-local help flags are excluded; `help sync` lists
+this family without opening state.
+
+Capabilities reports configured policy separately from qualified actions. The
+current development stage exposes no qualified action. New preparation and
+admission refuse; isolated internal fixtures prove their bounded transactions.
+Exact `show` opens existing state read-only without migration, expiry writes,
+pruning or service/remote inspection. An accepted duplicate `submit` returns
+its exact retained evidence before current policy or capacity refusal. A
+successful receipt or lookup exits zero independently of action outcome.
+
+The five-second invocation budget includes config inspection, database opening,
+migration-lock waiting, backup and admission. Deadline errors never start long
+work. Output failure exits 40; retain the same known handle and inspect it before
+resubmitting. The closed carrier bounds reasons to 256 UTF-8 bytes and the whole
+response to 1 MiB. Failed responses use stderr, and successful responses stdout.
+
 ### Sync retained-record lists
 
 Publication, peer-delivery, import, and verification history use a maximum page

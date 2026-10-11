@@ -104,16 +104,70 @@ func loadManagement(ctx context.Context, q managementQuerier, group, id string) 
 
 // beginManagementTx reserves the SQLite writer before reading capacity or
 // identity. A deferred read-to-write upgrade must not lose a concurrent submit.
-func (s *Store) beginManagementTx(ctx context.Context, id string) (*sql.Tx, error) {
-	tx, err := s.BeginTx(ctx, nil)
+func (s *Store) beginManagementTx(ctx context.Context, id string) (*managementTx, error) {
+	conn, err := s.Conn(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE sync_management_requests SET state=state WHERE request_id=?`, id); err != nil {
-		tx.Rollback()
+	var busyMS int64
+	if err = conn.QueryRowContext(ctx, `PRAGMA busy_timeout`).Scan(&busyMS); err != nil {
+		conn.Close()
 		return nil, err
 	}
-	return tx, nil
+	if _, err = conn.ExecContext(ctx, `PRAGMA busy_timeout=0`); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	release := func() {
+		conn.ExecContext(context.Background(), fmt.Sprintf("PRAGMA busy_timeout=%d", busyMS))
+		conn.Close()
+	}
+	for {
+		tx, err := conn.BeginTx(ctx, nil)
+		if err == nil {
+			_, err = tx.ExecContext(ctx, `UPDATE sync_management_requests SET state=state WHERE request_id=?`, id)
+			if err == nil {
+				return &managementTx{Tx: tx, release: release}, nil
+			}
+			tx.Rollback()
+		}
+		if !isBusy(err) {
+			release()
+			return nil, err
+		}
+		select {
+		case <-ctx.Done():
+			release()
+			return nil, ctx.Err()
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+}
+
+// The reserved connection keeps busy-handler changes private to this
+// transaction. Returning it restores ordinary callers' connection settings.
+type managementTx struct {
+	*sql.Tx
+	release func()
+}
+
+func (tx *managementTx) finish() {
+	if tx.release != nil {
+		tx.release()
+		tx.release = nil
+	}
+}
+
+func (tx *managementTx) Commit() error {
+	err := tx.Tx.Commit()
+	tx.finish()
+	return err
+}
+
+func (tx *managementTx) Rollback() error {
+	err := tx.Tx.Rollback()
+	tx.finish()
+	return err
 }
 
 // LoadManagementRequest is an exact bounded snapshot. Draft expiry is derived;
@@ -245,7 +299,8 @@ type ManagementAdmission struct {
 	QueueLimit         int
 	// This is the existing SyncRevision, not the full management config digest.
 	ControlSyncRevision string
-	Now                 time.Time
+	// Clock is sampled after acquiring the writer; nil uses time.Now.
+	Clock func() time.Time
 }
 
 // AcceptManagementRequest returns accepted duplicates before policy/capacity
@@ -267,7 +322,12 @@ func (s *Store) AcceptManagementRequest(ctx context.Context, in ManagementAdmiss
 	if r.AcceptedAt != nil {
 		return r, true, tx.Commit()
 	}
-	if in.Now.IsZero() || r.State != "prepared" || !in.Now.Before(mustManagementTime(r.ExpiresAt)) {
+	clock := in.Clock
+	if clock == nil {
+		clock = time.Now
+	}
+	now := clock()
+	if now.IsZero() || r.State != "prepared" || !now.Before(mustManagementTime(r.ExpiresAt)) {
 		return r, false, ErrManagementExpired
 	}
 	if !in.Authorized || !sameManagementAuthority(r.Binding, in.CurrentBinding) {
@@ -289,7 +349,7 @@ func (s *Store) AcceptManagementRequest(ctx context.Context, in ManagementAdmiss
 	if unresolved >= queue || unresolved+finished >= terminal {
 		return r, false, ErrSyncQueueFull
 	}
-	at := managementTime(in.Now)
+	at := managementTime(now)
 	state := "queued"
 	var outcomeJSON any
 	var resolved any
@@ -298,7 +358,7 @@ func (s *Store) AcceptManagementRequest(ctx context.Context, in ManagementAdmiss
 		if r.Action == "resume" {
 			target = "active"
 		}
-		control, err := setSyncControlTx(ctx, tx, r.GroupID, *r.ExpectedControlRevision, target, in.ControlSyncRevision, at)
+		control, err := setSyncControlTx(ctx, tx.Tx, r.GroupID, *r.ExpectedControlRevision, target, in.ControlSyncRevision, at)
 		if err != nil {
 			return r, false, err
 		}

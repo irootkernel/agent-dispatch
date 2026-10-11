@@ -81,6 +81,9 @@ var commandHelp = map[string]string{
 	"sync": `sync — inspect capabilities and control durable sync work
 
 Usage: agent-dispatch sync capabilities --output json
+       agent-dispatch sync request capabilities --group <id> [--config <path>] [--output json]
+       agent-dispatch sync request prepare --group <id> --action <action> [--target-request-id <id>] [--config <path>]
+       agent-dispatch sync request submit|show --group <id> --request-id <id> [--config <path>]
        agent-dispatch sync status --group <id> [--config <path>] --output json
        agent-dispatch sync verify --group <id> --output json
        agent-dispatch sync pause|resume --group <id> --expected-control-revision <n> [--config <path>] --output json
@@ -102,6 +105,10 @@ of initial_baseline, conflict_resolution, or history_bound_exhausted;
 --output json selects the versioned machine envelope.
 
 Defaults: the platform configuration path; sync is disabled by default.
+Management uses a closed parser and JSON output; use help sync for discovery.
+New management actions are unavailable until execution/recovery qualify.
+Capabilities and exact show remain usable; duplicate accepted submit returns
+retained evidence even after authority is disabled.
 Serve binds an owner-only Unix socket under the state directory for an
 operator-managed Tailscale HTTPS route. Service manages its exact launchd or
 systemd user definition; uninstall preserves SQLite state and evidence.

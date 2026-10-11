@@ -64,8 +64,11 @@ func verifyConfiguredSync(parent context.Context, cfg *config.Config, store *sql
 	if err != nil {
 		return syncMembershipError(stderr, command, err, 3)
 	}
-	service := &peerService{cfg: cfg}
-	membership, pair, err := service.currentMembers(ctx)
+	membership, err := client.ResolveRef(ctx, s.MembershipRef)
+	if err != nil {
+		return syncMembershipError(stderr, command, err, 30)
+	}
+	pair, err := loadConfiguredMembers(ctx, cfg, client, membership)
 	if err != nil {
 		return syncMembershipError(stderr, command, err, 30)
 	}

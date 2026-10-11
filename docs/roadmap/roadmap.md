@@ -15,9 +15,9 @@
 | Release target | v0.3.0 (constrained sync management successor) |
 | Current epic | E23 |
 | Current active task | None |
-| Next task | E23-T6 |
-| Completed tasks | 121 / 123 |
-| Planned tasks | 2 / 123 |
+| Next task | E23-T7 |
+| Completed tasks | 122 / 123 |
+| Planned tasks | 1 / 123 |
 | In progress tasks | 0 |
 | In review tasks | 0 |
 | Blocked tasks | 0 |
@@ -194,7 +194,7 @@ remain separate operator decisions.
 | 119 | E23-T3 | Completed | Bounded preparation, idempotent admission, and exact lookup |
 | 120 | E23-T4 | Completed | Shared worker execution and atomic local controls |
 | 121 | E23-T5 | Completed | Identity-preserving retry, recovery, retention, and restore |
-| 122 | E23-T6 | Planned | Management security, fault, saturation, and regression qualification |
+| 122 | E23-T6 | Completed | Management security, fault, saturation, and regression qualification |
 | 123 | E23-T7 | Planned | Exact-provider paired qualification and Plugin handoff |
 
 ---
@@ -6001,7 +6001,7 @@ E23 remains In Progress.
 
 ## E23-T6: Prove Management Security and Fault Acceptance
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -6010,11 +6010,11 @@ qualification, including the legacy surfaces that management must preserve.
 
 ### Deliverables
 
-- [ ] Run the G19 matrix with real public CLI emissions and disposable state.
-- [ ] Cover forbidden inputs, secrets/redaction, policy bypass attempts, direct command invocation, saturated queues, control reserve, and service fairness.
-- [ ] Add DF-007's stalling-transport/injected-deadline and verification-saturation cases for touched paths.
-- [ ] Address applicable DF-002/003/008 recovery, shared-helper, and result-boundary concerns without importing unrelated deferred work.
-- [ ] Run the full Core verification gates and obtain the required bounded independent review; settle acceptance blockers.
+- [x] Run the G19 matrix with real public CLI emissions and disposable state.
+- [x] Cover forbidden inputs, secrets/redaction, policy bypass attempts, direct command invocation, saturated queues, control reserve, and service fairness.
+- [x] Add DF-007's stalling-transport/injected-deadline and verification-saturation cases for touched paths.
+- [x] Address applicable DF-002/003/008 recovery, shared-helper, and result-boundary concerns without importing unrelated deferred work.
+- [x] Run the full Core verification gates and obtain the required bounded independent review; settle acceptance blockers.
 
 ### Requirements
 
@@ -6026,19 +6026,44 @@ E23-T5 Completed.
 
 ### Do Not
 
-- [ ] Do not substitute text-matching tests or hand-written envelopes for behavior and actual producer/consumer contract checks.
-- [ ] Do not use real production state, public endpoints, credentials in tracked evidence, or an unbounded review/retry loop.
+- [x] Do not substitute text-matching tests or hand-written envelopes for behavior and actual producer/consumer contract checks.
+- [x] Do not use real production state, public endpoints, credentials in tracked evidence, or an unbounded review/retry loop.
 
 ### Verification and Acceptance
 
-- [ ] Every deterministic G19 case has inspected results, not only a test name; unsupported environments and skipped legs are reported separately.
-- [ ] Management disabled preserves the existing CLI/sync regression behavior and all current safety boundaries.
-- [ ] No accepted request or unresolved obligation disappears under saturation, timeout, restart, or pruning.
+- [x] Every deterministic G19 case has inspected results, not only a test name; unsupported environments and skipped legs are reported separately.
+- [x] Management disabled preserves the existing CLI/sync regression behavior and all current safety boundaries.
+- [x] No accepted request or unresolved obligation disappears under saturation, timeout, restart, or pruning.
 
 ### Evidence
 
-Not executed. Retain bounded G19 evidence and review dispositions; native
-paired qualification remains E23-T7's responsibility.
+Completed 2026-10-12. Disposable fixtures now cover public frozen argv,
+management-disabled operator control, stalled verification and saturation,
+expired delivery claims, signer and socket startup refusal, actual reconcile
+output settlement, and retained obsolete or unavailable-Git inbox evidence.
+One-shot verification reuses the existing explicit configuration/Git membership
+helper; the serving cache and remote-current trust guard remain in place.
+`docs/VALIDATION.md` maps inspected AC-1901 through AC-1911 outcomes to the
+readable T2-T6 assertions and describes each injection boundary.
+
+The focused T6 suite and the full repository-default `make verify` passed on
+native darwin/arm64 with Go 1.27.1, including unit and race tests and all local
+documentation and contract gates. The first full run failed because the agent's
+temporary path exceeded the Unix-socket limit; a short private root fixed the
+runner, and the full gate then passed without source or timeout changes.
+Darwin lacks `systemd-analyze`, so systemd unit lint remains a native Linux gate.
+
+Three fresh report-only Independent Review lanes inspected all ten original
+criteria and reported no actionable findings or instruction deviations. Their
+execution basis was supplied by the coordinator; their source and assertion
+inspection was firsthand. After all three reports were terminal, the
+coordinator established the remaining review-completion condition and accepted
+all ten criteria under Master's delegated member authority. Matching staged
+endpoints establish a comparison, not immutable capture or host isolation.
+No Low correction, hardening deferral or promoted evidence package applies.
+Only the planned roadmap completion record and its generated manifest follow
+that review. E23 remains In Progress; native paired, three-platform,
+exact-artifact and Plugin handoff qualification remain E23-T7's gates.
 
 ## E23-T7: Qualify and Hand Off the Exact Provider
 

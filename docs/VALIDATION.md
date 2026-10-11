@@ -953,3 +953,52 @@ tests could run. Both passed unit and race suites, static analysis, manifest,
 schema, traceability, sync contract, and scheduler shell checks. Those images
 had neither Hermes nor Watchman, and lacked `plutil` and `systemd-analyze`;
 their corresponding real integration and platform lints were skipped.
+
+## G19 deterministic qualification basis (E23-T6)
+
+This matrix covers the disposable Core fixtures for AC-1901 through AC-1911.
+AC-1912's native paired run, three-platform qualification and exact artifact
+handoff remain E23-T7 gates. The tests exercise the real request producer and
+SQLite ledger. The frozen-argv, disabled-management, serve and reconcile cases
+enter through `Run`; verification injects HTTP at the ordinary command's
+producer seam. Other request cases use the request producer's internal
+composition seam. Injected HTTP and Git remote responses keep the tests off
+public endpoints. Local Git, signed
+membership validation and SQLite transactions run against private fixtures.
+
+| Criterion | Inspected behavior and readable test evidence |
+|---|---|
+| AC-1901 | T3 binding/obsolete refusal and T5 retry revocation preserve prior evidence. `TestE23T6PublicFrozenArgvRejectsAuthorityAndSecretInputs` sends all 69 frozen argv fixtures through the public parser, validates the actual carriers, rejects caller authority and legacy-global flags, checks secret non-disclosure and proves no executable work or control change. `TestE23T6ManagementDisabledPreservesOperatorControl` checks absent and false management policy alongside ordinary operator pause. |
+| AC-1902 | T2 draft immutability and T3 lost preparation responses leave only drafts. Frozen missing handles return refusal. Preparation has no acceptance, job, signing or remote effect. |
+| AC-1903 | T3 concurrent submission and lost acceptance responses retain one acceptance and the exact original handle; same-handle resubmission has no new effect, including after policy revocation. T5 acceptance transaction injection repeats this through the public CLI. |
+| AC-1904 | T4 terminates a real submitting helper, then dispatches its retained work; claim renewal cancels and joins the Git process group. Existing service-loop tests distinguish stopped availability from retained requests. |
+| AC-1905 | T2 immutable associations and T4 exact verification outcomes preserve each request's pinned target and job identity. Lookup of an older request remains exact after another acceptance. |
+| AC-1906 | T2 queue saturation still admits reserved control; injected acceptance failure rolls back both the control revision and result. T4 local controls share operator resume safety and retain unknown quiescence. Stale CAS and safety holds refuse. |
+| AC-1907 | T5 public retry cases send only recorded eligible deliveries and preserve payload, target, job identity and cumulative attempt/fence budgets. Settled, exhausted, revoked, unaccepted, control and pre-signature predecessors cannot create fresh work. |
+| AC-1908 | T5 acceptance, verification-journal and receiver-receipt fault injection preserves known evidence and ambiguous effects. `TestE23T6ExpiredDeliveryClaimRetainsExactReplayIdentity` records uncertainty before preparing an identical replay, makes no HTTP call during recovery, then settles only after 202. Lease expiry itself proves no external result. |
+| AC-1909 | T4 healthy verification excludes its own metadata; unrelated pending work, dirtiness, stale evidence and uncertainty stay incomplete, and a moving target stays target-changed. T6 propagates the production four-minute deadline to an injected transport; a five-second parent deadline interrupts a stalled transport and leaves one planned job, later expired without a new observation. |
+| AC-1910 | T2 bounds cover drafts, attempts, terminal/control capacity, associations and evidence retention; T3 bounds carriers and lock/output deadlines. T4 proves periodic work is not starved. T6 saturation returns exit 14 / `sync_precondition_failed`, retains both unresolved jobs and exposes queue pressure through actual `sync status`; stale remote membership returns exit 30 before job admission or HTTP observation. |
+| AC-1911 | T2 additive upgrade preserves jobs and makes the incompatible old schema guard refuse. T5 supported restore preserves accepted evidence and makes old-incarnation drafts obsolete. These are disposable state tests, not installation or production rollback evidence. |
+| AC-1912 | Pending E23-T7. Deterministic fixtures do not establish native paired qualification, artifact reproducibility or Plugin admission. |
+
+The one-shot verification command uses the explicit configuration-and-Git
+membership helper; the serving process retains its own membership cache.
+T6 also checks actual `sync serve` refusal for an open signer descriptor,
+missing membership and an occupied socket; obsolete inbox resolution retains
+its payload; unavailable local Git retains the pending obligation. The real
+`sync reconcile` producer feeds the inbox parser: a settled result preserves
+the measured target, while a successful query reporting a pause remains
+unsettled. The local-Git failure case injects the reconcile seam and does not
+claim a child-process run.
+
+DF-007's bounded queue decision preserves the shared queue limit and the
+explicit operator refusal. No observation reserve is added: verification
+cannot displace accepted unresolved obligations. Management control retains
+its separate bounded reserve. T6 addresses DF-008's one-shot helper and
+reconcile/result/service branches; log paths, manager enablement and the
+queue-diagnostics placement remain with their existing owners. T4/T5 recovery
+covers the applicable DF-002/003 boundaries without replacing orchestration.
+
+Current-candidate full verification and the selected Independent Review must
+pass before E23-T6 acceptance. No native Linux, emulated amd64, public endpoint,
+production-state, Plugin, release or installation result is claimed here.

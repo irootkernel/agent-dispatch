@@ -358,6 +358,9 @@ func (s *Store) AcceptManagementRequest(ctx context.Context, in ManagementAdmiss
 		if r.Action == "resume" {
 			target = "active"
 		}
+		if _, err := ensureSyncControlTx(ctx, tx.Tx, r.GroupID, in.ControlSyncRevision, at); err != nil {
+			return r, false, err
+		}
 		control, err := setSyncControlTx(ctx, tx.Tx, r.GroupID, *r.ExpectedControlRevision, target, in.ControlSyncRevision, at)
 		if err != nil {
 			return r, false, err

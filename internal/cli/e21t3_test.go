@@ -512,6 +512,7 @@ exec __BASE_WRAPPER__ "$@"
 	if err := store.QueryRow(`SELECT COUNT(*) FROM sync_jobs WHERE kind='delivery' AND state='pending'`).Scan(&deliveries); err != nil || deliveries != 1 {
 		t.Fatalf("reconcile did not retain publication delivery: %d err=%v", deliveries, err)
 	}
+	assertE23T4ManagedSignedRecovery(t, cfg, configPath, store, realGit, repo, publicationJobID, publicationRecord.BaseCommit, published.Result.CandidateCommit)
 	t.Setenv("E21T3_PUBLISHER", string(publisherKey))
 	var noOpOut, noOpErr bytes.Buffer
 	if code := Run([]string{"sync", "publish", "--group", cfg.Sync.GroupID, "--expected-config-revision", revision, "--output", "json"}, &noOpOut, &noOpErr); code != 0 || !bytes.Contains(noOpOut.Bytes(), []byte(`"state":"no_content_change"`)) {
@@ -655,6 +656,7 @@ exec __BASE_WRAPPER__ "$@"
 		t.Fatalf("normal equal-ref reconcile control=%+v err=%v", control, err)
 	}
 	assertE21PublishedNodeCanApplyPeerRoundTrip(t, cfg, configPath, contentState, repo, replacementKey)
+	assertE23T4ManagedPeerImport(t, cfg, configPath, contentState, repo, replacementKey)
 	// Rewinding the remote after a successful import must leave the local
 	// content ref unchanged and arm a conflict hold.
 	if err := os.WriteFile(contentState, []byte(base+"\n"), 0o600); err != nil {
@@ -793,6 +795,10 @@ func assertE21ContentVerificationRejectsSnapshotMismatch(t *testing.T, cfg *conf
 }
 
 func assertE21PublishedNodeCanApplyPeerRoundTrip(t *testing.T, cfg *config.Config, configPath, contentState, repo string, peerKey []byte) {
+	assertPublishedNodePeerRoundTrip(t, cfg, configPath, contentState, repo, peerKey, "operator")
+}
+
+func assertPublishedNodePeerRoundTrip(t *testing.T, cfg *config.Config, configPath, contentState, repo string, peerKey []byte, mode string) {
 	t.Helper()
 	client, err := gitlocal.New(repo, gitlocal.Limits{Timeout: 30 * time.Second, MaxOutput: 1 << 20})
 	if err != nil {
@@ -837,12 +843,14 @@ func assertE21PublishedNodeCanApplyPeerRoundTrip(t *testing.T, cfg *config.Confi
 	target := base
 	for i := 1; i <= 4; i++ {
 		targetFiles := cloneFiles(baseFiles)
-		targetFiles["note.md"] = []byte(fmt.Sprintf("peer round trip %d\n", i))
+		if !strings.Contains(mode, "capacity-controller") {
+			targetFiles["note.md"] = []byte(fmt.Sprintf("peer round trip %s %d\n", mode, i))
+		}
 		publication, err := syncrecords.NewPublication(syncrecords.PublicationBinding{
 			GroupID: cfg.Sync.GroupID, Publisher: peer.InstanceID, StateIncarnationID: peer.StateIncarnationID,
 			MembershipRevision: membership, ContentRef: cfg.Sync.ContentRef, BaseCommit: target,
 			ScopeDigest: config.SyncScopeDigest(cfg, cfg.Sync.Resource), ContractDigest: config.SyncContractDigest(),
-			SourceRevision: int64(i + 1), ReceiptIDs: []string{fmt.Sprintf("receipt-peer-round-trip-%d", i)},
+			SourceRevision: int64(i + 1), ReceiptIDs: []string{fmt.Sprintf("receipt-peer-round-trip-%s-%d", mode, i)},
 		}, syncrecords.SnapshotFiles(targetFiles))
 		if err != nil {
 			t.Fatal(err)
@@ -893,17 +901,41 @@ func assertE21PublishedNodeCanApplyPeerRoundTrip(t *testing.T, cfg *config.Confi
 		store.Close()
 		t.Fatal(err)
 	}
-	if err := store.Close(); err != nil {
-		t.Fatal(err)
+	defer store.Close()
+	if mode != "operator" {
+		control, err := store.LoadSyncControl(requestCtx(), cfg.Sync.GroupID)
+		if err != nil || control.State != "active" || control.MembershipMode != "normal" {
+			t.Fatalf("management fixture requires active normal control:%+v %v", control, err)
+		}
+		// This fixture changes the queue bound between cohorts. Apply that
+		// known configuration to its control before exercising the worker.
+		if control.ConfigRevision != revision {
+			if _, err := store.SetSyncControl(requestCtx(), cfg.Sync.GroupID, control.Revision, "active", revision, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
-	var out, stderr bytes.Buffer
-	if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &out, &stderr); code != 0 || !bytes.Contains(out.Bytes(), []byte(`"state":"applied"`)) {
-		t.Fatalf("peer round-trip reconcile: %d out=%s err=%s", code, out.String(), stderr.String())
+	if strings.HasPrefix(mode, "capacity-") {
+		assertE23T4ImportCapacityHold(t, cfg, configPath, store, base, target, strings.HasSuffix(mode, "-prior"))
+		assertE23T4DispatchPeerImport(t, cfg, configPath, store, target)
+	} else if mode == "parallel" {
+		assertE23T4ParallelPeerImport(t, cfg, configPath, store, target)
+	} else if mode == "management" {
+		assertE23T4DispatchPeerImport(t, cfg, configPath, store, target)
+	} else {
+		var out, stderr bytes.Buffer
+		if code := Run([]string{"sync", "reconcile", "--group", cfg.Sync.GroupID, "--output", "json"}, &out, &stderr); code != 0 || !bytes.Contains(out.Bytes(), []byte(`"state":"applied"`)) {
+			t.Fatalf("peer round-trip reconcile: %d out=%s err=%s", code, out.String(), stderr.String())
+		}
 	}
 	if got := gitTestOutput(t, "git", repo, "rev-parse", cfg.Sync.ContentRef); got != target {
 		t.Fatalf("round-trip content ref=%s want=%s", got, target)
 	}
-	if raw, err := os.ReadFile(filepath.Join(repo, "note.md")); err != nil || string(raw) != "peer round trip 4\n" {
+	wantContent := []byte(fmt.Sprintf("peer round trip %s 4\n", mode))
+	if strings.Contains(mode, "capacity-controller") {
+		wantContent = baseFiles["note.md"]
+	}
+	if raw, err := os.ReadFile(filepath.Join(repo, "note.md")); err != nil || !bytes.Equal(raw, wantContent) {
 		t.Fatalf("round-trip content=%q err=%v", raw, err)
 	}
 }

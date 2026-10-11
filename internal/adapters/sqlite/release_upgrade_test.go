@@ -41,7 +41,7 @@ func TestReleaseUpgradeFromV018(t *testing.T) {
 	if err := s.Migrate(t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
-	if version, err := s.SchemaVersion(); err != nil || version != 28 {
+	if version, err := s.SchemaVersion(); err != nil || version != 29 {
 		t.Fatalf("schema-20 upgrade yielded %d: %v", version, err)
 	}
 	var revision, root, at string

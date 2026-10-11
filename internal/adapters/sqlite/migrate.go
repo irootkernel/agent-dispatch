@@ -61,6 +61,7 @@ var Migrations = []Migration{
 	{Version: 26, Name: "sync-peer-nudge-inbox", SQL: schemaV26SyncPeerNudgeInbox},
 	{Version: 27, Name: "sync-recovery-schedule", SQL: schemaV27SyncRecoverySchedule},
 	{Version: 28, Name: "sync-management-request-ledger", SQL: schemaV28SyncManagement},
+	{Version: 29, Name: "sync-management-executor-evidence", SQL: schemaV29SyncManagementExecutor},
 }
 
 // MaxSchemaVersion is the highest version this binary understands; a

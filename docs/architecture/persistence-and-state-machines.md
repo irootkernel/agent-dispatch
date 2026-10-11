@@ -53,8 +53,9 @@ The implementation must verify the resulting journal mode and fail `doctor` if t
 | `sync_management_acceptances` | Durable acceptance independent of a submitting process (schema v28) | one immutable acceptance per existing handle |
 | `sync_management_executions` | Request claims and their inspected settlement (schema v28) | request + fence; at most 20 attempts; immutable owner/deadline and closed evidence |
 | `sync_management_jobs` | Exact request-to-effect associations (schema v28) | request + job; immutable kind, pinned target and reason; referenced jobs cannot prune |
+| `sync_management_executor` | Local worker availability evidence (schema v29) | one bound group row; owner-fenced heartbeat and explicit stopped observation |
 
-Migration v28 is the current schema head. Migration v23 is a compatibility
+Migration v29 is the current schema head. Migration v23 is a compatibility
 marker and does not reopen historical `blocked` rows that older code already
 made terminal without a matching group hold. Current writers retain a new
 blocked obligation together with its hold. Migration v24 makes journal order
@@ -83,6 +84,33 @@ resume safety checks, protected resource guards, and execution through the
 existing worker. The management CLI reports policy and exact retained requests
 through a read-only database connection. New preparation/admission remain gated
 by qualified execution and recovery; isolated fixtures exercise those primitives.
+
+The existing inbox worker performs peer/periodic recovery before dispatching at
+most one management request. Shared reconciliation and verification functions
+receive an explicit context, trusted configuration and store. Management claims
+renew every ten seconds within the original execution deadline. Requests
+reserve association capacity before protected effects and retain exact job
+identities; verification retains its actual target and job outcome. New
+verification and import jobs commit with their reserved request associations
+under the live request owner and fence. Confirmed signed publication, delivery
+and the reserved delivery association also commit together, including after
+local pause. Current control still gates subsequent effects. Local-control and
+capacity holds detected before verification peer queries remain blocked.
+Import admission capacity holds retain the exact target and a blocked outcome
+when no earlier request obligation exists. Earlier linked work, cancellation
+and ambiguous effects retain uncertainty. Local observation excludes only the
+running verification request's own harmless bookkeeping.
+Other unresolved management work remains pending, and the peer protocol has
+no exemption field.
+
+Migration v29 preserves v28 and binds worker evidence to local identity,
+incarnation and management policy/config revisions. A heartbeat is available
+for sixty seconds; missing, stale or future evidence is unknown. A worker
+records stopped only after its loop returns, without probing or installing a
+service. Old owners cannot refresh or stop a successor's record. Control
+admission initializes the first control row inside the same transaction as
+acceptance, the CAS transition and the request outcome. Resume retains the
+operator's resource guard through shared safety inspection and commit.
 
 Since E12-T2 the single-active slot, the dirty generation, and the follow-up
 chain are keyed on the dispatch's destination lane (`destination_lane_state`,

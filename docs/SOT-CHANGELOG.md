@@ -5,6 +5,16 @@ SOT snapshots, not product releases. Product release notes and pending user-faci
 changes belong to the root [changelog](../CHANGELOG.md). Historical entries below
 retain their recorded scope; migrated document pointers use their current paths.
 
+## Successor worker and control wiring - 2026-10-11
+
+- Add schema 29 worker availability evidence without changing the installed
+  schema 28 ledger migration or the frozen provider bundles.
+- Share guarded reconciliation and pinned-target verification between the
+  operator CLI and the existing worker, retaining exact request/job evidence.
+- Initialize local control inside atomic acceptance and reuse operator resume
+  safety checks under its resource guard. Keep public action admission gated
+  while interrupted execution and retry qualification remain pending.
+
 ## Successor request CLI - 2026-10-10
 
 - Expose closed management capabilities and exact retained-handle lookup;

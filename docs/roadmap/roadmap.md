@@ -15,9 +15,9 @@
 | Release target | v0.3.0 (constrained sync management successor) |
 | Current epic | E23 |
 | Current active task | None |
-| Next task | E23-T4 |
-| Completed tasks | 119 / 123 |
-| Planned tasks | 4 / 123 |
+| Next task | E23-T5 |
+| Completed tasks | 120 / 123 |
+| Planned tasks | 3 / 123 |
 | In progress tasks | 0 |
 | In review tasks | 0 |
 | Blocked tasks | 0 |
@@ -192,7 +192,7 @@ remain separate operator decisions.
 | 117 | E23-T1 | Completed | Successor management scope, authority, and executable contract freeze |
 | 118 | E23-T2 | Completed | Durable request ledger, immutable bindings, and additive migration |
 | 119 | E23-T3 | Completed | Bounded preparation, idempotent admission, and exact lookup |
-| 120 | E23-T4 | Planned | Shared worker execution and atomic local controls |
+| 120 | E23-T4 | Completed | Shared worker execution and atomic local controls |
 | 121 | E23-T5 | Planned | Identity-preserving retry, recovery, retention, and restore |
 | 122 | E23-T6 | Planned | Management security, fault, saturation, and regression qualification |
 | 123 | E23-T7 | Planned | Exact-provider paired qualification and Plugin handoff |
@@ -5874,7 +5874,7 @@ remain with later tasks. T4 remains Planned.
 
 ## E23-T4: Connect Worker Execution and Local Control
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -5883,11 +5883,11 @@ process local control without depending on a running or unpaused worker.
 
 ### Deliverables
 
-- [ ] Connect `sync-now` and `verify-all` to the existing worker with bounded fairness beside peer and periodic recovery.
-- [ ] Persist exact request-to-execution/job associations and the actual verified target/outcome.
-- [ ] Commit pause/resume acceptance, expected-revision mutation, and request result atomically through shared operator control rules.
-- [ ] Preserve signing isolation, resource guards, import acknowledgement, configured-remote binding, and membership/freshness checks.
-- [ ] Exclude only the verification request's harmless bookkeeping from its pending-work test; retain unrelated content-affecting work.
+- [x] Connect `sync-now` and `verify-all` to the existing worker with bounded fairness beside peer and periodic recovery.
+- [x] Persist exact request-to-execution/job associations and the actual verified target/outcome.
+- [x] Commit pause/resume acceptance, expected-revision mutation, and request result atomically through shared operator control rules.
+- [x] Preserve signing isolation, resource guards, import acknowledgement, configured-remote binding, and membership/freshness checks.
+- [x] Exclude only the verification request's harmless bookkeeping from its pending-work test; retain unrelated content-affecting work.
 
 ### Requirements
 
@@ -5900,19 +5900,40 @@ E23-T5 completes their implementation contract.
 
 ### Do Not
 
-- [ ] Do not sign, add a listener/scheduler, control the peer, or bypass existing blocked-state and revision checks.
-- [ ] Do not infer request success from latest status or claim quiescence from pause-intent acknowledgement.
+- [x] Do not sign, add a listener/scheduler, control the peer, or bypass existing blocked-state and revision checks.
+- [x] Do not infer request success from latest status or claim quiescence from pause-intent acknowledgement.
 
 ### Verification and Acceptance
 
-- [ ] Killing the submitter after acceptance does not discard work; a stopped executor is reported without implicit service installation.
-- [ ] Paused/saturated-worker cases still permit reserved local control and lookup; resume cannot clear safety or membership holds.
-- [ ] One healthy management verification can complete; dirty, pending, stale, uncertain, and moving-target cases remain incomplete or target-changed.
-- [ ] Parallel periodic work and repeated management submissions preserve fencing, fairness, and exact result association.
+- [x] Killing the submitter after acceptance does not discard work; a stopped executor is reported without implicit service installation.
+- [x] Paused/saturated-worker cases still permit reserved local control and lookup; resume cannot clear safety or membership holds.
+- [x] One healthy management verification can complete; dirty, pending, stale, uncertain, and moving-target cases remain incomplete or target-changed.
+- [x] Parallel periodic work and repeated management submissions preserve fencing, fairness, and exact result association.
 
 ### Evidence
 
-Not executed. Retain worker/control transaction and real-command result tests.
+Shared worker execution now retains exact request, execution and job identities,
+verified targets, and conservative outcomes beside periodic and peer recovery.
+Local pause and resume commit acceptance, revision changes and results atomically
+without depending on an active worker. Resource and authority guards remain in
+force, including known capacity holds and uncertainty after possible effects.
+
+The reviewed implementation passed default `make verify` on Darwin arm64,
+including unit and race tests and both frozen contract checks. Three independent
+static reviewers confirmed the frozen corrections and all T4 criteria using
+source inspection and separately supplied execution evidence. One remaining Low
+test assertion was corrected with the existing carrier-schema validator;
+30 focused concurrent-submit race repetitions and format/integrity checks pass.
+The review and full gate predate that exact test-only correction.
+
+Disposable real-command fixtures cover signed import, saturated local control,
+healthy and incomplete verification, periodic work beside repeated submissions,
+and exact result association. Capabilities also preserve read-only schema-27
+compatibility. Matching staged endpoints do not establish immutable capture.
+Systemd unit lint was skipped because `systemd-analyze` is absent on this host.
+Retry recovery, G19, native Darwin/Linux pairing and Plugin qualification remain
+with later tasks. Completed under delegated Task acceptance; E23 remains
+In Progress.
 
 ## E23-T5: Complete Retry and Interrupted-Request Recovery
 

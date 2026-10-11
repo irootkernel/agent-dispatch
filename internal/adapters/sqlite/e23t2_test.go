@@ -72,7 +72,7 @@ func finishManagement(t *testing.T, s *Store, r ManagementRequest) ManagementReq
 // recreating their historical schema. This is harness-only, never a downgrade.
 func dropManagementSchemaForHarness(t *testing.T, s *Store) {
 	t.Helper()
-	for _, stmt := range []string{"DROP TABLE sync_management_jobs", "DROP TABLE sync_management_executions", "DROP TABLE sync_management_acceptances", "DROP TABLE sync_management_requests", "DELETE FROM schema_migrations WHERE version=28"} {
+	for _, stmt := range []string{"DROP TABLE sync_management_executor", "DELETE FROM schema_migrations WHERE version=29", "DROP TABLE sync_management_jobs", "DROP TABLE sync_management_executions", "DROP TABLE sync_management_acceptances", "DROP TABLE sync_management_requests", "DELETE FROM schema_migrations WHERE version=28"} {
 		if _, err := s.Exec(stmt); err != nil {
 			t.Fatal(err)
 		}

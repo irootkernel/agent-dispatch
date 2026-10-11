@@ -11,8 +11,9 @@ This file records concise shipped outcomes and pending changes.
 
 ### Changed
 
-- Advance SQLite to schema 28 for bounded local management requests; rollback
-  requires a stopped-service backup restore before an older binary can run.
+- Advance SQLite to schema 29 for bounded local management requests and worker
+  availability evidence. Rollback requires a stopped-service backup restore
+  before an older binary can run.
 
 ## v0.2.0 - 2026-10-01
 

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -213,17 +214,21 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 // requiring import acknowledgement or resolving any signing/peer secret.
 // The caller holds the resource guard through the fenced control mutation.
 func validateSyncResume(cfg *config.Config, store *sqlite.Store, stderr io.Writer) int {
+	return validateSyncResumeContext(requestCtx(), cfg, store, stderr)
+}
+
+func validateSyncResumeContext(ctx context.Context, cfg *config.Config, store *sqlite.Store, stderr io.Writer) int {
 	const command = "sync resume"
 	s := cfg.Sync
 	client, err := membershipGitClient(cfg, s)
 	if err != nil {
 		return syncMembershipError(stderr, command, err, 14)
 	}
-	head, err := client.ResolveRef(requestCtx(), s.MembershipRef)
+	head, err := client.ResolveRef(ctx, s.MembershipRef)
 	if err != nil {
 		return syncMembershipError(stderr, command, err, 30)
 	}
-	remote, err := client.RemoteRef(requestCtx(), s.RemoteName, s.MembershipRef, s.RemoteRepositoryDigest)
+	remote, err := client.RemoteRef(ctx, s.RemoteName, s.MembershipRef, s.RemoteRepositoryDigest)
 	if err != nil {
 		if errors.Is(err, gitlocal.ErrRemoteBinding) || errors.Is(err, gitlocal.ErrMissingRef) {
 			return syncMembershipError(stderr, command, err, 30)
@@ -233,17 +238,17 @@ func validateSyncResume(cfg *config.Config, store *sqlite.Store, stderr io.Write
 	if remote != head {
 		return syncMembershipError(stderr, command, errors.New("local membership revision is not current on the approved remote"), 30)
 	}
-	if _, err := loadConfiguredMembers(requestCtx(), cfg, client, head); err != nil {
+	if _, err := loadConfiguredMembers(ctx, cfg, client, head); err != nil {
 		return syncMembershipError(stderr, command, err, 30)
 	}
-	state, err := client.InspectImport(requestCtx(), s.ContentRef)
+	state, err := client.InspectImport(ctx, s.ContentRef)
 	if err != nil {
 		return syncMembershipError(stderr, command, err, 14)
 	}
 	if state.ActiveOperation != "" {
 		return syncMembershipError(stderr, command, fmt.Errorf("local Git operation prevents resume: %s", state.ActiveOperation), 14)
 	}
-	idle, err := store.ResourceWritersIdle(requestCtx(), s.Resource)
+	idle, err := store.ResourceWritersIdle(ctx, s.Resource)
 	if err != nil {
 		return syncStoreError(stderr, command, err)
 	}

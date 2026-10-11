@@ -22,11 +22,14 @@ import (
 // persisted schedule prevents restarts or failed nudges from spinning while
 // a healthy wake can still shorten the ordinary periodic interval.
 func (s *peerService) inboxLoop(ctx context.Context) {
+	stopped := s.managementHeartbeat(ctx)
+	defer stopped()
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	wake := true // startup uncertainty requires a configured-ref inspection
 	for {
 		s.recoverScheduled(ctx, wake)
+		s.dispatchManagement(ctx)
 		select {
 		case <-ctx.Done():
 			return

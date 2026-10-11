@@ -43,7 +43,15 @@ func runSyncVerifyWithHTTP(args []string, stdout, stderr io.Writer, httpClient *
 		return code
 	}
 	defer store.Close()
-	ctx, cancel := context.WithTimeout(requestCtx(), verificationCommandDeadline)
+	return verifyConfiguredSync(requestCtx(), cfg, store, httpClient, stdout, stderr)
+}
+
+// verifyConfiguredSync shares one pinned-target verification between the CLI
+// and worker without changing global request context or configuration.
+func verifyConfiguredSync(parent context.Context, cfg *config.Config, store *sqlite.Store, httpClient *http.Client, stdout, stderr io.Writer) int {
+	const command = "sync verify"
+	s := cfg.Sync
+	ctx, cancel := context.WithTimeout(parent, verificationCommandDeadline)
 	defer cancel()
 	revision, _ := config.SyncRevision(cfg)
 	if _, err := store.EnsureSyncControl(ctx, s.GroupID, revision, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
@@ -97,13 +105,22 @@ func runSyncVerifyWithHTTP(args []string, stdout, stderr io.Writer, httpClient *
 		"target_commit":       verification.TargetCommit,
 		"phase":               "planned",
 	}
-	job, _, err := store.AdmitSyncJob(ctx, sqlite.SyncJobInput{
+	if err := reserveManagementExecution(ctx, store); err != nil {
+		managementVerificationAdmissionHold(ctx, err, target)
+		return syncStoreError(stderr, command, err)
+	}
+	job, _, err := admitManagementExecutionJob(ctx, store, sqlite.SyncJobInput{
 		JobID: verification.VerificationID, GroupID: s.GroupID, Kind: "verification",
 		LogicalKey: verification.VerificationID, InitialState: "planned",
 		PayloadJSON: mustJSON(planned), ConfigRevision: "", QueueLimit: s.Bounds.Queue,
 		Now: time.Now().UTC().Format(time.RFC3339Nano),
-	})
+	}, target, "verification_target")
 	if err != nil {
+		managementVerificationAdmissionHold(ctx, err, target)
+		return syncStoreError(stderr, command, err)
+	}
+	if err := managementEffectBoundary(ctx); err != nil {
+		managementVerificationAdmissionHold(ctx, err, target)
 		return syncStoreError(stderr, command, err)
 	}
 	selfNonce, peerNonce := randomSyncID("nonce"), randomSyncID("nonce")
@@ -114,7 +131,7 @@ func runSyncVerifyWithHTTP(args []string, stdout, stderr io.Writer, httpClient *
 		reasons = append(reasons, "peer_unavailable")
 	}
 	selfRequest := syncVerificationRequest(verification, pair[0].InstanceID, pair[1].InstanceID, selfNonce)
-	local := observeSyncPeer(ctx, cfg, store, client, selfRequest)
+	local := observeSyncPeerForManagement(ctx, cfg, store, client, selfRequest, managementVerificationRequest(ctx))
 	if syncResponseMatches(local, selfRequest, pair[1]) {
 		verification.Nodes = append(verification.Nodes, syncrecords.VerificationNodeFromStatus(local))
 		if local.State != "applied" || local.GovernedDirty || local.PendingWork || !local.MembershipCurrent || local.Uncertain {
@@ -138,7 +155,7 @@ func runSyncVerifyWithHTTP(args []string, stdout, stderr io.Writer, httpClient *
 	} else if uncertain {
 		reasons = append(reasons, "target_recheck_unavailable")
 	} else if verification.CleanPair() {
-		finalLocal := observeSyncPeer(ctx, cfg, store, client, selfRequest)
+		finalLocal := observeSyncPeerForManagement(ctx, cfg, store, client, selfRequest, managementVerificationRequest(ctx))
 		if syncResponseMatches(finalLocal, selfRequest, pair[1]) {
 			verification.Nodes[0] = syncrecords.VerificationNodeFromStatus(finalLocal)
 		}
@@ -163,6 +180,9 @@ func runSyncVerifyWithHTTP(args []string, stdout, stderr io.Writer, httpClient *
 	}
 	if err := verification.Validate(); err != nil {
 		return syncMembershipError(stderr, command, err, 30)
+	}
+	if err := managementEffectBoundary(ctx); err != nil {
+		return syncStoreError(stderr, command, err)
 	}
 	if err := store.FinishSyncVerification(ctx, job.JobID, verification.Result, mustJSON(map[string]any{"verification": verification, "reason_codes": reasons}), time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 		return syncStoreError(stderr, command, err)
@@ -248,7 +268,11 @@ func syncVerificationTargetChanged(ctx context.Context, cfg *config.Config, clie
 	if remoteTarget != target {
 		return true, false
 	}
-	currentCfg, err := config.Load(resolveConfigPath(""))
+	configPath := resolveConfigPath("")
+	if e, _ := ctx.Value(managementExecutionKey{}).(*managementExecution); e != nil {
+		configPath = e.service.configPath
+	}
+	currentCfg, err := config.LoadContext(ctx, configPath)
 	if err != nil {
 		return false, true
 	}

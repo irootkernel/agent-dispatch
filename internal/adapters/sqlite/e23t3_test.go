@@ -60,7 +60,7 @@ func TestE23T3ReadOnlyState(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Keep the writer open so lookup must observe committed WAL contents.
-	if _, err := s.Exec(`INSERT INTO schema_migrations(version,name,checksum) VALUES(29,'future','unsupported')`); err != nil {
+	if _, err := s.Exec(`INSERT INTO schema_migrations(version,name,checksum) VALUES(30,'future','unsupported')`); err != nil {
 		t.Fatal(err)
 	}
 	ro, err := OpenReadOnly(context.Background(), path)
@@ -73,7 +73,7 @@ func TestE23T3ReadOnlyState(t *testing.T) {
 	if err := ro.CheckManagementSchema(context.Background()); !errors.As(err, &tooNew) {
 		t.Fatalf("WAL future row not observed/refused: %v", err)
 	}
-	if _, err := ro.Exec(`DELETE FROM schema_migrations WHERE version=29`); err == nil {
+	if _, err := ro.Exec(`DELETE FROM schema_migrations WHERE version=30`); err == nil {
 		t.Fatal("read-only handle allowed a write")
 	}
 }

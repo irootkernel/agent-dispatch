@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -307,7 +308,11 @@ func publicationMembers(h syncmembership.History, local string) (syncrecords.Act
 // candidate reached the remote but before SQLite and the local ref committed.
 // It never signs or creates another commit.
 func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, client *gitlocal.Client, cfg *config.Config, s *config.Sync, history syncmembership.History, membership string, self, peer syncrecords.ActiveMember, claimPending *bool) (bool, int) {
-	jobs, err := store.LoadUnresolvedSyncJobs(requestCtx(), s.GroupID, "publication")
+	return recoverConfirmedPublicationContext(requestCtx(), stdout, stderr, store, client, cfg, s, history, membership, self, peer, claimPending)
+}
+
+func recoverConfirmedPublicationContext(ctx context.Context, stdout, stderr io.Writer, store *sqlite.Store, client *gitlocal.Client, cfg *config.Config, s *config.Sync, history syncmembership.History, membership string, self, peer syncrecords.ActiveMember, claimPending *bool) (bool, int) {
+	jobs, err := store.LoadUnresolvedSyncJobs(ctx, s.GroupID, "publication")
 	if err != nil {
 		return true, syncStoreError(stderr, "sync publish", err)
 	}
@@ -315,7 +320,7 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 		return false, 0
 	}
 	revision, _ := config.SyncRevision(cfg)
-	remote, remoteErr := client.RemoteRef(requestCtx(), s.RemoteName, s.ContentRef, s.RemoteRepositoryDigest)
+	remote, remoteErr := client.RemoteRef(ctx, s.RemoteName, s.ContentRef, s.RemoteRepositoryDigest)
 	if remoteErr != nil {
 		if errors.Is(remoteErr, gitlocal.ErrRemoteBinding) {
 			return true, syncMembershipError(stderr, "sync publish", remoteErr, 30)
@@ -326,7 +331,7 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 		return true, syncRetryableError(stderr, "sync publish", fmt.Errorf("publication recovery could not measure the approved remote content ref: %w", remoteErr))
 	}
 	for _, job := range jobs {
-		journals, loadErr := store.LoadSyncJournals(requestCtx(), job.JobID)
+		journals, loadErr := store.LoadSyncJournals(ctx, job.JobID)
 		if loadErr != nil {
 			return true, syncStoreError(stderr, "sync publish", loadErr)
 		}
@@ -337,6 +342,12 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 		publication, decodeErr := syncrecords.DecodePublication([]byte(job.PayloadJSON))
 		if decodeErr != nil || publication.MembershipRevision != membership || publication.Publisher != self.InstanceID || publication.StateIncarnationID != self.StateIncarnationID {
 			continue
+		}
+		if err := associateManagementExecution(ctx, store, job, candidate, "already_signed_recovery"); err != nil {
+			return true, syncStoreError(stderr, "sync reconcile", err)
+		}
+		if err := reserveManagementExecution(ctx, store); err != nil {
+			return true, syncStoreError(stderr, "sync reconcile", err)
 		}
 		recoveryOwner := ""
 		administrationRetry := false
@@ -353,10 +364,10 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 				}
 				nowText := now.Format(time.RFC3339Nano)
 				evidence := map[string]any{"candidate": candidate, "remote": remote, "base": publication.BaseCommit, "reason": "remote predecessor moved during publication recovery"}
-				if err := store.BlockSyncJobAfterRemoteMove(requestCtx(), job.JobID, job.Fence, sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "blocked", EvidenceJSON: mustJSON(evidence), RecordedAt: nowText}, nowText); err != nil {
+				if err := store.BlockSyncJobAfterRemoteMove(ctx, job.JobID, job.Fence, sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "blocked", EvidenceJSON: mustJSON(evidence), RecordedAt: nowText}, nowText); err != nil {
 					return true, syncStoreError(stderr, "sync publish", err)
 				}
-				held, err := store.HoldSyncControl(requestCtx(), s.GroupID, "conflict", revision, nowText)
+				held, err := store.HoldSyncControl(ctx, s.GroupID, "conflict", revision, nowText)
 				if err != nil {
 					return true, syncStoreError(stderr, "sync publish", err)
 				}
@@ -365,7 +376,7 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 				}
 				return true, syncMembershipError(stderr, "sync publish", errors.New("publication recovery found a moved remote content revision; review history and create a conflict-resolution checkpoint plan"), 14)
 			}
-			control, loadErr := store.LoadSyncControl(requestCtx(), s.GroupID)
+			control, loadErr := store.LoadSyncControl(ctx, s.GroupID)
 			if loadErr != nil {
 				return true, syncStoreError(stderr, "sync publish", loadErr)
 			}
@@ -379,12 +390,12 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 				if control.State != "blocked" || control.Reason != "conflict" {
 					return true, publicationBlockedResult(stdout, publication, candidate, control, false)
 				}
-				if verifyErr := verifyContentHead(client, history, cfg, s, candidate); verifyErr != nil {
+				if verifyErr := verifyContentHeadContext(ctx, client, history, cfg, s, candidate); verifyErr != nil {
 					return true, syncMembershipError(stderr, "sync publish", verifyErr, 30)
 				}
 				nowText := time.Now().UTC().Format(time.RFC3339Nano)
 				journal := sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": remote, "reopened_after_conflict": true}), RecordedAt: nowText}
-				if err := store.ReopenRejectedPublication(requestCtx(), job.JobID, job.Fence, journal, nowText); err != nil {
+				if err := store.ReopenRejectedPublication(ctx, job.JobID, job.Fence, journal, nowText); err != nil {
 					return true, syncStoreError(stderr, "sync publish", err)
 				}
 				job.State = "signed"
@@ -403,62 +414,65 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 					return true, syncMembershipError(stderr, "sync publish", errors.New("pending publication still has an unexpired claim"), 14)
 				}
 				nowText := now.Format(time.RFC3339Nano)
-				if err := store.ReconcileExpiredSyncClaim(requestCtx(), job.JobID, job.Fence, "effect_not_started", sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": remote}), RecordedAt: nowText}, nowText); err != nil {
+				if err := store.ReconcileExpiredSyncClaim(ctx, job.JobID, job.Fence, "effect_not_started", sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": remote}), RecordedAt: nowText}, nowText); err != nil {
 					return true, syncStoreError(stderr, "sync publish", err)
 				}
 				job.ClaimOwner = ""
 			}
 			if job.State == "uncertain" {
 				nowText := now.Format(time.RFC3339Nano)
-				if err := store.ReconcileUncertainPublication(requestCtx(), job.JobID, job.Fence, sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": remote}), RecordedAt: nowText}, nowText); err != nil {
+				if err := store.ReconcileUncertainPublication(ctx, job.JobID, job.Fence, sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "claim_recovery", Outcome: "effect_not_started", EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": remote}), RecordedAt: nowText}, nowText); err != nil {
 					return true, syncStoreError(stderr, "sync publish", err)
 				}
 			}
 			// Validate the exact signed candidate before any recovery push. A
 			// malformed retained object must never be allowed to move the remote.
-			if verifyErr := verifyContentHead(client, history, cfg, s, candidate); verifyErr != nil {
+			if verifyErr := verifyContentHeadContext(ctx, client, history, cfg, s, candidate); verifyErr != nil {
 				return true, syncMembershipError(stderr, "sync publish", verifyErr, 30)
 			}
 			owner := randomSyncID("publication-owner")
 			var claimed sqlite.SyncJobRow
 			var claimErr error
 			if administrationRetry {
-				claimed, claimErr = store.ClaimSyncAdministrationJob(requestCtx(), job.JobID, owner, revision, now.Format(time.RFC3339Nano), now.Add(time.Duration(s.Bounds.SubprocessSeconds*4+60)*time.Second).Format(time.RFC3339Nano))
+				claimed, claimErr = store.ClaimSyncAdministrationJob(ctx, job.JobID, owner, revision, now.Format(time.RFC3339Nano), now.Add(time.Duration(s.Bounds.SubprocessSeconds*4+60)*time.Second).Format(time.RFC3339Nano))
 			} else {
-				claimed, claimErr = store.ClaimSyncJob(requestCtx(), job.JobID, owner, revision, now.Format(time.RFC3339Nano), now.Add(time.Duration(s.Bounds.SubprocessSeconds*4+60)*time.Second).Format(time.RFC3339Nano))
+				claimed, claimErr = store.ClaimSyncJob(ctx, job.JobID, owner, revision, now.Format(time.RFC3339Nano), now.Add(time.Duration(s.Bounds.SubprocessSeconds*4+60)*time.Second).Format(time.RFC3339Nano))
 			}
 			if claimErr != nil {
 				return true, syncStoreError(stderr, "sync publish", claimErr)
 			}
-			if err := client.CheckAdvanceContentRef(requestCtx(), s.ContentRef, publication.BaseCommit, candidate); err != nil {
-				return true, finishPublicationFailureWithEvidence(stderr, store, claimed, owner, "signed", "effect_not_started", "local content advance is unsafe: "+err.Error(), map[string]any{"candidate": candidate, "recovered": true})
+			if err := client.CheckAdvanceContentRef(ctx, s.ContentRef, publication.BaseCommit, candidate); err != nil {
+				return true, finishPublicationFailureWithEvidenceContext(ctx, stderr, store, claimed, owner, "signed", "effect_not_started", "local content advance is unsafe: "+err.Error(), map[string]any{"candidate": candidate, "recovered": true})
 			}
-			push := client.PushFastForward(requestCtx(), s.RemoteName, s.ContentRef, candidate, publication.BaseCommit, s.RemoteRepositoryDigest)
+			if err := managementEffectBoundary(ctx); err != nil {
+				return true, syncStoreError(stderr, "sync reconcile", err)
+			}
+			push := client.PushFastForward(ctx, s.RemoteName, s.ContentRef, candidate, publication.BaseCommit, s.RemoteRepositoryDigest)
 			switch classifySyncPush(push.State, push.RemoteOID, publication.BaseCommit, candidate, push.Underlying) {
 			case syncPushTrust:
 				return true, finishClaimedSyncTrustFailure(stderr, "sync publish", store, claimed, owner, "signed", "publication", push.Underlying, map[string]any{"candidate": candidate, "recovered": true})
 			case syncPushRetryable:
 				evidence := map[string]any{"candidate": candidate, "remote": push.RemoteOID, "push_state": push.State, "recovered": true}
-				return true, finishPublicationRetryable(stderr, store, claimed, owner, evidence, "content push was rejected before the approved remote moved; rerun sync publish")
+				return true, finishPublicationRetryableContext(ctx, stderr, store, claimed, owner, evidence, "content push was rejected before the approved remote moved; rerun sync publish")
 			case syncPushConflict:
 				evidence := map[string]any{"candidate": candidate, "remote": push.RemoteOID, "push_state": push.State, "recovered": true}
-				held, err := store.HoldSyncControl(requestCtx(), s.GroupID, "conflict", revision, time.Now().UTC().Format(time.RFC3339Nano))
+				held, err := store.HoldSyncControl(ctx, s.GroupID, "conflict", revision, time.Now().UTC().Format(time.RFC3339Nano))
 				if err != nil {
 					return true, syncStoreError(stderr, "sync publish", err)
 				}
 				if held.Reason != "conflict" {
-					return true, finishPublicationBlockedByHold(stdout, stderr, store, claimed, owner, publication, candidate, held, evidence)
+					return true, finishPublicationBlockedByHoldContext(ctx, stdout, stderr, store, claimed, owner, publication, candidate, held, evidence)
 				}
-				return true, finishPublicationFailureWithEvidence(stderr, store, claimed, owner, "blocked", "blocked", "content fast-forward lost during publication recovery", evidence)
+				return true, finishPublicationFailureWithEvidenceContext(ctx, stderr, store, claimed, owner, "blocked", "blocked", "content fast-forward lost during publication recovery", evidence)
 			case syncPushUnknown:
 				evidence := map[string]any{"candidate": candidate, "remote": push.RemoteOID, "push_state": push.State, "recovered": true}
-				return true, finishPublicationFailureWithEvidence(stderr, store, claimed, owner, "uncertain", "effect_unknown", "content push outcome remains ambiguous", evidence)
+				return true, finishPublicationFailureWithEvidenceContext(ctx, stderr, store, claimed, owner, "uncertain", "effect_unknown", "content push outcome remains ambiguous", evidence)
 			}
 			remote = candidate
 			job = claimed
 			recoveryOwner = owner
 		}
-		if verifyErr := verifyContentHead(client, history, cfg, s, candidate); verifyErr != nil {
+		if verifyErr := verifyContentHeadContext(ctx, client, history, cfg, s, candidate); verifyErr != nil {
 			return true, syncMembershipError(stderr, "sync publish", verifyErr, 30)
 		}
 		now := time.Now().UTC()
@@ -470,7 +484,7 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 				return true, syncMembershipError(stderr, "sync publish", errors.New("confirmed publication still has an unexpired claim"), 14)
 			}
 		}
-		local, localErr := client.ResolveRef(requestCtx(), s.ContentRef)
+		local, localErr := client.ResolveRef(ctx, s.ContentRef)
 		if localErr != nil {
 			return true, syncMembershipError(stderr, "sync publish", localErr, 14)
 		}
@@ -478,7 +492,10 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 			if local != publication.BaseCommit {
 				return true, syncMembershipError(stderr, "sync publish", errors.New("local content ref moved during publication recovery"), 14)
 			}
-			if err := client.AdvanceContentRef(requestCtx(), s.ContentRef, publication.BaseCommit, candidate); err != nil {
+			if err := managementEffectBoundary(ctx); err != nil {
+				return true, syncStoreError(stderr, "sync reconcile", err)
+			}
+			if err := client.AdvanceContentRef(ctx, s.ContentRef, publication.BaseCommit, candidate); err != nil {
 				return true, syncMembershipError(stderr, "sync publish", fmt.Errorf("remote publication is confirmed but the local content ref did not move: %w", err), 13)
 			}
 		}
@@ -487,15 +504,11 @@ func recoverConfirmedPublication(stdout, stderr io.Writer, store *sqlite.Store, 
 		if encodeErr != nil {
 			return true, syncMembershipError(stderr, "sync publish", encodeErr, 14)
 		}
+		now = time.Now().UTC()
 		nowText := now.Format(time.RFC3339Nano)
 		delivery := sqlite.SyncJobInput{JobID: randomSyncID("delivery-job"), GroupID: s.GroupID, Kind: "delivery", LogicalKey: publication.PublicationID, InitialState: "pending", PayloadJSON: string(raw), QueueLimit: s.Bounds.Queue, Now: nowText}
 		journal := sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "publication", Outcome: "published", EvidenceJSON: mustJSON(map[string]any{"candidate": candidate, "remote": candidate, "push_state": gitlocal.PushConfirmed, "reason": "none", "publication_id": publication.PublicationID, "recovered": true}), RecordedAt: nowText}
-		if recoveryOwner == "" {
-			_, err = store.FinishRecoveredPublicationJob(requestCtx(), job.JobID, job.Fence, journal, delivery, nowText)
-		} else {
-			_, err = store.FinishPublicationJob(requestCtx(), job.JobID, recoveryOwner, job.Fence, journal, delivery, nowText)
-		}
-		if err != nil {
+		if err := finishManagementPublication(ctx, store, job, recoveryOwner, journal, delivery, candidate, now); err != nil {
 			return true, syncStoreError(stderr, "sync publish", err)
 		}
 		return true, writeEnvelope(stdout, "sync publish", map[string]any{"schema_version": "agent-dispatch.sync-publish-result/v1", "state": "published", "publication_id": publication.PublicationID, "candidate_commit": candidate, "remote_commit": candidate, "recovered": true, "idempotent": true, "side_effects": []string{"local_content_ref_reconciled", "peer_delivery_admitted", "state_committed"}})
@@ -575,7 +588,11 @@ func contentHeadNeedsInitialCheckpoint(client *gitlocal.Client, head string) (bo
 }
 
 func verifyContentHead(client *gitlocal.Client, history syncmembership.History, cfg *config.Config, s *config.Sync, head string) error {
-	parents, err := client.CommitParents(requestCtx(), head)
+	return verifyContentHeadContext(requestCtx(), client, history, cfg, s, head)
+}
+
+func verifyContentHeadContext(ctx context.Context, client *gitlocal.Client, history syncmembership.History, cfg *config.Config, s *config.Sync, head string) error {
+	parents, err := client.CommitParents(ctx, head)
 	if err != nil {
 		return err
 	}
@@ -583,11 +600,11 @@ func verifyContentHead(client *gitlocal.Client, history syncmembership.History, 
 		return fmt.Errorf("content head is not a linear signed publication or checkpoint")
 	}
 	parent := parents[0]
-	currentPublications, err := client.ReadTreePrefix(requestCtx(), head, ".agent-dispatch-sync/publications/")
+	currentPublications, err := client.ReadTreePrefix(ctx, head, ".agent-dispatch-sync/publications/")
 	if err != nil {
 		return err
 	}
-	parentPublications, err := client.ReadTreePrefix(requestCtx(), parent, ".agent-dispatch-sync/publications/")
+	parentPublications, err := client.ReadTreePrefix(ctx, parent, ".agent-dispatch-sync/publications/")
 	if err != nil {
 		return err
 	}
@@ -595,11 +612,11 @@ func verifyContentHead(client *gitlocal.Client, history syncmembership.History, 
 	if err != nil {
 		return err
 	}
-	currentCheckpoints, err := client.ReadTreePrefix(requestCtx(), head, ".agent-dispatch-sync/checkpoints/")
+	currentCheckpoints, err := client.ReadTreePrefix(ctx, head, ".agent-dispatch-sync/checkpoints/")
 	if err != nil {
 		return err
 	}
-	parentCheckpoints, err := client.ReadTreePrefix(requestCtx(), parent, ".agent-dispatch-sync/checkpoints/")
+	parentCheckpoints, err := client.ReadTreePrefix(ctx, parent, ".agent-dispatch-sync/checkpoints/")
 	if err != nil {
 		return err
 	}
@@ -607,11 +624,11 @@ func verifyContentHead(client *gitlocal.Client, history syncmembership.History, 
 	if err != nil {
 		return err
 	}
-	currentPlans, err := client.ReadTreePrefix(requestCtx(), head, ".agent-dispatch-sync/checkpoint-plans/")
+	currentPlans, err := client.ReadTreePrefix(ctx, head, ".agent-dispatch-sync/checkpoint-plans/")
 	if err != nil {
 		return err
 	}
-	parentPlans, err := client.ReadTreePrefix(requestCtx(), parent, ".agent-dispatch-sync/checkpoint-plans/")
+	parentPlans, err := client.ReadTreePrefix(ctx, parent, ".agent-dispatch-sync/checkpoint-plans/")
 	if err != nil {
 		return err
 	}
@@ -619,7 +636,7 @@ func verifyContentHead(client *gitlocal.Client, history syncmembership.History, 
 	if err != nil {
 		return err
 	}
-	files, err := client.ReadContentFiles(requestCtx(), head)
+	files, err := client.ReadContentFiles(ctx, head)
 	if err != nil {
 		return err
 	}
@@ -665,7 +682,7 @@ func verifyContentHead(client *gitlocal.Client, history syncmembership.History, 
 		if err := history.AuthorizePublisher(publication.MembershipRevision, key, false, false); err != nil {
 			return err
 		}
-		return client.VerifySSHSignature(requestCtx(), head, key)
+		return client.VerifySSHSignature(ctx, head, key)
 	case len(newCheckpoints) == 1 && len(newPublications) == 0 && len(newPlans) == 1:
 		var path string
 		var raw []byte
@@ -695,7 +712,7 @@ func verifyContentHead(client *gitlocal.Client, history syncmembership.History, 
 		if checkpoint.GroupID != s.GroupID || checkpoint.SnapshotDigest != digest || checkpoint.ScopeDigest != config.SyncScopeDigest(cfg, s.Resource) || checkpoint.ContractDigest != config.SyncContractDigest() || checkpoint.AdministratorKey != s.AdministratorKey {
 			return fmt.Errorf("content checkpoint binding does not match its commit")
 		}
-		targetFiles, err := client.ReadContentFiles(requestCtx(), checkpoint.TargetCommit)
+		targetFiles, err := client.ReadContentFiles(ctx, checkpoint.TargetCommit)
 		if err != nil {
 			return err
 		}
@@ -706,7 +723,7 @@ func verifyContentHead(client *gitlocal.Client, history syncmembership.History, 
 		if _, ok := history.Revisions[checkpoint.MembershipRevision]; !ok {
 			return fmt.Errorf("checkpoint membership revision is not verified")
 		}
-		return client.VerifySSHSignature(requestCtx(), head, s.AdministratorKey)
+		return client.VerifySSHSignature(ctx, head, s.AdministratorKey)
 	default:
 		return fmt.Errorf("content head must add exactly one publication or checkpoint record")
 	}
@@ -764,12 +781,16 @@ func finishPublicationFailure(stderr io.Writer, store *sqlite.Store, job sqlite.
 }
 
 func finishPublicationFailureWithEvidence(stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, owner, state, outcome, reason string, evidence map[string]any) int {
+	return finishPublicationFailureWithEvidenceContext(requestCtx(), stderr, store, job, owner, state, outcome, reason, evidence)
+}
+
+func finishPublicationFailureWithEvidenceContext(ctx context.Context, stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, owner, state, outcome, reason string, evidence map[string]any) int {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if evidence == nil {
 		evidence = map[string]any{}
 	}
 	evidence["reason"] = reason
-	err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, state, sqlite.SyncJobKeepUnresolved, sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "publication", Outcome: outcome, EvidenceJSON: mustJSON(evidence), RecordedAt: now}, now)
+	err := store.FinishSyncJob(ctx, job.JobID, owner, job.Fence, state, sqlite.SyncJobKeepUnresolved, sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "publication", Outcome: outcome, EvidenceJSON: mustJSON(evidence), RecordedAt: now}, now)
 	if err != nil {
 		return syncStoreError(stderr, "sync publish", err)
 	}
@@ -782,9 +803,13 @@ func finishPublicationFailureWithEvidence(stderr io.Writer, store *sqlite.Store,
 }
 
 func finishPublicationRetryable(stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, owner string, evidence map[string]any, reason string) int {
+	return finishPublicationRetryableContext(requestCtx(), stderr, store, job, owner, evidence, reason)
+}
+
+func finishPublicationRetryableContext(ctx context.Context, stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, owner string, evidence map[string]any, reason string) int {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	evidence["reason"] = reason
-	if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "signed", sqlite.SyncJobKeepUnresolved, sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "publication", Outcome: "effect_not_started", EvidenceJSON: mustJSON(evidence), RecordedAt: now}, now); err != nil {
+	if err := store.FinishSyncJob(ctx, job.JobID, owner, job.Fence, "signed", sqlite.SyncJobKeepUnresolved, sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "publication", Outcome: "effect_not_started", EvidenceJSON: mustJSON(evidence), RecordedAt: now}, now); err != nil {
 		return syncStoreError(stderr, "sync publish", err)
 	}
 	writeError(stderr, "sync publish", "sync_retryable", "transient_local", reason)
@@ -821,9 +846,13 @@ func publicationBlockedResult(stdout io.Writer, p syncrecords.Publication, candi
 }
 
 func finishPublicationBlockedByHold(stdout, stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, owner string, p syncrecords.Publication, candidate string, control sqlite.SyncControlRow, evidence map[string]any) int {
+	return finishPublicationBlockedByHoldContext(requestCtx(), stdout, stderr, store, job, owner, p, candidate, control, evidence)
+}
+
+func finishPublicationBlockedByHoldContext(ctx context.Context, stdout, stderr io.Writer, store *sqlite.Store, job sqlite.SyncJobRow, owner string, p syncrecords.Publication, candidate string, control sqlite.SyncControlRow, evidence map[string]any) int {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	evidence["reason"] = control.Reason
-	if err := store.FinishSyncJob(requestCtx(), job.JobID, owner, job.Fence, "blocked", sqlite.SyncJobKeepUnresolved, sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "publication", Outcome: "blocked", EvidenceJSON: mustJSON(evidence), RecordedAt: now}, now); err != nil {
+	if err := store.FinishSyncJob(ctx, job.JobID, owner, job.Fence, "blocked", sqlite.SyncJobKeepUnresolved, sqlite.SyncJournalEntry{JournalID: randomSyncID("publication-journal"), JobID: job.JobID, Fence: job.Fence, Phase: "publication", Outcome: "blocked", EvidenceJSON: mustJSON(evidence), RecordedAt: now}, now); err != nil {
 		return syncStoreError(stderr, "sync publish", err)
 	}
 	return publicationBlockedResult(stdout, p, candidate, control, true)

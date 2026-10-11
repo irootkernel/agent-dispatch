@@ -61,12 +61,12 @@ export PATH="$HOME/.local/bin:$PATH"
 ```
 
 This checkout builds the `agent-dispatch v0.3.0` development version and migrates
-opened state to schema 28. `sync request capabilities` reports local policy and
+opened state to schema 29. `sync request capabilities` reports local policy and
 `sync request show` reads an exact retained handle. New preparation and admission
 remain unavailable until execution and recovery are qualified.
 Use the v0.2.0 release tag or a published binary for the released version.
 Before opening existing state with a development build, back up its database
-and matching configuration. An older binary refuses schema 28; rollback requires
+and matching configuration. An older binary refuses schema 29; rollback requires
 a stopped-service backup restore. See the
 [migration guide](docs/implementation-tips/migration-and-versioning.md).
 

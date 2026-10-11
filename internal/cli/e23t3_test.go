@@ -231,19 +231,38 @@ func TestE23T3ConcurrentSubmitAndExactLookup(t *testing.T) {
 	cfg, path := e23t3Config(t)
 	id := e23t3Prepare(t, path, cfg.Sync.GroupID, "sync-now")
 	var wg sync.WaitGroup
-	codes := make(chan int, 8)
+	type response struct {
+		code      int
+		errorJSON string
+	}
+	codes := make(chan response, 8)
 	for i := 0; i < 8; i++ {
 		wg.Go(func() {
 			var out, errOut bytes.Buffer
-			codes <- runSyncRequestQualified(context.Background(), []string{"submit", "--group", cfg.Sync.GroupID, "--request-id", id, "--config", path}, false, []string{"sync-now"}, &out, &errOut)
+			code := runSyncRequestQualified(context.Background(), []string{"submit", "--group", cfg.Sync.GroupID, "--request-id", id, "--config", path}, false, []string{"sync-now"}, &out, &errOut)
+			codes <- response{code: code, errorJSON: errOut.String()}
 		})
 	}
 	wg.Wait()
 	close(codes)
-	for code := range codes {
-		if code != 0 {
-			t.Fatalf("concurrent submit: %d", code)
+	for result := range codes {
+		if result.code == 0 {
+			continue
 		}
+		var carrier map[string]any
+		if err := json.Unmarshal([]byte(result.errorJSON), &carrier); err != nil {
+			t.Fatalf("concurrent submit: %d %s", result.code, result.errorJSON)
+		}
+		e23t3ValidateCarrier(t, carrier)
+		errorValue := carrier["error"].(map[string]any)
+		if result.code != 10 || errorValue["code"] != "sync_request_busy" || errorValue["category"] != "transient_local" || errorValue["retryable"] != false {
+			t.Fatalf("concurrent submit: %d %s", result.code, result.errorJSON)
+		}
+	}
+	// After the concurrent writers settle, an explicit same-handle resubmit
+	// resolves the allowed transient refusal without creating another action.
+	if code, value := e23t3Invoke(t, path, "submit", "--group", cfg.Sync.GroupID, "--request-id", id); code != 0 || value["result"].(map[string]any)["request_id"] != id {
+		t.Fatalf("same-handle resubmit: %d %v", code, value)
 	}
 	other := e23t3Prepare(t, path, cfg.Sync.GroupID, "sync-now")
 	if other == id {

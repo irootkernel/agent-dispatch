@@ -22,6 +22,11 @@ lookup; preparation/admission use isolated qualification fixtures until runtime
 execution and recovery are ready;
 T4 and T5 own execution/recovery wiring and runtime capability qualification.
 
+T4 connects shared worker execution and atomic local controls in development
+fixtures. Schema 29 records bound worker heartbeats and explicit stopped
+observations. Public action admission remains gated while T5 qualifies
+interrupted-request recovery and retry.
+
 ## Authorities
 
 | Concern | Owner |

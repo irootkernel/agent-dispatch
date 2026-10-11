@@ -34,14 +34,20 @@ Do not tie all axes to the product version.
 
 Each release notes whether downgrade is unsupported and how to restore the backup.
 
-The v0.3.0 development build advances schema 27 to 28 with additive management
+The v0.3.0 development build advances schema 27 to 29 with additive management
 request, acceptance, execution and job-association tables. Existing jobs remain
 unchanged and have no invented request ancestry. A schema-27 binary refuses the
 upgraded database. Stop the service and restore its compatible pre-migration
-state/configuration backup to roll back; do not open schema 28 with the old
+state/configuration backup to roll back; do not open schema 29 with the old
 binary. Supported destructive identity recovery keeps management disabled and
 establishes a new state incarnation before new effects. These storage primitives
 do not enable the management command family; later E23 tasks own that admission.
+Migration 29 adds one bound worker-evidence row per group. It preserves the
+installed schema 28 migration and request/job history. Stale evidence yields
+unknown availability; an explicit stopped record follows worker termination.
+Management capabilities can read supported pre-management state without
+migrating it and report unknown availability. Request lookup still requires the
+schema 28 ledger; corrupt or newer migration history remains an error.
 
 ## 4. Record Contract Evolution
 

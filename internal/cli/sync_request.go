@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -15,6 +16,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/irootkernel/agent-dispatch/internal/adapters/resourceguard"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/domain/syncmanagement"
@@ -175,7 +177,22 @@ func runSyncRequestQualified(parent context.Context, args []string, prefix bool,
 	}
 	current := syncmanagement.Binding{GroupID: f.group, InstanceID: cfg.Instance.ID, StateIncarnationID: localSyncIncarnation(cfg), PolicyRevision: policy, ConfigRevision: revision}
 	if f.phase == "capabilities" {
-		return managementSuccess(stdout, stderr, command, map[string]any{"schema_version": syncmanagement.Schema, "kind": "capabilities", "group_id": f.group, "contract_digest": managementContractDigest, "enabled": enabled, "configured_actions": configured, "available_actions": available, "executor": "unknown", "limits": managementLimits(), "data_capacity": cfg.Sync.Bounds.Queue, "side_effects": []string{}})
+		executor := "unknown"
+		path := filepath.Join(platformpaths.ResolveStateDir(cfg.Instance.StateDir), StateDBName)
+		store, openErr := sqlite.OpenReadOnly(ctx, path)
+		if openErr == nil {
+			defer store.Close()
+			if err := store.CheckManagementCapabilitiesSchema(ctx); err != nil {
+				return managementStoreError(ctx, stderr, command, err, nil)
+			}
+			executor, err = store.ManagementExecutorAvailability(ctx, current, time.Now())
+			if err != nil {
+				return managementStoreError(ctx, stderr, command, err, nil)
+			}
+		} else if !errors.Is(openErr, os.ErrNotExist) {
+			return managementStoreError(ctx, stderr, command, openErr, nil)
+		}
+		return managementSuccess(stdout, stderr, command, map[string]any{"schema_version": syncmanagement.Schema, "kind": "capabilities", "group_id": f.group, "contract_digest": managementContractDigest, "enabled": enabled, "configured_actions": configured, "available_actions": available, "executor": executor, "limits": managementLimits(), "data_capacity": cfg.Sync.Bounds.Queue, "side_effects": []string{}})
 	}
 	stateDir := platformpaths.ResolveStateDir(cfg.Instance.StateDir)
 	path := filepath.Join(stateDir, StateDBName)
@@ -202,11 +219,16 @@ func runSyncRequestQualified(parent context.Context, args []string, prefix bool,
 		if err == nil {
 			request, err = store.LoadManagementRequest(ctx, f.group, f.request, time.Now())
 		}
+		executor := "unknown"
+		if err == nil {
+			executor, err = store.ManagementExecutorAvailability(ctx, current, time.Now())
+		}
 		store.Close()
 		if err != nil {
 			return managementStoreError(ctx, stderr, command, err, nil)
 		}
 		view := managementView(request, f.phase, current, []string{})
+		view["executor"] = executor
 		if f.phase == "show" || request.AcceptedAt != nil {
 			return managementSuccess(stdout, stderr, command, view)
 		}
@@ -257,6 +279,36 @@ func runSyncRequestQualified(parent context.Context, args []string, prefix bool,
 		}
 		request, _, err = store.PrepareManagementRequest(ctx, id, current, time.Now())
 	} else {
+		// Admission repeats the CAS inside its transaction. Resume inspection
+		// holds the same nonblocking resource guard as the operator command.
+		pending, loadErr := store.LoadManagementRequest(ctx, f.group, f.request, time.Now())
+		if loadErr != nil {
+			return managementStoreError(ctx, stderr, command, loadErr, nil)
+		}
+		if pending.AcceptedAt == nil && pending.Action == "resume" {
+			syncRevision, _ := config.SyncRevision(cfg)
+			control, loadErr := store.LoadSyncControl(ctx, f.group)
+			if errors.Is(loadErr, sql.ErrNoRows) {
+				control = defaultSyncControlRow(f.group, syncRevision)
+			} else if loadErr != nil {
+				return managementStoreError(ctx, stderr, command, loadErr, nil)
+			}
+			if control.Revision != *pending.ExpectedControlRevision || control.State == "blocked" || control.MembershipMode != "normal" {
+				return managementStoreError(ctx, stderr, command, sqlite.ErrSyncControlHeld, nil)
+			}
+			guard, guardErr := resourceguard.Acquire(stateDirOf(cfg), cfg.Sync.Resource)
+			if guardErr != nil {
+				return fail("sync_request_conflict", "conflict", "resource is busy; retain the same handle", 14, nil)
+			}
+			defer guard.Close()
+			var validation bytes.Buffer
+			if code := validateSyncResumeContext(ctx, cfg, store, &validation); code != 0 {
+				if ctx.Err() != nil {
+					return managementStoreError(ctx, stderr, command, ctx.Err(), nil)
+				}
+				return fail("sync_request_conflict", "conflict", "local resume safety checks refused the request", 14, nil)
+			}
+		}
 		syncRevision, _ := config.SyncRevision(cfg)
 		request, duplicate, err = store.AcceptManagementRequest(ctx, sqlite.ManagementAdmission{GroupID: f.group, RequestID: f.request, CurrentBinding: current, Authorized: true, QueueLimit: cfg.Sync.Bounds.Queue, ControlSyncRevision: syncRevision})
 	}
@@ -275,7 +327,12 @@ func runSyncRequestQualified(parent context.Context, args []string, prefix bool,
 			effects = append(effects, "local_control_write")
 		}
 	}
-	return managementSuccess(stdout, stderr, command, managementView(request, f.phase, current, effects))
+	view := managementView(request, f.phase, current, effects)
+	executor, lookupErr := store.ManagementExecutorAvailability(ctx, current, time.Now())
+	if lookupErr == nil {
+		view["executor"] = executor
+	}
+	return managementSuccess(stdout, stderr, command, view)
 }
 
 func managementView(r sqlite.ManagementRequest, phase string, current syncmanagement.Binding, effects []string) map[string]any {

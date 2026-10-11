@@ -220,6 +220,16 @@ func (s *Store) EnsureSyncControl(ctx context.Context, groupID, configRevision, 
 		return SyncControlRow{}, err
 	}
 	defer tx.Rollback()
+	row, err := ensureSyncControlTx(ctx, tx, groupID, configRevision, now)
+	if err != nil {
+		return SyncControlRow{}, err
+	}
+	return row, tx.Commit()
+}
+
+// ensureSyncControlTx shares first-row initialization with management admission.
+// A failed request acceptance rolls back both initialization and its journal.
+func ensureSyncControlTx(ctx context.Context, tx *sql.Tx, groupID, configRevision, now string) (SyncControlRow, error) {
 	res, err := tx.ExecContext(ctx, `INSERT INTO sync_controls
 		(group_id, revision, state, reason, config_revision, updated_at)
 		VALUES (?, 1, 'active', 'none', ?, ?)
@@ -239,9 +249,6 @@ func (s *Store) EnsureSyncControl(ctx context.Context, groupID, configRevision, 
 	if err := tx.QueryRowContext(ctx, `SELECT group_id, revision, state, reason, membership_mode, config_revision, updated_at
 		FROM sync_controls WHERE group_id = ?`, groupID).Scan(
 		&row.GroupID, &row.Revision, &row.State, &row.Reason, &row.MembershipMode, &row.ConfigRevision, &row.UpdatedAt); err != nil {
-		return SyncControlRow{}, err
-	}
-	if err := tx.Commit(); err != nil {
 		return SyncControlRow{}, err
 	}
 	return row, nil
@@ -471,9 +478,13 @@ func (s *Store) ReconcileSyncControlCheckpoint(ctx context.Context, groupID stri
 // logical key and fingerprint returns the existing identity; changed immutable
 // input is a conflict. Queue exhaustion leaves all existing rows intact.
 func (s *Store) AdmitSyncJob(ctx context.Context, in SyncJobInput) (SyncJobRow, bool, error) {
+	return s.admitSyncJob(ctx, in, "", nil)
+}
+
+func (s *Store) admitSyncJob(ctx context.Context, in SyncJobInput, requestID string, associate func(*sql.Tx, SyncJobRow) error) (SyncJobRow, bool, error) {
 	var lastErr error
 	for attempt := 0; attempt < 20; attempt++ {
-		row, reused, err := s.admitSyncJobOnce(ctx, in)
+		row, reused, err := s.admitSyncJobOnce(ctx, in, requestID, associate)
 		if err == nil || !isBusy(err) {
 			return row, reused, err
 		}
@@ -494,7 +505,7 @@ type syncBusyError struct{ err error }
 func (e *syncBusyError) Error() string { return fmt.Sprintf("sync admission remained busy: %v", e.err) }
 func (e *syncBusyError) Unwrap() error { return e.err }
 
-func (s *Store) admitSyncJobOnce(ctx context.Context, in SyncJobInput) (SyncJobRow, bool, error) {
+func (s *Store) admitSyncJobOnce(ctx context.Context, in SyncJobInput, requestID string, associate func(*sql.Tx, SyncJobRow) error) (SyncJobRow, bool, error) {
 	if in.QueueLimit < 1 || in.QueueLimit > 1000 {
 		return SyncJobRow{}, false, fmt.Errorf("sync queue limit must be 1..1000")
 	}
@@ -506,15 +517,37 @@ func (s *Store) admitSyncJobOnce(ctx context.Context, in SyncJobInput) (SyncJobR
 		return SyncJobRow{}, false, err
 	}
 	in.PayloadJSON = canonicalPayload
-	tx, err := s.BeginTx(ctx, nil)
-	if err != nil {
-		return SyncJobRow{}, false, err
+	var tx *sql.Tx
+	var commit func() error
+	if associate == nil {
+		tx, err = s.BeginTx(ctx, nil)
+		if err != nil {
+			return SyncJobRow{}, false, err
+		}
+		defer tx.Rollback()
+		commit = tx.Commit
+	} else {
+		// Reserve the writer before reading identity or capacity. Managed reuse
+		// must commit its association too, never return an outside-tx identity.
+		managed, err := s.beginManagementTx(ctx, requestID)
+		if err != nil {
+			return SyncJobRow{}, false, err
+		}
+		defer managed.Rollback()
+		tx, commit = managed.Tx, managed.Commit
 	}
-	defer tx.Rollback()
 	row, err := loadSyncJobByKey(ctx, tx, in.GroupID, in.Kind, in.LogicalKey)
 	if err == nil {
 		if row.RequestFingerprint != fingerprint {
 			return SyncJobRow{}, false, fmt.Errorf("logical key %q already has a different request fingerprint: %w", in.LogicalKey, ErrSyncAdmissionConflict)
+		}
+		if associate != nil {
+			if err := associate(tx, row); err != nil {
+				return SyncJobRow{}, false, err
+			}
+			if err := commit(); err != nil {
+				return SyncJobRow{}, false, err
+			}
 		}
 		return row, true, nil
 	}
@@ -550,6 +583,9 @@ func (s *Store) admitSyncJobOnce(ctx context.Context, in SyncJobInput) (SyncJobR
 	if _, err := tx.ExecContext(ctx, `INSERT INTO sync_jobs
 		(job_id, group_id, kind, logical_key, request_fingerprint, state, payload_json, created_at, updated_at)
 		VALUES (?,?,?,?,?,?,?,?,?)`, in.JobID, in.GroupID, in.Kind, in.LogicalKey, fingerprint, in.InitialState, in.PayloadJSON, in.Now, in.Now); err != nil {
+		if associate != nil {
+			return SyncJobRow{}, false, err
+		}
 		_ = tx.Rollback()
 		existing, loadErr := loadSyncJobByKey(ctx, s.DB, in.GroupID, in.Kind, in.LogicalKey)
 		if loadErr == nil {
@@ -564,7 +600,12 @@ func (s *Store) admitSyncJobOnce(ctx context.Context, in SyncJobInput) (SyncJobR
 	if err != nil {
 		return SyncJobRow{}, false, err
 	}
-	if err := tx.Commit(); err != nil {
+	if associate != nil {
+		if err := associate(tx, row); err != nil {
+			return SyncJobRow{}, false, err
+		}
+	}
+	if err := commit(); err != nil {
 		return SyncJobRow{}, false, err
 	}
 	return row, false, nil
@@ -1392,6 +1433,10 @@ func (s *Store) FindSyncJob(ctx context.Context, groupID, kind, logicalKey strin
 // FinishPublicationJob commits the confirmed publication and its one peer
 // delivery obligation atomically. A crash can therefore expose neither half.
 func (s *Store) FinishPublicationJob(ctx context.Context, jobID, owner string, fence int64, journal SyncJournalEntry, delivery SyncJobInput, now string) (SyncJobRow, error) {
+	return s.finishPublicationJob(ctx, jobID, owner, fence, journal, delivery, now, nil)
+}
+
+func (s *Store) finishPublicationJob(ctx context.Context, jobID, owner string, fence int64, journal SyncJournalEntry, delivery SyncJobInput, now string, association func(*sql.Tx, SyncJobRow) error) (SyncJobRow, error) {
 	fingerprint, payload, err := syncRequestFingerprint("delivery", []byte(delivery.PayloadJSON))
 	if err != nil {
 		return SyncJobRow{}, err
@@ -1433,6 +1478,11 @@ func (s *Store) FinishPublicationJob(ctx context.Context, jobID, owner string, f
 		if existing.RequestFingerprint != fingerprint {
 			return SyncJobRow{}, ErrSyncAdmissionConflict
 		}
+		if association != nil {
+			if err := association(tx, existing); err != nil {
+				return SyncJobRow{}, err
+			}
+		}
 		if err := tx.Commit(); err != nil {
 			return SyncJobRow{}, err
 		}
@@ -1455,6 +1505,11 @@ func (s *Store) FinishPublicationJob(ctx context.Context, jobID, owner string, f
 	if err != nil {
 		return SyncJobRow{}, err
 	}
+	if association != nil {
+		if err := association(tx, created); err != nil {
+			return SyncJobRow{}, err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return SyncJobRow{}, err
 	}
@@ -1465,6 +1520,10 @@ func (s *Store) FinishPublicationJob(ctx context.Context, jobID, owner string, f
 // after the original process lost its claim. It refuses an unexpired owner and
 // still commits the peer obligation in the same transaction.
 func (s *Store) FinishRecoveredPublicationJob(ctx context.Context, jobID string, expectedFence int64, journal SyncJournalEntry, delivery SyncJobInput, now string) (SyncJobRow, error) {
+	return s.finishRecoveredPublicationJob(ctx, jobID, expectedFence, journal, delivery, now, nil)
+}
+
+func (s *Store) finishRecoveredPublicationJob(ctx context.Context, jobID string, expectedFence int64, journal SyncJournalEntry, delivery SyncJobInput, now string, association func(*sql.Tx, SyncJobRow) error) (SyncJobRow, error) {
 	fingerprint, payload, err := syncRequestFingerprint("delivery", []byte(delivery.PayloadJSON))
 	if err != nil {
 		return SyncJobRow{}, err
@@ -1506,6 +1565,11 @@ func (s *Store) FinishRecoveredPublicationJob(ctx context.Context, jobID string,
 		if existing.RequestFingerprint != fingerprint {
 			return SyncJobRow{}, ErrSyncAdmissionConflict
 		}
+		if association != nil {
+			if err := association(tx, existing); err != nil {
+				return SyncJobRow{}, err
+			}
+		}
 		if err := tx.Commit(); err != nil {
 			return SyncJobRow{}, err
 		}
@@ -1527,6 +1591,11 @@ func (s *Store) FinishRecoveredPublicationJob(ctx context.Context, jobID string,
 	created, err := loadSyncJobByKey(ctx, tx, delivery.GroupID, "delivery", delivery.LogicalKey)
 	if err != nil {
 		return SyncJobRow{}, err
+	}
+	if association != nil {
+		if err := association(tx, created); err != nil {
+			return SyncJobRow{}, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return SyncJobRow{}, err

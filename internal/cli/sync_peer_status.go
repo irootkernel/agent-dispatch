@@ -14,6 +14,10 @@ import (
 // observeSyncPeer reads local facts for one request. Every invocation measures
 // Git and SQLite anew; the request nonce cannot refresh a cached observation.
 func observeSyncPeer(ctx context.Context, cfg *config.Config, store *sqlite.Store, client *gitlocal.Client, request syncrecords.StatusRequest) syncrecords.StatusResponse {
+	return observeSyncPeerForManagement(ctx, cfg, store, client, request, "")
+}
+
+func observeSyncPeerForManagement(ctx context.Context, cfg *config.Config, store *sqlite.Store, client *gitlocal.Client, request syncrecords.StatusRequest, ownVerification string) syncrecords.StatusResponse {
 	s := cfg.Sync
 	started := time.Now()
 	response := syncrecords.StatusResponse{
@@ -75,7 +79,11 @@ func observeSyncPeer(ctx context.Context, cfg *config.Config, store *sqlite.Stor
 	if err != nil {
 		return response
 	}
-	response.PendingWork = pending || inbox.Pending > 0 || inbox.Failed > 0 || !writersIdle
+	managementPending, err := store.ManagementContentPending(ctx, s.GroupID, ownVerification)
+	if err != nil {
+		return response
+	}
+	response.PendingWork = managementPending || pending || inbox.Pending > 0 || inbox.Failed > 0 || !writersIdle
 	if control.State == "blocked" || control.MembershipMode != "normal" {
 		response.State = "blocked"
 		return response

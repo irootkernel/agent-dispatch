@@ -141,7 +141,7 @@ func TestE23T3FrozenArgvAndRawGlobalClosure(t *testing.T) {
 	}
 }
 
-func TestE23T3PublicUnavailableAndNonMutatingMissingLookup(t *testing.T) {
+func TestE23T3PublicCapabilitiesAndNonMutatingMissingLookup(t *testing.T) {
 	cfg, path := e23t3Config(t)
 	var out, errOut bytes.Buffer
 	code := Run([]string{"sync", "request", "capabilities", "--group", cfg.Sync.GroupID, "--config", path}, &out, &errOut)
@@ -154,12 +154,12 @@ func TestE23T3PublicUnavailableAndNonMutatingMissingLookup(t *testing.T) {
 	}
 	e23t3ValidateCarrier(t, e)
 	result := e["result"].(map[string]any)
-	if len(result["available_actions"].([]any)) != 0 || result["contract_digest"] != managementContractDigest {
-		t.Fatal("unqualified runtime advertised")
+	if len(result["available_actions"].([]any)) != 5 || result["contract_digest"] != managementContractDigest {
+		t.Fatal("qualified runtime capabilities differ")
 	}
 	out.Reset()
 	errOut.Reset()
-	code = Run([]string{"sync", "request", "prepare", "--group", cfg.Sync.GroupID, "--action", "sync-now", "--config", path}, &out, &errOut)
+	code = runSyncRequestQualified(context.Background(), []string{"prepare", "--group", cfg.Sync.GroupID, "--action", "sync-now", "--config", path}, false, []string{}, &out, &errOut)
 	if code != 3 || !strings.Contains(errOut.String(), "sync_management_unavailable") {
 		t.Fatalf("unqualified preparation: %d %s", code, errOut.String())
 	}

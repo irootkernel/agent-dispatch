@@ -82,8 +82,9 @@ their request ancestry and effect evidence. Lease expiry permits inspection,
 never automatic repeated effects. The application owns policy revalidation,
 resume safety checks, protected resource guards, and execution through the
 existing worker. The management CLI reports policy and exact retained requests
-through a read-only database connection. New preparation/admission remain gated
-by qualified execution and recovery; isolated fixtures exercise those primitives.
+through a read-only database connection. Configured action admission is enabled
+with shared execution and interrupted-request recovery; management remains
+disabled by default.
 
 The existing inbox worker performs peer/periodic recovery before dispatching at
 most one management request. Shared reconciliation and verification functions
@@ -102,6 +103,22 @@ and ambiguous effects retain uncertainty. Local observation excludes only the
 running verification request's own harmless bookkeeping.
 Other unresolved management work remains pending, and the peer protocol has
 no exemption field.
+
+Retry admission copies the predecessor's flattened immutable associations in
+the acceptance transaction. Eligibility is checked at preparation and again
+under the admission writer lock. Held and exhausted jobs remain in the result;
+recovery helpers consider only eligible recorded jobs and never admit a fresh
+import at a newer remote target. Request execution attempts are also counted
+across the retained retry family, so branches cannot reset its twenty-attempt
+budget. Already-settled retries finish at acceptance without an execution claim.
+
+After periodic recovery, the worker inspects one interrupted management request
+and runs a bounded retention pass. Finished verification results come from the
+exact job's journal. An expired claim with no admitted association may be
+requeued only after inspecting that invariant and current authority; unresolved
+effects retain uncertainty. Management revocation prevents new request effects
+and preserves accepted lookup and settled evidence. Operator pruning uses the
+same bounded leaf selection as worker retention and reports its actual count.
 
 Migration v29 preserves v28 and binds worker evidence to local identity,
 incarnation and management policy/config revisions. A heartbeat is available

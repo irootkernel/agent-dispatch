@@ -54,7 +54,11 @@ lineage. Terminal request leaves retain evidence for at least 180 days or the
 longer configured completed-receipt horizon; ordinary pruning can remove released
 job evidence afterward. Exact management lookup remains available without
 pruning or recovery, including after management authority is disabled. New
-management actions remain unavailable until execution and recovery qualify.
+management actions require current configured authority before effects.
+Worker recovery prunes at most 256 eligible request leaves per pass. Operator
+`maintenance prune` uses the same selection with a non-mutating default plan;
+`--before` does not shorten the minimum or longer configured management horizon.
+Expired unsubmitted drafts survive for 24 hours after their 600-second lifetime.
 
 Schema v23 is a compatibility marker and does not reopen historical blocked
 rows that an older writer already made terminal without a matching group hold.

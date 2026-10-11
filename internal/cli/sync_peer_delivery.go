@@ -61,6 +61,9 @@ func (s *peerService) deliverPending(ctx context.Context, client *http.Client) e
 	}
 	revision, _ := config.SyncRevision(s.cfg)
 	for _, job := range jobs {
+		if !managementRetryAllowsJob(ctx, job) {
+			continue
+		}
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -94,6 +97,9 @@ func (s *peerService) deliverPending(ctx context.Context, client *http.Client) e
 		}
 		now := time.Now().UTC()
 		owner := randomSyncID("delivery-worker")
+		if err := managementEffectBoundary(ctx); err != nil {
+			return err
+		}
 		claimed, err := s.store.ClaimSyncJob(ctx, job.JobID, owner, revision, now.Format(time.RFC3339Nano), now.Add(30*time.Second).Format(time.RFC3339Nano))
 		if err != nil {
 			if errors.Is(err, sqlite.ErrSyncControlHeld) {
@@ -181,6 +187,9 @@ func (s *peerService) sendNudge(ctx context.Context, client *http.Client, job sq
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Authorization", "Bearer "+credential)
+	if err := managementEffectBoundary(ctx); err != nil {
+		return "retryable", "retryable", 0
+	}
 	response, err := client.Do(request)
 	if err != nil {
 		// The peer may have committed before the response was lost. Retain

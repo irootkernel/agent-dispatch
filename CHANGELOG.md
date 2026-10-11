@@ -8,6 +8,9 @@ This file records concise shipped outcomes and pending changes.
 
 - Inspect management policy and exact retained requests with
   `sync request capabilities` and `sync request show`.
+- Prepare and submit bounded local sync, verification, retry, pause, and resume
+  requests. Interrupted work retains its recorded jobs, targets, and retry budget;
+  local control remains available independently of the worker.
 
 ### Changed
 

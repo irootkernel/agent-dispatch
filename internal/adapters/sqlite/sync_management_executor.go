@@ -140,20 +140,24 @@ func (s *Store) FinishManagementPublicationJob(ctx context.Context, expected Man
 		if !managementHeadMatches(r, expected) || !managementClaimLive(r, time.Now()) {
 			return ErrSyncPrecondition
 		}
-		if r.Action != "sync-now" || job.GroupID != r.GroupID || job.Kind != "delivery" {
+		if (r.Action != "sync-now" && r.Action != "retry") || job.GroupID != r.GroupID || job.Kind != "delivery" {
 			return ErrSyncAdmissionConflict
+		}
+		reason := "already_signed_recovery"
+		if r.Action == "retry" {
+			reason = "retry_obligation"
 		}
 		var publicationTarget, publicationReason string
 		if err := tx.QueryRowContext(ctx, `SELECT target_commit,association_reason FROM sync_management_jobs WHERE request_id=? AND job_id=? AND kind='publication'`, r.RequestID, jobID).Scan(&publicationTarget, &publicationReason); err != nil {
 			return err
 		}
-		if publicationTarget != target || publicationReason != "already_signed_recovery" {
+		if publicationTarget != target || publicationReason != reason {
 			return ErrSyncAdmissionConflict
 		}
 		var oldTarget, oldReason string
 		err = tx.QueryRowContext(ctx, `SELECT target_commit,association_reason FROM sync_management_jobs WHERE request_id=? AND job_id=?`, r.RequestID, job.JobID).Scan(&oldTarget, &oldReason)
 		if err == nil {
-			if oldTarget != target || oldReason != "already_signed_recovery" {
+			if oldTarget != target || oldReason != reason {
 				return ErrSyncAdmissionConflict
 			}
 		} else {
@@ -163,7 +167,7 @@ func (s *Store) FinishManagementPublicationJob(ctx context.Context, expected Man
 			if r.AssociationReserved < 1 {
 				return ErrSyncQueueFull
 			}
-			if _, err := tx.ExecContext(ctx, `INSERT INTO sync_management_jobs(request_id,job_id,kind,target_commit,association_reason) VALUES(?,?,'delivery',?,'already_signed_recovery')`, r.RequestID, job.JobID, target); err != nil {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO sync_management_jobs(request_id,job_id,kind,target_commit,association_reason) VALUES(?,?,'delivery',?,?)`, r.RequestID, job.JobID, target, reason); err != nil {
 				return err
 			}
 			if _, err := tx.ExecContext(ctx, `UPDATE sync_management_requests SET association_reserved=association_reserved-1,revision=revision+1 WHERE request_id=?`, r.RequestID); err != nil {

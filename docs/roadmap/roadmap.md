@@ -15,9 +15,9 @@
 | Release target | v0.3.0 (constrained sync management successor) |
 | Current epic | E23 |
 | Current active task | None |
-| Next task | E23-T5 |
-| Completed tasks | 120 / 123 |
-| Planned tasks | 3 / 123 |
+| Next task | E23-T6 |
+| Completed tasks | 121 / 123 |
+| Planned tasks | 2 / 123 |
 | In progress tasks | 0 |
 | In review tasks | 0 |
 | Blocked tasks | 0 |
@@ -193,7 +193,7 @@ remain separate operator decisions.
 | 118 | E23-T2 | Completed | Durable request ledger, immutable bindings, and additive migration |
 | 119 | E23-T3 | Completed | Bounded preparation, idempotent admission, and exact lookup |
 | 120 | E23-T4 | Completed | Shared worker execution and atomic local controls |
-| 121 | E23-T5 | Planned | Identity-preserving retry, recovery, retention, and restore |
+| 121 | E23-T5 | Completed | Identity-preserving retry, recovery, retention, and restore |
 | 122 | E23-T6 | Planned | Management security, fault, saturation, and regression qualification |
 | 123 | E23-T7 | Planned | Exact-provider paired qualification and Plugin handoff |
 
@@ -5937,7 +5937,7 @@ In Progress.
 
 ## E23-T5: Complete Retry and Interrupted-Request Recovery
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -5946,10 +5946,10 @@ underlying identity, target, authority, or attempt budget.
 
 ### Deliverables
 
-- [ ] Implement retry requests linked to earlier management requests and their verified retry-eligible obligations only.
-- [ ] Recover process loss and expired claims from effect evidence before another attempt; recognize work already settled by periodic recovery.
-- [ ] Apply authorization revocation and binding changes before new effects while retaining accepted evidence.
-- [ ] Complete expiry/pruning and supported migration/rollback/restore behavior, including obsolete-incarnation handles.
+- [x] Implement retry requests linked to earlier management requests and their verified retry-eligible obligations only.
+- [x] Recover process loss and expired claims from effect evidence before another attempt; recognize work already settled by periodic recovery.
+- [x] Apply authorization revocation and binding changes before new effects while retaining accepted evidence.
+- [x] Complete expiry/pruning and supported migration/rollback/restore behavior, including obsolete-incarnation handles.
 
 ### Requirements
 
@@ -5961,18 +5961,43 @@ E23-T4 Completed.
 
 ### Do Not
 
-- [ ] Do not treat timeout as no effect, create a fresh target on retry, reset underlying attempts, or resolve pre-signature and safety-held work through management.
-- [ ] Do not prune unresolved lineage or execute a restored prepared handle from an old incarnation.
+- [x] Do not treat timeout as no effect, create a fresh target on retry, reset underlying attempts, or resolve pre-signature and safety-held work through management.
+- [x] Do not prune unresolved lineage or execute a restored prepared handle from an old incarnation.
 
 ### Verification and Acceptance
 
-- [ ] Inject loss before/after acceptance, claim, effect, journal completion, and response; replay does not duplicate logical effects.
-- [ ] Already-settled, exhausted, revoked, stale, wrong-request, and no-recoverable-obligation retry cases return their exact bounded outcome.
-- [ ] Expiry/retention boundaries and supported restore prove that absent/obsolete handles cannot start work; old binaries cannot open unsupported upgraded state.
+- [x] Inject loss before/after acceptance, claim, effect, journal completion, and response; replay does not duplicate logical effects.
+- [x] Already-settled, exhausted, revoked, stale, wrong-request, and no-recoverable-obligation retry cases return their exact bounded outcome.
+- [x] Expiry/retention boundaries and supported restore prove that absent/obsolete handles cannot start work; old binaries cannot open unsupported upgraded state.
 
 ### Evidence
 
-Not executed. Retain crash-boundary, retry-lineage, pruning, and restore evidence.
+Explicit retry reuses recorded obligations, IDs, targets and cumulative attempt
+budgets. Recovery checks durable effect evidence before replay and keeps
+uncertainty, authority changes and safety holds visible. Pruning retains
+unresolved lineage; restored drafts from an older incarnation cannot execute.
+
+Public-command fixtures cover exact retry refusals, post-acceptance revocation
+and rebinding, acceptance transaction failures, response loss and durable receiver
+effects before sender journal completion. Real signed imports resume the same
+stored import after admission, claim and pre-apply interruptions. The fixtures
+use controlled durable states and SQL faults, with an actual submitter-process
+kill; they do not kill a process at every boundary.
+
+Expiry and retention boundary tests, local backup/new-root restore, and an actual
+generated compatible pre-upgrade backup restore pass. The old supported migration
+range refuses schema 29 without changing it. The retained published v0.2.0 binary
+check covers schema 28; schema 29 uses the executable old-range harness.
+
+The corrected candidate passed default `make verify` on Darwin arm64, including
+unit and race tests and both frozen contract gates. Three independent static
+reviewers assessed all nine T5 criteria as met in the second assessment with no
+remaining finding, using source inspection and separately supplied execution
+evidence. Matching staged endpoints do not establish immutable capture.
+Systemd unit lint was skipped because `systemd-analyze` is absent on this host.
+G19-wide checks, three-platform and native paired qualification, and Plugin
+qualification remain with T6/T7. Completed under delegated Task acceptance;
+E23 remains In Progress.
 
 ## E23-T6: Prove Management Security and Fault Acceptance
 

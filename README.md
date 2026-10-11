@@ -63,7 +63,11 @@ export PATH="$HOME/.local/bin:$PATH"
 This checkout builds the `agent-dispatch v0.3.0` development version and migrates
 opened state to schema 29. `sync request capabilities` reports local policy and
 `sync request show` reads an exact retained handle. New preparation and admission
-remain unavailable until execution and recovery are qualified.
+support configured `sync-now`, `verify-all`, `retry`, `pause`, and `resume`
+actions. Management is disabled by default. The
+[management contract](docs/contracts/sync-management-contract.md) describes
+request handles, local authority, and bounded recovery. Native paired provider
+qualification remains an E23 delivery gate.
 Use the v0.2.0 release tag or a published binary for the released version.
 Before opening existing state with a development build, back up its database
 and matching configuration. An older binary refuses schema 29; rollback requires

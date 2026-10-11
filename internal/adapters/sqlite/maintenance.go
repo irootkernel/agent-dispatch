@@ -116,23 +116,26 @@ type PruneCutoffs struct {
 	CompletedReceipts  string `json:"completed_receipts"`
 	ResolvedQuarantine string `json:"resolved_quarantine"`
 	Notifications      string `json:"notifications"`
+	ManagementDrafts   string `json:"management_drafts,omitempty"`
+	ManagementTerminal string `json:"management_terminal,omitempty"`
 }
 
 // PruneCounts reports the per-class prune counts of one plan or
 // execution.
 type PruneCounts struct {
-	Attempts      int64 `json:"attempts"`
-	Receipts      int64 `json:"receipts"`
-	WorkReceipts  int64 `json:"work_receipts"`
-	Intents       int64 `json:"intents"`
-	Decisions     int64 `json:"decisions"`
-	Batches       int64 `json:"batches"`
-	Observations  int64 `json:"observations"`
-	PathFacts     int64 `json:"path_facts"`
-	Quarantine    int64 `json:"quarantine"`
-	Notifications int64 `json:"notifications"`
-	SyncJournals  int64 `json:"sync_journals"`
-	SyncJobs      int64 `json:"sync_jobs"`
+	Attempts           int64 `json:"attempts"`
+	Receipts           int64 `json:"receipts"`
+	WorkReceipts       int64 `json:"work_receipts"`
+	Intents            int64 `json:"intents"`
+	Decisions          int64 `json:"decisions"`
+	Batches            int64 `json:"batches"`
+	Observations       int64 `json:"observations"`
+	PathFacts          int64 `json:"path_facts"`
+	Quarantine         int64 `json:"quarantine"`
+	Notifications      int64 `json:"notifications"`
+	SyncJournals       int64 `json:"sync_journals"`
+	SyncJobs           int64 `json:"sync_jobs"`
+	ManagementRequests int64 `json:"management_requests,omitempty"`
 }
 
 // PrunePlan is the dry-run result: per-class counts plus the bounded
@@ -192,6 +195,13 @@ func (s *Store) PlanPrune(ctx context.Context, cutoffs PruneCutoffs) (PrunePlan,
 	}
 	if err := s.planRemaining(ctx, &plan, terminal); err != nil {
 		return plan, err
+	}
+	if c.ManagementDrafts != "" && c.ManagementTerminal != "" {
+		candidates, err := managementPruneCandidates(ctx, s, c.ManagementDrafts, c.ManagementTerminal)
+		if err != nil {
+			return plan, err
+		}
+		plan.Counts.ManagementRequests = int64(len(candidates))
 	}
 	rows, err := s.QueryContext(ctx, `SELECT dispatch_id FROM dispatch_intents WHERE state IN `+terminal+` AND updated_at < ? ORDER BY updated_at LIMIT 20`, c.Attempts)
 	if err == nil {
@@ -282,6 +292,15 @@ func (s *Store) ExecutePrune(ctx context.Context, cutoffs PruneCutoffs, actor, r
 		return counts, err
 	}
 	defer tx.Rollback()
+	// Snapshot the same bounded leaves as the planner before deleting other
+	// classes. Linked jobs remain retained until a later ordinary prune pass.
+	var managementCandidates []managementPruneCandidate
+	if c.ManagementDrafts != "" && c.ManagementTerminal != "" {
+		managementCandidates, err = managementPruneCandidates(ctx, tx, c.ManagementDrafts, c.ManagementTerminal)
+		if err != nil {
+			return counts, err
+		}
+	}
 	exec := func(label string, query string, args ...any) (int64, error) {
 		res, err := tx.ExecContext(ctx, query, args...)
 		if err != nil {
@@ -403,6 +422,12 @@ func (s *Store) ExecutePrune(ctx context.Context, cutoffs PruneCutoffs, actor, r
 	if counts.Notifications, err = exec("notifications",
 		`DELETE FROM notification_events WHERE state IN ('delivered','refused') AND resolved_at IS NOT NULL AND resolved_at < ?`, c.Notifications); err != nil {
 		return counts, err
+	}
+	for _, candidate := range managementCandidates {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM sync_management_requests WHERE request_id=?`, candidate.id); err != nil {
+			return counts, err
+		}
+		counts.ManagementRequests++
 	}
 	detail, _ := json.Marshal(map[string]any{"actor": actor, "reason": reason, "cutoffs": cutoffs, "counts": counts})
 	if _, err := tx.ExecContext(ctx, `INSERT INTO state_transitions (entity_type, entity_id, from_state, to_state, recorded_at, context_json)

@@ -26,6 +26,7 @@ type managementExecution struct {
 	service         *peerService
 	admissionHold   string
 	admissionTarget string
+	retryJobs       map[string]sqlite.ManagementObligation
 }
 
 func managementBindingForConfig(cfg *config.Config) (syncmanagement.Binding, error) {
@@ -98,6 +99,13 @@ func associateManagementExecution(ctx context.Context, store *sqlite.Store, job 
 	if err := e.authorized(ctx); err != nil {
 		return err
 	}
+	if e.request.Action == "retry" {
+		j, ok := e.retryJobs[job.JobID]
+		if !ok || !j.Eligible || j.Kind != job.Kind || j.TargetCommit == nil || *j.TargetCommit != target {
+			return sqlite.ErrManagementNotRetryable
+		}
+		reason = "retry_obligation"
+	}
 	// Existing immutable associations need no new reservation, including a
 	// periodic pass that settled a previously observed request obligation.
 	var count int
@@ -128,6 +136,9 @@ func admitManagementExecutionJob(ctx context.Context, store *sqlite.Store, in sq
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.request.Action == "retry" {
+		return sqlite.SyncJobRow{}, false, sqlite.ErrManagementNotRetryable
+	}
 	if err := e.authorized(ctx); err != nil {
 		return sqlite.SyncJobRow{}, false, err
 	}
@@ -246,7 +257,7 @@ func (s *peerService) dispatchManagement(ctx context.Context) {
 }
 
 func (s *peerService) dispatchManagementWithHTTP(ctx context.Context, httpClient *http.Client) {
-	if ctx.Err() != nil || s.cfg.Sync.Management == nil || !s.cfg.Sync.Management.Enabled || !s.recoveryAllowed(ctx) {
+	if ctx.Err() != nil {
 		return
 	}
 	id, err := s.store.NextQueuedManagementRequest(ctx, s.cfg.Sync.GroupID)
@@ -254,7 +265,7 @@ func (s *peerService) dispatchManagementWithHTTP(ctx context.Context, httpClient
 		return
 	}
 	pending, err := s.store.LoadManagementRequest(ctx, s.cfg.Sync.GroupID, id, time.Now())
-	if err != nil || (pending.Action != "sync-now" && pending.Action != "verify-all") {
+	if err != nil || (pending.Action != "sync-now" && pending.Action != "verify-all" && pending.Action != "retry") {
 		return
 	}
 	binding, err := managementBindingForConfig(s.cfg)
@@ -273,9 +284,24 @@ func (s *peerService) dispatchManagementWithHTTP(ctx context.Context, httpClient
 	}
 	claimed, err := s.store.ClaimManagementRequest(ctx, pending.GroupID, id, randomSyncID("management-owner"), binding, true, time.Now())
 	if err != nil {
+		if errors.Is(err, sqlite.ErrSyncQueueFull) {
+			if _, err := s.store.TransitionManagementRequest(ctx, pending, "blocked", &syncmanagement.Outcome{Status: "blocked", Reason: "request lineage exhausted its execution budget"}, "management-attempt-budget-inspection", time.Now()); err != nil {
+				s.warn("management budget result remains unresolved")
+			}
+		}
 		return
 	}
 	e.request = claimed
+	if pending.Action == "retry" {
+		jobs, err := s.store.InspectManagementObligations(ctx, claimed, time.Now())
+		if err != nil {
+			return
+		}
+		e.retryJobs = make(map[string]sqlite.ManagementObligation, len(jobs))
+		for _, j := range jobs {
+			e.retryJobs[j.JobID] = j
+		}
+	}
 	executionCtx, cancel := context.WithTimeout(ctx, syncmanagement.ExecutionSeconds*time.Second)
 	executionCtx = context.WithValue(executionCtx, managementExecutionKey{}, e)
 	defer cancel()
@@ -308,7 +334,9 @@ func (s *peerService) dispatchManagementWithHTTP(ctx context.Context, httpClient
 	}()
 	out := boundedReconcileOutput{limit: 1048576}
 	code := 0
-	if pending.Action == "verify-all" {
+	if pending.Action == "retry" {
+		code = s.retryManagement(executionCtx, e, httpClient, &out)
+	} else if pending.Action == "verify-all" {
 		if httpClient == nil {
 			httpClient = peerHTTPClient()
 			defer httpClient.CloseIdleConnections()
@@ -346,7 +374,22 @@ func (s *peerService) dispatchManagementWithHTTP(ctx context.Context, httpClient
 		}
 	}
 	if code == 0 && !wasCancelled {
-		if pending.Action == "verify-all" {
+		if pending.Action == "retry" {
+			jobs, inspectErr := s.store.InspectManagementObligations(cleanup, e.request, time.Now())
+			if inspectErr == nil && len(jobs) > 0 {
+				state = "finished"
+				outcome = syncmanagement.Outcome{Status: "already_settled", Reason: "exact recorded obligations are durably settled"}
+				for _, j := range jobs {
+					if !j.Settled {
+						outcome.Status = "incomplete"
+						outcome.Reason = "recorded obligations remain held, exhausted or unresolved"
+					}
+					if len(jobs) == 1 {
+						outcome.TargetCommit = j.TargetCommit
+					}
+				}
+			}
+		} else if pending.Action == "verify-all" {
 			var result struct {
 				Result syncrecords.Verification `json:"result"`
 			}

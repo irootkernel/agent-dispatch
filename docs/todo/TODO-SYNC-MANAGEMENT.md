@@ -24,8 +24,10 @@ T4 and T5 own execution/recovery wiring and runtime capability qualification.
 
 T4 connects shared worker execution and atomic local controls in development
 fixtures. Schema 29 records bound worker heartbeats and explicit stopped
-observations. Public action admission remains gated while T5 qualifies
-interrupted-request recovery and retry.
+observations. T5 connects interrupted-request recovery and retries over recorded
+obligations. Development builds expose the five configured actions; management
+remains disabled by default. T6 owns G19 security/fault acceptance and T7 owns
+native paired provider qualification before the Plugin handoff.
 
 ## Authorities
 

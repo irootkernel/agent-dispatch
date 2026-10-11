@@ -113,8 +113,7 @@ func parseManagementFlags(args []string) (managementFlags, error) {
 }
 
 func runSyncRequest(parent context.Context, args []string, prefix bool, stdout, stderr io.Writer) int {
-	// Runtime actions remain unqualified until their execution/recovery owner lands.
-	return runSyncRequestQualified(parent, args, prefix, []string{}, stdout, stderr)
+	return runSyncRequestQualified(parent, args, prefix, []string{"sync-now", "verify-all", "retry", "pause", "resume"}, stdout, stderr)
 }
 
 // qualified is supplied only by the internal composition/test harness; it is
@@ -416,8 +415,12 @@ func managementStoreError(ctx context.Context, stderr io.Writer, command string,
 		code, category, exit = "sync_request_not_found", "input_rejected", 4
 	case errors.Is(err, sqlite.ErrManagementExpired):
 		code, category, exit = "sync_request_expired", "input_rejected", 4
+	case errors.Is(err, sqlite.ErrManagementObsolete):
+		code, category, exit = "sync_request_obsolete", "input_rejected", 4
 	case errors.Is(err, sqlite.ErrManagementUnauthorized):
 		code, category, exit = "sync_request_binding_changed", "conflict", 14
+	case errors.Is(err, sqlite.ErrManagementNotRetryable):
+		code, category, exit = "sync_request_not_retryable", "conflict", 14
 	case errors.Is(err, sqlite.ErrSyncAdmissionConflict), errors.Is(err, sqlite.ErrSyncPrecondition), errors.Is(err, sqlite.ErrSyncControlHeld):
 		code, category, exit = "sync_request_conflict", "conflict", 14
 	case errors.Is(err, sqlite.ErrSyncQueueFull):

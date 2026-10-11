@@ -660,7 +660,7 @@ func assertE23T4ManagedSignedRecovery(t *testing.T, cfg *config.Config, path str
 			}
 		}()
 	}
-	cfg.Sync.Management = &config.SyncManagement{Enabled: true, Actions: []string{"sync-now"}}
+	cfg.Sync.Management = &config.SyncManagement{Enabled: true, Actions: []string{"sync-now", "retry"}}
 	e23t3SaveConfig(t, cfg, path)
 	if _, err := store.Exec(`UPDATE sync_jobs SET state='signed',retain_until_resolved=1,resolved_at=NULL,claim_owner=NULL,claim_expires_at=NULL WHERE job_id=?`, jobID); err != nil {
 		t.Fatal(err)
@@ -694,6 +694,7 @@ func assertE23T4ManagedSignedRecovery(t *testing.T, cfg *config.Config, path str
 	if !seen["publication"] || !seen["delivery"] || gitTestOutput(t, git, repo, "rev-parse", cfg.Sync.ContentRef) != target {
 		t.Fatalf("signed recovery identities:%+v", request.Jobs)
 	}
+	assertE23T5SignedRetry(t, cfg, path, store, git, repo, request, jobID, base, target)
 }
 
 func assertE23T4ManagedPeerImport(t *testing.T, cfg *config.Config, path, contentState, repo string, peerKey []byte) {
@@ -725,10 +726,28 @@ func assertE23T4ManagedPeerImport(t *testing.T, cfg *config.Config, path, conten
 	cfg.Sync.Bounds.Queue = originalQueue
 	assertPublishedNodePeerRoundTrip(t, cfg, path, contentState, repo, peerKey, "management")
 	assertPublishedNodePeerRoundTrip(t, cfg, path, contentState, repo, peerKey, "parallel")
+	cfg.Sync.Management.Actions = []string{"sync-now", "retry"}
+	// Retain earlier capacity/claim evidence while admitting three retry cohorts.
+	cfg.Sync.Bounds.Queue = 16
+	for i, phase := range []string{"admission", "claim", "preapply"} {
+		t.Run("stored-import-retry-"+phase, func(t *testing.T) {
+			t.Setenv("E23T5_IMPORT_LOSS", phase)
+			mode := "capacity-import"
+			if i == 1 {
+				mode = "management"
+			}
+			assertPublishedNodePeerRoundTrip(t, cfg, path, contentState, repo, peerKey, mode)
+		})
+	}
+	cfg.Sync.Bounds.Queue = originalQueue
 }
 
 func assertE23T4DispatchPeerImport(t *testing.T, cfg *config.Config, path string, store *sqlite.Store, target string) {
 	t.Helper()
+	if phase := os.Getenv("E23T5_IMPORT_LOSS"); phase != "" {
+		assertE23T5RetryStoredImport(t, cfg, path, store, target, phase)
+		return
+	}
 	code, value := e23t4Request(t, path, "prepare", "--group", cfg.Sync.GroupID, "--action", "sync-now")
 	if code != 0 {
 		t.Fatal(value)
@@ -790,7 +809,9 @@ exec %s "$@"
 	if code, value := e23t4Request(t, path, "submit", "--group", cfg.Sync.GroupID, "--request-id", first); code != 0 {
 		t.Fatal(value)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	// Cover the barrier, concurrent public replays and actual import within
+	// the declared worker execution budget.
+	ctx, cancel := context.WithTimeout(context.Background(), syncmanagement.ExecutionSeconds*time.Second)
 	service := &peerService{cfg: cfg, configPath: path, store: store, wake: make(chan struct{}, 1)}
 	firstDone := make(chan struct{})
 	go func() { defer close(firstDone); service.dispatchManagement(ctx) }()
@@ -898,7 +919,14 @@ exec %s "$@"
 	select {
 	case <-firstDone:
 	case <-ctx.Done():
-		t.Fatal("guarded management import did not finish")
+		diagnosticCtx, diagnosticCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer diagnosticCancel()
+		r, requestErr := store.LoadManagementRequest(diagnosticCtx, cfg.Sync.GroupID, first, time.Now())
+		jobs, jobsErr := store.LoadUnresolvedSyncJobs(diagnosticCtx, cfg.Sync.GroupID, "import")
+		for _, job := range jobs {
+			t.Logf("pending import: id=%s state=%s attempts=%d fence=%d claimed=%t", job.JobID, job.State, job.Attempts, job.Fence, job.ClaimOwner != "")
+		}
+		t.Fatalf("guarded management import did not finish: context=%v request_state=%s attempts=%d fence=%d request_error=%v jobs_error=%v", ctx.Err(), r.State, r.Attempts, r.Fence, requestErr, jobsErr)
 	}
 	exact, err := store.LoadManagementRequest(ctx, cfg.Sync.GroupID, first, time.Now())
 	if err != nil || exact.State != "finished" || exact.Attempts != 1 || exact.Fence != running.Fence || exact.Outcome == nil || exact.Outcome.Status != "already_settled" || exact.Outcome.TargetCommit == nil || *exact.Outcome.TargetCommit != target || len(exact.Jobs) != 1 {
@@ -1060,7 +1088,11 @@ func TestE23T4CapabilitiesPreservesPreManagementState(t *testing.T) {
 				}
 				e23t3ValidateCarrier(t, envelope)
 				result := envelope["result"].(map[string]any)
-				if result["executor"] != "unknown" || len(result["available_actions"].([]any)) != 0 || len(result["side_effects"].([]any)) != 0 || result["enabled"] != (mode == "enabled") {
+				actions := 0
+				if mode == "enabled" {
+					actions = 5
+				}
+				if result["executor"] != "unknown" || len(result["available_actions"].([]any)) != actions || len(result["side_effects"].([]any)) != 0 || result["enabled"] != (mode == "enabled") {
 					t.Fatalf("pre-management capability:%v", result)
 				}
 			}

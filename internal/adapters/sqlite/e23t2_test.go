@@ -355,7 +355,9 @@ func TestE23T2AssociationReservationImmutableTargetsAndRetention(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := claimManagement(t, s, acceptManagement(t, s, prepareManagement(t, s, 1, managementBinding("sync-now")), 2))
-	job, _, err := s.AdmitSyncJob(ctx, syncJobFixture("managed-job", "managed-key", `{}`))
+	importRecord := validE21T4Import(t, false)
+	importRaw, _ := json.Marshal(importRecord)
+	job, _, err := s.AdmitSyncJob(ctx, SyncJobInput{JobID: importRecord.ImportID, GroupID: importRecord.GroupID, Kind: "import", LogicalKey: importRecord.PlanID, InitialState: "validated", PayloadJSON: string(importRaw), ConfigRevision: "cfg-1", QueueLimit: 1000, Now: syncT0})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -396,7 +398,7 @@ func TestE23T2AssociationReservationImmutableTargetsAndRetention(t *testing.T) {
 	if n, err := s.PruneManagementRequests(ctx, managementT0.Add(400*24*time.Hour), 0); err != nil || n != 0 {
 		t.Fatalf("unresolved job/retry pruned parent: %d %v", n, err)
 	}
-	if _, err := s.Exec(`UPDATE sync_jobs SET state='published',retain_until_resolved=0,resolved_at=? WHERE job_id=?`, syncT0, job.JobID); err != nil {
+	if _, err := s.Exec(`UPDATE sync_jobs SET state='applied',retain_until_resolved=0,resolved_at=? WHERE job_id=?`, syncT0, job.JobID); err != nil {
 		t.Fatal(err)
 	}
 	cut := PruneCutoffs{CompletedReceipts: "2028-01-01T00:00:00Z"}
@@ -498,7 +500,8 @@ func TestE23T2UpgradePreservesJobsAndOldBinaryRefuses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Migrate(t.TempDir()); err != nil {
+	upgradeBackups := filepath.Join(t.TempDir(), "upgrade-backups")
+	if err := s.Migrate(upgradeBackups); err != nil {
 		t.Fatal(err)
 	}
 	after, err := loadSyncJob(ctx, s.DB, before.JobID)
@@ -524,6 +527,38 @@ func TestE23T2UpgradePreservesJobsAndOldBinaryRefuses(t *testing.T) {
 	var tooNew *ErrSchemaTooNewType
 	if err := old.Migrate(t.TempDir()); !errors.As(err, &tooNew) {
 		t.Fatalf("old schema range did not fail closed: %v", err)
+	}
+	var version int
+	if err := old.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 29 {
+		t.Fatalf("old reader downgraded upgraded state: %d %v", version, err)
+	}
+	backups, err := filepath.Glob(filepath.Join(upgradeBackups, "agent-dispatch-v27-to-v29-*.backup"))
+	if err != nil || len(backups) != 1 {
+		t.Fatalf("compatible pre-upgrade backup: %v %v", backups, err)
+	}
+	raw, err := os.ReadFile(backups[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	restoredPath := filepath.Join(t.TempDir(), "compatible-restored.db")
+	if err := os.WriteFile(restoredPath, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := Open(restoredPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restored.Close()
+	restored.migrations = Migrations[:27]
+	if err := restored.Migrate(t.TempDir()); err != nil {
+		t.Fatalf("compatible rollback refused: %v", err)
+	}
+	restoredJob, err := loadSyncJob(ctx, restored.DB, before.JobID)
+	if err != nil || restoredJob != before {
+		t.Fatalf("rollback rewrote historical job: %+v %v", restoredJob, err)
+	}
+	if err := restored.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != 27 {
+		t.Fatalf("restored compatible schema: %d %v", version, err)
 	}
 }
 
@@ -1017,7 +1052,7 @@ func TestE23T2AdmissionBoundsAndRetryAuthorityRefuseWithoutWrites(t *testing.T) 
 	}
 	acceptManagement(t, s, r, 2)
 	retry.StateIncarnationID = "epoch-other"
-	if _, _, err := s.PrepareManagementRequest(ctx, managementHandle(2), retry, managementT0); !errors.Is(err, ErrManagementUnauthorized) {
+	if _, _, err := s.PrepareManagementRequest(ctx, managementHandle(2), retry, managementT0); !errors.Is(err, ErrManagementObsolete) {
 		t.Fatalf("stale predecessor authorized retry: %v", err)
 	}
 	var requests, acceptances int

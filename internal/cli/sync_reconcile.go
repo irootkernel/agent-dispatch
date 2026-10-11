@@ -227,6 +227,11 @@ func reconcileConfiguredSync(ctx context.Context, cfg *config.Config, store *sql
 	if handled, result := recoverPendingImportContext(ctx, stdout, stderr, cfg, s, revision, store, client, remoteHistory, remoteMembership, target); handled {
 		return result
 	}
+	if managementRetry(ctx) {
+		// A retry never falls through to fresh import admission at the newest
+		// remote head. Only its recorded recovery obligations may run.
+		return reconcileEnvelope(stdout, "deferred", "recorded_obligations_only", map[string]any{})
+	}
 	relation, err := client.Compare(ctx, from, target)
 	if err != nil {
 		return syncMembershipError(stderr, command, err, 30)
@@ -603,6 +608,9 @@ func recoverPendingImportContext(ctx context.Context, stdout, stderr io.Writer, 
 	}
 	strongerHold := control.State == "blocked" && (control.Reason == "conflict" || control.Reason == "trust_failure" || control.Reason == "recovery_required")
 	for _, job := range jobs {
+		if !managementRetryAllowsJob(ctx, job) {
+			continue
+		}
 		if job.State == "deferred" || job.State == "blocked" || job.State == "requested" || job.State == "fetched" {
 			continue
 		}
@@ -634,6 +642,7 @@ func recoverPendingImportContext(ctx context.Context, stdout, stderr io.Writer, 
 			}
 		}
 		planMatchesRemote := record.MembershipRevision == membership && record.TargetCommit == remoteTarget
+		resumeValidated := false
 		if job.State == "validated" {
 			now := time.Now().UTC().Format(time.RFC3339Nano)
 			recoveryFence := job.Fence
@@ -646,26 +655,40 @@ func recoverPendingImportContext(ctx context.Context, stdout, stderr io.Writer, 
 					if err := store.ResolveObsoleteImport(ctx, job.JobID, job.Fence, journal, now); err != nil {
 						return true, syncStoreError(stderr, "sync reconcile", err)
 					}
+					continue
 				}
-				continue
-			}
-			noEffect, evidence := validatedImportNoEffectContext(ctx, client, cfg, s, record)
-			journal := sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: recoveryFence, Phase: "claim_recovery", Outcome: map[bool]string{true: "effect_not_started", false: "effect_unknown"}[noEffect], EvidenceJSON: mustJSON(evidence), RecordedAt: now}
-			if noEffect && !planMatchesRemote {
-				if err := store.ResolveObsoleteImport(ctx, job.JobID, job.Fence, journal, now); err != nil {
+				if !managementRetry(ctx) || record.ControllerOnly {
+					continue
+				}
+				noEffect, _ := validatedImportNoEffectContext(ctx, client, cfg, s, record)
+				if !noEffect {
+					return true, pendingImportPartialEffectContext(ctx, stdout, stderr, store, s.GroupID, revision, job, "the stored pre-apply plan no longer matches its no-effect fence")
+				}
+				resumeValidated = true
+			} else {
+				noEffect, evidence := validatedImportNoEffectContext(ctx, client, cfg, s, record)
+				journal := sqlite.SyncJournalEntry{JournalID: randomSyncID("import-journal"), JobID: job.JobID, Fence: recoveryFence, Phase: "claim_recovery", Outcome: map[bool]string{true: "effect_not_started", false: "effect_unknown"}[noEffect], EvidenceJSON: mustJSON(evidence), RecordedAt: now}
+				if noEffect && !planMatchesRemote {
+					if err := store.ResolveObsoleteImport(ctx, job.JobID, job.Fence, journal, now); err != nil {
+						return true, syncStoreError(stderr, "sync reconcile", err)
+					}
+					continue
+				}
+				if err := store.ReconcileExpiredSyncClaim(ctx, job.JobID, job.Fence, journal.Outcome, journal, now); err != nil {
 					return true, syncStoreError(stderr, "sync reconcile", err)
 				}
-				continue
+				if !noEffect {
+					job.State = "uncertain"
+					job.ClaimOwner = ""
+					return true, pendingImportPartialEffectContext(ctx, stdout, stderr, store, s.GroupID, revision, job, "an expired pre-apply claim no longer matches its no-effect fence")
+				}
+				if !managementRetry(ctx) || record.ControllerOnly {
+					continue
+				}
+				job.ClaimOwner = ""
+				job.ClaimExpiresAt = ""
+				resumeValidated = true
 			}
-			if err := store.ReconcileExpiredSyncClaim(ctx, job.JobID, job.Fence, journal.Outcome, journal, now); err != nil {
-				return true, syncStoreError(stderr, "sync reconcile", err)
-			}
-			if noEffect {
-				continue
-			}
-			job.State = "uncertain"
-			job.ClaimOwner = ""
-			return true, pendingImportPartialEffectContext(ctx, stdout, stderr, store, s.GroupID, revision, job, "an expired pre-apply claim no longer matches its no-effect fence")
 		}
 		administratorCheckpointRecovery := strongerHold && contentHeadAddsCheckpointContext(ctx, client, remoteTarget) && verifyContentHeadContext(ctx, client, history, cfg, s, remoteTarget) == nil
 		checkpointCoversPlan := false
@@ -831,7 +854,15 @@ func recoverPendingImportContext(ctx context.Context, stdout, stderr io.Writer, 
 					return true, syncStoreError(stderr, "sync reconcile", err)
 				}
 			}
-			continue
+			if !managementRetry(ctx) || !planMatchesRemote {
+				continue
+			}
+			// A retry resumes this immutable plan after durable no-effect
+			// recovery; it never falls through to fresh import admission.
+			job.State = "validated"
+			job.ClaimOwner = ""
+			job.ClaimExpiresAt = ""
+			resumeValidated = true
 		}
 		if job.State == "uncertain" {
 			now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -902,6 +933,18 @@ func recoverPendingImportContext(ctx context.Context, stdout, stderr io.Writer, 
 				return true, finishImportUncertainContext(ctx, stdout, stderr, store, claimed, owner, errors.New("recovery target bytes do not match the stored import plan"))
 			}
 			writes[effect.Path] = raw
+		}
+		if resumeValidated {
+			// Recheck the original pre-apply fences after claiming and reading
+			// target bytes, immediately before durable effect admission.
+			noEffect, _ := validatedImportNoEffectContext(ctx, client, cfg, s, record)
+			remoteNow, remoteErr := client.RemoteRef(ctx, s.RemoteName, s.ContentRef, s.RemoteRepositoryDigest)
+			membershipNow, membershipErr := client.RemoteRef(ctx, s.RemoteName, s.MembershipRef, s.RemoteRepositoryDigest)
+			observationNow, observationErr := store.ObservationRevision(ctx, s.Resource)
+			idleNow, idleErr := store.ResourceWritersIdle(ctx, s.Resource)
+			if !noEffect || remoteErr != nil || membershipErr != nil || observationErr != nil || idleErr != nil || !idleNow || remoteNow != record.TargetCommit || membershipNow != record.MembershipRevision || observationNow != record.ResourceObservationRevision || !config.SyncAcknowledgementCurrent(cfg, localSyncIncarnation(cfg)) {
+				return true, finishImportDispositionContext(ctx, stdout, stderr, store, claimed, owner, "deferred", "deferred", "a stored pre-apply fence changed", "git_unstable")
+			}
 		}
 		started := time.Now().UTC().Format(time.RFC3339Nano)
 		if err := managementEffectBoundary(ctx); err != nil {

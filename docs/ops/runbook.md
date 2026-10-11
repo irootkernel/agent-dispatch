@@ -217,6 +217,27 @@ command did not resolve secrets, so verify live authentication separately.
 
 ### 3c. Sync State and Trust Maintenance
 
+Local management is disabled by default. Enable only the reviewed actions in
+`sync.management` and inspect `sync request capabilities --group <group>`.
+Prepare an action with `sync request prepare --group <group> --action sync-now`,
+retain its returned handle, then submit that exact handle with
+`sync request submit --group <group> --request-id <request-id>`.
+`sync request show --group <group> --request-id <request-id>` reads only that
+request's evidence. A successful submission acknowledges durable acceptance;
+inspect the action outcome separately. A stopped executor leaves accepted work
+retained and does not install or start a service.
+
+For an explicit retry, prepare `--action retry --target-request-id <request-id>`.
+Only recorded eligible obligations run, with the same job identities, pinned
+targets and attempt budgets. Already-settled work returns `already_settled`
+without repeating effects. No eligible obligation returns
+`sync_request_not_retryable`; resolve pre-signature, safety, stale-binding or
+exhausted work through its existing operator procedure. A mixed result can be
+`incomplete` while held obligations remain visible. Expired claims trigger
+evidence inspection; elapsed time alone does not prove that an effect failed.
+Local pause/resume requests commit intent atomically and report quiescence
+separately; they cannot clear safety or membership holds.
+
 - **Upgrade:** Stop the managed service, back up state and configuration, and
   uninstall the old exact definition with the old binary and config path.
   Install the reviewed binary, inspect its rendered definition, and install it.
@@ -224,12 +245,16 @@ command did not resolve secrets, so verify live authentication separately.
   restart retains the state incarnation and all pending obligations.
 - **Backup and restore:** Stop the service and participating writers before
   taking a consistent SQLite and repository backup. Preserve the old copy for
-  diagnosis. A destructive reset or restore must use a new configured local
+  diagnosis. Keep management disabled during destructive recovery. A destructive
+  reset or restore must use a new configured local
   `state_incarnation_id`, a fresh cooperative-import acknowledgement, and a
   reviewed `sync membership plan --change incarnation_registration --instance <local-id>`
   followed by `sync membership apply` with the exact predecessor.
   Do not start the restored node as its old incarnation or copy the other
   node's acknowledgement. Reconcile and verify both nodes after registration.
+  Restored prepared management handles from the retired incarnation are obsolete
+  and cannot execute. Accepted handles remain available for exact lookup; an
+  absent handle is never recreated by submission.
 - **Publisher-key rotation:** Stop the service and pause new protected work.
   Generate the new key outside the service. Update the local publisher key
   and state incarnation in config, then

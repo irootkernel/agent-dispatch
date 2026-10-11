@@ -331,6 +331,9 @@ func recoverConfirmedPublicationContext(ctx context.Context, stdout, stderr io.W
 		return true, syncRetryableError(stderr, "sync publish", fmt.Errorf("publication recovery could not measure the approved remote content ref: %w", remoteErr))
 	}
 	for _, job := range jobs {
+		if !managementRetryAllowsJob(ctx, job) {
+			continue
+		}
 		journals, loadErr := store.LoadSyncJournals(ctx, job.JobID)
 		if loadErr != nil {
 			return true, syncStoreError(stderr, "sync publish", loadErr)

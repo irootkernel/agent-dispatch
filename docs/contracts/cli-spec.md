@@ -245,8 +245,8 @@ Global overrides and phase-local help flags are excluded; `help sync` lists
 this family without opening state.
 
 Capabilities reports configured policy separately from qualified actions. The
-current development stage exposes no qualified action. New preparation and
-admission refuse; isolated internal fixtures prove their bounded transactions.
+development runtime supports the five configured management actions through
+shared execution and recovery. Disabled management exposes no available action.
 Exact `show` opens existing state read-only without migration, expiry writes,
 pruning or service/remote inspection. An accepted duplicate `submit` returns
 its exact retained evidence before current policy or capacity refusal. A
@@ -551,6 +551,12 @@ governs resolved publication, delivery, import, and verification jobs and
 journals; it defaults to 180 days and may be narrowed explicitly. Membership
 and checkpoint evidence lasts for the life of the group, while unresolved sync
 obligations are never age-pruned.
+Management request leaves have a separate minimum 180-day terminal horizon,
+extended by a longer configured completed-receipt horizon; `--before` cannot
+shorten it. Unsubmitted drafts prune only after 24 hours past expiry. The plan
+reports `management_drafts` and `management_terminal` cutoffs and a
+`management_requests` count when nonzero. One pass removes at most 256 eligible
+leaves. Associated job evidence remains protected until a later prune pass.
 Vacuum refuses while active attempts exist. Backup writes a verified owner-only snapshot of the durable store through the built-in `VACUUM INTO` path (runbook §8) and refuses to overwrite an existing file.
 
 ## 12. JSON Envelope

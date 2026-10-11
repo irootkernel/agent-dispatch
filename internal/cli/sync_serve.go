@@ -35,23 +35,24 @@ type peerRequest struct {
 }
 
 type peerService struct {
-	cfg                  *config.Config
-	configPath           string
-	store                *sqlite.Store
-	members              func(context.Context) (string, [2]syncrecords.ActiveMember, error)
-	reconcile            func(context.Context) (bool, string)
-	reconcileShutdownErr error // read only after the inbox worker has stopped
-	wake                 chan struct{}
-	slots                chan struct{}
-	rateMu               sync.Mutex
-	rate                 map[string]peerRate
-	stderr               io.Writer
-	managed              bool
-	warnMu               sync.Mutex
-	warnedAt             map[string]time.Time
-	memberMu             sync.Mutex
-	memberHead           string
-	memberPair           [2]syncrecords.ActiveMember
+	cfg                     *config.Config
+	configPath              string
+	store                   *sqlite.Store
+	members                 func(context.Context) (string, [2]syncrecords.ActiveMember, error)
+	reconcile               func(context.Context) (bool, string)
+	reconcileShutdownErr    error  // read only after the inbox worker has stopped
+	managementRecoveryAfter string // owned by the inbox worker
+	wake                    chan struct{}
+	slots                   chan struct{}
+	rateMu                  sync.Mutex
+	rate                    map[string]peerRate
+	stderr                  io.Writer
+	managed                 bool
+	warnMu                  sync.Mutex
+	warnedAt                map[string]time.Time
+	memberMu                sync.Mutex
+	memberHead              string
+	memberPair              [2]syncrecords.ActiveMember
 }
 
 type peerRate struct {

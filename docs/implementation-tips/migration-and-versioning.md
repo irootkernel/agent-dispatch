@@ -40,8 +40,10 @@ unchanged and have no invented request ancestry. A schema-27 binary refuses the
 upgraded database. Stop the service and restore its compatible pre-migration
 state/configuration backup to roll back; do not open schema 29 with the old
 binary. Supported destructive identity recovery keeps management disabled and
-establishes a new state incarnation before new effects. These storage primitives
-do not enable the management command family; later E23 tasks own that admission.
+establishes a new state incarnation before new effects. Management admission
+uses the current incarnation and refuses restored obsolete drafts; retained
+accepted handles remain inspectable. Configured management actions are now
+connected to shared execution and recovery, with management disabled by default.
 Migration 29 adds one bound worker-evidence row per group. It preserves the
 installed schema 28 migration and request/job history. Stale evidence yields
 unknown availability; an explicit stopped record follows worker termination.

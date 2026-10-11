@@ -35,6 +35,16 @@ func (s *Store) ClaimManagementRequest(ctx context.Context, group, id, owner str
 	if r.Attempts >= syncmanagement.AttemptLimit {
 		return r, ErrSyncQueueFull
 	}
+	// Retry branches share the original request's execution budget. Counting
+	// retained attempts in its FK-protected family prevents repeated retries of
+	// an early predecessor from manufacturing another twenty executions.
+	lineageAttempts, err := managementLineageAttempts(ctx, tx, r.RequestID)
+	if err != nil {
+		return r, err
+	}
+	if lineageAttempts >= syncmanagement.AttemptLimit {
+		return r, ErrSyncQueueFull
+	}
 	var state, membership string
 	if err := tx.QueryRowContext(ctx, `SELECT state,membership_mode FROM sync_controls WHERE group_id=?`, group).Scan(&state, &membership); err != nil {
 		return r, err
@@ -188,7 +198,7 @@ func (s *Store) NextQueuedManagementRequest(ctx context.Context, group string) (
 	ctx, cancel := context.WithTimeout(ctx, syncmanagement.CallSeconds*time.Second)
 	defer cancel()
 	var id string
-	err := s.QueryRowContext(ctx, `SELECT request_id FROM sync_management_requests WHERE group_id=? AND state='queued' ORDER BY accepted_at,request_id LIMIT 1`, group).Scan(&id)
+	err := s.QueryRowContext(ctx, `SELECT request_id FROM sync_management_requests WHERE group_id=? AND state='queued' ORDER BY attempts,accepted_at,request_id LIMIT 1`, group).Scan(&id)
 	if err == sql.ErrNoRows {
 		return "", nil
 	}

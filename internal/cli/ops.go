@@ -180,6 +180,7 @@ func runMaintenancePrune(command string, args []string, stdout, stderr io.Writer
 	if err != nil {
 		return planErr(stderr, command, "config_invalid", "configuration", err.Error(), 3)
 	}
+	managementRetention := max(policy.CompletedReceipts, 180*24*time.Hour)
 	if before := flags.val("--before"); before != "" {
 		d, err := config.ParseDuration(before)
 		if err != nil {
@@ -195,6 +196,8 @@ func runMaintenancePrune(command string, args []string, stdout, stderr io.Writer
 	ctx := requestCtx()
 	now := time.Now().UTC()
 	cutoffs := sqlite.PruneCutoffs{
+		ManagementDrafts:   now.Add(-24 * time.Hour).Format("2006-01-02T15:04:05.000000000Z"),
+		ManagementTerminal: now.Add(-managementRetention).Format("2006-01-02T15:04:05.000000000Z"),
 		Observations:       dispatch.Timestamp(now.Add(-policy.Observations)),
 		Attempts:           dispatch.Timestamp(now.Add(-policy.Attempts)),
 		CompletedReceipts:  dispatch.Timestamp(now.Add(-policy.CompletedReceipts)),

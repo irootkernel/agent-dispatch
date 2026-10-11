@@ -29,6 +29,8 @@ func (s *peerService) inboxLoop(ctx context.Context) {
 	wake := true // startup uncertainty requires a configured-ref inspection
 	for {
 		s.recoverScheduled(ctx, wake)
+		s.recoverManagement(ctx)
+		s.pruneManagement(ctx)
 		s.dispatchManagement(ctx)
 		select {
 		case <-ctx.Done():

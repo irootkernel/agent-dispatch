@@ -15,6 +15,8 @@ var (
 	ErrManagementNotFound     = errors.New("management handle not found")
 	ErrManagementExpired      = errors.New("management draft expired")
 	ErrManagementUnauthorized = errors.New("management policy or binding is not current")
+	ErrManagementNotRetryable = errors.New("management request has no recoverable obligations")
+	ErrManagementObsolete     = errors.New("management request incarnation is obsolete")
 )
 
 type ManagementRequest struct {
@@ -260,12 +262,8 @@ func (s *Store) PrepareManagementRequest(ctx context.Context, id string, b syncm
 		return r, false, err
 	}
 	if b.TargetRequestID != nil {
-		prev, err := loadManagement(ctx, tx, b.GroupID, *b.TargetRequestID)
-		if err != nil {
+		if _, _, err := retryObligations(ctx, tx, b, now); err != nil {
 			return r, false, err
-		}
-		if prev.AcceptedAt == nil || !sameManagementAuthority(prev.Binding, b) {
-			return r, false, ErrManagementUnauthorized
 		}
 	}
 	class := syncmanagement.IsControl(b.Action)
@@ -333,6 +331,14 @@ func (s *Store) AcceptManagementRequest(ctx context.Context, in ManagementAdmiss
 	if !in.Authorized || !sameManagementAuthority(r.Binding, in.CurrentBinding) {
 		return r, false, ErrManagementUnauthorized
 	}
+	var predecessor ManagementRequest
+	var obligations []ManagementObligation
+	if r.Action == "retry" {
+		predecessor, obligations, err = retryObligations(ctx, tx, r.Binding, now)
+		if err != nil {
+			return r, false, err
+		}
+	}
 	if in.QueueLimit < syncmanagement.DataQueueMin || in.QueueLimit > syncmanagement.DataQueueMax {
 		return r, false, fmt.Errorf("management queue limit must be 2..1000")
 	}
@@ -353,6 +359,24 @@ func (s *Store) AcceptManagementRequest(ctx context.Context, in ManagementAdmiss
 	state := "queued"
 	var outcomeJSON any
 	var resolved any
+	if r.Action == "retry" {
+		settled := len(obligations) > 0
+		for _, j := range obligations {
+			settled = settled && j.Settled
+		}
+		if settled {
+			o := syncmanagement.Outcome{Status: "already_settled", Reason: "predecessor obligations are durably settled"}
+			if len(obligations) == 1 {
+				o.TargetCommit = obligations[0].TargetCommit
+			}
+			outcomeJSON, err = managementOutcomeJSON(r.Action, &o)
+			if err != nil {
+				return r, false, err
+			}
+			state = "finished"
+			resolved = at
+		}
+	}
 	if class {
 		target := "paused"
 		if r.Action == "resume" {
@@ -387,9 +411,28 @@ func (s *Store) AcceptManagementRequest(ctx context.Context, in ManagementAdmiss
 	if n, _ := res.RowsAffected(); n != 1 {
 		return r, false, ErrSyncPrecondition
 	}
+	if r.Action == "retry" {
+		// Every successor carries the entire already-flattened evidence set,
+		// including held obligations. No caller can add a job or change a target.
+		for _, j := range obligations {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO sync_management_jobs(request_id,job_id,kind,target_commit,association_reason) VALUES(?,?,?,?,'retry_obligation')`, r.RequestID, j.JobID, j.Kind, j.TargetCommit); err != nil {
+				return r, false, err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE sync_management_requests SET attempts=? WHERE request_id=?`, predecessor.Attempts, r.RequestID); err != nil {
+			return r, false, err
+		}
+	}
 	r, err = loadManagement(ctx, tx, r.GroupID, r.RequestID)
 	if err != nil {
 		return r, false, err
+	}
+	if r.Action == "retry" {
+		for _, j := range obligations {
+			association := j.ManagementJob
+			association.AssociationReason = "retry_obligation"
+			r.Jobs = append(r.Jobs, association)
+		}
 	}
 	return r, false, tx.Commit()
 }

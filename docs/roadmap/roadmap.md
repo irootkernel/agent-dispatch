@@ -5942,9 +5942,9 @@ In Progress.
 Formal whole-Epic audit reopened T5 to correct recovery of a request blocked
 before job admission during operator pause. The correction revalidates current
 authority and retains the original identity and attempt budget. Focused race
-tests and both native ARM full gates pass. Corrected-artifact paired qualification
-and whole-Epic confirmation remain required before further closeout; T6/T7 retain
-their historical completion records.
+tests and both native ARM full gates pass. Corrected-artifact native ARM paired
+qualification now passes, including both actions recovering the original paused handles. Whole-Epic confirmation remains
+required before further closeout; T6/T7 retain their historical completion records.
 
 ### Objective
 
@@ -6076,6 +6076,13 @@ exact-artifact and Plugin handoff qualification remain E23-T7's gates.
 
 **Status:** Completed
 
+Formal whole-Epic audit required T7's exact-provider handoff to follow the T5
+recovery correction. Both corrected ARM artifacts now pass the native public
+matrix, and the handoff identifies their source and full-gate documentation
+projection. The owned refresh is locally verified under delegated correction
+acceptance. Whole-Epic confirmation and the new reviewed evidence projection
+remain final closeout gates; the previous package remains immutable.
+
 ### Objective
 
 Finish G19 on one exact provider revision and provide Plugin TASK-028 with
@@ -6112,11 +6119,13 @@ artifacts are required; no Plugin implementation is required.
 
 The [exact-provider handoff](../integrations/e23t7-management-handoff.md)
 identifies the committed product source, reproducible artifacts and qualified
-native public interfaces. Both native ARM full verification gates and the
-paired management/service matrix are complete. [D-031](../specs/decision-log.md#d-031---2026-10-12---arm-scoped-e23-completion-amd64-qualification-deferred)
+native public interfaces. Both native ARM full verification gates cover the
+corrected code and test inputs, with the documented lifecycle/manifest projection. The exact corrected
+artifacts pass the refreshed native paired management/service matrix. [D-031](../specs/decision-log.md#d-031---2026-10-12---arm-scoped-e23-completion-amd64-qualification-deferred)
 authorizes ARM-scoped E23 completion, with amd64 explicitly unverified in
 [DF-010](../deferred-feedback/010-e23-amd64-qualification.md). T7 is
-Completed with the required Independent Review and verified handoff promotion.
+Completed under its original member acceptance. The corrected handoff awaits
+whole-Epic confirmation and its eligible final evidence promotion.
 Plugin TASK-028 receives ARM qualification under separate admission authority;
 TASK-029 cannot start before its scope amendment is approved. The three-platform
 release gate and Plugin EPIC-009 remain independent unfinished obligations.

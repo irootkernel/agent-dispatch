@@ -4,9 +4,10 @@ This handoff identifies the v0.3.0 qualification candidate for Plugin TASK-028.
 It grants no Plugin admission, production activation, installation or publication.
 [D-031](../specs/decision-log.md#d-031---2026-10-12---arm-scoped-e23-completion-amd64-qualification-deferred)
 permits ARM-scoped E23 completion using native Darwin arm64/Linux arm64 full
-gates and paired public CLI evidence. Both native qualifications are complete
-on the exact product source and binaries below. Their temporary services and
-credentials have been removed. The required member and whole-Epic reviews
+gates and paired public CLI evidence. Both native paired qualifications are complete
+on the product source and binaries below. The native full gates cover the same
+code and test inputs with the documentation projection described below.
+Their temporary services and credentials have been removed. The required member and whole-Epic reviews
 remain completion gates; admission requires the committed handoff package.
 
 Linux amd64 is reproducibly built but unverified. Its unfinished full gate is
@@ -19,7 +20,7 @@ completion does not close that requirement or qualify native amd64 Plugin use.
 | Field | Required value |
 |---|---|
 | Product version | `v0.3.0` |
-| Product source commit | `6786088bc7b6540b34f25c9a398e644dae6a4547` |
+| Product source commit | `f263e096c5b01fe2a83c7f95c66410035030a752` |
 | Management contract | `sha256:77dba7fac82cf1e627ad29ab89057c18d4d5c2c380251112579e551d1122cf39` |
 | Base-sync contract | `sha256:30cf47b1bd854a0271aa9df3e7b37f0cc14cdd86d3f06a65a2cb787c6741131b` |
 | Toolchain | Go `1.27.1` |
@@ -34,9 +35,9 @@ this handoff and the exact binary SHA.
 
 | Artifact | SHA-256 | Qualification |
 |---|---|---|
-| `agent-dispatch-v0.3.0-darwin-arm64` | `0d51e0afce19ae880bfb33211c5d06b81370f3ca9b1c19ce35e254a74016c9f7` | Native qualified |
-| `agent-dispatch-v0.3.0-linux-arm64` | `d2ea2388b6474c60dec541d4a7d9ac974b39df28f710894a853b844e5dbc56e4` | Native qualified |
-| `agent-dispatch-v0.3.0-linux-amd64` | `1bc58fc7a9cca839c5e7ead10365ee2286a2e446e00be52b0ae5fd1472aa6ebe` | Built only; unverified, DF-010 |
+| `agent-dispatch-v0.3.0-darwin-arm64` | `5c8ece46ee7f27d8d7fc1acb3c5fb9c0a50675fefcb1150de15edd2e827f787c` | Native qualified |
+| `agent-dispatch-v0.3.0-linux-arm64` | `47e1e7e1b9d2fbdb8397230604a85b93c6893ef88209eef9a98d278a7e1b99e9` | Native qualified |
+| `agent-dispatch-v0.3.0-linux-amd64` | `fc6c676063357a70058f1b1227d44e0e0dde6f4ba1fef2989317a950844f11bd` | Built only; unverified, DF-010 |
 
 Two builds on native Darwin arm64 and two on native Linux arm64 produced this
 same three-platform checksum list. Each used the exact Git archive, `make
@@ -58,7 +59,14 @@ Opaque identities, timestamps and machine paths are removed from that
 projection. It is evidence of selected native fields, not a complete wire
 fixture or a request receipt. Full carriers and identity equalities were
 inspected separately during qualification. Admission requires the committed
-package; review and verified promotion precede the member completion commit.
+package; review and verified promotion precede final Epic closeout. The corrected
+provider requires checksum target
+`sha256:5df11b40f04553590769e1348d1191a9820ba0879841242fa7e046a3cd022eda`.
+The earlier committed package with checksum target
+`sha256:47a6683dd5b826f30f03d7a2d75f5dc5367ff568ac3124f7707d5b406fe84d90`
+is historical evidence for the earlier source and cannot admit this corrected
+provider. Promotion is a reviewed commit-boundary projection; this handoff
+does not claim that an uncommitted package is available to the consumer.
 
 ## Public admission checks
 
@@ -102,30 +110,43 @@ output into a normative fixture or widen a consumer pin.
 The paired run used native Darwin arm64 and native Linux arm64, the binaries
 above, disposable signed Git repositories and SQLite state, strict SSH host
 verification, private HTTPS peer routes and native launchd/systemd user services.
-The public CLI created signed membership and an initial administrator checkpoint.
-No Plugin implementation or direct fixture database mutation supplied the run.
+The run reused private signed membership and an administrator checkpoint
+previously created through the public CLI. The corrected binaries supplied the
+new management, recovery and verification results. No Plugin implementation,
+new publication, signing operation or direct fixture database mutation supplied
+this run.
 
 | Public behavior | Qualified result |
 |---|---|
 | Capabilities and service availability | Five enabled actions; matching loaded native definitions, accepting local sockets and available executors were inspected separately. |
 | `sync-now` | A request accepted without an executor survived startup and finished `no_op` at the measured configured target. No new publication or signing was requested. |
 | `verify-all` | The native managed executor finished a request with its exact verification job and target; ordinary `sync verify` returned fresh, clean two-node `complete` results in both directions. |
-| Local `pause` and `resume` | Atomic control results returned `intent_committed`; the paused pair stayed incomplete and the resumed pair became complete. Quiescence remained `unknown`, with no claim that pause proved an idle worker. |
+| Local `pause` and `resume` | Atomic control results returned `intent_committed`; the paused pair stayed incomplete and the resumed pair became complete. On both native nodes, `sync-now` and `verify-all` dispatched while paused became blocked with zero jobs and attempts; resume completed the original handles with unchanged bindings, acceptance and budgets. Reconciliation finished `no_op` with no job; verification finished `complete` with one job and one attempt. Quiescence remained `unknown`. |
 | `retry` | A settled predecessor retained the same verification job, target and job-attempt count and returned `already_settled`. Native eligible delivery replay was not exercised; T5/T6 deterministic cases cover that branch. |
 | Service interruption | A stopped executor retained a queued request with zero attempts. Native restart finished that same handle and preserved its acceptance; resubmission added no effect. |
 | Lost caller response | Closing the submitter's output reader caused SIGPIPE after durable acceptance. Exact lookup retained the queued handle; native restart completed one attempt and one verification job, and duplicate submission had no effect. |
 | Exact historical lookup | An older request kept its original job and verification identity after newer successful verifications. |
 | Uninstall | Stop, disable and state-preserving uninstall removed the matching definitions. Accepted request/job evidence remained available afterward. |
 
-All 47 captured management carriers validated against the frozen envelope
+All 173 captured management carriers validated against the frozen envelope
 and result schemas. Decoded public output was inspected for fixture secrets.
-Temporary service definitions, private peer routes, bridges, transport agents,
-owned credential files and the added SSH authorization/host-key lines were
-removed. Existing routes, SSH file contents and agent keys were preserved.
+Temporary service definitions, private peer routes, bridges, owned peer
+credential files, the temporary Mac binary copy and the added Linux SSH
+authorization/host-key lines were removed. No new SSH agent was started.
+Existing routes, SSH file contents and agent keys were preserved.
 
-Native Darwin arm64 and Linux arm64 passed `make verify` on the exact archived
-source. Linux amd64 emulation has not yet passed the complete gate. The first
-attempt failed optional Watchman startup; the next reached the package's
+Native Darwin arm64 and Linux arm64 passed default `make verify` on the fixed
+source projection. Every code, test, build and contract input matches the product
+source above. Its subsequent commit changed only the planned roadmap completion
+note and generated documentation manifest; focused documentation checks passed.
+The handoff refresh changes canonical qualification information and its generated
+manifest, with the same product inputs. The full gate was not rerun on these later
+documentation bytes.
+
+Linux amd64 has no new execution result for the corrected source. Earlier
+emulation results belong to source
+`6786088bc7b6540b34f25c9a398e644dae6a4547` and cannot qualify the corrected
+binary. The first attempt failed optional Watchman startup; the next reached the package's
 30-minute unit-test limit. Container-local source/cache storage allowed the
 unit suite to pass, but the race suite reached the same limit. The final run
 with two CPUs and `GOMAXPROCS=2` passed the unit suite in 1563.124 seconds and

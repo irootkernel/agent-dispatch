@@ -33,7 +33,9 @@ The [exact-provider handoff](integrations/e23t7-management-handoff.md) identifie
 the current qualification artifacts, public admission checks and remaining gates.
 [D-031](specs/decision-log.md#d-031---2026-10-12---arm-scoped-e23-completion-amd64-qualification-deferred)
 permits ARM-scoped E23 completion; [DF-010](deferred-feedback/010-e23-amd64-qualification.md)
-retains unverified amd64 before a future three-platform release.
+records native amd64 full-gate qualification for the selected source and artifact.
+Future release inputs require applicable requalification; native paired management
+and Plugin admission remain ARM-only.
 The published Core/inspection-Plugin
 v0.2.0 pair is pinned in that contract. Core E23 precedes Plugin EPIC-008. The latter
 remains Deferred in its own roadmap until provider qualification and a

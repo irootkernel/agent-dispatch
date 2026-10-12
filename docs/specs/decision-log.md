@@ -645,3 +645,9 @@ Plugin TASK-028 receives ARM-only qualification; this exception does not admit
 amd64 management, broaden Plugin pins, or satisfy Plugin EPIC-009. No frozen
 contract, code, test selection, timeout, installation, activation or publication
 authority changes. Final Epic acceptance remains user-owned.
+
+**Subsequent qualification (2026-10-13).** [DF-010](../deferred-feedback/010-e23-amd64-qualification.md)
+is resolved for product source `f263e096c5b01fe2a83c7f95c66410035030a752` and its
+exact Linux amd64 artifact after the native full gate and release rebuild.
+This preserves the original ARM completion decision and paired qualification
+scope. Plugin admission and future release-input qualification remain separate.

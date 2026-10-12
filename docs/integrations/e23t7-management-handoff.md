@@ -10,10 +10,11 @@ code and test inputs with the documentation projection described below.
 Their temporary services and credentials have been removed. Member and whole-Epic
 independent reviews are complete; admission requires the committed handoff package.
 
-Linux amd64 is reproducibly built but unverified. Its unfinished full gate is
-owned by [DF-010](../deferred-feedback/010-e23-amd64-qualification.md) before a
-future three-platform release or amd64 management admission. ARM-scoped E23
-completion does not close that requirement or qualify native amd64 Plugin use.
+Linux amd64 subsequently passed the native full gate for the selected source
+and artifact, resolving [DF-010](../deferred-feedback/010-e23-amd64-qualification.md).
+Native paired management and service qualification remains ARM-only. This
+follow-up does not widen Plugin admission or qualify native amd64 Plugin use;
+new release inputs require applicable requalification.
 
 ## Provider identity
 
@@ -37,7 +38,7 @@ this handoff and the exact binary SHA.
 |---|---|---|
 | `agent-dispatch-v0.3.0-darwin-arm64` | `5c8ece46ee7f27d8d7fc1acb3c5fb9c0a50675fefcb1150de15edd2e827f787c` | Native qualified |
 | `agent-dispatch-v0.3.0-linux-arm64` | `47e1e7e1b9d2fbdb8397230604a85b93c6893ef88209eef9a98d278a7e1b99e9` | Native qualified |
-| `agent-dispatch-v0.3.0-linux-amd64` | `fc6c676063357a70058f1b1227d44e0e0dde6f4ba1fef2989317a950844f11bd` | Built only; unverified, DF-010 |
+| `agent-dispatch-v0.3.0-linux-amd64` | `fc6c676063357a70058f1b1227d44e0e0dde6f4ba1fef2989317a950844f11bd` | Native full gate and version execution qualified; paired management unqualified |
 
 Two builds on native Darwin arm64 and two on native Linux arm64 produced this
 same three-platform checksum list. Each used the exact Git archive, `make
@@ -144,8 +145,22 @@ The handoff refresh changes canonical qualification information and its generate
 manifest, with the same product inputs. The full gate was not rerun on these later
 documentation bytes.
 
-Linux amd64 has no new execution result for the corrected source. Earlier
-emulation results belong to source
+On 2026-10-13 the cloud verification maintainer supplied native Linux amd64
+terminal evidence from a clean checkout of the product source above on an
+x86_64 KVM virtual machine with Go `1.27.1`. Default `make verify` exited 0,
+including the unchanged unit and race targets and systemd artifact lint.
+Real Watchman was available through the isolated runner. The unit stage reused
+30 package results from a prior attempt on the same source. Non-verbose output
+does not establish individual skip counts or optional real-Hermes coverage;
+macOS launchd lint was skipped on Linux. A native release rebuild reproduced
+the exact amd64 SHA above, with Linux amd64 ELF/build metadata and successful
+native `version` and `version --json` reporting `v0.3.0`. Documentation HEAD
+`15092eb47760940fd008c2938ebc26f6d2abb163` passed focused documentation and
+contract checks. The local coordinator checked these supplied bindings against
+the repository; it did not independently read the cloud filesystem. The existing
+promoted package retains ARM public-interface evidence and is unchanged.
+
+Earlier emulation results belong to source
 `6786088bc7b6540b34f25c9a398e644dae6a4547` and cannot qualify the corrected
 binary. The first attempt failed optional Watchman startup; the next reached the package's
 30-minute unit-test limit. Container-local source/cache storage allowed the
@@ -154,10 +169,9 @@ with two CPUs and `GOMAXPROCS=2` passed the unit suite in 1563.124 seconds and
 failed the CLI race package at 1800.120 seconds, with `make verify` exit 2.
 The timeout occurred while an existing G9 notification test was running;
 it does not establish an individual assertion failure or race violation.
-The source, checks and 30-minute timeout remained unchanged. The full amd64 SCP-008 gate
-remains open in DF-010. D-031 excludes it from this ARM-scoped E23 completion;
-future amd64 qualification requires a qualified host or separately authorized
-correction to the canonical verification gate.
+The source, checks and 30-minute timeout remained unchanged. This historical
+timeout is superseded for the selected corrected source by the native full-gate
+pass above. D-031 remains the authority for the original ARM-scoped E23 completion.
 Native Darwin supplies real Watchman integration and launchd lint; native
 Linux supplies systemd lint. Emulated amd64 evidence grants no native amd64
 Plugin support.

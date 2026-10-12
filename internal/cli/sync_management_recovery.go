@@ -78,10 +78,10 @@ func (s *peerService) recoverManagement(ctx context.Context) {
 				outcome = &syncmanagement.Outcome{Status: v.Result, TargetCommit: &v.TargetCommit, VerificationID: &v.VerificationID, Reason: "exact interrupted verification result recovered"}
 			}
 		}
-	} else if len(jobs) == 0 && (r.State == "running" || r.State == "uncertain") {
+	} else if len(jobs) == 0 {
 		// Every protected content effect and verification observation first
-		// commits an association. Empty evidence under an expired exact claim
-		// proves no such effect was admitted, independently of claim age.
+		// commits an association. Empty evidence proves no such effect was
+		// admitted; a held request can requeue after current authority permits it.
 		e := &managementExecution{request: r, service: s}
 		// Inspect current authority without reusing the expired effect claim.
 		e.request.State = "queued"

@@ -105,6 +105,80 @@ func TestE23T5ExpiredEmptyClaimRecoversWithoutTreatingTimeAsEffectProof(t *testi
 	}
 }
 
+func TestE23T5EmptyHoldRecovery(t *testing.T) {
+	for _, action := range []string{"sync-now", "verify-all"} {
+		for _, mode := range []string{"resumed", "revoked", "rebound", "safety", "exhausted"} {
+			t.Run(action+"/"+mode, func(t *testing.T) {
+				f := newResumeFixture(t)
+				f.cfg.Sync.Management = &config.SyncManagement{Enabled: true, Actions: []string{"sync-now", "verify-all", "pause", "resume"}}
+				f.writeConfig(t)
+				id := e23t5Accepted(t, f.cfg, f.path, action)
+				e23t5Accepted(t, f.cfg, f.path, "pause")
+				service := &peerService{cfg: f.cfg, configPath: f.path, store: f.store}
+				service.dispatchManagement(context.Background())
+				blocked, err := f.store.LoadManagementRequest(context.Background(), f.cfg.Sync.GroupID, id, time.Now())
+				if err != nil || blocked.State != "blocked" || blocked.AcceptedAt == nil || blocked.Attempts != 0 || blocked.Fence != 0 || len(blocked.Jobs) != 0 {
+					t.Fatalf("paused dispatch:%+v %v", blocked, err)
+				}
+				service.recoverManagement(context.Background())
+				held, err := f.store.LoadManagementRequest(context.Background(), f.cfg.Sync.GroupID, id, time.Now())
+				if err != nil || held.State != "blocked" || held.Revision != blocked.Revision || held.Attempts != 0 {
+					t.Fatalf("recovery cleared pause:%+v %v", held, err)
+				}
+				e23t5Accepted(t, f.cfg, f.path, "resume")
+				switch mode {
+				case "revoked":
+					f.cfg.Sync.Management.Enabled = false
+					f.writeConfig(t)
+				case "rebound":
+					f.cfg.Sync.Bounds.Queue--
+					f.writeConfig(t)
+				case "safety":
+					if _, err := f.store.Exec(`UPDATE sync_controls SET membership_mode='blocked_emergency' WHERE group_id=?`, f.cfg.Sync.GroupID); err != nil {
+						t.Fatal(err)
+					}
+				case "exhausted":
+					if _, err := f.store.Exec(`UPDATE sync_management_requests SET attempts=? WHERE request_id=?`, syncmanagement.AttemptLimit, id); err != nil {
+						t.Fatal(err)
+					}
+				}
+				service.recoverManagement(context.Background())
+				got, err := f.store.LoadManagementRequest(context.Background(), f.cfg.Sync.GroupID, id, time.Now())
+				want, attempts := "blocked", 0
+				if mode == "resumed" {
+					want = "queued"
+				}
+				if mode == "exhausted" {
+					attempts = syncmanagement.AttemptLimit
+				}
+				if err != nil || got.State != want || got.RequestID != id || got.Fingerprint != blocked.Fingerprint || got.AcceptedAt == nil || *got.AcceptedAt != *blocked.AcceptedAt || got.Attempts != attempts || got.Fence != 0 || got.ClaimOwner != "" || len(got.Jobs) != 0 {
+					t.Fatalf("hold recovery:%+v %v", got, err)
+				}
+				if mode != "resumed" {
+					return
+				}
+				if got.Outcome != nil || got.Revision != blocked.Revision+1 {
+					t.Fatalf("requeue retained old hold:%+v", got)
+				}
+				if _, err := f.store.TransitionManagementRequest(context.Background(), blocked, "queued", nil, "stale-hold-inspection", time.Now()); !errors.Is(err, sqlite.ErrSyncPrecondition) {
+					t.Fatalf("stale hold revision accepted:%v", err)
+				}
+				if code, v := e23t5Public(t, f.path, "submit", "--group", f.cfg.Sync.GroupID, "--request-id", id); code != 0 || v["result"].(map[string]any)["request_id"] != id || v["result"].(map[string]any)["state"] != "queued" {
+					t.Fatalf("accepted duplicate changed recovered identity:%d %v", code, v)
+				}
+				binding, err := managementBindingForConfig(f.cfg)
+				if err != nil {
+					t.Fatal(err)
+				}
+				claimed, err := f.store.ClaimManagementRequest(context.Background(), f.cfg.Sync.GroupID, id, "resumed-worker", binding, true, time.Now())
+				if err != nil || claimed.State != "running" || claimed.Attempts != 1 || claimed.Fence != 1 || claimed.RequestID != id {
+					t.Fatalf("same request did not regain bounded execution:%+v %v", claimed, err)
+				}
+			})
+		}
+	}
+}
+
 func TestE23T5VerificationJournalSurvivesLostManagementCompletion(t *testing.T) {
 	f := newResumeFixture(t)
 	f.cfg.Sync.Management = &config.SyncManagement{Enabled: true, Actions: []string{"verify-all", "retry"}}
@@ -785,6 +859,17 @@ func TestE23T5AcceptedRetryRevocationBeforeDispatchRetainsEvidence(t *testing.T)
 			got, err := store.LoadManagementRequest(context.Background(), cfg.Sync.GroupID, retry, time.Now())
 			if err != nil || got.State != "blocked" || got.AcceptedAt == nil || got.Attempts != 1 || got.Fence != 0 || got.Outcome == nil || got.Outcome.Status != "blocked" || len(got.Jobs) != 1 || got.Jobs[0].JobID != jobID || got.Jobs[0].Attempts != 0 || got.Jobs[0].State != "pending" || got.Jobs[0].TargetCommit == nil || *got.Jobs[0].TargetCommit != target {
 				t.Fatalf("post-acceptance authority:%+v %v", got, err)
+			}
+			if mode == "revoked" {
+				cfg.Sync.Management.Enabled = true
+			} else {
+				cfg.Sync.Bounds.Queue++
+			}
+			e23t3SaveConfig(t, cfg, path)
+			service.recoverManagement(context.Background())
+			retained, err := store.LoadManagementRequest(context.Background(), cfg.Sync.GroupID, retry, time.Now())
+			if err != nil || retained.State != "blocked" || retained.Revision != got.Revision || retained.Attempts != got.Attempts || len(retained.Jobs) != 1 || retained.Jobs[0].JobID != jobID || retained.Jobs[0].Attempts != 0 || retained.Jobs[0].TargetCommit == nil || *retained.Jobs[0].TargetCommit != target {
+				t.Fatalf("associated hold was requeued without effect inspection:%+v %v", retained, err)
 			}
 			if code, v = e23t5Public(t, path, "show", "--group", cfg.Sync.GroupID, "--request-id", retry); code != 0 {
 				t.Fatal(v)

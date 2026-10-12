@@ -5939,6 +5939,13 @@ In Progress.
 
 **Status:** Completed
 
+Formal whole-Epic audit reopened T5 to correct recovery of a request blocked
+before job admission during operator pause. The correction revalidates current
+authority and retains the original identity and attempt budget. Focused race
+tests and both native ARM full gates pass. Corrected-artifact paired qualification
+and whole-Epic confirmation remain required before further closeout; T6/T7 retain
+their historical completion records.
+
 ### Objective
 
 Recover uncertain work and permit bounded explicit retry without changing its

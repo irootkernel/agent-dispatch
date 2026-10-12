@@ -18,6 +18,11 @@ This file records concise shipped outcomes and pending changes.
   availability evidence. Rollback requires a stopped-service backup restore
   before an older binary can run.
 
+### Fixed
+
+- Resume accepted management requests blocked before job admission after the
+  operator pause is lifted, retaining their identity and execution budget.
+
 ## v0.2.0 - 2026-10-01
 
 ### Added

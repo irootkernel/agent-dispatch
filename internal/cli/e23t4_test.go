@@ -375,10 +375,13 @@ func TestE23T4LocalControlsShareOperatorResumeSafety(t *testing.T) {
 }
 
 func TestE23T4WorkerVerificationHasExactResultAndOwnMetadataExemption(t *testing.T) {
-	for _, name := range []string{"healthy", "pending", "dirty", "stale", "uncertain", "moving", "capacity", "association_capacity", "pause_admission"} {
+	for _, name := range []string{"healthy", "paused_dispatch", "pending", "dirty", "stale", "uncertain", "moving", "capacity", "association_capacity", "pause_admission"} {
 		t.Run(name, func(t *testing.T) {
 			f := newResumeFixture(t)
 			f.cfg.Sync.Management = &config.SyncManagement{Enabled: true, Actions: []string{"verify-all", "sync-now"}}
+			if name == "paused_dispatch" {
+				f.cfg.Sync.Management.Actions = append(f.cfg.Sync.Management.Actions, "pause", "resume")
+			}
 			if name == "capacity" {
 				f.cfg.Sync.Bounds.Queue = 2
 			}
@@ -469,6 +472,19 @@ func TestE23T4WorkerVerificationHasExactResultAndOwnMetadataExemption(t *testing
 				return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(raw)), Header: http.Header{}}, nil
 			})
 			service := &peerService{cfg: f.cfg, configPath: f.path, store: f.store}
+			if name == "paused_dispatch" {
+				e23t5Accepted(t, f.cfg, f.path, "pause")
+				service.dispatchManagementWithHTTP(context.Background(), &http.Client{Transport: e22t3RoundTrip(func(*http.Request) (*http.Response, error) {
+					t.Fatal("paused dispatch started a peer observation")
+					return nil, nil
+				})})
+				held, err := f.store.LoadManagementRequest(context.Background(), f.cfg.Sync.GroupID, id, time.Now())
+				if err != nil || held.State != "blocked" || held.Attempts != 0 || len(held.Jobs) != 0 {
+					t.Fatalf("paused request admitted effects:%+v %v", held, err)
+				}
+				e23t5Accepted(t, f.cfg, f.path, "resume")
+				service.recoverManagement(context.Background())
+			}
 			service.dispatchManagementWithHTTP(context.Background(), &http.Client{Transport: transport})
 			request, err := f.store.LoadManagementRequest(context.Background(), f.cfg.Sync.GroupID, id, time.Now())
 			if err != nil {
@@ -506,7 +522,7 @@ func TestE23T4WorkerVerificationHasExactResultAndOwnMetadataExemption(t *testing
 				return
 			}
 			want := "incomplete"
-			if name == "healthy" {
+			if name == "healthy" || name == "paused_dispatch" {
 				want = "complete"
 			}
 			if name == "moving" {
@@ -514,6 +530,9 @@ func TestE23T4WorkerVerificationHasExactResultAndOwnMetadataExemption(t *testing
 			}
 			if request.State != "finished" || request.Outcome == nil || request.Outcome.Status != want || request.Outcome.TargetCommit == nil || *request.Outcome.TargetCommit != target || request.Outcome.VerificationID == nil || len(request.Jobs) != 1 || request.Jobs[0].JobID != *request.Outcome.VerificationID || request.Jobs[0].State != want || request.Jobs[0].Kind != "verification" {
 				t.Fatalf("exact verification:%+v", request)
+			}
+			if name == "paused_dispatch" && (request.RequestID != id || request.Attempts != 1 || request.Jobs[0].Attempts != 1) {
+				t.Fatalf("resumed verification changed identity or budget:%+v", request)
 			}
 			code, value = e23t4Request(t, f.path, "show", "--group", f.cfg.Sync.GroupID, "--request-id", id)
 			if code != 0 {

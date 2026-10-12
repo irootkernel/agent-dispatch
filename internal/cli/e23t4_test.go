@@ -228,6 +228,10 @@ func TestE23T4ManagementClaimRenewsAndCancelsGitGroup(t *testing.T) {
 		t.Fatal(err)
 	}
 	marker := filepath.Join(t.TempDir(), "git.pid")
+	// Exercise the interval between marker creation and PID publication.
+	if err := os.WriteFile(marker, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
 	binGit := filepath.Join(filepath.Dir(f.remoteHead), "bin", "git")
 	raw, err := os.ReadFile(binGit)
 	if err != nil {
@@ -248,7 +252,9 @@ func TestE23T4ManagementClaimRenewsAndCancelsGitGroup(t *testing.T) {
 	for time.Now().Before(until) {
 		if raw, err := os.ReadFile(marker); err == nil {
 			pid, _ = strconv.Atoi(string(raw))
-			break
+			if pid > 0 {
+				break
+			}
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

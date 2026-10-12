@@ -113,12 +113,15 @@ not become a release blocker merely because it shares that inventory.
 
 - [ ] Every SMR requirement has a task and G19 scenario with inspected evidence.
 - [ ] Public Core CLI tests work without a Plugin implementation or direct test mutation of private production state.
-- [ ] Deterministic gates retain Core's three-platform scope; native Darwin arm64/Linux arm64 paired behavior and service lifecycles use one exact provider candidate.
+- [ ] D-031 ARM-scoped completion retains both native full gates and paired behavior/service lifecycles on one exact candidate; DF-010 retains unverified amd64 before a three-platform release.
 - [ ] The handoff includes version, full commit, artifact SHA values, both contract identities, schemas/fixtures, failure outcomes, limits, and migration/rollback guidance.
 - [ ] Ordinary manual publication and the existing peer service keep their signing-key separation.
 - [ ] Plugin TASK-028 can admit the provider without guessing paths, interpreting latest status as a request receipt, or silently broadening its binary allowlist.
 - [ ] Final review has no unresolved acceptance blocker; publication, installation, and production activation remain separately authorized.
 
-The paired handoff initially covers Darwin arm64 and Linux arm64. It does not
-change Core's SCP-008 requirement or grant native Linux amd64 Plugin support.
+[D-031](../specs/decision-log.md#d-031---2026-10-12---arm-scoped-e23-completion-amd64-qualification-deferred)
+permits E23 completion and the paired handoff on Darwin arm64 and Linux arm64.
+[DF-010](../deferred-feedback/010-e23-amd64-qualification.md) retains the unfinished
+amd64 gate before a three-platform release. Core's official support policy is
+unchanged and no native Linux amd64 Plugin support is granted.
 Plugin EPIC-009/TASK-033 remains independent of E23 and EPIC-008.

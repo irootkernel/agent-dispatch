@@ -619,3 +619,29 @@ without representing it as a Hermes work receipt. Existing v0.1.8 commands and
 routes retain their behavior when sync is absent or disabled. Product
 implementation, production activation, commit, tag, and release publication
 remain separate actions.
+
+## D-031 - 2026-10-12 - ARM-scoped E23 completion; amd64 qualification deferred
+
+**Decision.** Master approved completing E23 on native `darwin/arm64` and
+`linux/arm64`, with Linux amd64 qualification tracked separately in
+[DF-010](../deferred-feedback/010-e23-amd64-qualification.md). This is a bounded
+exception to the SCP-008/SMR-015 three-platform evidence requirement for E23
+completion and its ARM provider handoff. G19 completion under this exception
+requires both native full `make verify` gates, the native paired CLI matrix,
+exact artifacts and contracts, and the required member and whole-Epic reviews.
+
+**Context.** Both native ARM gates and the paired public CLI qualification
+passed on one exact product source. The amd64 emulation passed unit tests but
+exhausted the unchanged 30-minute CLI race budget. Master explicitly approved
+ARM-scoped completion with amd64 as a separate unfinished verification item.
+An emulated timeout is not a successful platform gate or proof of a particular
+production defect.
+
+**Consequences.** D-029's official three-platform support policy remains in
+force. SCP-008 remains required for a future three-platform release: DF-010
+must supply full exact-candidate amd64 evidence before such publication.
+The amd64 binary is reproducibly built, but is not qualified by this handoff.
+Plugin TASK-028 receives ARM-only qualification; this exception does not admit
+amd64 management, broaden Plugin pins, or satisfy Plugin EPIC-009. No frozen
+contract, code, test selection, timeout, installation, activation or publication
+authority changes. Final Epic acceptance remains user-owned.

@@ -979,7 +979,11 @@ membership validation and SQLite transactions run against private fixtures.
 | AC-1909 | T4 healthy verification excludes its own metadata; unrelated pending work, dirtiness, stale evidence and uncertainty stay incomplete, and a moving target stays target-changed. T6 propagates the production four-minute deadline to an injected transport; a five-second parent deadline interrupts a stalled transport and leaves one planned job, later expired without a new observation. |
 | AC-1910 | T2 bounds cover drafts, attempts, terminal/control capacity, associations and evidence retention; T3 bounds carriers and lock/output deadlines. T4 proves periodic work is not starved. T6 saturation returns exit 14 / `sync_precondition_failed`, retains both unresolved jobs and exposes queue pressure through actual `sync status`; stale remote membership returns exit 30 before job admission or HTTP observation. |
 | AC-1911 | T2 additive upgrade preserves jobs and makes the incompatible old schema guard refuse. T5 supported restore preserves accepted evidence and makes old-incarnation drafts obsolete. These are disposable state tests, not installation or production rollback evidence. |
-| AC-1912 | Pending E23-T7. Deterministic fixtures do not establish native paired qualification, artifact reproducibility or Plugin admission. |
+| AC-1912 | E23-T7's [exact-provider handoff](integrations/e23t7-management-handoff.md) identifies the reproducible candidate and qualified native public CLI pair. Native Darwin arm64/Linux arm64 passed the exact-source full gate. D-031 permits ARM-scoped E23 completion with the required reviews; DF-010 retains amd64 as unverified after the emulated race package exhausted its 30-minute budget (`make verify` exit 2). The three-platform release gate remains open. Deterministic fixtures do not establish Plugin admission. |
+
+D-031 records Master's approval of ARM-scoped E23 completion. Both native PASS
+records retain their exact source and artifact bindings, confirmed by read-only
+checks on both hosts. DF-010 owns the separate unverified amd64 follow-up.
 
 The one-shot verification command uses the explicit configuration-and-Git
 membership helper; the serving process retains its own membership cache.

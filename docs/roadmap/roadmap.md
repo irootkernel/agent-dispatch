@@ -15,9 +15,9 @@
 | Release target | v0.3.0 (constrained sync management successor) |
 | Current epic | E23 |
 | Current active task | None |
-| Next task | E23-T7 |
-| Completed tasks | 122 / 123 |
-| Planned tasks | 1 / 123 |
+| Next task | None |
+| Completed tasks | 123 / 123 |
+| Planned tasks | 0 / 123 |
 | In progress tasks | 0 |
 | In review tasks | 0 |
 | Blocked tasks | 0 |
@@ -195,7 +195,7 @@ remain separate operator decisions.
 | 120 | E23-T4 | Completed | Shared worker execution and atomic local controls |
 | 121 | E23-T5 | Completed | Identity-preserving retry, recovery, retention, and restore |
 | 122 | E23-T6 | Completed | Management security, fault, saturation, and regression qualification |
-| 123 | E23-T7 | Planned | Exact-provider paired qualification and Plugin handoff |
+| 123 | E23-T7 | Completed | Exact-provider paired qualification and Plugin handoff |
 
 ---
 
@@ -6067,7 +6067,7 @@ exact-artifact and Plugin handoff qualification remain E23-T7's gates.
 
 ## E23-T7: Qualify and Hand Off the Exact Provider
 
-**Status:** Planned
+**Status:** Completed
 
 ### Objective
 
@@ -6076,10 +6076,10 @@ sufficient public evidence to admit management without guessing Core semantics.
 
 ### Deliverables
 
-- [ ] Freeze the final source/version, management and base-sync contract identities, artifact checksums, schemas, fixtures, errors, and limits.
-- [ ] Run native Darwin arm64/Linux arm64 paired requests, interruption/recovery, control, verification, and service availability through the public CLI.
-- [ ] Retain SCP-008 deterministic verification on all three Core platforms and clearly label any emulated evidence.
-- [ ] Document release/upgrade/rollback/restore and local production/development isolation; complete whole-Epic review and the Plugin handoff.
+- [x] Freeze the final source/version, management and base-sync contract identities, artifact checksums, schemas, fixtures, errors, and limits.
+- [x] Run native Darwin arm64/Linux arm64 paired requests, interruption/recovery, control, verification, and service availability through the public CLI.
+- [x] Retain exact-source native Darwin arm64/Linux arm64 full verification under D-031; identify amd64 as unverified in DF-010 and preserve the three-platform release gate.
+- [x] Document release/upgrade/rollback/restore and local production/development isolation; complete whole-Epic review and the Plugin handoff.
 
 ### Requirements
 
@@ -6092,19 +6092,27 @@ artifacts are required; no Plugin implementation is required.
 
 ### Do Not
 
-- [ ] Do not mark Plugin EPIC-008 complete, activate Plugin mutations, broaden its pins, claim native amd64 Plugin support, or publish/install without separate authorization.
-- [ ] Do not replace the frozen operating v0.2.0 pair with a development executable or share its production database.
+- [x] Do not mark Plugin EPIC-008 complete, activate Plugin mutations, broaden its pins, claim native amd64 Plugin support, or publish/install without separate authorization.
+- [x] Do not replace the frozen operating v0.2.0 pair with a development executable or share its production database.
 
 ### Verification and Acceptance
 
-- [ ] G19 has exact-candidate deterministic and native paired evidence with no unresolved acceptance blocker.
-- [ ] Handoff artifacts let TASK-028 verify version, SHA, capability, schemas, result identity, and failure handling through public interfaces only.
-- [ ] Plugin TASK-028 is the next consumer admission gate; TASK-029 starts only after that amendment is approved. EPIC-009 stays independent.
+- [x] G19 has exact-candidate native ARM deterministic and paired evidence with no unresolved ARM-scoped acceptance blocker; D-031 and DF-010 explicitly retain the unfinished amd64 release gate.
+- [x] Handoff artifacts let TASK-028 verify version, SHA, capability, schemas, result identity, and failure handling through public interfaces only.
+- [x] Plugin TASK-028 is the next consumer admission gate; TASK-029 starts only after that amendment is approved. EPIC-009 stays independent.
 
 ### Evidence
 
-Not executed. Final evidence belongs to `docs/VALIDATION.md` and a bounded
-integration/handoff record; do not fabricate a candidate, SHA, or pass result.
+The [exact-provider handoff](../integrations/e23t7-management-handoff.md)
+identifies the committed product source, reproducible artifacts and qualified
+native public interfaces. Both native ARM full verification gates and the
+paired management/service matrix are complete. [D-031](../specs/decision-log.md#d-031---2026-10-12---arm-scoped-e23-completion-amd64-qualification-deferred)
+authorizes ARM-scoped E23 completion, with amd64 explicitly unverified in
+[DF-010](../deferred-feedback/010-e23-amd64-qualification.md). T7 is
+Completed with the required Independent Review and verified handoff promotion.
+Plugin TASK-028 receives ARM qualification under separate admission authority;
+TASK-029 cannot start before its scope amendment is approved. The three-platform
+release gate and Plugin EPIC-009 remain independent unfinished obligations.
 
 # 4. Deferred Future Work
 

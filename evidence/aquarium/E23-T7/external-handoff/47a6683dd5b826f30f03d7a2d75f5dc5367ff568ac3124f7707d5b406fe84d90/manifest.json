@@ -1,0 +1,28 @@
+{
+  "schema": "aquarium.promoted-evidence/v1",
+  "work_unit": {
+    "kind": "task",
+    "id": "E23-T7"
+  },
+  "purpose": "external-handoff",
+  "target": {
+    "git_head": "6786088bc7b6540b34f25c9a398e644dae6a4547",
+    "capture_kind": "file",
+    "content_sha256": "sha256:47a6683dd5b826f30f03d7a2d75f5dc5367ff568ac3124f7707d5b406fe84d90"
+  },
+  "source": {
+    "tool": "make release, shasum and agent-dispatch public CLI"
+  },
+  "payloads": [
+    {
+      "path": "evidence/aquarium/E23-T7/external-handoff/47a6683dd5b826f30f03d7a2d75f5dc5367ff568ac3124f7707d5b406fe84d90/SHA256SUMS",
+      "media_type": "text/plain",
+      "sha256": "sha256:47a6683dd5b826f30f03d7a2d75f5dc5367ff568ac3124f7707d5b406fe84d90"
+    },
+    {
+      "path": "evidence/aquarium/E23-T7/external-handoff/47a6683dd5b826f30f03d7a2d75f5dc5367ff568ac3124f7707d5b406fe84d90/public-interface.json",
+      "media_type": "application/json",
+      "sha256": "sha256:e8029652948d63dadf2c4e348e457446f75a2491739ecc17c24fd2f3a9b35c82"
+    }
+  ]
+}

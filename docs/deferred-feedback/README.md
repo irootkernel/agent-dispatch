@@ -14,6 +14,7 @@ postponed from current work.
 | [DF-007](007-e22-verification-saturation-and-deadline.md) | Verification deadline and saturated-queue reporting need hardening | 2026-09-28 |
 | [DF-008](008-e22-service-structure-hardening.md) | Verification and managed-service structure needs hardening | 2026-09-28 |
 | [DF-009](009-e22-contract-usage-drift-guard.md) | Sync contract usage needs a flag-drift guard | 2026-09-28 |
+| [DF-010](010-e23-amd64-qualification.md) | E23 amd64 full-gate qualification remains unfinished under D-031 | 2026-10-12 |
 
 An entry here must name the affected authority, the bounded concern, and
 the condition for reconsideration. Oversized work is promoted to one TODO candidate

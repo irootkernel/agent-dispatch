@@ -1,0 +1,372 @@
+{
+  "format": "selected-public-cli-fields",
+  "identity_and_dynamic_metadata_redacted": true,
+  "capabilities": {
+    "api_version": "agent-dispatch.cli/v1",
+    "command": "sync request capabilities",
+    "ok": true,
+    "result": {
+      "schema_version": "agent-dispatch.sync-management/v1",
+      "kind": "capabilities",
+      "contract_digest": "sha256:77dba7fac82cf1e627ad29ab89057c18d4d5c2c380251112579e551d1122cf39",
+      "enabled": true,
+      "available_actions": [
+        "pause",
+        "resume",
+        "retry",
+        "sync-now",
+        "verify-all"
+      ],
+      "configured_actions": [
+        "pause",
+        "resume",
+        "retry",
+        "sync-now",
+        "verify-all"
+      ],
+      "executor": "available",
+      "limits": {
+        "association_limit": 1000,
+        "call_deadline_seconds": 5,
+        "claim_lease_seconds": 30,
+        "claim_renewal_seconds": 10,
+        "cumulative_attempts": 20,
+        "execution_deadline_seconds": 240,
+        "executor_freshness_seconds": 60,
+        "expired_draft_retention_seconds": 86400,
+        "management_per_recovery_pass": 1,
+        "minimum_terminal_retention_days": 180,
+        "preparation_ttl_seconds": 600,
+        "prepared_control_limit": 16,
+        "prepared_data_limit": 256,
+        "reason_bytes": 256,
+        "result_bytes": 1048576,
+        "shutdown_seconds": 30,
+        "terminal_control_limit": 1000,
+        "terminal_data_limit": 10000,
+        "unresolved_control_limit": 16,
+        "unresolved_data_max": 1000,
+        "unresolved_data_min": 2
+      },
+      "data_capacity": 100,
+      "side_effects": []
+    }
+  },
+  "requests": {
+    "sync_now": {
+      "api_version": "agent-dispatch.cli/v1",
+      "command": "sync request show",
+      "ok": true,
+      "result": {
+        "schema_version": "agent-dispatch.sync-management/v1",
+        "kind": "request",
+        "phase": "show",
+        "action": "sync-now",
+        "state": "finished",
+        "attempts": 1,
+        "binding_current": true,
+        "executor": "available",
+        "side_effects": [],
+        "outcome": {
+          "status": "no_op",
+          "quiescence": null,
+          "reason": "guarded reconciliation observed the configured target"
+        },
+        "jobs": []
+      }
+    },
+    "verify_all": {
+      "api_version": "agent-dispatch.cli/v1",
+      "command": "sync request show",
+      "ok": true,
+      "result": {
+        "schema_version": "agent-dispatch.sync-management/v1",
+        "kind": "request",
+        "phase": "show",
+        "action": "verify-all",
+        "state": "finished",
+        "attempts": 1,
+        "binding_current": true,
+        "executor": "available",
+        "side_effects": [],
+        "outcome": {
+          "status": "complete",
+          "quiescence": null,
+          "reason": "exact verification result recorded"
+        },
+        "jobs": [
+          {
+            "kind": "verification",
+            "state": "complete",
+            "attempts": 1,
+            "association_reason": "verification_target"
+          }
+        ]
+      }
+    },
+    "pause": {
+      "api_version": "agent-dispatch.cli/v1",
+      "command": "sync request show",
+      "ok": true,
+      "result": {
+        "schema_version": "agent-dispatch.sync-management/v1",
+        "kind": "request",
+        "phase": "show",
+        "action": "pause",
+        "state": "finished",
+        "attempts": 0,
+        "binding_current": true,
+        "executor": "available",
+        "side_effects": [],
+        "outcome": {
+          "status": "intent_committed",
+          "quiescence": "unknown",
+          "reason": "local control intent committed"
+        },
+        "jobs": []
+      }
+    },
+    "resume": {
+      "api_version": "agent-dispatch.cli/v1",
+      "command": "sync request submit",
+      "ok": true,
+      "result": {
+        "schema_version": "agent-dispatch.sync-management/v1",
+        "kind": "request",
+        "phase": "submit",
+        "action": "resume",
+        "state": "finished",
+        "attempts": 0,
+        "binding_current": true,
+        "executor": "available",
+        "side_effects": [
+          "request_acceptance_write",
+          "local_control_write"
+        ],
+        "outcome": {
+          "status": "intent_committed",
+          "quiescence": "unknown",
+          "reason": "local control intent committed"
+        },
+        "jobs": []
+      }
+    },
+    "retry": {
+      "api_version": "agent-dispatch.cli/v1",
+      "command": "sync request submit",
+      "ok": true,
+      "result": {
+        "schema_version": "agent-dispatch.sync-management/v1",
+        "kind": "request",
+        "phase": "submit",
+        "action": "retry",
+        "state": "finished",
+        "attempts": 1,
+        "binding_current": true,
+        "executor": "available",
+        "side_effects": [
+          "request_acceptance_write"
+        ],
+        "outcome": {
+          "status": "already_settled",
+          "quiescence": null,
+          "reason": "predecessor obligations are durably settled"
+        },
+        "jobs": [
+          {
+            "kind": "verification",
+            "state": "complete",
+            "attempts": 1,
+            "association_reason": "retry_obligation"
+          }
+        ]
+      }
+    },
+    "stopped_queue": {
+      "api_version": "agent-dispatch.cli/v1",
+      "command": "sync request show",
+      "ok": true,
+      "result": {
+        "schema_version": "agent-dispatch.sync-management/v1",
+        "kind": "request",
+        "phase": "show",
+        "action": "verify-all",
+        "state": "queued",
+        "attempts": 0,
+        "binding_current": true,
+        "executor": "stopped",
+        "side_effects": [],
+        "outcome": null,
+        "jobs": []
+      }
+    },
+    "restarted": {
+      "api_version": "agent-dispatch.cli/v1",
+      "command": "sync request show",
+      "ok": true,
+      "result": {
+        "schema_version": "agent-dispatch.sync-management/v1",
+        "kind": "request",
+        "phase": "show",
+        "action": "verify-all",
+        "state": "finished",
+        "attempts": 1,
+        "binding_current": true,
+        "executor": "available",
+        "side_effects": [],
+        "outcome": {
+          "status": "complete",
+          "quiescence": null,
+          "reason": "exact verification result recorded"
+        },
+        "jobs": [
+          {
+            "kind": "verification",
+            "state": "complete",
+            "attempts": 1,
+            "association_reason": "verification_target"
+          }
+        ]
+      }
+    },
+    "lost_response_lookup": {
+      "api_version": "agent-dispatch.cli/v1",
+      "command": "sync request show",
+      "ok": true,
+      "result": {
+        "schema_version": "agent-dispatch.sync-management/v1",
+        "kind": "request",
+        "phase": "show",
+        "action": "verify-all",
+        "state": "queued",
+        "attempts": 0,
+        "binding_current": true,
+        "executor": "stopped",
+        "side_effects": [],
+        "outcome": null,
+        "jobs": []
+      }
+    },
+    "lost_response_recovered": {
+      "api_version": "agent-dispatch.cli/v1",
+      "command": "sync request show",
+      "ok": true,
+      "result": {
+        "schema_version": "agent-dispatch.sync-management/v1",
+        "kind": "request",
+        "phase": "show",
+        "action": "verify-all",
+        "state": "finished",
+        "attempts": 1,
+        "binding_current": true,
+        "executor": "available",
+        "side_effects": [],
+        "outcome": {
+          "status": "complete",
+          "quiescence": null,
+          "reason": "exact verification result recorded"
+        },
+        "jobs": [
+          {
+            "kind": "verification",
+            "state": "complete",
+            "attempts": 1,
+            "association_reason": "verification_target"
+          }
+        ]
+      }
+    },
+    "duplicate_after_restart": {
+      "api_version": "agent-dispatch.cli/v1",
+      "command": "sync request submit",
+      "ok": true,
+      "result": {
+        "schema_version": "agent-dispatch.sync-management/v1",
+        "kind": "request",
+        "phase": "submit",
+        "action": "verify-all",
+        "state": "finished",
+        "attempts": 1,
+        "side_effects": []
+      }
+    },
+    "duplicate_after_lost_response": {
+      "api_version": "agent-dispatch.cli/v1",
+      "command": "sync request submit",
+      "ok": true,
+      "result": {
+        "schema_version": "agent-dispatch.sync-management/v1",
+        "kind": "request",
+        "phase": "submit",
+        "action": "verify-all",
+        "state": "finished",
+        "attempts": 1,
+        "side_effects": []
+      }
+    }
+  },
+  "paired_verification": {
+    "native_darwin_arm64": {
+      "api_version": "agent-dispatch.cli/v1",
+      "command": "sync verify",
+      "ok": true,
+      "result": {
+        "schema_version": "agent-dispatch.sync-verification/v1",
+        "phase": "finished",
+        "result": "complete",
+        "retain_until_resolved": false
+      },
+      "nodes": [
+        {
+          "state": "applied",
+          "governed_dirty": false,
+          "pending_work": false,
+          "membership_current": true,
+          "evidence_fresh": true,
+          "uncertain": false
+        },
+        {
+          "state": "applied",
+          "governed_dirty": false,
+          "pending_work": false,
+          "membership_current": true,
+          "evidence_fresh": true,
+          "uncertain": false
+        }
+      ]
+    },
+    "native_linux_arm64": {
+      "api_version": "agent-dispatch.cli/v1",
+      "command": "sync verify",
+      "ok": true,
+      "result": {
+        "schema_version": "agent-dispatch.sync-verification/v1",
+        "phase": "finished",
+        "result": "complete",
+        "retain_until_resolved": false
+      },
+      "nodes": [
+        {
+          "state": "applied",
+          "governed_dirty": false,
+          "pending_work": false,
+          "membership_current": true,
+          "evidence_fresh": true,
+          "uncertain": false
+        },
+        {
+          "state": "applied",
+          "governed_dirty": false,
+          "pending_work": false,
+          "membership_current": true,
+          "evidence_fresh": true,
+          "uncertain": false
+        }
+      ]
+    }
+  },
+  "version": {
+    "name": "agent-dispatch",
+    "version": "v0.3.0"
+  }
+}

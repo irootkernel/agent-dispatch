@@ -249,6 +249,13 @@ The [management contract](../contracts/sync-management-contract.md) owns the
 frozen successor request boundaries. E23-T6 owns deterministic qualification;
 E23-T7 owns the exact-candidate native paired handoff.
 
+[D-031](decision-log.md#d-031---2026-10-12---arm-scoped-e23-completion-amd64-qualification-deferred)
+permits ARM-scoped E23 completion with both native full gates and the paired
+matrix. The handoff must identify amd64 as built but unverified and retain
+[DF-010](../deferred-feedback/010-e23-amd64-qualification.md). This exception
+does not satisfy the full three-platform release gate or admit amd64 Plugin
+management.
+
 | ID | Given / When / Then |
 |---|---|
 | AC-1901 | Given absent/disabled management, a forbidden action, wrong group, stale policy/config binding, or obsolete incarnation, when prepare/submit/execution is attempted, then Core refuses new effects while existing sync and authorized historical lookup retain their documented behavior. Claimed actors and confirmation text grant no authority. |
@@ -262,7 +269,7 @@ E23-T7 owns the exact-candidate native paired handoff.
 | AC-1909 | Given a healthy pair, when a management verification runs, then its harmless self-bookkeeping does not make completion impossible. Given unrelated content-affecting requests, dirtiness, stale membership/evidence, pending work, or uncertainty, it remains incomplete. A moving target and injected stalled transport preserve truthful target-changed/deadline outcomes. |
 | AC-1910 | Given preparation, queue, control-reserve, evidence-size, attempt, and execution bounds, when each is exhausted and management competes with peer/periodic work, then refusal is bounded, accepted obligations remain durable, lookup remains available, and periodic recovery is not starved. Terminal pruning preserves unresolved request/job/retry lineage. |
 | AC-1911 | Given existing v0.2.0 state, when the additive upgrade and supported stopped-service rollback/restore are exercised, then existing jobs remain valid, incompatible old binaries refuse upgraded state, and obsolete or absent handles cannot execute. Restoring a pre-submission snapshot cannot reactivate its old-incarnation prepared request. |
-| AC-1912 | Given one exact successor source and its reproducible binaries, when the public Core CLI matrix runs without a Plugin on disposable native Darwin arm64/Linux arm64 hosts, then the five actions, lost responses, restart/recovery, control, and fresh pair evidence satisfy the frozen contract. Three-platform deterministic evidence, artifact/schema/fixture identities, and a bounded review are handed to Plugin TASK-028 without authorizing mutation or publication. |
+| AC-1912 | Given one exact successor source and its reproducible binaries, when the public Core CLI matrix runs without a Plugin on disposable native Darwin arm64/Linux arm64 hosts, then the five actions, lost responses, restart/recovery, control, and fresh pair evidence satisfy the frozen contract. Deterministic evidence, artifact/schema/fixture identities, and a bounded review are handed to Plugin TASK-028 without authorizing mutation or publication. D-031 permits ARM-scoped E23 completion with both native full gates and an explicitly unverified amd64 follow-up in DF-010; three-platform release qualification remains required. |
 
 ## 3. Automatic-Write Gate
 
@@ -277,4 +284,6 @@ publication remain separate authorizations.
 For the later management release only, G19 must pass before management is
 advertised for production. The operator must explicitly enable its local
 allowlist after the existing sync activation prerequisites are satisfied.
+ARM-scoped E23 completion under D-031 alone does not establish three-platform
+release or production readiness.
 This does not retroactively alter v0.2.0's G16-G18 activation boundary.

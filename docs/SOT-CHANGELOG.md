@@ -5,6 +5,14 @@ SOT snapshots, not product releases. Product release notes and pending user-faci
 changes belong to the root [changelog](../CHANGELOG.md). Historical entries below
 retain their recorded scope; migrated document pointers use their current paths.
 
+## ARM-scoped E23 qualification - 2026-10-12
+
+- Accept D-031 for E23 completion on the two native ARM full gates and paired
+  CLI evidence, while retaining D-029's official three-platform support policy.
+- Keep Linux amd64 explicitly unverified in DF-010 before any future
+  three-platform release or amd64 management admission. Preserve the frozen
+  provider contracts and separate Plugin, installation and publication gates.
+
 ## Successor worker and control wiring - 2026-10-11
 
 - Add schema 29 worker availability evidence without changing the installed

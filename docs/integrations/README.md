@@ -12,6 +12,7 @@ newly installed Hermes or Watchman version.
 | [Hermes G11 evidence](hermes-v0.20.5-g11-evidence.md) | Capability and serialization certification |
 | [E17 cold validation](e17t2-cold-validation-evidence.md) | v0.1.6 real-environment validation |
 | [E22-T5 two-node qualification](e22t5-two-node-qualification.md) | Disposable Mac and Oracle Cloud Linux sync matrix, scope and remaining gates |
+| [E23-T7 management provider handoff](e23t7-management-handoff.md) | Exact successor artifacts, native management qualification, remaining platform gates and Plugin admission boundary |
 | [Capability report](hermes-capability-report.json) | Schema-validated historical capability fixture |
 
 Captured fixtures remain under `fixtures/hermes/` and `fixtures/watchman/`.

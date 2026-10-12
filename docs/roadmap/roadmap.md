@@ -13,7 +13,7 @@
 | Shipped release | v0.2.0 (published 2026-10-01; frozen Core/inspection-Plugin pair) |
 | Current SOT baseline | 1.8.0 ([D-030](../specs/decision-log.md); G17 and G18 complete) |
 | Release target | v0.3.0 (constrained sync management successor) |
-| Current epic | E23 |
+| Current epic | None |
 | Current active task | None |
 | Next task | None |
 | Completed tasks | 123 / 123 |
@@ -23,13 +23,17 @@
 | Blocked tasks | 0 |
 | Deferred tracked tasks | 0 |
 
-E23 is In Progress for the v0.3.0 management-provider successor. The published
-Core/inspection-Plugin v0.2.0 pair remains frozen and independently usable;
-E20-E22 retain their completion state. Master approved E23 execution on
-2026-10-09. T1 freezes the contract without runtime changes; later runtime
-work uses disposable development fixtures. Plugin EPIC-008 follows the exact
-qualified provider handoff. Publication, installation, and real-vault activation
-remain separate operator decisions.
+E23 is Completed for the v0.3.0 management-provider successor within
+[D-031's ARM scope](../specs/decision-log.md#d-031---2026-10-12---arm-scoped-e23-completion-amd64-qualification-deferred).
+All seven tasks and the whole-Epic audit and independent review are complete.
+The [exact-provider handoff](../integrations/e23t7-management-handoff.md)
+identifies the corrected source, reproducible artifacts and native Darwin
+arm64/Linux arm64 qualification. [DF-010](../deferred-feedback/010-e23-amd64-qualification.md)
+retains unverified amd64 before a future three-platform release.
+The published Core/inspection-Plugin v0.2.0 pair remains frozen. Plugin
+EPIC-008 starts with its separate TASK-028 admission; TASK-029 requires the
+scope amendment. Publication, installation and real-vault activation remain
+separate operator decisions.
 
 ### Historical evidence
 
@@ -67,7 +71,7 @@ remain separate operator decisions.
 | E20 | Two-Node Sync Contracts and Admission | **Completed** | 5 | G16 |
 | E21 | Signed Publication and Guarded Import | **Completed** | 5 | G17 |
 | E22 | Peer Recovery, Verification, and Operations | **Completed** | 5 | G18 |
-| E23 | Constrained Sync Management Request Provider | **In Progress** | 7 | G19, post-v0.2.0 provider handoff |
+| E23 | Constrained Sync Management Request Provider | **Completed** | 7 | G19, post-v0.2.0 provider handoff |
 
 ## 3. Task Status Index
 
@@ -5680,11 +5684,11 @@ E22-T4 Completed.
 
 # E23: Constrained Sync Management Request Provider
 
-**Status:** In Progress
+**Status:** Completed
 
 **Release scope:** v0.3.0 successor to the frozen published v0.2.0 pair.
 
-**Detailed SOT:** [TODO-SYNC-MANAGEMENT.md](../todo/TODO-SYNC-MANAGEMENT.md)
+**Canonical Outcomes:** [Requirements](../specs/required-spec.md#20-post-v020-constrained-sync-management), [management contract](../contracts/sync-management-contract.md), [ADR-0026](../architecture-decision-records/0026-constrained-sync-management-requests.md), [G19 validation](../VALIDATION.md), [exact-provider handoff](../integrations/e23t7-management-handoff.md), and [operations](../ops/runbook.md).
 
 **Dependencies:** E22 Completed; current paired-release identity and runtime isolation boundary recorded before E23 runtime changes.
 
@@ -5943,8 +5947,9 @@ Formal whole-Epic audit reopened T5 to correct recovery of a request blocked
 before job admission during operator pause. The correction revalidates current
 authority and retains the original identity and attempt budget. Focused race
 tests and both native ARM full gates pass. Corrected-artifact native ARM paired
-qualification now passes, including both actions recovering the original paused handles. Whole-Epic confirmation remains
-required before further closeout; T6/T7 retain their historical completion records.
+qualification passes, including both actions recovering the original paused
+handles. Whole-Epic confirmation is complete; T6/T7 retain their historical
+completion records.
 
 ### Objective
 
@@ -6079,9 +6084,9 @@ exact-artifact and Plugin handoff qualification remain E23-T7's gates.
 Formal whole-Epic audit required T7's exact-provider handoff to follow the T5
 recovery correction. Both corrected ARM artifacts now pass the native public
 matrix, and the handoff identifies their source and full-gate documentation
-projection. The owned refresh is locally verified under delegated correction
-acceptance. Whole-Epic confirmation and the new reviewed evidence projection
-remain final closeout gates; the previous package remains immutable.
+projection. The corrected handoff has whole-Epic confirmation and a reviewed
+[public evidence package](../../evidence/aquarium/E23-T7/external-handoff/5df11b40f04553590769e1348d1191a9820ba0879841242fa7e046a3cd022eda/manifest.json).
+The previous package remains immutable historical evidence.
 
 ### Objective
 
@@ -6124,8 +6129,8 @@ corrected code and test inputs, with the documented lifecycle/manifest projectio
 artifacts pass the refreshed native paired management/service matrix. [D-031](../specs/decision-log.md#d-031---2026-10-12---arm-scoped-e23-completion-amd64-qualification-deferred)
 authorizes ARM-scoped E23 completion, with amd64 explicitly unverified in
 [DF-010](../deferred-feedback/010-e23-amd64-qualification.md). T7 is
-Completed under its original member acceptance. The corrected handoff awaits
-whole-Epic confirmation and its eligible final evidence promotion.
+Completed under its original member acceptance. The corrected handoff has
+whole-Epic confirmation and the reviewed evidence package above.
 Plugin TASK-028 receives ARM qualification under separate admission authority;
 TASK-029 cannot start before its scope amendment is approved. The three-platform
 release gate and Plugin EPIC-009 remain independent unfinished obligations.
@@ -6133,7 +6138,7 @@ release gate and Plugin EPIC-009 remain independent unfinished obligations.
 # 4. Deferred Future Work
 
 Official Linux Support is tracked on-roadmap as **E19**, two-node Wiki sync
-as **E20-E22**, and the planned constrained management provider as **E23**.
+as **E20-E22**, and the completed ARM-scoped management provider as **E23**.
 E18 remains Absolute Watch-Root Binding (Completed 2026-09-08 under D-028).
 
 The following do not count toward the 123 tracked roadmap tasks and remain

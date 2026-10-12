@@ -7,9 +7,8 @@ selected by E23-T1 on 2026-10-09. Runtime delivery and G19 qualification remain
 separate requirements; the v0.2.0 executable does not implement this family.
 The successor requirements are `SMR-001` through `SMR-015` in
 [required-spec.md](../specs/required-spec.md#20-post-v020-constrained-sync-management).
-[E23's dossier](../todo/TODO-SYNC-MANAGEMENT.md) maps delivery, and the
-[roadmap](../roadmap/roadmap.md#e23-constrained-sync-management-request-provider)
-alone owns status. [ADR-0026](../architecture-decision-records/0026-constrained-sync-management-requests.md)
+The [roadmap](../roadmap/roadmap.md#e23-constrained-sync-management-request-provider)
+owns status and links to the canonical delivery outcomes. [ADR-0026](../architecture-decision-records/0026-constrained-sync-management-requests.md)
 records the accepted architectural decision.
 
 The first provider release is v0.3.0. Use a separately versioned

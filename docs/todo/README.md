@@ -11,15 +11,6 @@ Future work is not permission to partially implement these features during
 roadmap tasks. Each priority candidate requires a new roadmap, requirement
 changes, and where noted a new ADR/security review.
 
-## Adopted execution dossiers
-
-| Epic | Dossier | Scope |
-|---|---|---|
-| E23 | [Constrained sync management](TODO-SYNC-MANAGEMENT.md) | Planned successor provider after the current v0.2.0 paired release; Plugin EPIC-008 consumes its qualified contract |
-
-E23's status and task order belong to the roadmap. This planning entry does
-not start runtime work or change current release/production authority.
-
 ## Priority Candidates
 
 | Candidate | Value | Entry condition | Key risk |

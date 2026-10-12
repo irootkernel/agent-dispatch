@@ -19,16 +19,16 @@ qualifies its reviewed disposable Mac/Linux fixture and artifacts. Final
 release artifacts and the matching Plugin allowance require fresh qualification
 before publication.
 
-E23 develops the v0.3.0 successor for constrained local sync management. Its
+E23 delivers the v0.3.0 successor for constrained local sync management. Its
 [requirements](specs/required-spec.md#20-post-v020-constrained-sync-management),
 [frozen implementation contract](contracts/sync-management-contract.md), and
-[execution dossier](todo/TODO-SYNC-MANAGEMENT.md) are separate from the frozen
+[canonical outcomes](roadmap/roadmap.md#e23-constrained-sync-management-request-provider) are separate from the frozen
 v0.2.0 release gates. Development builds use v0.3.0 with schema 28's local request
 ledger and schema 29's worker availability evidence. The closed management CLI
 exposes capabilities, preparation, submission and exact retained-handle lookup.
 Configured actions use the existing worker and bounded recovery; management
 remains disabled by default. G19 and native paired provider qualification
-remain separate E23 gates.
+are complete within the approved ARM scope.
 The [exact-provider handoff](integrations/e23t7-management-handoff.md) identifies
 the current qualification artifacts, public admission checks and remaining gates.
 [D-031](specs/decision-log.md#d-031---2026-10-12---arm-scoped-e23-completion-amd64-qualification-deferred)

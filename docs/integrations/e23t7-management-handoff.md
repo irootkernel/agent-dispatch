@@ -7,8 +7,8 @@ permits ARM-scoped E23 completion using native Darwin arm64/Linux arm64 full
 gates and paired public CLI evidence. Both native paired qualifications are complete
 on the product source and binaries below. The native full gates cover the same
 code and test inputs with the documentation projection described below.
-Their temporary services and credentials have been removed. The required member and whole-Epic reviews
-remain completion gates; admission requires the committed handoff package.
+Their temporary services and credentials have been removed. Member and whole-Epic
+independent reviews are complete; admission requires the committed handoff package.
 
 Linux amd64 is reproducibly built but unverified. Its unfinished full gate is
 owned by [DF-010](../deferred-feedback/010-e23-amd64-qualification.md) before a
@@ -53,14 +53,15 @@ It does not implement management and was not replaced during qualification.
 
 The handoff evidence belongs in one `external-handoff` package under
 `evidence/aquarium/E23-T7/external-handoff/<checksum-manifest-sha256>/`.
-Its `manifest.json` binds the native checksum file's SHA and source commit
+Its `manifest.json` binds the native checksum file's SHA and capture-time Git HEAD
 and indexes the three-artifact `SHA256SUMS` and a selected public-interface projection.
+The projection separately identifies the compiled product source.
 Opaque identities, timestamps and machine paths are removed from that
 projection. It is evidence of selected native fields, not a complete wire
 fixture or a request receipt. Full carriers and identity equalities were
 inspected separately during qualification. Admission requires the committed
-package; review and verified promotion precede final Epic closeout. The corrected
-provider requires checksum target
+package. The [corrected package](../../evidence/aquarium/E23-T7/external-handoff/5df11b40f04553590769e1348d1191a9820ba0879841242fa7e046a3cd022eda/manifest.json)
+requires checksum target
 `sha256:5df11b40f04553590769e1348d1191a9820ba0879841242fa7e046a3cd022eda`.
 The earlier committed package with checksum target
 `sha256:47a6683dd5b826f30f03d7a2d75f5dc5367ff568ac3124f7707d5b406fe84d90`

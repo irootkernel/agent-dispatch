@@ -15,7 +15,8 @@ E21 provides local control, membership, signed publication, checkpoints, and
 guarded import. E22 adds authenticated peer admission, periodic configured-ref
 recovery, fresh pair verification, and managed peer services on macOS and Linux.
 E22-T5 qualified the disposable two-node system on the final committed code
-revision; the release target remains unpublished.
+revision. Its release target was unpublished at the 2026-09-28 closeout;
+[v0.2.0 was subsequently published on 2026-10-01](../../CHANGELOG.md#v020---2026-10-01).
 
 E23's v0.3.0 management extension is described in
 [the management contract](../contracts/sync-management-contract.md) and

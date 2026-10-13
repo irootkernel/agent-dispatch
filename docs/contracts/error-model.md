@@ -89,12 +89,14 @@ it carries a result rather than an error object.
 
 ## 4. Stable Error Code Registry
 
-The shared registry below is closed. The `sync capabilities` and `sync request`
-families use the closed registry in
-[`sync-management-v1/errors.json`](sync-management-v1/errors.json), which also
-owns their code, category, and exit mappings. Shared codes retain
-the same categories and exits in both registries. Adding or changing a code is
-a contract change recorded in the owning registry and changelog.
+The shared registry below is closed. The `sync request` family uses the closed
+registry in [`sync-management-v1/errors.json`](sync-management-v1/errors.json),
+which owns its code, category, and exit mappings. The frozen `sync capabilities`
+command retains the shared CLI registry and the
+[base-provider error set](sync-provider-v1/errors.json) for provider sync codes.
+Shared codes retain the same categories and exits in their owning registries.
+Adding or changing a code is a contract change recorded in the owning registry
+and changelog.
 
 | Code | Category | Exit |
 |---|---|---:|

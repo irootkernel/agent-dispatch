@@ -1,7 +1,8 @@
 # Retention and Privacy
 
-This guide is for the operator responsible for local macOS arm64 state and
-backups. Inspect retention settings and unresolved lineage before removal;
+This guide is for the operator responsible for local macOS arm64, Linux arm64,
+or Linux amd64 state and backups. Inspect retention settings and unresolved
+lineage before removal;
 pruning needs the state owner's authority and a verified backup. The normative
 policy belongs to the specifications and configuration contract.
 

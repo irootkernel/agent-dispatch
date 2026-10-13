@@ -1,7 +1,8 @@
 # Failure and Recovery Guide
 
-For the operator of a local macOS arm64 installation. Before intervention,
-identify the binary version, configuration, route, and affected causal IDs.
+For the operator of a local macOS arm64, Linux arm64, or Linux amd64
+installation. Before intervention, identify the binary version, configuration,
+route, and affected causal IDs.
 Inspect `status`, `doctor`, and the relevant dispatch or notification first.
 The host owner authorizes changes; maintainers own unexplained defects.
 Keep the same explicit `--config` path for diagnosis and resolution.

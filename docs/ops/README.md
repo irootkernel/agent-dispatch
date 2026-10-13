@@ -1,9 +1,13 @@
 # Operations
 
-This directory owns operational guidance for the local macOS arm64 installation:
-Agent Dispatch commands, SQLite state, managed Watchman triggers, and launchd
-schedules. It is one of the eight canonical documentation roles. Guidance here
+This directory owns operational guidance for local macOS arm64, Linux arm64,
+and Linux amd64 installations: Agent Dispatch commands, SQLite state, managed
+Watchman triggers, and launchd or systemd schedules. It is one of the eight canonical documentation roles. Guidance here
 is non-normative and cannot override specifications, contracts, or accepted ADRs.
+
+Use the [installation guide](installation.md) and
+[exact-provider handoff](../integrations/e23t7-management-handoff.md) for
+version-specific native qualification and management admission limits.
 
 The installation's operator owns configuration, local access, backup, and approval
 to change its vault/board integration. Repository maintainers own defect diagnosis

@@ -11,11 +11,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/irootkernel/agent-dispatch/internal/adapters/resourceguard"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/config"
 	"github.com/irootkernel/agent-dispatch/internal/domain/syncmanagement"
@@ -1127,7 +1129,7 @@ func TestE23T5PublicRetryRefusesControlAndUnacceptedPredecessors(t *testing.T) {
 }
 
 func TestE23T5OperatorAdoptionHoldsRequireSpecificRemoval(t *testing.T) {
-	for _, kind := range []string{"membership", "membership_normal", "checkpoint", "checkpoint_signed"} {
+	for _, kind := range []string{"membership", "membership_normal", "checkpoint", "checkpoint_signed", "checkpoint_unsigned", "checkpoint_ancestor"} {
 		t.Run(kind, func(t *testing.T) {
 			holdKind := strings.Split(kind, "_")[0]
 			f := newResumeFixture(t)
@@ -1140,6 +1142,7 @@ func TestE23T5OperatorAdoptionHoldsRequireSpecificRemoval(t *testing.T) {
 			membership := gitTestOutput(t, f.git, f.repo, "rev-parse", f.cfg.Sync.MembershipRef)
 			base := gitTestOutput(t, f.git, f.repo, "rev-parse", f.cfg.Sync.ContentRef)
 			target := base
+			adoptedHead := ""
 			if holdKind == "membership" {
 				client, err := membershipGitClient(f.cfg, f.cfg.Sync)
 				if err != nil {
@@ -1179,7 +1182,7 @@ func TestE23T5OperatorAdoptionHoldsRequireSpecificRemoval(t *testing.T) {
 				}
 				gitTestRun(t, f.git, f.repo, "update-ref", f.cfg.Sync.MembershipRef, membership)
 			} else {
-				if kind == "checkpoint_signed" {
+				if kind != "checkpoint" {
 					client, err := membershipGitClient(f.cfg, f.cfg.Sync)
 					if err != nil {
 						t.Fatal(err)
@@ -1188,25 +1191,43 @@ func TestE23T5OperatorAdoptionHoldsRequireSpecificRemoval(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					plan, err := syncrecords.NewCheckpointPlan(f.cfg.Sync.GroupID, "initial_baseline", base, digest, config.SyncScopeDigest(f.cfg, f.cfg.Sync.Resource), config.SyncContractDigest(), membership, base, f.cfg.Sync.AdministratorKey)
-					if err != nil {
-						t.Fatal(err)
+					checkpointCommit := func(parent, checkpointKind string) string {
+						t.Helper()
+						plan, err := syncrecords.NewCheckpointPlan(f.cfg.Sync.GroupID, checkpointKind, parent, digest, config.SyncScopeDigest(f.cfg, f.cfg.Sync.Resource), config.SyncContractDigest(), membership, parent, f.cfg.Sync.AdministratorKey)
+						if err != nil {
+							t.Fatal(err)
+						}
+						checkpoint, err := syncrecords.CanonicalCheckpoint(plan.ProposedCheckpoint)
+						if err != nil {
+							t.Fatal(err)
+						}
+						proposal, err := syncrecords.CanonicalCheckpointPlan(plan)
+						if err != nil {
+							t.Fatal(err)
+						}
+						tree, err := client.SnapshotTree(context.Background(), parent, map[string][]byte{".agent-dispatch-sync/checkpoints/" + plan.ProposedCheckpoint.CheckpointID + ".json": checkpoint, ".agent-dispatch-sync/checkpoint-plans/" + plan.PlanID + ".json": proposal})
+						if err != nil {
+							t.Fatal(err)
+						}
+						commit, err := client.CreateSignedContentCommit(context.Background(), tree, f.adminKey, parent, time.Now(), "administrator", "Reviewed fixture checkpoint")
+						if err != nil {
+							t.Fatal(err)
+						}
+						return commit
 					}
-					checkpoint, err := syncrecords.CanonicalCheckpoint(plan.ProposedCheckpoint)
-					if err != nil {
-						t.Fatal(err)
-					}
-					proposal, err := syncrecords.CanonicalCheckpointPlan(plan)
-					if err != nil {
-						t.Fatal(err)
-					}
-					tree, err := client.SnapshotTree(context.Background(), base, map[string][]byte{".agent-dispatch-sync/checkpoints/" + plan.ProposedCheckpoint.CheckpointID + ".json": checkpoint, ".agent-dispatch-sync/checkpoint-plans/" + plan.PlanID + ".json": proposal})
-					if err != nil {
-						t.Fatal(err)
-					}
-					target, err = client.CreateSignedContentCommit(context.Background(), tree, f.adminKey, base, time.Now(), "administrator", "Reviewed fixture checkpoint")
-					if err != nil {
-						t.Fatal(err)
+					target = checkpointCommit(base, "initial_baseline")
+					if kind == "checkpoint_unsigned" {
+						if err := client.VerifySSHSignature(context.Background(), target, f.cfg.Sync.AdministratorKey); err != nil {
+							t.Fatal(err)
+						}
+						tree := gitTestOutput(t, f.git, f.repo, "rev-parse", target+"^{tree}")
+						// Keep the valid records and predecessor; remove only the Git signature.
+						target = gitTestOutput(t, f.git, f.repo, "-c", "commit.gpgsign=false", "commit-tree", tree, "-p", base, "-m", "Unsigned fixture checkpoint")
+						if err := client.VerifySSHSignature(context.Background(), target, f.cfg.Sync.AdministratorKey); err == nil {
+							t.Fatal("unsigned fixture retained a signature")
+						}
+					} else if kind == "checkpoint_ancestor" {
+						adoptedHead = checkpointCommit(target, "conflict_resolution")
 					}
 				} else {
 					checkpoint := filepath.Join(f.repo, ".agent-dispatch-sync", "checkpoints", "operator-only.json")
@@ -1221,6 +1242,9 @@ func TestE23T5OperatorAdoptionHoldsRequireSpecificRemoval(t *testing.T) {
 					target = gitTestOutput(t, f.git, f.repo, "rev-parse", "HEAD")
 					gitTestRun(t, f.git, f.repo, "reset", "--hard", base)
 				}
+			}
+			if adoptedHead == "" {
+				adoptedHead = target
 			}
 			binGit := filepath.Join(filepath.Dir(f.remoteHead), "bin", "git")
 			raw, err := os.ReadFile(binGit)
@@ -1252,6 +1276,16 @@ func TestE23T5OperatorAdoptionHoldsRequireSpecificRemoval(t *testing.T) {
 			if holdKind == "checkpoint" && (request.Outcome.TargetCommit == nil || *request.Outcome.TargetCommit != target) {
 				t.Fatal("known checkpoint target lost")
 			}
+			assertHeld := func(contentHead, membershipHead string) {
+				t.Helper()
+				held, err := f.store.LoadManagementRequest(context.Background(), f.cfg.Sync.GroupID, id, time.Now())
+				if err != nil || held.State != "blocked" || held.Revision != request.Revision || held.Attempts != request.Attempts || held.Fence != request.Fence || held.Fingerprint != request.Fingerprint || held.AcceptedAt == nil || *held.AcceptedAt != *request.AcceptedAt || len(held.Jobs) != 0 || !reflect.DeepEqual(held.Outcome, request.Outcome) {
+					t.Fatalf("standing operator hold changed:%+v %v", held, err)
+				}
+				if gitTestOutput(t, f.git, f.repo, "rev-parse", f.cfg.Sync.ContentRef) != contentHead || gitTestOutput(t, f.git, f.repo, "rev-parse", f.cfg.Sync.MembershipRef) != membershipHead {
+					t.Fatal("management recovery changed adopted refs")
+				}
+			}
 			for pass := range 3 {
 				if pass == 1 {
 					f.cfg.Sync.Management.Enabled = false
@@ -1259,10 +1293,7 @@ func TestE23T5OperatorAdoptionHoldsRequireSpecificRemoval(t *testing.T) {
 				}
 				service.recoverManagement(context.Background())
 				service.dispatchManagement(context.Background())
-				held, err := f.store.LoadManagementRequest(context.Background(), f.cfg.Sync.GroupID, id, time.Now())
-				if err != nil || held.State != "blocked" || held.Revision != request.Revision || held.Attempts != request.Attempts || held.Fence != request.Fence || held.Fingerprint != request.Fingerprint || held.AcceptedAt == nil || *held.AcceptedAt != *request.AcceptedAt || len(held.Jobs) != 0 || held.Outcome == nil || held.Outcome.Reason != request.Outcome.Reason {
-					t.Fatalf("standing operator hold changed:%+v %v", held, err)
-				}
+				assertHeld(base, membership)
 				f.cfg.Sync.Management.Enabled = true
 				f.writeConfig(t)
 			}
@@ -1272,13 +1303,29 @@ func TestE23T5OperatorAdoptionHoldsRequireSpecificRemoval(t *testing.T) {
 			if got := gitTestOutput(t, f.git, f.repo, "rev-parse", f.cfg.Sync.ContentRef); got != base {
 				t.Fatalf("management adopted checkpoint:%s", got)
 			}
-			if kind == "membership_normal" || kind == "checkpoint_signed" {
+			if kind == "checkpoint_unsigned" {
+				gitTestRun(t, f.git, f.repo, "reset", "--hard", target)
+				service.recoverManagement(context.Background())
+				assertHeld(target, membership)
+			}
+			if kind == "membership_normal" || kind == "checkpoint_signed" || kind == "checkpoint_ancestor" {
 				// Fixture setup represents an already completed, explicit operator
 				// adoption. Management recovery may inspect it, never perform it.
 				if kind == "membership_normal" {
 					gitTestRun(t, f.git, f.repo, "update-ref", f.cfg.Sync.MembershipRef, strings.TrimSpace(string(mustRead(t, f.remoteHead))))
 				} else {
-					gitTestRun(t, f.git, f.repo, "reset", "--hard", target)
+					gitTestRun(t, f.git, f.repo, "reset", "--hard", adoptedHead)
+				}
+				currentMembership := gitTestOutput(t, f.git, f.repo, "rev-parse", f.cfg.Sync.MembershipRef)
+				guard, err := resourceguard.Acquire(stateDirOf(f.cfg), f.cfg.Sync.Resource)
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { guard.Close() })
+				service.recoverManagement(context.Background())
+				assertHeld(adoptedHead, currentMembership)
+				if err := guard.Close(); err != nil {
+					t.Fatal(err)
 				}
 				service.recoverManagement(context.Background())
 				queued, err := f.store.LoadManagementRequest(context.Background(), f.cfg.Sync.GroupID, id, time.Now())

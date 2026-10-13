@@ -4,14 +4,15 @@ This handoff identifies the v0.3.0 qualification candidate for Plugin TASK-028.
 It grants no Plugin admission, production activation, installation or publication.
 [D-031](../specs/decision-log.md#d-031---2026-10-12---arm-scoped-e23-completion-amd64-qualification-deferred)
 permits ARM-scoped E23 completion using native Darwin arm64/Linux arm64 full
-gates and paired public CLI evidence. Both native paired qualifications are complete
-on the product source and binaries below. The native full gates cover the same
-code and test inputs with the documentation projection described below.
-Their temporary services and credentials have been removed. Member and whole-Epic
-independent reviews are complete; admission requires the committed handoff package.
+gates and paired public CLI evidence. The product source and binaries below
+have native ARM paired qualification.
+The exact source passed the native full gates described below. Temporary services
+and credentials were removed. TASK-028 also requires a completed whole-Epic
+independent review of this corrected candidate and its committed handoff package.
 
-Linux amd64 subsequently passed the native full gate for the selected source
-and artifact, resolving [DF-010](../deferred-feedback/010-e23-amd64-qualification.md).
+The selected source passed the native Linux amd64 full gate.
+[DF-010](../deferred-feedback/010-e23-amd64-qualification.md) preserves the earlier
+qualification of its original source and the requirement to requalify changed inputs.
 Native paired management and service qualification remains ARM-only. This
 follow-up does not widen Plugin admission or qualify native amd64 Plugin use;
 new release inputs require applicable requalification.
@@ -21,7 +22,7 @@ new release inputs require applicable requalification.
 | Field | Required value |
 |---|---|
 | Product version | `v0.3.0` |
-| Product source commit | `f263e096c5b01fe2a83c7f95c66410035030a752` |
+| Product source commit | `47cdc6b8ac6efb39fb6d7e6cb827bb178332996b` |
 | Management contract | `sha256:77dba7fac82cf1e627ad29ab89057c18d4d5c2c380251112579e551d1122cf39` |
 | Base-sync contract | `sha256:30cf47b1bd854a0271aa9df3e7b37f0cc14cdd86d3f06a65a2cb787c6741131b` |
 | Toolchain | Go `1.27.1` |
@@ -36,12 +37,12 @@ this handoff and the exact binary SHA.
 
 | Artifact | SHA-256 | Qualification |
 |---|---|---|
-| `agent-dispatch-v0.3.0-darwin-arm64` | `5c8ece46ee7f27d8d7fc1acb3c5fb9c0a50675fefcb1150de15edd2e827f787c` | Native qualified |
-| `agent-dispatch-v0.3.0-linux-arm64` | `47e1e7e1b9d2fbdb8397230604a85b93c6893ef88209eef9a98d278a7e1b99e9` | Native qualified |
-| `agent-dispatch-v0.3.0-linux-amd64` | `fc6c676063357a70058f1b1227d44e0e0dde6f4ba1fef2989317a950844f11bd` | Native full gate and version execution qualified; paired management unqualified |
+| `agent-dispatch-v0.3.0-darwin-arm64` | `c43e20f23d22705d9bb958dc23c3104085cc0c05c24a11fa5382a0c1848b1b41` | Native qualified |
+| `agent-dispatch-v0.3.0-linux-arm64` | `e1476833dfa8e80737bb99646ff787900fa33bcacd12238ab0e94786f410aae0` | Native qualified |
+| `agent-dispatch-v0.3.0-linux-amd64` | `4d42dc3a689a512bb9a4c2bdb900982c5d750d061cb7fe5dd73c83313d91e764` | Native full gate and version execution qualified; paired management unqualified |
 
-Two builds on native Darwin arm64 and two on native Linux arm64 produced this
-same three-platform checksum list. Each used the exact Git archive, `make
+Independent builds on native Darwin arm64 and native Linux arm64 produced
+the same three-platform checksum list. Each used the exact Git archive, `make
 release`, `VERSION=v0.3.0`, the full `RELEASE_COMMIT` above, that commit's
 `%cI` value as `COMMIT_DATE`, `-trimpath` and `CGO_ENABLED=0`.
 Build into a disposable `DIST_DIR`; rebuilding does not publish or install.
@@ -52,23 +53,21 @@ The separately frozen operating pair remains Core v0.2.0 source
 [frozen-pair table](../contracts/sync-management-contract.md#frozen-release-pair-and-development-isolation).
 It does not implement management and was not replaced during qualification.
 
-The handoff evidence belongs in one `external-handoff` package under
-`evidence/aquarium/E23-T7/external-handoff/<checksum-manifest-sha256>/`.
-Its `manifest.json` binds the native checksum file's SHA and capture-time Git HEAD
-and indexes the three-artifact `SHA256SUMS` and a selected public-interface projection.
-The projection separately identifies the compiled product source.
-Opaque identities, timestamps and machine paths are removed from that
-projection. It is evidence of selected native fields, not a complete wire
-fixture or a request receipt. Full carriers and identity equalities were
-inspected separately during qualification. Admission requires the committed
-package. The [corrected package](../../evidence/aquarium/E23-T7/external-handoff/5df11b40f04553590769e1348d1191a9820ba0879841242fa7e046a3cd022eda/manifest.json)
-requires checksum target
-`sha256:5df11b40f04553590769e1348d1191a9820ba0879841242fa7e046a3cd022eda`.
-The earlier committed package with checksum target
-`sha256:47a6683dd5b826f30f03d7a2d75f5dc5367ff568ac3124f7707d5b406fe84d90`
-is historical evidence for the earlier source and cannot admit this corrected
-provider. Promotion is a reviewed commit-boundary projection; this handoff
-does not claim that an uncommitted package is available to the consumer.
+Admission requires one committed `external-handoff` package for this product
+source under `evidence/aquarium/E23-T7/external-handoff/`.
+The native checksum file target is
+`sha256:d7a1aed771fbc551e96e4efc3426653f65d3d5d890d187f5f2e61baebedc149f`.
+The package's `manifest.json` binds that exact file target and capture-time Git
+HEAD and indexes `SHA256SUMS` and selected native public-interface fields.
+Verify the manifest and payload digests, the source identity and every artifact
+SHA above. A missing or mismatched package cannot admit the provider.
+
+The public projection omits opaque identities, timestamps, credentials and
+machine paths. It contains selected native fields and is neither a complete
+wire fixture nor a request receipt. Full carriers and exact identity equalities
+were inspected separately. Promotion follows operationally complete native
+review and receives commit-boundary validation. Earlier committed packages
+remain immutable historical evidence and cannot admit this source.
 
 ## Public admission checks
 
@@ -130,51 +129,53 @@ this run.
 | Exact historical lookup | An older request kept its original job and verification identity after newer successful verifications. |
 | Uninstall | Stop, disable and state-preserving uninstall removed the matching definitions. Accepted request/job evidence remained available afterward. |
 
-All 173 captured management carriers validated against the frozen envelope
+All 393 captured management carriers validated against the frozen envelope
 and result schemas. Decoded public output was inspected for fixture secrets.
 Temporary service definitions, private peer routes, bridges, owned peer
 credential files, the temporary Mac binary copy and the added Linux SSH
 authorization/host-key lines were removed. No new SSH agent was started.
 Existing routes, SSH file contents and agent keys were preserved.
 
-Native Darwin arm64 and Linux arm64 passed default `make verify` on the fixed
-source projection. Every code, test, build and contract input matches the product
-source above. Its subsequent commit changed only the planned roadmap completion
-note and generated documentation manifest; focused documentation checks passed.
-The handoff refresh changes canonical qualification information and its generated
-manifest, with the same product inputs. The full gate was not rerun on these later
-documentation bytes.
+Native Darwin arm64, Linux arm64 and Linux amd64 passed default `make verify`
+on the exact Git archive of the product source above with Go `1.27.1`.
+The unit and race targets retained their 30-minute deadlines; no test-selection
+or deadline override was used. Native Darwin supplied launchd lint; native
+Linux supplied systemd lint. The other platform's manager lint was skipped on
+each host. Native Darwin had real Watchman and the installed Hermes executable;
+Linux arm64 had no real Watchman or Hermes on its verification PATH.
+Non-verbose gate output does not establish individual optional-test skip counts.
 
-On 2026-10-13 the cloud verification maintainer supplied native Linux amd64
-terminal evidence from a clean checkout of the product source above on an
-x86_64 KVM virtual machine with Go `1.27.1`. Default `make verify` exited 0,
-including the unchanged unit and race targets and systemd artifact lint.
-Real Watchman was available through the isolated runner. The unit stage reused
-30 package results from a prior attempt on the same source. Non-verbose output
-does not establish individual skip counts or optional real-Hermes coverage;
-macOS launchd lint was skipped on Linux. A native release rebuild reproduced
-the exact amd64 SHA above, with Linux amd64 ELF/build metadata and successful
-native `version` and `version --json` reporting `v0.3.0`. Documentation HEAD
-`15092eb47760940fd008c2938ebc26f6d2abb163` passed focused documentation and
-contract checks. The local coordinator checked these supplied bindings against
-the repository; it did not independently read the cloud filesystem. The existing
-promoted package retains ARM public-interface evidence and is unchanged.
+Native Linux amd64 used real Watchman from an owned tool directory. Its first
+attempt failed before unit execution because the client tried to create its
+installation's default state directory. Later attempts supplied private
+client state, pid and log defaults while retaining the runner's later explicit
+instance paths. A subsequent attempt was interrupted when the disposable VM
+session restarted, so its partial unit/race output does not qualify the source.
+The final attempt used an owned persistent tool/source directory and a session
+heartbeat; the default gate passed. Repository source, test selection and
+deadlines did not change.
+The coordinator directly inspected the native terminal result and its source
+and log digests. Native `version --json` executed the exact amd64 artifact and
+returned `v0.3.0`; paired management and service qualification remains ARM-only.
 
-Earlier emulation results belong to source
-`6786088bc7b6540b34f25c9a398e644dae6a4547` and cannot qualify the corrected
-binary. The first attempt failed optional Watchman startup; the next reached the package's
-30-minute unit-test limit. Container-local source/cache storage allowed the
-unit suite to pass, but the race suite reached the same limit. The final run
-with two CPUs and `GOMAXPROCS=2` passed the unit suite in 1563.124 seconds and
-failed the CLI race package at 1800.120 seconds, with `make verify` exit 2.
-The timeout occurred while an existing G9 notification test was running;
-it does not establish an individual assertion failure or race violation.
-The source, checks and 30-minute timeout remained unchanged. This historical
-timeout is superseded for the selected corrected source by the native full-gate
-pass above. D-031 remains the authority for the original ARM-scoped E23 completion.
-Native Darwin supplies real Watchman integration and launchd lint; native
-Linux supplies systemd lint. Emulated amd64 evidence grants no native amd64
-Plugin support.
+The paired run's first Mac service could not finish an external-volume open.
+The same binary ran from an owned internal fixture copy. Its existing import
+acknowledgement was rebound to the copied resource's public configuration
+revision. The original failed-start handle was settled through the public
+worker before the clean pair was checked. Both Mac paused actions were then
+confirmed from a healthy acknowledgement baseline; neither confirmation
+changed the configuration between pause and completion. Failed attempts remain
+separate from the successful native matrix; no fixture database was edited to
+force a result.
+The final native services, routes, bridges and credentials were removed, and
+Linux SSH file contents were restored to their pre-run digests.
+
+Later handoff and manifest edits change only canonical documentation and
+promoted evidence. Their focused documentation and contract checks do not
+pretend to rerun the full gates on those later bytes. Changed product, test,
+build or contract inputs require fresh applicable qualification. D-031 keeps
+its original ARM completion boundary; DF-010 keeps its historical exact-source
+resolution. Neither record qualifies a changed source automatically.
 
 ## Operations and consumer ownership
 

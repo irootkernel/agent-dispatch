@@ -6083,12 +6083,15 @@ exact-artifact and Plugin handoff qualification remain E23-T7's gates.
 
 **Status:** Completed
 
-Formal whole-Epic audit required T7's exact-provider handoff to follow the T5
-recovery correction. Both corrected ARM artifacts now pass the native public
-matrix, and the handoff identifies their source and full-gate documentation
-projection. The corrected handoff has whole-Epic confirmation and a reviewed
+The original T7 delivery followed the T5 recovery correction and received
+whole-Epic confirmation with its reviewed
 [public evidence package](../../evidence/aquarium/E23-T7/external-handoff/5df11b40f04553590769e1348d1191a9820ba0879841242fa7e046a3cd022eda/manifest.json).
-The previous package remains immutable historical evidence.
+That package remains immutable historical evidence. The
+[current exact-provider handoff](../integrations/e23t7-management-handoff.md)
+selects the corrected provider source, its native qualification and the exact
+checksum target. A changed provider requires completed whole-Epic review and a
+matching committed package before Plugin admission; the original package cannot
+admit it.
 
 ### Objective
 

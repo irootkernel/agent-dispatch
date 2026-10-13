@@ -981,19 +981,24 @@ membership validation and SQLite transactions run against private fixtures.
 | AC-1909 | T4 healthy verification excludes its own metadata; unrelated pending work, dirtiness, stale evidence and uncertainty stay incomplete, and a moving target stays target-changed. T6 propagates the production four-minute deadline to an injected transport; a five-second parent deadline interrupts a stalled transport and leaves one planned job, later expired without a new observation. |
 | AC-1910 | T2 bounds cover drafts, attempts, terminal/control capacity, associations and evidence retention; T3 bounds carriers and lock/output deadlines. T4 proves periodic work is not starved. T6 saturation returns exit 14 / `sync_precondition_failed`, retains both unresolved jobs and exposes queue pressure through actual `sync status`; stale remote membership returns exit 30 before job admission or HTTP observation. |
 | AC-1911 | T2 additive upgrade preserves jobs and makes the incompatible old schema guard refuse. T5 supported restore preserves accepted evidence and makes old-incarnation drafts obsolete. These are disposable state tests, not installation or production rollback evidence. |
-| AC-1912 | E23-T7's [exact-provider handoff](integrations/e23t7-management-handoff.md) identifies the reproducible candidate and qualified native public CLI pair. Both native ARM full gates passed the fixed code, test, build and contract inputs; the subsequent lifecycle note and generated manifest passed focused checks. The exact corrected binaries passed the refreshed native paired matrix, including same-handle paused-dispatch recovery for both actions on both nodes. D-031 permits ARM-scoped E23 completion with the required reviews; DF-010 is resolved for product source `f263e096c5b01fe2a83c7f95c66410035030a752` and its exact artifact by subsequent supplied native Linux amd64 full-gate evidence (`make verify` exit 0); the earlier emulated timeout remains historical. Native paired management and Plugin admission remain ARM-only. New release inputs require applicable requalification. Deterministic fixtures do not establish Plugin admission. |
+| AC-1912 | E23-T7's [exact-provider handoff](integrations/e23t7-management-handoff.md) selects product source `47cdc6b8ac6efb39fb6d7e6cb827bb178332996b` and reproducible artifact SHAs. That source passed default native Darwin arm64, Linux arm64 and Linux amd64 full gates with Go `1.27.1`. The exact ARM artifacts passed the public paired matrix, including both paused actions on both nodes, exact-handle restart and lost-response recovery, and fresh two-node verification. The handoff records native availability, state-preserving uninstall, cleanup and the separate failed-attempt limits. Whole-Epic review of the corrected candidate and its conditional committed handoff package remain admission requirements. D-031 retains its original ARM completion boundary; DF-010 retains its historical `f263e096c5b01fe2a83c7f95c66410035030a752` resolution. Native paired management and Plugin admission remain ARM-only. New release inputs require applicable requalification; deterministic fixtures do not establish Plugin admission. |
 
-D-031 records Master's approval of ARM-scoped E23 completion. Both native PASS
-records retain their fixed-source bindings, and both native paired runs bind the
-exact corrected artifacts. The handoff states the later documentation projection
-and keeps the earlier emulated amd64 result separate. DF-010 records the resolved
-native amd64 follow-up: Go `1.27.1`, default full gate, exact-source release rebuild
-and native version execution. The cloud maintainer supplied the terminal evidence;
-the local coordinator checked its source/artifact bindings without direct cloud
-filesystem access. The unit stage reused 30 same-source package results, and
-non-verbose output does not establish individual skip counts or optional
-real-Hermes coverage. Native Linux systemd lint passed; macOS launchd lint was
-skipped there. Later documentation bytes receive focused checks, not a new full gate.
+The current handoff separates compiled product identity from later documentation
+and evidence projection. Its three native full gates retained the repository's
+test selection and 30-minute unit/race deadlines. Native Darwin supplied launchd
+lint and native Linux supplied systemd lint; each host skipped the other manager's
+lint. Native Linux arm64 had no real Watchman or Hermes on the verification PATH.
+Native amd64 used real Watchman with private client defaults. Non-verbose output
+does not establish individual optional-test skip counts. The coordinator checked
+current native source, terminal and artifact bindings directly. Later handoff
+documentation receives focused checks; changed product, test, build or contract
+inputs require fresh applicable qualification.
+
+D-031 and DF-010 preserve the original ARM completion and the earlier supplied
+exact-source amd64 follow-up separately. That earlier cloud unit stage reused
+30 same-source package results, and its coordinator did not inspect the cloud
+filesystem directly. Its emulated timeout remains historical. Those dated
+records do not qualify a changed product source or widen paired Plugin admission.
 
 The one-shot verification command uses the explicit configuration-and-Git
 membership helper; the serving process retains its own membership cache.

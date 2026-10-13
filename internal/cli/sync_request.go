@@ -406,27 +406,37 @@ func managementWrite(w io.Writer, value any) error {
 }
 func managementStoreError(ctx context.Context, stderr io.Writer, command string, err error, result any) int {
 	code, category, exit := "sqlite_write_failed", "storage", 20
+	message := "local storage failed; repair the store and inspect the same handle before submitting"
 	var busy *ports.StoreError
 	var sqliteErr *driver.Error
 	switch {
 	case ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled):
 		code, category, exit = "sync_request_deadline", "transient_local", 10
+		message = "request deadline reached; inspect the same handle before repeating the operation"
 	case errors.Is(err, sqlite.ErrManagementNotFound):
 		code, category, exit = "sync_request_not_found", "input_rejected", 4
+		message = "request handle was not found in this group; check the group and exact handle"
 	case errors.Is(err, sqlite.ErrManagementExpired):
 		code, category, exit = "sync_request_expired", "input_rejected", 4
+		message = "request draft expired; prepare a new request after reviewing current state"
 	case errors.Is(err, sqlite.ErrManagementObsolete):
 		code, category, exit = "sync_request_obsolete", "input_rejected", 4
+		message = "request draft is obsolete; prepare a new request against current control state"
 	case errors.Is(err, sqlite.ErrManagementUnauthorized):
 		code, category, exit = "sync_request_binding_changed", "conflict", 14
+		message = "request binding changed; inspect the same handle and review current policy before preparing another"
 	case errors.Is(err, sqlite.ErrManagementNotRetryable):
 		code, category, exit = "sync_request_not_retryable", "conflict", 14
+		message = "request has no eligible retry obligation or has exhausted its budget; inspect its jobs before operator recovery"
 	case errors.Is(err, sqlite.ErrSyncAdmissionConflict), errors.Is(err, sqlite.ErrSyncPrecondition), errors.Is(err, sqlite.ErrSyncControlHeld):
 		code, category, exit = "sync_request_conflict", "conflict", 14
+		message = "request conflicts with current control or admission state; inspect the same handle and resolve the guard"
 	case errors.Is(err, sqlite.ErrSyncQueueFull):
 		code, category, exit = "sync_request_capacity", "transient_local", 10
+		message = "request capacity is exhausted; inspect pending work and let it settle before repeating the operation"
 	case errors.As(err, &busy) || (errors.As(err, &sqliteErr) && sqliteErr.Code()&255 == 5):
 		code, category, exit = "sync_request_busy", "transient_local", 10
+		message = "local store is busy; inspect the same handle and repeat the operation after contention clears"
 	}
-	return managementError(stderr, command, code, category, "request operation refused; inspect the same handle before resubmission", exit, result)
+	return managementError(stderr, command, code, category, message, exit, result)
 }

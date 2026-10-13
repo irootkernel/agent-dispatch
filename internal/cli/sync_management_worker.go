@@ -284,9 +284,13 @@ func (s *peerService) dispatchManagementWithHTTP(ctx context.Context, httpClient
 	}
 	claimed, err := s.store.ClaimManagementRequest(ctx, pending.GroupID, id, randomSyncID("management-owner"), binding, true, time.Now())
 	if err != nil {
-		if errors.Is(err, sqlite.ErrSyncQueueFull) {
-			if _, err := s.store.TransitionManagementRequest(ctx, pending, "blocked", &syncmanagement.Outcome{Status: "blocked", Reason: "request lineage exhausted its execution budget"}, "management-attempt-budget-inspection", time.Now()); err != nil {
-				s.warn("management budget result remains unresolved")
+		if errors.Is(err, sqlite.ErrSyncQueueFull) || errors.Is(err, sqlite.ErrManagementUnauthorized) || errors.Is(err, sqlite.ErrSyncControlHeld) {
+			reason := "worker binding or current control refuses execution"
+			if errors.Is(err, sqlite.ErrSyncQueueFull) {
+				reason = "request lineage exhausted its execution budget"
+			}
+			if _, err := s.store.TransitionManagementRequest(ctx, pending, "blocked", &syncmanagement.Outcome{Status: "blocked", Reason: reason}, "management-claim-refusal-inspection", time.Now()); err != nil {
+				s.warn("management claim refusal remains unresolved")
 			}
 		}
 		return

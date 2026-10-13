@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -381,7 +382,7 @@ func TestE23T4LocalControlsShareOperatorResumeSafety(t *testing.T) {
 }
 
 func TestE23T4WorkerVerificationHasExactResultAndOwnMetadataExemption(t *testing.T) {
-	for _, name := range []string{"healthy", "paused_dispatch", "pending", "dirty", "stale", "uncertain", "moving", "capacity", "association_capacity", "pause_admission"} {
+	for _, name := range []string{"healthy", "paused_dispatch", "pending", "pending_verification", "dirty", "stale", "uncertain", "moving", "capacity", "association_capacity", "pause_admission"} {
 		t.Run(name, func(t *testing.T) {
 			f := newResumeFixture(t)
 			f.cfg.Sync.Management = &config.SyncManagement{Enabled: true, Actions: []string{"verify-all", "sync-now"}}
@@ -430,6 +431,16 @@ func TestE23T4WorkerVerificationHasExactResultAndOwnMetadataExemption(t *testing
 				code, other = e23t4Request(t, f.path, "submit", "--group", f.cfg.Sync.GroupID, "--request-id", other["result"].(map[string]any)["request_id"].(string))
 				if code != 0 {
 					t.Fatal(other)
+				}
+			}
+			if name == "pending_verification" {
+				otherID := e23t5Accepted(t, f.cfg, f.path, "verify-all")
+				binding, err := managementBindingForConfig(f.cfg)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := f.store.ClaimManagementRequest(context.Background(), f.cfg.Sync.GroupID, otherID, "other-verifier", binding, true, time.Now()); err != nil {
+					t.Fatal(err)
 				}
 			}
 			if name == "dirty" {
@@ -570,10 +581,19 @@ func TestE23T4ExistingWorkerFairnessAndStoppedEvidence(t *testing.T) {
 			t.Fatal(value)
 		}
 	}
+	target := gitTestOutput(t, f.git, f.repo, "rev-parse", f.cfg.Sync.ContentRef)
+	nudge := syncrecords.Nudge{SchemaVersion: syncrecords.NudgeSchema, GroupID: f.cfg.Sync.GroupID, PublicationID: "fairness-nudge", Sender: f.cfg.Sync.Nodes[1].InstanceID, Receiver: f.cfg.Sync.LocalInstanceID, MembershipRevision: gitTestOutput(t, f.git, f.repo, "rev-parse", f.cfg.Sync.MembershipRef), ContentRef: f.cfg.Sync.ContentRef, TargetCommit: target}
+	raw, err := syncrecords.CanonicalNudge(nudge)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.AdmitPeerNudge(context.Background(), sqlite.PeerNudgeInput{GroupID: nudge.GroupID, PublicationID: nudge.PublicationID, Fingerprint: fmt.Sprintf("sha256:%x", sha256.Sum256(raw)), PayloadJSON: string(raw), ReceivedAt: time.Now().UTC().Format(time.RFC3339Nano), QueueLimit: 2}); err != nil {
+		t.Fatal(err)
+	}
 	periodic := make(chan struct{}, 2)
 	service := &peerService{cfg: f.cfg, configPath: f.path, store: f.store, wake: make(chan struct{}, 1), reconcile: func(context.Context) (bool, string) {
 		periodic <- struct{}{}
-		return true, strings.Repeat("a", 40)
+		return true, target
 	}}
 	binding, err := managementBindingForConfig(f.cfg)
 	if err != nil {
@@ -608,6 +628,10 @@ func TestE23T4ExistingWorkerFairnessAndStoppedEvidence(t *testing.T) {
 	}
 	awaitPass()
 	awaitDispatch(0)
+	var resolution string
+	if err := f.store.QueryRow(`SELECT resolution FROM sync_peer_nudges WHERE publication_id=? AND processed_at IS NOT NULL`, nudge.PublicationID).Scan(&resolution); err != nil || resolution != "covered" {
+		t.Fatalf("queued management starved peer recovery: %s %v", resolution, err)
+	}
 	second, err := f.store.LoadManagementRequest(context.Background(), f.cfg.Sync.GroupID, ids[1], time.Now())
 	if err != nil || second.State != "queued" {
 		t.Fatalf("startup dispatched more than one request:%+v %v", second, err)
@@ -654,6 +678,40 @@ func TestE23T4ExistingWorkerFairnessAndStoppedEvidence(t *testing.T) {
 		if code != 0 || value["result"].(map[string]any)["executor"] != "stopped" {
 			t.Fatalf("exact stopped lookup:%d %v", code, value)
 		}
+	}
+}
+
+func TestE23T4StaleWorkerBindingDoesNotHoldTheQueuedHead(t *testing.T) {
+	f := newResumeFixture(t)
+	f.cfg.Sync.Management = &config.SyncManagement{Enabled: true, Actions: []string{"sync-now"}}
+	f.writeConfig(t)
+	startup, err := config.Load(f.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.cfg.Sync.Management.Actions = append(f.cfg.Sync.Management.Actions, "verify-all")
+	f.writeConfig(t)
+	first := e23t5Accepted(t, f.cfg, f.path, "sync-now")
+	second := e23t5Accepted(t, f.cfg, f.path, "sync-now")
+	before, err := f.store.LoadManagementRequest(context.Background(), f.cfg.Sync.GroupID, first, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := &peerService{cfg: startup, configPath: f.path, store: f.store}
+	service.dispatchManagement(context.Background())
+	held, err := f.store.LoadManagementRequest(context.Background(), f.cfg.Sync.GroupID, first, time.Now())
+	if err != nil || held.State != "blocked" || held.Outcome == nil || held.Outcome.Status != "blocked" || held.Attempts != 0 || held.Fence != 0 || len(held.Jobs) != 0 || held.Fingerprint != before.Fingerprint || held.AcceptedAt == nil || *held.AcceptedAt != *before.AcceptedAt {
+		t.Fatalf("stale worker lost its refusal: %+v %v", held, err)
+	}
+	next, err := f.store.NextQueuedManagementRequest(context.Background(), f.cfg.Sync.GroupID)
+	if err != nil || next != second {
+		t.Fatalf("refused head starved later work: %s %v", next, err)
+	}
+	service.cfg = f.cfg
+	service.dispatchManagement(context.Background())
+	progressed, err := f.store.LoadManagementRequest(context.Background(), f.cfg.Sync.GroupID, second, time.Now())
+	if err != nil || progressed.State == "queued" || progressed.Attempts != 1 {
+		t.Fatalf("current worker did not dispatch later work: %+v %v", progressed, err)
 	}
 }
 

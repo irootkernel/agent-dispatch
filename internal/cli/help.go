@@ -33,7 +33,7 @@ Commands:
   events         show — aggregate-event inspection with per-child evidence.
   notifications  test, list, retry, drain — the notification delivery surface.
   schedule       render, install, inspect, disable, uninstall, run — the managed launchd drain schedule.
-  sync           capabilities, control, publication, guarded import, membership, checkpoints, and managed service.
+  sync           capabilities, requests, control, publication, guarded import, membership, checkpoints, and managed service.
   work           begin, complete, fail — the Hermes companion receipt surface.
   quarantine     list, release, discard — held-path operator exits.
   reconcile      Run a full-scope reconciliation generation.
@@ -105,8 +105,8 @@ of initial_baseline, conflict_resolution, or history_bound_exhausted;
 --output json selects the versioned machine envelope.
 
 Defaults: the platform configuration path; sync is disabled by default.
-Management uses a closed parser and JSON output; use help sync for discovery.
-New management actions are unavailable until execution/recovery qualify.
+Management uses a closed parser and JSON output. The five configured actions
+are available when sync and management are enabled; disabled policy exposes none.
 Capabilities and exact show remain usable; duplicate accepted submit returns
 retained evidence even after authority is disabled.
 Serve binds an owner-only Unix socket under the state directory for an

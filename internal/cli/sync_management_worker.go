@@ -504,6 +504,8 @@ func managementSharedRefusal(action string, exit int, raw []byte) (string, strin
 		return "blocked", v.Error.Code
 	case exit == 14 && v.Error.Code == "sync_precondition_failed" && v.Error.Category == "conflict":
 		return "blocked", v.Error.Code
+	case exit == 20 && v.Error.Code == "sqlite_write_failed" && v.Error.Category == "storage":
+		return "blocked", v.Error.Code
 	}
 	return "", ""
 }

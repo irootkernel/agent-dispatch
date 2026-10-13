@@ -1218,7 +1218,7 @@ func TestE23T4CapabilitiesPreservesPreManagementState(t *testing.T) {
 }
 
 func TestE23T4WorkerPreservesKnownPreEffectResult(t *testing.T) {
-	for _, mode := range []string{"no_op", "git_unstable", "trust", "transport"} {
+	for _, mode := range []string{"no_op", "git_unstable", "trust", "transport", "storage"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newResumeFixture(t)
 			f.cfg.Sync.Management = &config.SyncManagement{Enabled: true, Actions: []string{"sync-now", "verify-all"}}
@@ -1228,7 +1228,7 @@ func TestE23T4WorkerPreservesKnownPreEffectResult(t *testing.T) {
 				t.Fatal(err)
 			}
 			action := "sync-now"
-			if mode == "trust" || mode == "transport" {
+			if mode == "trust" || mode == "transport" || mode == "storage" {
 				action = "verify-all"
 			}
 			id := e23t5Accepted(t, f.cfg, f.path, action)
@@ -1256,6 +1256,10 @@ func TestE23T4WorkerPreservesKnownPreEffectResult(t *testing.T) {
 				if err := os.WriteFile(f.transportFailure, []byte("unavailable"), 0600); err != nil {
 					t.Fatal(err)
 				}
+			} else if mode == "storage" {
+				if _, err := f.store.Exec(`CREATE TRIGGER refuse_control_metadata BEFORE INSERT ON sync_controls BEGIN SELECT RAISE(FAIL,'fixture storage failure'); END`); err != nil {
+					t.Fatal(err)
+				}
 			}
 			service := &peerService{cfg: f.cfg, configPath: f.path, store: f.store}
 			service.dispatchManagement(context.Background())
@@ -1272,6 +1276,8 @@ func TestE23T4WorkerPreservesKnownPreEffectResult(t *testing.T) {
 			}
 			if mode == "transport" {
 				reason = "sync_retryable"
+			} else if mode == "storage" {
+				reason = "sqlite_write_failed"
 			}
 			if r.State != state || r.Outcome.Status != status || r.Outcome.Reason != reason || r.Outcome.VerificationID != nil {
 				t.Fatalf("known result lost:%+v", r)

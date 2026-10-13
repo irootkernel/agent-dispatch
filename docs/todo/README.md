@@ -32,7 +32,17 @@ changes, and where noted a new ADR/security review.
 | Automatic conflict merge or semantic resolution | Reduce operator conflict work | E22 conflict-stop evidence accepted; a successor to D-030 admits a deterministic resolution authority | silent content loss and split-brain history |
 | Additional Plugin management beyond the E23/EPIC-008 action set | Broader Hermes operations | E23's constrained provider and a separate Plugin scope decision | version skew, lifecycle coupling, and split authority |
 | Local dashboard | Operator convenience | stable status/management API exists | unnecessary daemon/network surface |
+| Management bound enforcement consolidation | Keep advertised and enforced limits aligned | a successor changes frozen freshness, renewal, shutdown, or retention limits | drift between worker, capabilities and operator prune |
 | Hermes management plugin | Native Hermes UI | public authenticated Agent Dispatch management API or MCP stable | lifecycle coupling and split authority |
+
+### Management bound enforcement consolidation
+
+Proposed owner: the Core verification maintainer. Share executor freshness,
+claim-renewal and shutdown constants with the advertised policy, and consolidate
+worker and operator management-retention cutoffs. The current v1 values agree;
+the result-byte limit already uses one domain constant. Re-enter when a successor
+changes one of these frozen limits or the retention callers need different
+cutoff logic.
 
 ## Future Hermes Plugin Constraints
 

@@ -66,8 +66,11 @@ opened state to schema 29. `sync request capabilities` reports local policy and
 support configured `sync-now`, `verify-all`, `retry`, `pause`, and `resume`
 actions. Management is disabled by default. The
 [management contract](docs/contracts/sync-management-contract.md) describes
-request handles, local authority, and bounded recovery. Native paired provider
-qualification remains an E23 delivery gate.
+request handles, local authority, and bounded recovery. The
+[exact-provider handoff](docs/integrations/e23t7-management-handoff.md) records
+native ARM paired qualification and the selected-source Linux amd64 full gate.
+Those results cover its pinned source and artifacts; changed inputs need fresh
+applicable qualification. Plugin admission and publication remain separate.
 Use the v0.2.0 release tag or a published binary for the released version.
 Before opening existing state with a development build, back up its database
 and matching configuration. An older binary refuses schema 29; rollback requires

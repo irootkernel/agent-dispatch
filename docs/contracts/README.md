@@ -19,7 +19,7 @@ than a separate lifecycle authority.
 - [`source-adapter-contract.md`](source-adapter-contract.md)
 - [`sink-adapter-contract.md`](sink-adapter-contract.md)
 - [`sync-contract.md`](sync-contract.md)
-- [`sync-management-contract.md`](sync-management-contract.md), the frozen v0.3.0 implementation contract; runtime availability requires later E23 qualification
+- [`sync-management-contract.md`](sync-management-contract.md), the frozen v0.3.0 implementation contract; configured actions use shared Core execution and recovery, with management disabled by default
 
 The sync contract defines the v0.2.0 command and protocol identities. The v1
 command identities are implemented through E22-T4; the capability surface
@@ -31,4 +31,7 @@ E23 keeps management capabilities, schemas, and checksums in the independent
 frozen v0.2.0 provider bundle. `make management-contract-check` compiles its
 closed schemas, validates raw JSON/argv/error-exit fixtures and digest vectors,
 and verifies the pinned digest and ordered checksums. This check is required
-by `make verify`. Runtime completion and Plugin admission are later gates.
+by `make verify`. The roadmap records Core E23 delivery as complete. Exact
+provider qualification is bound to the source and artifacts in the
+[handoff](../integrations/e23t7-management-handoff.md); Plugin admission remains
+its own later gate.

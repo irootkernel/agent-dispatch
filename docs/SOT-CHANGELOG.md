@@ -5,6 +5,14 @@ SOT snapshots, not product releases. Product release notes and pending user-faci
 changes belong to the root [changelog](../CHANGELOG.md). Historical entries below
 retain their recorded scope; migrated document pointers use their current paths.
 
+## Selected-source amd64 qualification - 2026-10-13
+
+- Record [DF-010](deferred-feedback/010-e23-amd64-qualification.md) as resolved
+  for its named source and artifact, retaining D-031's original ARM-scoped
+  completion and paired-management boundary.
+- Keep requalification of changed source and release inputs, Plugin admission,
+  installation and publication as separate requirements.
+
 ## ARM-scoped E23 qualification - 2026-10-12
 
 - Accept D-031 for E23 completion on the two native ARM full gates and paired

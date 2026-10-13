@@ -8,10 +8,10 @@ v0.2.0 two-node Wiki sync target under `SYN-*`; E20 through E22 completed that
 work. Every unamended earlier requirement remains binding in v0.2.0 whether
 sync is enabled or disabled.
 
-Section 20 defines planned successor requirements for E23. `SMR-*` applies
-only to the later management-provider release, whose version is not yet
-selected. It neither reopens completed E20-E22 work nor adds a v0.2.0 release
-condition. Current v0.2.0 configurations and capabilities remain unchanged.
+Section 20 defines E23's selected v0.3.0 management-provider requirements.
+`SMR-*` applies to that successor. It neither reopens completed E20-E22 work
+nor adds a v0.2.0 release condition. Current v0.2.0 configurations and
+capabilities remain unchanged.
 
 - **MUST** requirements block their explicitly applicable release. `SMR-*`
   does not block the current v0.2.0 release.

@@ -243,8 +243,9 @@ linear-history verification.
 
 ### G19: Constrained Sync Management Provider (Post-v0.2.0)
 
-G19 is planned for E23's successor provider. It is not an additional v0.2.0
-release or deployment gate and none of its rows is evidence of implementation.
+G19 defines acceptance for E23's v0.3.0 successor provider. It adds no v0.2.0
+release or deployment gate. The rows specify expected behavior; inspected
+results and their source bindings are recorded in [G19 validation](../VALIDATION.md).
 The [management contract](../contracts/sync-management-contract.md) owns the
 frozen successor request boundaries. E23-T6 owns deterministic qualification;
 E23-T7 owns the exact-candidate native paired handoff.

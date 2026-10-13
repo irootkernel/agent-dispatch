@@ -957,8 +957,10 @@ their corresponding real integration and platform lints were skipped.
 ## G19 deterministic qualification basis (E23-T6)
 
 This matrix covers the disposable Core fixtures for AC-1901 through AC-1911.
-AC-1912's native paired run, three-platform qualification and exact artifact
-handoff remain E23-T7 gates. The tests exercise the real request producer and
+E23-T7's exact-provider handoff records native ARM paired qualification and
+the selected-source amd64 full-gate follow-up. Those results apply only to its
+named source and artifacts; changed release inputs need applicable
+requalification. The tests exercise the real request producer and
 SQLite ledger. The frozen-argv, disabled-management, serve and reconcile cases
 enter through `Run`; verification injects HTTP at the ordinary command's
 producer seam. Other request cases use the request producer's internal

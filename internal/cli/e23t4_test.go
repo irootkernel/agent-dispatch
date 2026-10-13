@@ -1342,8 +1342,7 @@ func TestE23T4ExhaustedLineageYieldsQueuedHead(t *testing.T) {
 		t.Fatal(v)
 	}
 	for n := 1; n < syncmanagement.AttemptLimit; n++ {
-		r, err = f.store.TransitionManagementRequest(ctx, r, "queued", nil, "fixture-budget-inspection", time.Now())
-		if err != nil {
+		if _, err := f.store.TransitionManagementRequest(ctx, r, "queued", nil, "fixture-budget-inspection", time.Now()); err != nil {
 			t.Fatal(err)
 		}
 		r, err = f.store.ClaimManagementRequest(ctx, f.cfg.Sync.GroupID, root, "budget-worker", binding, true, time.Now())

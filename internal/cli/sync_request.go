@@ -284,7 +284,7 @@ func runSyncRequestQualified(parent context.Context, args []string, prefix bool,
 		if loadErr != nil {
 			return managementStoreError(ctx, stderr, command, loadErr, nil)
 		}
-		if pending.AcceptedAt == nil && pending.Action == "resume" {
+		if pending.AcceptedAt == nil && (pending.Action == "pause" || pending.Action == "resume") {
 			syncRevision, _ := config.SyncRevision(cfg)
 			control, loadErr := store.LoadSyncControl(ctx, f.group)
 			if errors.Is(loadErr, sql.ErrNoRows) {
@@ -292,28 +292,37 @@ func runSyncRequestQualified(parent context.Context, args []string, prefix bool,
 			} else if loadErr != nil {
 				return managementStoreError(ctx, stderr, command, loadErr, nil)
 			}
-			if control.Revision != *pending.ExpectedControlRevision || control.State == "blocked" || control.MembershipMode != "normal" {
-				return managementStoreError(ctx, stderr, command, sqlite.ErrSyncControlHeld, nil)
+			if control.Revision != *pending.ExpectedControlRevision {
+				return fail("sync_request_conflict", "conflict", fmt.Sprintf("control revision is %d, expected %d; inspect sync status, complete any required operator recovery, then prepare a new request", control.Revision, *pending.ExpectedControlRevision), 14, nil)
 			}
-			guard, guardErr := resourceguard.Acquire(stateDirOf(cfg), cfg.Sync.Resource)
-			if guardErr != nil {
-				return fail("sync_request_conflict", "conflict", "resource is busy; retain the same handle", 14, nil)
-			}
-			defer guard.Close()
-			var validation bytes.Buffer
-			if code := validateSyncResumeContext(ctx, cfg, store, &validation); code != 0 {
-				if ctx.Err() != nil {
-					return managementStoreError(ctx, stderr, command, ctx.Err(), nil)
+			if control.State == "blocked" || pending.Action == "resume" && control.MembershipMode != "normal" {
+				message := "control safety hold remains; inspect sync status and complete its operator recovery before preparing another request"
+				if control.MembershipMode == "blocked_emergency" {
+					message = "membership emergency remains; inspect sync status and adopt a reviewed normal membership replacement through the operator CLI before preparing another request"
 				}
-				switch code {
-				case 30:
-					return fail("sync_trust_failed", "security", "resume trust checks failed; review signed membership and the approved remote before repeating this handle", 30, nil)
-				case 10:
-					return fail("sync_request_busy", "transient_local", "resume could not inspect the approved remote; restore connectivity and repeat this handle", 10, nil)
-				case 20:
-					return fail("sqlite_write_failed", "storage", "resume could not inspect local storage; repair the store and repeat this handle", 20, nil)
-				default:
-					return fail("sync_request_conflict", "conflict", "resume requires idle Git state and resource writers; resolve the local guard and repeat this handle", 14, nil)
+				return fail("sync_request_conflict", "conflict", message, 14, nil)
+			}
+			if pending.Action == "resume" {
+				guard, guardErr := resourceguard.Acquire(stateDirOf(cfg), cfg.Sync.Resource)
+				if guardErr != nil {
+					return fail("sync_request_conflict", "conflict", "resource is busy; retain the same handle", 14, nil)
+				}
+				defer guard.Close()
+				var validation bytes.Buffer
+				if code := validateSyncResumeContext(ctx, cfg, store, &validation); code != 0 {
+					if ctx.Err() != nil {
+						return managementStoreError(ctx, stderr, command, ctx.Err(), nil)
+					}
+					switch code {
+					case 30:
+						return fail("sync_trust_failed", "security", "resume trust checks failed; review signed membership and the approved remote before repeating this handle", 30, nil)
+					case 10:
+						return fail("sync_request_busy", "transient_local", "resume could not inspect the approved remote; restore connectivity and repeat this handle", 10, nil)
+					case 20:
+						return fail("sqlite_write_failed", "storage", "resume could not inspect local storage; repair the store and repeat this handle", 20, nil)
+					default:
+						return fail("sync_request_conflict", "conflict", "resume requires idle Git state and resource writers; resolve the local guard and repeat this handle", 14, nil)
+					}
 				}
 			}
 		}
@@ -439,7 +448,7 @@ func managementStoreError(ctx context.Context, stderr io.Writer, command string,
 		message = "request has no eligible retry obligation or has exhausted its budget; inspect its jobs before operator recovery"
 	case errors.Is(err, sqlite.ErrSyncAdmissionConflict), errors.Is(err, sqlite.ErrSyncPrecondition), errors.Is(err, sqlite.ErrSyncControlHeld):
 		code, category, exit = "sync_request_conflict", "conflict", 14
-		message = "request conflicts with current control or admission state; inspect the same handle and resolve the guard"
+		message = "request conflicts with current control or admission state; inspect sync status and the same handle; prepare a new request if its bound control revision changed"
 	case errors.Is(err, sqlite.ErrSyncQueueFull):
 		code, category, exit = "sync_request_capacity", "transient_local", 10
 		message = "request capacity is exhausted; inspect pending work and let it settle before repeating the operation"

@@ -331,7 +331,7 @@ func e23t4Request(t *testing.T, path string, args ...string) (int, map[string]an
 }
 
 func TestE23T4LocalControlsShareOperatorResumeSafety(t *testing.T) {
-	for _, name := range []string{"healthy", "held", "emergency", "busy", "stale", "trust", "transport", "storage"} {
+	for _, name := range []string{"healthy", "held", "emergency", "busy", "stale", "trust", "transport", "storage", "merge", "index_lock", "foreign_branch", "detached_head", "writer"} {
 		t.Run(name, func(t *testing.T) {
 			f := newResumeFixture(t)
 			f.cfg.Sync.Management = &config.SyncManagement{Enabled: true, Actions: []string{"pause", "resume"}}
@@ -365,6 +365,46 @@ func TestE23T4LocalControlsShareOperatorResumeSafety(t *testing.T) {
 				err = os.WriteFile(f.transportFailure, []byte("unavailable"), 0600)
 			case "storage":
 				_, err = f.store.Exec(`DROP TABLE destination_lane_state`)
+			case "merge":
+				head := gitTestOutput(t, f.git, f.repo, "rev-parse", "HEAD")
+				err = os.WriteFile(filepath.Join(f.repo, ".git", "MERGE_HEAD"), []byte(head+"\n"), 0600)
+			case "index_lock":
+				err = os.WriteFile(filepath.Join(f.repo, ".git", "index.lock"), nil, 0600)
+			case "foreign_branch":
+				gitTestRun(t, f.git, f.repo, "checkout", "-q", "-b", "foreign")
+			case "detached_head":
+				gitTestRun(t, f.git, f.repo, "checkout", "-q", "--detach")
+			case "writer":
+				resource := f.cfg.Resources[f.cfg.Sync.Resource]
+				if err := f.store.RegisterResource(nil, f.cfg.Sync.Resource, "resource-resume-writer", resource.Root, resource.Root, resource.FileScope, resource.Git.Mode); err != nil {
+					t.Fatal(err)
+				}
+				found := false
+				for routeID, route := range f.cfg.Routes {
+					if route.Source.Resource != f.cfg.Sync.Resource {
+						continue
+					}
+					routeRevision, _ := config.RouteRevision(f.cfg, routeID)
+					if err := f.store.RegisterRoute(nil, routeID, routeRevision, config.PolicyRevision(route), f.cfg.Sync.Resource, route.Destinations[0].Target, "{}", time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+						t.Fatal(err)
+					}
+					if err := f.store.InitializeRouteState(nil, routeID); err != nil {
+						t.Fatal(err)
+					}
+					seedE21T3Eligibility(t, f.cfg, f.path, []byte("base\n"))
+					_, err = f.store.Exec(`UPDATE route_runtime_state SET active_dispatch_id=? WHERE route_id=?`, "dispatch-"+routeID, routeID)
+					found = true
+					break
+				}
+				if !found {
+					t.Fatal("fixture has no maintained resource writer")
+				}
+				if idle, inspectErr := f.store.ResourceWritersIdle(context.Background(), f.cfg.Sync.Resource); inspectErr != nil || idle {
+					t.Fatalf("writer fixture is not active:%v %v", idle, inspectErr)
+				}
+				// The receipt fixture rewrites unchanged bytes; settle its stat cache
+				// before checking that resume itself leaves the index unchanged.
+				gitTestRun(t, f.git, f.repo, "update-index", "--refresh")
 			}
 			if err != nil {
 				t.Fatal(err)
@@ -373,10 +413,15 @@ func TestE23T4LocalControlsShareOperatorResumeSafety(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			head := gitTestOutput(t, f.git, f.repo, "rev-parse", "HEAD")
+			index := mustRead(t, filepath.Join(f.repo, ".git", "index"))
 			code, value = e23t4Request(t, f.path, "submit", "--group", f.cfg.Sync.GroupID, "--request-id", id)
 			after, err := f.store.LoadSyncControl(context.Background(), f.cfg.Sync.GroupID)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if head != gitTestOutput(t, f.git, f.repo, "rev-parse", "HEAD") || !bytes.Equal(index, mustRead(t, filepath.Join(f.repo, ".git", "index"))) {
+				t.Fatal("resume changed HEAD or the Git index")
 			}
 			request, err := f.store.LoadManagementRequest(context.Background(), f.cfg.Sync.GroupID, id, time.Now())
 			if err != nil {
@@ -394,6 +439,28 @@ func TestE23T4LocalControlsShareOperatorResumeSafety(t *testing.T) {
 					wantCode, wantError = 10, "sync_request_busy"
 				} else if name == "storage" {
 					wantCode, wantError = 20, "sqlite_write_failed"
+				}
+				if code != wantCode {
+					t.Fatalf("resume refusal code:%d want%d envelope%v", code, wantCode, value)
+				}
+				wantMessage := "resume requires idle Git state and resource writers; resolve the local guard and repeat this handle"
+				switch name {
+				case "held", "stale":
+					wantMessage = fmt.Sprintf("control revision is %d, expected %d; inspect sync status, complete any required operator recovery, then prepare a new request", before.Revision, paused.Revision)
+				case "emergency":
+					wantMessage = "membership emergency remains; inspect sync status and adopt a reviewed normal membership replacement through the operator CLI before preparing another request"
+				case "busy":
+					wantMessage = "resource is busy; retain the same handle"
+				case "trust":
+					wantMessage = "resume trust checks failed; review signed membership and the approved remote before repeating this handle"
+				case "transport":
+					wantMessage = "resume could not inspect the approved remote; restore connectivity and repeat this handle"
+				case "storage":
+					wantMessage = "resume could not inspect local storage; repair the store and repeat this handle"
+				}
+				message := value["error"].(map[string]any)["message"].(string)
+				if message != wantMessage || strings.Contains(message, f.repo) || strings.Contains(message, f.path) || len([]byte(message)) > 256 {
+					t.Fatalf("resume diagnostic lost its closed safe action:%q want%q", message, wantMessage)
 				}
 				if code != wantCode || value["error"].(map[string]any)["code"] != wantError || after != before || request.AcceptedAt != nil || request.State != "prepared" {
 					t.Fatalf("safety:%d %v %+v -> %+v request%+v", code, value, before, after, request)
@@ -1415,5 +1482,106 @@ func TestE23T4SharedRefusalRequiresTypedCompleteDiagnosis(t *testing.T) {
 	}
 	if _, err := bounded.Write([]byte(" ")); err == nil || !bounded.overflow {
 		t.Fatal("complete prefix hid oversized output")
+	}
+}
+
+func TestE23T4KnownRefusalKeepsAmbiguousWorkerEvidence(t *testing.T) {
+	for _, kind := range []string{"overflow", "associated"} {
+		t.Run(kind, func(t *testing.T) {
+			f := newResumeFixture(t)
+			f.cfg.Sync.Management = &config.SyncManagement{Enabled: true, Actions: []string{"verify-all"}}
+			f.writeConfig(t)
+			revision, _ := config.SyncRevision(f.cfg)
+			if _, err := f.store.SetSyncControl(context.Background(), f.cfg.Sync.GroupID, 1, "active", revision, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+				t.Fatal(err)
+			}
+			target := gitTestOutput(t, f.git, f.repo, "rev-parse", f.cfg.Sync.ContentRef)
+			if kind == "associated" {
+				bin := filepath.Join(filepath.Dir(f.remoteHead), "bin", "git")
+				raw, err := os.ReadFile(bin)
+				if err != nil {
+					t.Fatal(err)
+				}
+				condition := fmt.Sprintf("    test \"$last\" = '%s' || exit 2", f.cfg.Sync.MembershipRef)
+				reply := fmt.Sprintf("    if test \"$last\" = '%s'; then printf '%%s\\t%%s\\n' '%s' \"$last\"; exit 0; fi\n", f.cfg.Sync.ContentRef, target)
+				if !strings.Contains(string(raw), condition) {
+					t.Fatal("remote fixture shape changed")
+				}
+				if err := os.WriteFile(bin, []byte(strings.Replace(string(raw), condition, reply+condition, 1)), 0700); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := f.store.Exec(`CREATE TRIGGER refuse_verification_finish BEFORE UPDATE OF state ON sync_jobs WHEN OLD.kind='verification' AND NEW.state='collecting' BEGIN SELECT RAISE(FAIL,'fixture-private-finalization'); END`); err != nil {
+					t.Fatal(err)
+				}
+			} else if kind == "overflow" {
+				message := "fixture-private-storage"
+				create := func(text string) {
+					t.Helper()
+					if _, err := f.store.Exec("CREATE TRIGGER refuse_control_metadata BEFORE INSERT ON sync_controls BEGIN SELECT RAISE(FAIL,'" + strings.ReplaceAll(text, "'", "''") + "'); END"); err != nil {
+						t.Fatal(err)
+					}
+				}
+				create(message)
+				_, err := f.store.EnsureSyncControl(context.Background(), f.cfg.Sync.GroupID, revision, time.Now().UTC().Format(time.RFC3339Nano))
+				if err == nil {
+					t.Fatal("storage fixture did not refuse")
+				}
+				var probe bytes.Buffer
+				if syncStoreError(&probe, "sync verify", err) != 20 {
+					t.Fatal("storage fixture has wrong class")
+				}
+				message += strings.Repeat("x", syncmanagement.ResultBytes+1-probe.Len())
+				if _, err := f.store.Exec(`DROP TRIGGER refuse_control_metadata`); err != nil {
+					t.Fatal(err)
+				}
+				create(message)
+				_, err = f.store.EnsureSyncControl(context.Background(), f.cfg.Sync.GroupID, revision, time.Now().UTC().Format(time.RFC3339Nano))
+				probe.Reset()
+				syncStoreError(&probe, "sync verify", err)
+				if probe.Len() != syncmanagement.ResultBytes+1 || !json.Valid(probe.Bytes()[:syncmanagement.ResultBytes]) {
+					t.Fatalf("overflow fixture must retain a complete typed JSON prefix: %d", probe.Len())
+				}
+			}
+			id := e23t5Accepted(t, f.cfg, f.path, "verify-all")
+			before, err := f.store.LoadManagementRequest(context.Background(), f.cfg.Sync.GroupID, id, time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("SYNC_NODE_A_TO_B", "fixture-peer-credential")
+			observations := 0
+			client := &http.Client{Transport: e22t3RoundTrip(func(r *http.Request) (*http.Response, error) {
+				if kind != "associated" {
+					t.Fatal("pre-effect refusal started a peer observation")
+				}
+				observations++
+				var request syncrecords.StatusRequest
+				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+					t.Fatal(err)
+				}
+				response := syncrecords.StatusResponse{SchemaVersion: syncrecords.StatusResponseSchema, GroupID: request.GroupID, Responder: request.Receiver, StateIncarnationID: f.cfg.Sync.Nodes[1].StateIncarnationID, MembershipRevision: request.MembershipRevision, ContentRef: request.ContentRef, TargetCommit: request.TargetCommit, ScopeDigest: request.ScopeDigest, ContractDigest: request.ContractDigest, Nonce: request.Nonce, EvidenceGeneration: time.Now().UnixNano(), State: "applied", MembershipCurrent: true}
+				raw, _ := json.Marshal(response)
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(raw)), Header: http.Header{}}, nil
+			})}
+			service := &peerService{cfg: f.cfg, configPath: f.path, store: f.store}
+			service.dispatchManagementWithHTTP(context.Background(), client)
+			after, err := f.store.LoadManagementRequest(context.Background(), f.cfg.Sync.GroupID, id, time.Now())
+			if err != nil || after.Attempts != 1 || after.Fence != 1 || after.AcceptedAt == nil || *after.AcceptedAt != *before.AcceptedAt || after.Fingerprint != before.Fingerprint || after.Outcome == nil {
+				t.Fatalf("fault changed immutable acceptance or budget:%+v %v", after, err)
+			}
+			state, reason := "uncertain", "execution requires exact journal inspection"
+			if after.State != state || after.Outcome.Status != state || after.Outcome.Reason != reason || after.Outcome.TargetCommit != nil || after.Outcome.VerificationID != nil {
+				t.Fatalf("fault claimed an unsupported result:%+v", after)
+			}
+			if kind == "associated" {
+				if observations == 0 || len(after.Jobs) != 1 || after.Jobs[0].Kind != "verification" || after.Jobs[0].State != "planned" || after.Jobs[0].Attempts != 0 || after.Jobs[0].TargetCommit == nil || *after.Jobs[0].TargetCommit != target || after.Jobs[0].AssociationReason != "verification_target" {
+					t.Fatalf("finalization refusal discarded the actual observation journal:%+v observations%d", after, observations)
+				}
+			} else if len(after.Jobs) != 0 {
+				t.Fatalf("pre-effect fault invented an association:%+v", after.Jobs)
+			}
+			if gitTestOutput(t, f.git, f.repo, "rev-parse", f.cfg.Sync.ContentRef) != target {
+				t.Fatal("refusal changed content")
+			}
+		})
 	}
 }

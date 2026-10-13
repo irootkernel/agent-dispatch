@@ -22,7 +22,7 @@ new release inputs require applicable requalification.
 | Field | Required value |
 |---|---|
 | Product version | `v0.3.0` |
-| Product source commit | `789c698441dd000ada6ee7ddaaea7d775bbf3ffe` |
+| Product source commit | `5afbe30052d35064f5607b0eeb2570efe299fbf0` |
 | Management contract | `sha256:77dba7fac82cf1e627ad29ab89057c18d4d5c2c380251112579e551d1122cf39` |
 | Base-sync contract | `sha256:30cf47b1bd854a0271aa9df3e7b37f0cc14cdd86d3f06a65a2cb787c6741131b` |
 | Toolchain | Go `1.27.1` |
@@ -37,9 +37,9 @@ this handoff and the exact binary SHA.
 
 | Artifact | SHA-256 | Qualification |
 |---|---|---|
-| `agent-dispatch-v0.3.0-darwin-arm64` | `26ee0cfa2226d218ba415f89c3c1f829abb67d4e49538e769e77dce3a57e6997` | Native qualified |
-| `agent-dispatch-v0.3.0-linux-arm64` | `01f8767b570a11ad4194d1bc91737f50774d135973c1629259d12649b8b77b99` | Native qualified |
-| `agent-dispatch-v0.3.0-linux-amd64` | `e0901669997c0afa160f2d65f7d3bc49fcfb526c2d627f75361bd5c29dce97ef` | Native full gate and version execution qualified; paired management unqualified |
+| `agent-dispatch-v0.3.0-darwin-arm64` | `c9eef936df5de3cbdf232e4c1e84beec0f11388c45ef268a9abe592ab7fde04a` | Native qualified |
+| `agent-dispatch-v0.3.0-linux-arm64` | `3ae38c18dc61146b6af86be171905b375df542c244e0226a2edc7b897cf808c4` | Native qualified |
+| `agent-dispatch-v0.3.0-linux-amd64` | `081ecb615474a01bebdd0bb4341f450b968d51f0fb49d07f04dc1477dc928e14` | Native full gate and version execution qualified; paired management unqualified |
 
 Independent builds on native Darwin arm64 and native Linux arm64 produced
 the same three-platform checksum list. Each used the exact Git archive, `make
@@ -56,7 +56,7 @@ It does not implement management and was not replaced during qualification.
 Admission requires one committed `external-handoff` package for this product
 source under `evidence/aquarium/E23-T7/external-handoff/`.
 The native checksum file target is
-`sha256:ad1435efd2c564fad36d686266cfac8f249ac9f299385519b2d0beb7e116843a`.
+`sha256:26b4989e7f9ee6cf80a81b688f0979081898f0d5a95bb025152ef78d9e702eca`.
 The package's `manifest.json` binds that exact file target and capture-time Git
 HEAD and indexes `SHA256SUMS` and selected native public-interface fields.
 Verify the manifest and payload digests, the source identity and every artifact
@@ -147,7 +147,7 @@ Non-verbose gate output does not establish individual optional-test skip counts.
 
 Native Linux amd64 used real Watchman from an owned tool directory with
 private defaults for client state, pid and log files. The runner's explicit
-instance paths took precedence. Earlier current-source attempts were interrupted
+instance paths took precedence. Earlier qualification attempts on preceding sources were interrupted
 when the Cloud Shell environment was replaced. Their partial unit/race output
 and transport exit status do not qualify the source. The final default gate
 completed with unchanged source, test selection and deadlines. The coordinator

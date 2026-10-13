@@ -6129,18 +6129,21 @@ artifacts are required; no Plugin implementation is required.
 
 The [exact-provider handoff](../integrations/e23t7-management-handoff.md)
 identifies the committed product source, reproducible artifacts and qualified
-native public interfaces. Both native ARM full verification gates cover the
-corrected code and test inputs, with the documented lifecycle/manifest projection. The exact corrected
-artifacts pass the refreshed native paired management/service matrix. [D-031](../specs/decision-log.md#d-031---2026-10-12---arm-scoped-e23-completion-amd64-qualification-deferred)
+native public interfaces. All three native full verification gates cover the
+current corrected code and test inputs, with the documented lifecycle/manifest
+projection. The exact ARM artifacts pass the refreshed native paired
+management/service matrix; paired and Plugin admission scope remains ARM-only. [D-031](../specs/decision-log.md#d-031---2026-10-12---arm-scoped-e23-completion-amd64-qualification-deferred)
 authorizes the original ARM-scoped E23 completion. The separate
 [DF-010](../deferred-feedback/010-e23-amd64-qualification.md) follow-up now
 qualifies the selected source and artifact on native Linux amd64; paired
 management and Plugin admission remain ARM-only. T7 is
-Completed under its original member acceptance. The corrected handoff has
-whole-Epic confirmation and the reviewed evidence package above.
+Completed under its original member acceptance. The original T7 delivery has
+whole-Epic confirmation and the historical evidence package above. The current
+corrected handoff still requires completed whole-Epic review and its matching
+committed package before consumer admission.
 Plugin TASK-028 receives ARM qualification under separate admission authority;
-TASK-029 cannot start before its scope amendment is approved. The three-platform
-release gate and Plugin EPIC-009 remain independent unfinished obligations.
+TASK-029 cannot start before its scope amendment is approved. Release
+acceptance and Plugin EPIC-009 remain independent obligations.
 
 # 4. Deferred Future Work
 

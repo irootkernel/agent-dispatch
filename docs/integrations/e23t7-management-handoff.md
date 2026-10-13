@@ -22,7 +22,7 @@ new release inputs require applicable requalification.
 | Field | Required value |
 |---|---|
 | Product version | `v0.3.0` |
-| Product source commit | `47cdc6b8ac6efb39fb6d7e6cb827bb178332996b` |
+| Product source commit | `789c698441dd000ada6ee7ddaaea7d775bbf3ffe` |
 | Management contract | `sha256:77dba7fac82cf1e627ad29ab89057c18d4d5c2c380251112579e551d1122cf39` |
 | Base-sync contract | `sha256:30cf47b1bd854a0271aa9df3e7b37f0cc14cdd86d3f06a65a2cb787c6741131b` |
 | Toolchain | Go `1.27.1` |
@@ -37,9 +37,9 @@ this handoff and the exact binary SHA.
 
 | Artifact | SHA-256 | Qualification |
 |---|---|---|
-| `agent-dispatch-v0.3.0-darwin-arm64` | `c43e20f23d22705d9bb958dc23c3104085cc0c05c24a11fa5382a0c1848b1b41` | Native qualified |
-| `agent-dispatch-v0.3.0-linux-arm64` | `e1476833dfa8e80737bb99646ff787900fa33bcacd12238ab0e94786f410aae0` | Native qualified |
-| `agent-dispatch-v0.3.0-linux-amd64` | `4d42dc3a689a512bb9a4c2bdb900982c5d750d061cb7fe5dd73c83313d91e764` | Native full gate and version execution qualified; paired management unqualified |
+| `agent-dispatch-v0.3.0-darwin-arm64` | `26ee0cfa2226d218ba415f89c3c1f829abb67d4e49538e769e77dce3a57e6997` | Native qualified |
+| `agent-dispatch-v0.3.0-linux-arm64` | `01f8767b570a11ad4194d1bc91737f50774d135973c1629259d12649b8b77b99` | Native qualified |
+| `agent-dispatch-v0.3.0-linux-amd64` | `e0901669997c0afa160f2d65f7d3bc49fcfb526c2d627f75361bd5c29dce97ef` | Native full gate and version execution qualified; paired management unqualified |
 
 Independent builds on native Darwin arm64 and native Linux arm64 produced
 the same three-platform checksum list. Each used the exact Git archive, `make
@@ -56,7 +56,7 @@ It does not implement management and was not replaced during qualification.
 Admission requires one committed `external-handoff` package for this product
 source under `evidence/aquarium/E23-T7/external-handoff/`.
 The native checksum file target is
-`sha256:d7a1aed771fbc551e96e4efc3426653f65d3d5d890d187f5f2e61baebedc149f`.
+`sha256:ad1435efd2c564fad36d686266cfac8f249ac9f299385519b2d0beb7e116843a`.
 The package's `manifest.json` binds that exact file target and capture-time Git
 HEAD and indexes `SHA256SUMS` and selected native public-interface fields.
 Verify the manifest and payload digests, the source identity and every artifact
@@ -129,7 +129,7 @@ this run.
 | Exact historical lookup | An older request kept its original job and verification identity after newer successful verifications. |
 | Uninstall | Stop, disable and state-preserving uninstall removed the matching definitions. Accepted request/job evidence remained available afterward. |
 
-All 393 captured management carriers validated against the frozen envelope
+All 177 captured management carriers validated against the frozen envelope
 and result schemas. Decoded public output was inspected for fixture secrets.
 Temporary service definitions, private peer routes, bridges, owned peer
 credential files, the temporary Mac binary copy and the added Linux SSH
@@ -145,30 +145,25 @@ each host. Native Darwin had real Watchman and the installed Hermes executable;
 Linux arm64 had no real Watchman or Hermes on its verification PATH.
 Non-verbose gate output does not establish individual optional-test skip counts.
 
-Native Linux amd64 used real Watchman from an owned tool directory. Its first
-attempt failed before unit execution because the client tried to create its
-installation's default state directory. Later attempts supplied private
-client state, pid and log defaults while retaining the runner's later explicit
-instance paths. A subsequent attempt was interrupted when the disposable VM
-session restarted, so its partial unit/race output does not qualify the source.
-The final attempt used an owned persistent tool/source directory and a session
-heartbeat; the default gate passed. Repository source, test selection and
-deadlines did not change.
-The coordinator directly inspected the native terminal result and its source
-and log digests. Native `version --json` executed the exact amd64 artifact and
-returned `v0.3.0`; paired management and service qualification remains ARM-only.
+Native Linux amd64 used real Watchman from an owned tool directory with
+private defaults for client state, pid and log files. The runner's explicit
+instance paths took precedence. Earlier current-source attempts were interrupted
+when the Cloud Shell environment was replaced. Their partial unit/race output
+and transport exit status do not qualify the source. The final default gate
+completed with unchanged source, test selection and deadlines. The coordinator
+inspected its terminal result, exact source archive and complete log digest.
+Native `version --json` executed the exact amd64 artifact and returned `v0.3.0`;
+paired management and service qualification remains ARM-only.
 
-The paired run's first Mac service could not finish an external-volume open.
-The same binary ran from an owned internal fixture copy. Its existing import
-acknowledgement was rebound to the copied resource's public configuration
-revision. The original failed-start handle was settled through the public
-worker before the clean pair was checked. Both Mac paused actions were then
-confirmed from a healthy acknowledgement baseline; neither confirmation
-changed the configuration between pause and completion. Failed attempts remain
-separate from the successful native matrix; no fixture database was edited to
-force a result.
-The final native services, routes, bridges and credentials were removed, and
-Linux SSH file contents were restored to their pre-run digests.
+An earlier source's first Mac service could not finish an external-volume open.
+That attempt was resolved using an owned internal fixture, public configuration
+acknowledgement and worker recovery, without editing its database. The current
+source used the retained internal fixture with a healthy acknowledgement
+baseline. Both paused actions passed on both nodes without a configuration
+change between pause and completion. The final native services, routes, bridges
+and credentials were removed, and Linux SSH file contents were restored to
+their pre-run digests. Earlier failed attempts remain separate historical
+evidence and do not qualify the current source.
 
 Later handoff and manifest edits change only canonical documentation and
 promoted evidence. Their focused documentation and contract checks do not

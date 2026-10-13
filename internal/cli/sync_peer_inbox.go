@@ -174,13 +174,15 @@ func (s *peerService) runReconcile(ctx context.Context) (bool, string) {
 }
 
 type boundedReconcileOutput struct {
-	buffer bytes.Buffer
-	limit  int
+	buffer   bytes.Buffer
+	limit    int
+	overflow bool
 }
 
 func (b *boundedReconcileOutput) Write(p []byte) (int, error) {
 	remaining := b.limit - b.buffer.Len()
 	if len(p) > remaining {
+		b.overflow = true
 		if remaining > 0 {
 			_, _ = b.buffer.Write(p[:remaining])
 		}

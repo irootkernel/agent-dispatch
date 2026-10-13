@@ -305,7 +305,16 @@ func runSyncRequestQualified(parent context.Context, args []string, prefix bool,
 				if ctx.Err() != nil {
 					return managementStoreError(ctx, stderr, command, ctx.Err(), nil)
 				}
-				return fail("sync_request_conflict", "conflict", "local resume safety checks refused the request", 14, nil)
+				switch code {
+				case 30:
+					return fail("sync_trust_failed", "security", "resume trust checks failed; review signed membership and the approved remote before repeating this handle", 30, nil)
+				case 10:
+					return fail("sync_request_busy", "transient_local", "resume could not inspect the approved remote; restore connectivity and repeat this handle", 10, nil)
+				case 20:
+					return fail("sqlite_write_failed", "storage", "resume could not inspect local storage; repair the store and repeat this handle", 20, nil)
+				default:
+					return fail("sync_request_conflict", "conflict", "resume requires idle Git state and resource writers; resolve the local guard and repeat this handle", 14, nil)
+				}
 			}
 		}
 		syncRevision, _ := config.SyncRevision(cfg)

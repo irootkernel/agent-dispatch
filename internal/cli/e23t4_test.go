@@ -129,6 +129,12 @@ func TestE23T4ManagementCannotAdoptMembershipOrCheckpoint(t *testing.T) {
 			if err != nil || request.State != "blocked" || request.Outcome == nil || request.Outcome.Status != "blocked" || len(request.Jobs) != 0 {
 				t.Fatalf("operator-only adoption:%+v %v", request, err)
 			}
+			if request.Outcome.Reason != kind+"_adoption_requires_operator" {
+				t.Fatalf("operator-only reason lost: %+v", request.Outcome)
+			}
+			if kind == "checkpoint" && (request.Outcome.TargetCommit == nil || *request.Outcome.TargetCommit != target) {
+				t.Fatal("known checkpoint target lost")
+			}
 			if got := gitTestOutput(t, f.git, f.repo, "rev-parse", f.cfg.Sync.MembershipRef); got != membership {
 				t.Fatalf("management adopted membership:%s", got)
 			}
@@ -203,7 +209,7 @@ func TestE23T4AcceptedWorkSurvivesSubmitterDeath(t *testing.T) {
 	service := &peerService{cfg: f.cfg, configPath: f.path, store: f.store}
 	service.dispatchManagement(context.Background())
 	request, err = f.store.LoadManagementRequest(context.Background(), f.cfg.Sync.GroupID, id, time.Now())
-	if err != nil || request.State != "uncertain" || request.Attempts != 1 {
+	if err != nil || request.State != "blocked" || request.Attempts != 1 || request.Outcome == nil || request.Outcome.Reason != "git_unstable" {
 		t.Fatalf("independent worker did not execute durable work:%+v %v", request, err)
 	}
 }
@@ -325,7 +331,7 @@ func e23t4Request(t *testing.T, path string, args ...string) (int, map[string]an
 }
 
 func TestE23T4LocalControlsShareOperatorResumeSafety(t *testing.T) {
-	for _, name := range []string{"healthy", "held", "emergency", "busy", "stale"} {
+	for _, name := range []string{"healthy", "held", "emergency", "busy", "stale", "trust", "transport", "storage"} {
 		t.Run(name, func(t *testing.T) {
 			f := newResumeFixture(t)
 			f.cfg.Sync.Management = &config.SyncManagement{Enabled: true, Actions: []string{"pause", "resume"}}
@@ -353,6 +359,12 @@ func TestE23T4LocalControlsShareOperatorResumeSafety(t *testing.T) {
 				}
 			case "stale":
 				_, err = f.store.SetSyncControl(context.Background(), f.cfg.Sync.GroupID, paused.Revision, "active", revision, time.Now().UTC().Format(time.RFC3339Nano))
+			case "trust":
+				err = os.WriteFile(f.remoteHead, []byte(strings.Repeat("a", 40)), 0600)
+			case "transport":
+				err = os.WriteFile(f.transportFailure, []byte("unavailable"), 0600)
+			case "storage":
+				_, err = f.store.Exec(`DROP TABLE destination_lane_state`)
 			}
 			if err != nil {
 				t.Fatal(err)
@@ -374,8 +386,18 @@ func TestE23T4LocalControlsShareOperatorResumeSafety(t *testing.T) {
 				if code != 0 || after.State != "active" || after.Revision != before.Revision+1 || request.AcceptedAt == nil || request.Outcome == nil || request.Outcome.Status != "intent_committed" || *request.Outcome.Quiescence != "unknown" {
 					t.Fatalf("healthy:%d %v %+v %+v", code, value, after, request)
 				}
-			} else if code != 14 || after != before || request.AcceptedAt != nil || request.State != "prepared" {
-				t.Fatalf("safety:%d %v %+v -> %+v request%+v", code, value, before, after, request)
+			} else {
+				wantCode, wantError := 14, "sync_request_conflict"
+				if name == "trust" {
+					wantCode, wantError = 30, "sync_trust_failed"
+				} else if name == "transport" {
+					wantCode, wantError = 10, "sync_request_busy"
+				} else if name == "storage" {
+					wantCode, wantError = 20, "sqlite_write_failed"
+				}
+				if code != wantCode || value["error"].(map[string]any)["code"] != wantError || after != before || request.AcceptedAt != nil || request.State != "prepared" {
+					t.Fatalf("safety:%d %v %+v -> %+v request%+v", code, value, before, after, request)
+				}
 			}
 		})
 	}
@@ -619,7 +641,7 @@ func TestE23T4ExistingWorkerFairnessAndStoppedEvidence(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if request.State == "uncertain" {
+			if request.State == "blocked" && request.Outcome != nil && request.Outcome.Reason == "git_unstable" {
 				return
 			}
 			time.Sleep(10 * time.Millisecond)
@@ -1192,5 +1214,201 @@ func TestE23T4CapabilitiesPreservesPreManagementState(t *testing.T) {
 				t.Fatal("request lookup no longer requires the management ledger")
 			}
 		})
+	}
+}
+
+func TestE23T4WorkerPreservesKnownPreEffectResult(t *testing.T) {
+	for _, mode := range []string{"no_op", "git_unstable", "trust", "transport"} {
+		t.Run(mode, func(t *testing.T) {
+			f := newResumeFixture(t)
+			f.cfg.Sync.Management = &config.SyncManagement{Enabled: true, Actions: []string{"sync-now", "verify-all"}}
+			f.writeConfig(t)
+			revision, _ := config.SyncRevision(f.cfg)
+			if _, err := f.store.SetSyncControl(context.Background(), f.cfg.Sync.GroupID, 1, "active", revision, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+				t.Fatal(err)
+			}
+			action := "sync-now"
+			if mode == "trust" || mode == "transport" {
+				action = "verify-all"
+			}
+			id := e23t5Accepted(t, f.cfg, f.path, action)
+			before, err := f.store.LoadManagementRequest(context.Background(), f.cfg.Sync.GroupID, id, time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+			target := gitTestOutput(t, f.git, f.repo, "rev-parse", f.cfg.Sync.ContentRef)
+			if mode == "no_op" {
+				bin := filepath.Join(filepath.Dir(f.remoteHead), "bin", "git")
+				raw, err := os.ReadFile(bin)
+				if err != nil {
+					t.Fatal(err)
+				}
+				quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }
+				prefix := fmt.Sprintf("#!/bin/sh\ncase \" $* \" in\n *\" fetch \"*) for last do :; done; case \"$last\" in *membership*) source=$(cat %s);; *) source=%s;; esac; destination=${last#*:}; exec %s -C %s update-ref \"$destination\" \"$source\";;\n *\" ls-remote \"*%s*) printf '%%s\\t%%s\\n' %s %s; exit 0;;\nesac\n", quote(f.remoteHead), quote(target), quote(f.git), quote(f.repo), quote(f.cfg.Sync.ContentRef), quote(target), quote(f.cfg.Sync.ContentRef))
+				if err := os.WriteFile(bin, []byte(prefix+strings.TrimPrefix(string(raw), "#!/bin/sh\n")), 0700); err != nil {
+					t.Fatal(err)
+				}
+			} else if mode == "trust" {
+				if err := os.WriteFile(f.remoteHead, []byte(strings.Repeat("a", 40)), 0600); err != nil {
+					t.Fatal(err)
+				}
+			} else if mode == "transport" {
+				if err := os.WriteFile(f.transportFailure, []byte("unavailable"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			service := &peerService{cfg: f.cfg, configPath: f.path, store: f.store}
+			service.dispatchManagement(context.Background())
+			r, err := f.store.LoadManagementRequest(context.Background(), f.cfg.Sync.GroupID, id, time.Now())
+			if err != nil || r.Attempts != 1 || r.Fence != 1 || len(r.Jobs) != 0 || r.AcceptedAt == nil || *r.AcceptedAt != *before.AcceptedAt || r.Fingerprint != before.Fingerprint || r.Outcome == nil {
+				t.Fatalf("immutable bounded result:%+v %v", r, err)
+			}
+			state, status, reason := "blocked", "blocked", "git_unstable"
+			if mode == "no_op" {
+				state, status, reason = "finished", "no_op", "guarded reconciliation observed the configured target"
+			}
+			if mode == "trust" {
+				state, status, reason = "finished", "failed", "sync_trust_failed"
+			}
+			if mode == "transport" {
+				reason = "sync_retryable"
+			}
+			if r.State != state || r.Outcome.Status != status || r.Outcome.Reason != reason || r.Outcome.VerificationID != nil {
+				t.Fatalf("known result lost:%+v", r)
+			}
+			if mode == "no_op" {
+				if r.Outcome.TargetCommit == nil || *r.Outcome.TargetCommit != target {
+					t.Fatal("no-op target lost")
+				}
+			} else if r.Outcome.TargetCommit != nil {
+				t.Fatal("pre-pin refusal invented a target")
+			}
+			if gitTestOutput(t, f.git, f.repo, "rev-parse", f.cfg.Sync.ContentRef) != target {
+				t.Fatal("pre-effect result moved content")
+			}
+		})
+	}
+}
+
+func TestE23T4ExhaustedLineageYieldsQueuedHead(t *testing.T) {
+	f := newResumeFixture(t)
+	f.cfg.Sync.Management = &config.SyncManagement{Enabled: true, Actions: []string{"sync-now", "retry"}}
+	f.writeConfig(t)
+	ctx := context.Background()
+	revision, _ := config.SyncRevision(f.cfg)
+	if _, err := f.store.SetSyncControl(ctx, f.cfg.Sync.GroupID, 1, "active", revision, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	root := e23t5Accepted(t, f.cfg, f.path, "sync-now")
+	binding, err := managementBindingForConfig(f.cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := f.store.ClaimManagementRequest(ctx, f.cfg.Sync.GroupID, root, "budget-worker", binding, true, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := strings.Repeat("b", 40)
+	plan, err := syncrecords.NewImport(syncrecords.ImportBinding{GroupID: f.cfg.Sync.GroupID, FromCommit: strings.Repeat("a", 40), TargetCommit: target, MembershipRevision: strings.Repeat("d", 40), AcknowledgementID: "fixture-ack", ResourceObservationRevision: 1, ExpectedGitStateDigest: "sha256:" + strings.Repeat("e", 64), HistoryEvidenceID: "fixture-history", CaseMode: config.CaseMode(), State: "validated", Reason: "none"}, []syncrecords.ImportPath{{Path: "note.md", Before: "absent", After: "sha256:" + strings.Repeat("f", 64)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := syncrecords.CanonicalImport(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	job, _, err := f.store.AdmitSyncJob(ctx, sqlite.SyncJobInput{JobID: plan.ImportID, GroupID: plan.GroupID, Kind: "import", LogicalKey: plan.PlanID, InitialState: "validated", PayloadJSON: string(raw), ConfigRevision: revision, QueueLimit: 1000, Now: time.Now().UTC().Format(time.RFC3339Nano)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err = f.store.ReserveManagementAssociations(ctx, r, 1, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err = f.store.AssociateManagementJob(ctx, r, sqlite.ManagementJob{JobID: job.JobID, Kind: "import", TargetCommit: &target, AssociationReason: "observed_reconciliation"}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err = f.store.TransitionManagementRequest(ctx, r, "blocked", &syncmanagement.Outcome{Status: "blocked", Reason: "fixture obligation"}, "fixture-budget-inspection", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, v := e23t5Public(t, f.path, "prepare", "--group", f.cfg.Sync.GroupID, "--action", "retry", "--target-request-id", root)
+	if code != 0 {
+		t.Fatal(v)
+	}
+	child := v["result"].(map[string]any)["request_id"].(string)
+	if code, v = e23t5Public(t, f.path, "submit", "--group", f.cfg.Sync.GroupID, "--request-id", child); code != 0 {
+		t.Fatal(v)
+	}
+	for n := 1; n < syncmanagement.AttemptLimit; n++ {
+		r, err = f.store.TransitionManagementRequest(ctx, r, "queued", nil, "fixture-budget-inspection", time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, err = f.store.ClaimManagementRequest(ctx, f.cfg.Sync.GroupID, root, "budget-worker", binding, true, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, err = f.store.TransitionManagementRequest(ctx, r, "blocked", &syncmanagement.Outcome{Status: "blocked", Reason: "fixture obligation"}, "fixture-budget-inspection", time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err = f.store.TransitionManagementRequest(ctx, r, "finished", &syncmanagement.Outcome{Status: "failed", Reason: "operator review required"}, "fixture-budget-inspection", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	later := e23t5Accepted(t, f.cfg, f.path, "sync-now")
+	// Retry drafts inherit the predecessor attempt count. Put later work at
+	// the same scheduling priority so the exhausted lineage is the head.
+	laterClaim, err := f.store.ClaimManagementRequest(ctx, f.cfg.Sync.GroupID, later, "later-worker", binding, true, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.TransitionManagementRequest(ctx, laterClaim, "queued", nil, "fixture-budget-inspection", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	before, err := f.store.LoadManagementRequest(ctx, f.cfg.Sync.GroupID, child, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := &peerService{cfg: f.cfg, configPath: f.path, store: f.store}
+	service.dispatchManagement(ctx)
+	held, err := f.store.LoadManagementRequest(ctx, f.cfg.Sync.GroupID, child, time.Now())
+	if err != nil || held.State != "blocked" || held.Attempts != before.Attempts || held.Fence != before.Fence || held.Outcome == nil || held.Outcome.Reason != "request lineage exhausted its execution budget" || held.Fingerprint != before.Fingerprint || held.AcceptedAt == nil || *held.AcceptedAt != *before.AcceptedAt || len(held.Jobs) != 1 || held.Jobs[0].JobID != before.Jobs[0].JobID || held.Jobs[0].State != before.Jobs[0].State || held.Jobs[0].Attempts != before.Jobs[0].Attempts || held.Jobs[0].TargetCommit == nil || *held.Jobs[0].TargetCommit != target {
+		t.Fatalf("exhausted lineage:%+v %v", held, err)
+	}
+	next, err := f.store.NextQueuedManagementRequest(ctx, f.cfg.Sync.GroupID)
+	if err != nil || next != later {
+		t.Fatalf("exhausted head starved later work:%s %v", next, err)
+	}
+	service.dispatchManagement(ctx)
+	progressed, err := f.store.LoadManagementRequest(ctx, f.cfg.Sync.GroupID, later, time.Now())
+	if err != nil || progressed.State == "queued" || progressed.Attempts != laterClaim.Attempts+1 {
+		t.Fatalf("later work did not progress:%+v %v", progressed, err)
+	}
+	original, err := f.store.LoadManagementRequest(ctx, f.cfg.Sync.GroupID, root, time.Now())
+	if err != nil || original.Attempts != syncmanagement.AttemptLimit || original.Jobs[0].Attempts != before.Jobs[0].Attempts {
+		t.Fatalf("refusal consumed budget or effects:%+v %v", original, err)
+	}
+}
+
+func TestE23T4SharedRefusalRequiresTypedCompleteDiagnosis(t *testing.T) {
+	for _, raw := range []string{`{`, `{"ok":false,"command":"sync verify","error":{"code":"sync_trust_failed","category":"storage"}}`, `{"ok":false,"command":"sync reconcile","error":{"code":"sync_trust_failed","category":"security"}}`, `{"ok":false,"command":"sync verify","error":{"code":"/private/secret","category":"security"}}`} {
+		if state, reason := managementSharedRefusal("verify-all", 30, []byte(raw)); state != "" || reason != "" {
+			t.Fatalf("untyped refusal became certainty:%s %s", state, reason)
+		}
+	}
+	var out bytes.Buffer
+	writeError(&out, "sync verify", "sync_trust_failed", "security", "/private/secret remote text")
+	if state, reason := managementSharedRefusal("verify-all", 30, out.Bytes()); state != "finished" || reason != "sync_trust_failed" {
+		t.Fatal("typed diagnosis was lost")
+	}
+	bounded := boundedReconcileOutput{limit: out.Len()}
+	if _, err := bounded.Write(out.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bounded.Write([]byte(" ")); err == nil || !bounded.overflow {
+		t.Fatal("complete prefix hid oversized output")
 	}
 }

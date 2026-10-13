@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"slices"
 	"sync"
@@ -337,6 +336,7 @@ func (s *peerService) dispatchManagementWithHTTP(ctx context.Context, httpClient
 		}
 	}()
 	out := boundedReconcileOutput{limit: syncmanagement.ResultBytes}
+	diagnostics := boundedReconcileOutput{limit: syncmanagement.ResultBytes}
 	code := 0
 	if pending.Action == "retry" {
 		code = s.retryManagement(executionCtx, e, httpClient, &out)
@@ -345,9 +345,9 @@ func (s *peerService) dispatchManagementWithHTTP(ctx context.Context, httpClient
 			httpClient = peerHTTPClient()
 			defer httpClient.CloseIdleConnections()
 		}
-		code = verifyConfiguredSync(executionCtx, s.cfg, s.store, httpClient, &out, io.Discard)
+		code = verifyConfiguredSync(executionCtx, s.cfg, s.store, httpClient, &out, &diagnostics)
 	} else {
-		code = reconcileConfiguredSync(executionCtx, s.cfg, s.store, &out, io.Discard)
+		code = reconcileConfiguredSync(executionCtx, s.cfg, s.store, &out, &diagnostics)
 	}
 	wasCancelled := executionCtx.Err() != nil
 	cancel()
@@ -360,13 +360,40 @@ func (s *peerService) dispatchManagementWithHTTP(ctx context.Context, httpClient
 	defer e.mu.Unlock()
 	state := "uncertain"
 	outcome := syncmanagement.Outcome{Status: "uncertain", Reason: "execution requires exact journal inspection"}
-	if !wasCancelled {
+	if !wasCancelled && !out.overflow && !diagnostics.overflow {
 		result, target := parseReconcileResult(out.buffer.Bytes())
+		reason := managementReconcileReason(out.buffer.Bytes())
 		if pending.Action == "sync-now" && result == "blocked" {
 			state = "blocked"
 			outcome = syncmanagement.Outcome{Status: "blocked", Reason: "shared reconciliation retained an operator or safety hold"}
+			if reason != "" {
+				outcome.Reason = reason
+			}
 			if syncmanagement.ValidCommit(target) {
 				outcome.TargetCommit = &target
+			}
+		}
+		// Protected effects are associated before admission. A completed typed
+		// refusal plus an empty journal distinguishes a known pre-effect result
+		// from interrupted, malformed or already-associated execution.
+		if pending.Action != "retry" && state == "uncertain" {
+			refusalState, refusalReason := managementSharedRefusal(pending.Action, code, diagnostics.buffer.Bytes())
+			if pending.Action == "sync-now" && result == "deferred" && reason != "" && (code == 0 || code == 10) {
+				refusalState, refusalReason = "blocked", reason
+			}
+			if refusalState != "" {
+				jobs, inspectErr := s.store.InspectManagementObligations(cleanup, e.request, time.Now())
+				if inspectErr == nil && len(jobs) == 0 {
+					state = refusalState
+					status := "blocked"
+					if state == "finished" {
+						status = "failed"
+					}
+					outcome = syncmanagement.Outcome{Status: status, Reason: refusalReason}
+					if pending.Action == "sync-now" && reason != "" && syncmanagement.ValidCommit(target) {
+						outcome.TargetCommit = &target
+					}
+				}
 			}
 		}
 	}
@@ -377,7 +404,7 @@ func (s *peerService) dispatchManagementWithHTTP(ctx context.Context, httpClient
 			outcome.TargetCommit = &e.admissionTarget
 		}
 	}
-	if code == 0 && !wasCancelled {
+	if code == 0 && !wasCancelled && !out.overflow && !diagnostics.overflow {
 		if pending.Action == "retry" {
 			jobs, inspectErr := s.store.InspectManagementObligations(cleanup, e.request, time.Now())
 			if inspectErr == nil && len(jobs) > 0 {
@@ -417,9 +444,15 @@ func (s *peerService) dispatchManagementWithHTTP(ctx context.Context, httpClient
 				} else if total != 0 {
 					outcome.Status = "already_settled"
 				}
-			} else {
+			} else if result == "deferred" {
 				state = "blocked"
 				outcome = syncmanagement.Outcome{Status: "blocked", Reason: "guarded reconciliation deferred; inspect exact obligations"}
+				if reason := managementReconcileReason(out.buffer.Bytes()); reason != "" {
+					outcome.Reason = reason
+				}
+				if syncmanagement.ValidCommit(target) {
+					outcome.TargetCommit = &target
+				}
 			}
 		}
 	}
@@ -427,6 +460,52 @@ func (s *peerService) dispatchManagementWithHTTP(ctx context.Context, httpClient
 	if err != nil && !errors.Is(err, sqlite.ErrSyncPrecondition) {
 		s.warn("management result remains unresolved")
 	}
+}
+
+// Copy only closed machine codes, never remote diagnostics or local paths.
+func managementReconcileReason(raw []byte) string {
+	var v struct {
+		Command string `json:"command"`
+		OK      bool   `json:"ok"`
+		Result  struct {
+			Schema string `json:"schema_version"`
+			Reason string `json:"reason"`
+		} `json:"result"`
+	}
+	if json.Unmarshal(raw, &v) != nil || !v.OK || v.Command != "sync reconcile" || v.Result.Schema != "agent-dispatch.sync-reconcile-result/v1" {
+		return ""
+	}
+	switch v.Result.Reason {
+	case "resource_busy", "git_unstable", "operator_pause", "observation_unavailable", "acknowledgement_stale", "local_overlap", "untracked_collision", "membership_stale", "history_uncovered", "history_diverged", "trust_failed", "bound_exhausted", "membership_adoption_requires_operator", "checkpoint_adoption_requires_operator", "membership_emergency", "trust_failure", "conflict", "recovery_required", "recorded_obligations_only", "publication_recovery_pending":
+		return v.Result.Reason
+	}
+	return ""
+}
+
+func managementSharedRefusal(action string, exit int, raw []byte) (string, string) {
+	var v struct {
+		Command string                          `json:"command"`
+		OK      bool                            `json:"ok"`
+		Error   struct{ Code, Category string } `json:"error"`
+	}
+	command := "sync reconcile"
+	if action == "verify-all" {
+		command = "sync verify"
+	}
+	if json.Unmarshal(raw, &v) != nil || v.OK || v.Command != command {
+		return "", ""
+	}
+	switch {
+	case exit == 30 && v.Error.Code == "sync_trust_failed" && v.Error.Category == "security":
+		return "finished", v.Error.Code
+	case exit == 3 && v.Error.Code == "config_invalid" && v.Error.Category == "configuration":
+		return "finished", v.Error.Code
+	case exit == 10 && v.Error.Code == "sync_retryable" && v.Error.Category == "transient_local":
+		return "blocked", v.Error.Code
+	case exit == 14 && v.Error.Code == "sync_precondition_failed" && v.Error.Category == "conflict":
+		return "blocked", v.Error.Code
+	}
+	return "", ""
 }
 
 // Heartbeats belong to the existing worker lifecycle, including a paused worker.

@@ -17,8 +17,82 @@ import (
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/domain/syncmanagement"
 	"github.com/irootkernel/agent-dispatch/internal/domain/syncrecords"
 )
+
+func TestE23T6LocalInstanceRebindRetainsOriginalHandles(t *testing.T) {
+	f := newResumeFixture(t)
+	f.cfg.Sync.Management = &config.SyncManagement{Enabled: true, Actions: []string{"sync-now"}}
+	f.writeConfig(t)
+	accepted := e23t5Accepted(t, f.cfg, f.path, "sync-now")
+	code, draft := e23t5Public(t, f.path, "prepare", "--group", f.cfg.Sync.GroupID, "--action", "sync-now")
+	if code != 0 {
+		t.Fatal(draft)
+	}
+	id := draft["result"].(map[string]any)["request_id"].(string)
+	original := f.cfg.Instance.ID
+	incarnation := localSyncIncarnation(f.cfg)
+	// Keep a valid two-node config and the same incarnation while changing
+	// only the local node identity, rather than testing config parse refusal.
+	f.cfg.Instance.ID = "replacement-local-node"
+	f.cfg.Sync.LocalInstanceID = f.cfg.Instance.ID
+	for i := range f.cfg.Sync.Nodes {
+		if f.cfg.Sync.Nodes[i].InstanceID == original {
+			f.cfg.Sync.Nodes[i].InstanceID = f.cfg.Instance.ID
+		}
+	}
+	f.writeConfig(t)
+	if current, err := config.Load(f.path); err != nil || localSyncIncarnation(current) != incarnation {
+		t.Fatalf("fixture did not isolate node identity: %v", err)
+	}
+	code, result := e23t5Public(t, f.path, "submit", "--group", f.cfg.Sync.GroupID, "--request-id", id)
+	if code != 4 || result["error"].(map[string]any)["code"] != "sync_request_obsolete" {
+		t.Fatalf("rebound draft gained acceptance: %d %v", code, result)
+	}
+	service := &peerService{cfg: f.cfg, configPath: f.path, store: f.store}
+	service.dispatchManagement(context.Background())
+	retained, err := f.store.LoadManagementRequest(context.Background(), f.cfg.Sync.GroupID, accepted, time.Now())
+	if err != nil || retained.State != "blocked" || retained.InstanceID != original || retained.StateIncarnationID != incarnation || retained.Attempts != 0 || len(retained.Jobs) != 0 {
+		t.Fatalf("accepted rebound handle gained effects: %+v %v", retained, err)
+	}
+	for _, handle := range []string{id, accepted} {
+		code, result = e23t5Public(t, f.path, "show", "--group", f.cfg.Sync.GroupID, "--request-id", handle)
+		if code != 0 || result["result"].(map[string]any)["request_id"] != handle || result["result"].(map[string]any)["bindings"].(map[string]any)["instance_id"] != original {
+			t.Fatalf("rebind lost exact historical identity: %d %v", code, result)
+		}
+	}
+}
+
+func TestE23T6ReconcileResultCeilingRejectsTruncatedSuccess(t *testing.T) {
+	target := strings.Repeat("a", 40)
+	var empty bytes.Buffer
+	if code := reconcileEnvelope(&empty, "no_change", "none", map[string]any{"target_commit": target, "detail": ""}); code != 0 {
+		t.Fatal("fixture producer failed")
+	}
+	for _, overflow := range []int{0, 1, 2} {
+		t.Run(fmt.Sprintf("overflow-%d", overflow), func(t *testing.T) {
+			size := syncmanagement.ResultBytes - empty.Len()
+			size += overflow
+			out := boundedReconcileOutput{limit: syncmanagement.ResultBytes}
+			code := reconcileEnvelope(&out, "no_change", "none", map[string]any{"target_commit": target, "detail": strings.Repeat("x", size)})
+			state, pinned := parseReconcileResult(out.buffer.Bytes())
+			settled, _ := settledReconcileResult(state, pinned)
+			if out.buffer.Len() != syncmanagement.ResultBytes {
+				t.Fatalf("capture exceeded or missed its ceiling: %d", out.buffer.Len())
+			}
+			if overflow > 0 {
+				// Dropping only the newline can leave parseable JSON. The
+				// producer must still fail, so dispatch cannot finish it.
+				if code == 0 || overflow > 1 && (settled || pinned != "") {
+					t.Fatalf("truncated result settled a target: %d %s %s", code, state, pinned)
+				}
+			} else if code != 0 || !settled || pinned != target {
+				t.Fatalf("exact-bound result rejected: %d %s %s", code, state, pinned)
+			}
+		})
+	}
+}
 
 func TestE23T6PublicFrozenArgvRejectsAuthorityAndSecretInputs(t *testing.T) {
 	cfg, path := e23t3Config(t)

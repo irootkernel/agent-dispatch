@@ -30,6 +30,7 @@ const (
 	ExecutionSeconds        = 240
 	CallSeconds             = 5
 	ReasonBytes             = 256
+	ResultBytes             = 1048576
 	MinimumRetentionDays    = 180
 )
 

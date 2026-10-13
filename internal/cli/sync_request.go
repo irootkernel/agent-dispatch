@@ -343,7 +343,7 @@ func managementView(r sqlite.ManagementRequest, phase string, current syncmanage
 }
 
 func managementLimits() map[string]int {
-	return map[string]int{"preparation_ttl_seconds": 600, "expired_draft_retention_seconds": 86400, "prepared_data_limit": 256, "prepared_control_limit": 16, "unresolved_data_min": 2, "unresolved_data_max": 1000, "unresolved_control_limit": 16, "terminal_data_limit": 10000, "terminal_control_limit": 1000, "association_limit": 1000, "result_bytes": 1048576, "reason_bytes": 256, "call_deadline_seconds": 5, "execution_deadline_seconds": 240, "claim_lease_seconds": 30, "claim_renewal_seconds": 10, "executor_freshness_seconds": 60, "shutdown_seconds": 30, "cumulative_attempts": 20, "minimum_terminal_retention_days": 180, "management_per_recovery_pass": 1}
+	return map[string]int{"preparation_ttl_seconds": 600, "expired_draft_retention_seconds": 86400, "prepared_data_limit": 256, "prepared_control_limit": 16, "unresolved_data_min": 2, "unresolved_data_max": 1000, "unresolved_control_limit": 16, "terminal_data_limit": 10000, "terminal_control_limit": 1000, "association_limit": 1000, "result_bytes": syncmanagement.ResultBytes, "reason_bytes": 256, "call_deadline_seconds": 5, "execution_deadline_seconds": 240, "claim_lease_seconds": 30, "claim_renewal_seconds": 10, "executor_freshness_seconds": 60, "shutdown_seconds": 30, "cumulative_attempts": 20, "minimum_terminal_retention_days": 180, "management_per_recovery_pass": 1}
 }
 
 func managementMessage(message string) string {
@@ -395,7 +395,7 @@ func managementWrite(w io.Writer, value any) error {
 		return err
 	}
 	raw = append(raw, '\n')
-	if len(raw) > 1048576 {
+	if len(raw) > syncmanagement.ResultBytes {
 		return fmt.Errorf("bounded envelope is too large")
 	}
 	n, err := w.Write(raw)

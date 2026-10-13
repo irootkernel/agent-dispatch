@@ -27,7 +27,7 @@ func TestFrozenPolicyAndLifecycle(t *testing.T) {
 		"terminal_control_limit": ControlTerminalLimit, "association_limit": AssociationLimit,
 		"cumulative_attempts": AttemptLimit, "claim_lease_seconds": LeaseSeconds,
 		"execution_deadline_seconds": ExecutionSeconds, "call_deadline_seconds": CallSeconds,
-		"reason_bytes": ReasonBytes, "minimum_terminal_retention_days": MinimumRetentionDays,
+		"reason_bytes": ReasonBytes, "result_bytes": ResultBytes, "minimum_terminal_retention_days": MinimumRetentionDays,
 	} {
 		if want, ok := policy.Limits[key]; !ok || got != want {
 			t.Errorf("%s=%d, frozen %d (present=%v)", key, got, want, ok)

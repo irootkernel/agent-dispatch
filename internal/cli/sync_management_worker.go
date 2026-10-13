@@ -336,7 +336,7 @@ func (s *peerService) dispatchManagementWithHTTP(ctx context.Context, httpClient
 			}
 		}
 	}()
-	out := boundedReconcileOutput{limit: 1048576}
+	out := boundedReconcileOutput{limit: syncmanagement.ResultBytes}
 	code := 0
 	if pending.Action == "retry" {
 		code = s.retryManagement(executionCtx, e, httpClient, &out)

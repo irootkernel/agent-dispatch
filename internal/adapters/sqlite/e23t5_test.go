@@ -69,7 +69,7 @@ func TestE23T5RetryAdmissionFlattensExactObligationsAndPreservesAttempts(t *test
 }
 
 func TestE23T5RetryRechecksEligibilityAtAcceptanceAndRollsBack(t *testing.T) {
-	for _, state := range []string{"blocked", "deferred", "exhausted", "held"} {
+	for _, state := range []string{"blocked", "deferred", "resolved_deferred", "exhausted", "held"} {
 		t.Run(state, func(t *testing.T) {
 			s := openTestStore(t)
 			r := e23t5Claim(t, s)
@@ -79,6 +79,13 @@ func TestE23T5RetryRechecksEligibilityAtAcceptanceAndRollsBack(t *testing.T) {
 			b.TargetRequestID = &r.RequestID
 			draft := prepareManagement(t, s, 2, b)
 			switch state {
+			case "resolved_deferred":
+				if _, err := s.Exec(`UPDATE sync_jobs SET state='deferred' WHERE job_id=?`, job.JobID); err != nil {
+					t.Fatal(err)
+				}
+				if err := s.ResolveImportDeferral(context.Background(), job.JobID, syncT3); err != nil {
+					t.Fatal(err)
+				}
 			case "exhausted":
 				_, _ = s.Exec(`UPDATE sync_jobs SET attempts=20 WHERE job_id=?`, job.JobID)
 			case "held":

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -176,6 +177,83 @@ func TestE23T5EmptyHoldRecovery(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestE23T5DeferredImportHoldYieldsToSettledRecovery(t *testing.T) {
+	f := newResumeFixture(t)
+	f.cfg.Sync.Management = &config.SyncManagement{Enabled: true, Actions: []string{"sync-now", "retry"}}
+	f.writeConfig(t)
+	ids := []string{e23t5Accepted(t, f.cfg, f.path, "sync-now"), e23t5Accepted(t, f.cfg, f.path, "sync-now")}
+	slices.Sort(ids)
+	ctx := context.Background()
+	binding, err := managementBindingForConfig(f.cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision, _ := config.SyncRevision(f.cfg)
+	jobs := make([]string, 2)
+	for i, id := range ids {
+		r, err := f.store.ClaimManagementRequest(ctx, f.cfg.Sync.GroupID, id, fmt.Sprintf("worker-%d", i), binding, true, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		target := strings.Repeat(string(rune('b'+i)), 40)
+		p, err := syncrecords.NewImport(syncrecords.ImportBinding{GroupID: f.cfg.Sync.GroupID, FromCommit: strings.Repeat("a", 40), TargetCommit: target, MembershipRevision: strings.Repeat("d", 40), AcknowledgementID: "fixture-ack", ResourceObservationRevision: 1, ExpectedGitStateDigest: "sha256:" + strings.Repeat("e", 64), HistoryEvidenceID: "fixture-history", CaseMode: config.CaseMode(), State: "validated", Reason: "none"}, []syncrecords.ImportPath{{Path: "note.md", Before: "absent", After: "sha256:" + strings.Repeat("f", 64)}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := syncrecords.CanonicalImport(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		job, _, err := f.store.AdmitSyncJob(ctx, sqlite.SyncJobInput{JobID: p.ImportID, GroupID: p.GroupID, Kind: "import", LogicalKey: p.PlanID, InitialState: "validated", PayloadJSON: string(raw), ConfigRevision: revision, QueueLimit: 1000, Now: time.Now().UTC().Format(time.RFC3339Nano)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		jobs[i] = job.JobID
+		r, err = f.store.ReserveManagementAssociations(ctx, r, 1, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, err = f.store.AssociateManagementJob(ctx, r, sqlite.ManagementJob{JobID: job.JobID, Kind: "import", TargetCommit: &target, AssociationReason: "observed_reconciliation"}, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			if _, err := f.store.Exec(`UPDATE sync_jobs SET state='deferred' WHERE job_id=?`, job.JobID); err != nil {
+				t.Fatal(err)
+			}
+			if err := f.store.ResolveImportDeferral(ctx, job.JobID, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+				t.Fatal(err)
+			}
+		} else if _, err := f.store.Exec(`UPDATE sync_jobs SET state='applied',resolved_at=?,retain_until_resolved=0 WHERE job_id=?`, time.Now().UTC().Format(time.RFC3339Nano), job.JobID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.store.TransitionManagementRequest(ctx, r, "blocked", &syncmanagement.Outcome{Status: "blocked", Reason: "recorded import awaits recovery inspection"}, "fixture-import-inspection", time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	service := &peerService{cfg: f.cfg, configPath: f.path, store: f.store}
+	service.recoverManagement(ctx)
+	held, err := f.store.LoadManagementRequest(ctx, f.cfg.Sync.GroupID, ids[0], time.Now())
+	if err != nil || held.State != "blocked" || held.Outcome == nil || held.Outcome.Status != "blocked" || held.Attempts != 1 || len(held.Jobs) != 1 || held.Jobs[0].State != "deferred" || held.Jobs[0].JobID != jobs[0] {
+		t.Fatalf("deferral falsely settled: %+v %v", held, err)
+	}
+	service.recoverManagement(ctx)
+	settled, err := f.store.LoadManagementRequest(ctx, f.cfg.Sync.GroupID, ids[1], time.Now())
+	if err != nil || settled.State != "finished" || settled.Outcome == nil || settled.Outcome.Status != "already_settled" || settled.Attempts != 1 || len(settled.Jobs) != 1 || settled.Jobs[0].JobID != jobs[1] {
+		t.Fatalf("retained hold starved later recovery: %+v %v", settled, err)
+	}
+	// Ordinary effect recovery can later apply the original plan. Management
+	// observes that durable head without reopening the safety-held import itself.
+	if _, err := f.store.Exec(`UPDATE sync_jobs SET state='applied' WHERE job_id=?`, jobs[0]); err != nil {
+		t.Fatal(err)
+	}
+	service.recoverManagement(ctx)
+	settled, err = f.store.LoadManagementRequest(ctx, f.cfg.Sync.GroupID, ids[0], time.Now())
+	if err != nil || settled.State != "finished" || settled.Outcome == nil || settled.Outcome.Status != "already_settled" || settled.Attempts != 1 || settled.Jobs[0].JobID != jobs[0] {
+		t.Fatalf("applied original obligation did not settle: %+v %v", settled, err)
 	}
 }
 

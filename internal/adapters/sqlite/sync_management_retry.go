@@ -48,6 +48,12 @@ func managementObligations(ctx context.Context, q managementQuerier, r Managemen
 				return nil, fmt.Errorf("invalid recorded obligation resolution")
 			}
 		}
+		// Ordinary sync resolves a deferral to release active-queue capacity.
+		// Its protected effect is still held, so management cannot infer an
+		// applied obligation or reopen it through explicit retry.
+		if o.Kind == "import" && o.State == "deferred" {
+			o.Settled = false
+		}
 		o.Eligible = !o.Settled && o.Attempts < syncmanagement.AttemptLimit && !SyncClaimLiveAt(owner, expiry, now) && o.TargetCommit != nil && syncmanagement.ValidCommit(*o.TargetCommit)
 		if o.Eligible {
 			switch o.Kind {

@@ -89,7 +89,12 @@ it carries a result rather than an error object.
 
 ## 4. Stable Error Code Registry
 
-The v0.1 registry is closed: implementations emit only the codes below. Adding or changing a code is a contract change recorded in the changelog and this table.
+The shared registry below is closed. The `sync capabilities` and `sync request`
+families use the closed registry in
+[`sync-management-v1/errors.json`](sync-management-v1/errors.json), which also
+owns their code, category, exit, and retryability mappings. Shared codes retain
+the same categories and exits in both registries. Adding or changing a code is
+a contract change recorded in the owning registry and changelog.
 
 | Code | Category | Exit |
 |---|---|---:|

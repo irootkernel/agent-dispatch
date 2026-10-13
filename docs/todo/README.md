@@ -33,6 +33,7 @@ changes, and where noted a new ADR/security review.
 | Additional Plugin management beyond the E23/EPIC-008 action set | Broader Hermes operations | E23's constrained provider and a separate Plugin scope decision | version skew, lifecycle coupling, and split authority |
 | Local dashboard | Operator convenience | stable status/management API exists | unnecessary daemon/network surface |
 | Management bound enforcement consolidation | Keep advertised and enforced limits aligned | a successor changes frozen freshness, renewal, shutdown, or retention limits | drift between worker, capabilities and operator prune |
+| Management ledger and retry policy consolidation | Keep persistence rules in the SQLite adapter and retry eligibility consistent | store clock, recovery, association rules, retry states, or payload eligibility change | duplicated storage predicates and eligibility rules |
 | Hermes management plugin | Native Hermes UI | public authenticated Agent Dispatch management API or MCP stable | lifecycle coupling and split authority |
 
 ### Management bound enforcement consolidation
@@ -43,6 +44,17 @@ worker and operator management-retention cutoffs. The current v1 values agree;
 the result-byte limit already uses one domain constant. Re-enter when a successor
 changes one of these frozen limits or the retention callers need different
 cutoff logic.
+
+### Management ledger and retry policy consolidation
+
+Proposed owner: the Core persistence maintainer, with the Core verification
+maintainer covering the behavior checks. Move physical management-ledger SQL
+and storage timestamp formatting from CLI orchestration into the SQLite adapter.
+Consolidate the adapter and CLI retry-state lists while preserving payload and
+effect-eligibility checks. The current predicates and timestamp encoding agree;
+the CLI also requires the adapter's eligibility result before retrying an effect.
+Re-enter when store-clock, recovery, association, retry-state, or payload rules
+change. This candidate does not defer current correctness or acceptance work.
 
 ## Future Hermes Plugin Constraints
 

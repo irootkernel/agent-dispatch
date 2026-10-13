@@ -92,7 +92,7 @@ it carries a result rather than an error object.
 The shared registry below is closed. The `sync capabilities` and `sync request`
 families use the closed registry in
 [`sync-management-v1/errors.json`](sync-management-v1/errors.json), which also
-owns their code, category, exit, and retryability mappings. Shared codes retain
+owns their code, category, and exit mappings. Shared codes retain
 the same categories and exits in both registries. Adding or changing a code is
 a contract change recorded in the owning registry and changelog.
 

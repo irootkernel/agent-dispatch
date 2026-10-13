@@ -227,6 +227,11 @@ request's evidence. A successful submission acknowledges durable acceptance;
 inspect the action outcome separately. A stopped executor leaves accepted work
 retained and does not install or start a service.
 
+If the submit response is lost, inspect the retained handle with exact `show`
+and resubmit that same handle when needed. A missing response does not prove
+that acceptance failed. An absent handle after retention or restore does not
+authorize creating a replacement automatically.
+
 For an explicit retry, prepare `--action retry --target-request-id <request-id>`.
 Only recorded eligible obligations run, with the same job identities, pinned
 targets and attempt budgets. Already-settled work returns `already_settled`
@@ -355,6 +360,12 @@ Before upgrade or risky maintenance:
 Copying a live WAL database without its WAL/SHM or checkpoint procedure is not a valid backup.
 
 ## 9. Upgrade
+
+For v0.3.0 management schemas 28/29, use
+[sync state and trust maintenance](#3c-sync-state-and-trust-maintenance) and the
+[migration guide](../implementation-tips/migration-and-versioning.md) before
+opening the store. An older binary cannot open schema 29; rollback restores its
+compatible backup with writers and the peer service stopped.
 
 1. back up database and config;
 2. validate the new binary identity and run doctor for schema compatibility;

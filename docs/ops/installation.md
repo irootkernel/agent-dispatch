@@ -238,6 +238,13 @@ and use the verified pre-upgrade database/configuration with its matching binary
 for rollback. Never point an older binary at the upgraded database expecting a
 reverse migration.
 
+For v0.3.0 management state (schemas 28/29), follow
+[sync state and trust maintenance](runbook.md#3c-sync-state-and-trust-maintenance)
+and the [migration guide](../implementation-tips/migration-and-versioning.md).
+Stop the peer service and writers before backup or restore. Rollback requires
+the old binary's compatible backup; destructive identity recovery keeps
+management disabled until a new local incarnation is registered.
+
 ## 5a. v0.2.0 Two-Node Sync Upgrade
 
 The v0.1.8 binary supports SQLite schemas 1-20; v0.2.0 supports 1-27.

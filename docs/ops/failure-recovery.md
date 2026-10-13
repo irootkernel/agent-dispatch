@@ -8,6 +8,8 @@ Keep the same explicit `--config` path for diagnosis and resolution.
 
 | Symptom | Likely state | Safe action | Forbidden action |
 |---|---|---|---|
+| Management submit response is lost | durable acceptance may already exist | inspect exact `sync request show`; resubmit the retained handle; follow [management recovery](runbook.md#3c-sync-state-and-trust-maintenance) | infer no effect or prepare a replacement automatically |
+| Restored management handle is obsolete or absent | state incarnation changed, or retention/restore removed the handle | keep management disabled during [identity recovery](runbook.md#3c-sync-state-and-trust-maintenance); inspect retained evidence | execute a retired draft or recreate an absent handle automatically |
 | Watchman command exits nonzero after a change | input rejected, storage failure, target problem, or unknown | inspect logs and `status`; use causal ID | manually fire webhook as fallback |
 | Hermes CLI timed out | `unknown` if request may have been sent | lookup by idempotency key/task ID | blind retry |
 | Hermes definitely unavailable before invocation | `retry_wait` or command error | allow bounded retry or drain later | change idempotency key |

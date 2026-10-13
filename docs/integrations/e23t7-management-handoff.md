@@ -22,7 +22,7 @@ new release inputs require applicable requalification.
 | Field | Required value |
 |---|---|
 | Product version | `v0.3.0` |
-| Product source commit | `5afbe30052d35064f5607b0eeb2570efe299fbf0` |
+| Product source commit | `48181a25d366c52aff0f0856a281d99985a812f5` |
 | Management contract | `sha256:77dba7fac82cf1e627ad29ab89057c18d4d5c2c380251112579e551d1122cf39` |
 | Base-sync contract | `sha256:30cf47b1bd854a0271aa9df3e7b37f0cc14cdd86d3f06a65a2cb787c6741131b` |
 | Toolchain | Go `1.27.1` |
@@ -37,9 +37,9 @@ this handoff and the exact binary SHA.
 
 | Artifact | SHA-256 | Qualification |
 |---|---|---|
-| `agent-dispatch-v0.3.0-darwin-arm64` | `c9eef936df5de3cbdf232e4c1e84beec0f11388c45ef268a9abe592ab7fde04a` | Native qualified |
-| `agent-dispatch-v0.3.0-linux-arm64` | `3ae38c18dc61146b6af86be171905b375df542c244e0226a2edc7b897cf808c4` | Native qualified |
-| `agent-dispatch-v0.3.0-linux-amd64` | `081ecb615474a01bebdd0bb4341f450b968d51f0fb49d07f04dc1477dc928e14` | Native full gate and version execution qualified; paired management unqualified |
+| `agent-dispatch-v0.3.0-darwin-arm64` | `aa27796a42f3236e75f642eaa0be7b703229e7cfdfa4485d096d9f68bbb481bd` | Native qualified |
+| `agent-dispatch-v0.3.0-linux-arm64` | `adcb97015f0f868264df287ee49f8fc38e6e3bc6410b454e8e330f6ff840de50` | Native qualified |
+| `agent-dispatch-v0.3.0-linux-amd64` | `e95c0047420889a9192cc016ca798f3d94eb81423e31e53878fc715b1e6bfee8` | Native full gate and version execution qualified; paired management unqualified |
 
 Independent builds on native Darwin arm64 and native Linux arm64 produced
 the same three-platform checksum list. Each used the exact Git archive, `make
@@ -56,7 +56,7 @@ It does not implement management and was not replaced during qualification.
 Admission requires one committed `external-handoff` package for this product
 source under `evidence/aquarium/E23-T7/external-handoff/`.
 The native checksum file target is
-`sha256:26b4989e7f9ee6cf80a81b688f0979081898f0d5a95bb025152ef78d9e702eca`.
+`sha256:4d39ddb396e0baff4026915edefb1cd00c3ea8c4029eddf957a72f7847215cc9`.
 The package's `manifest.json` binds that exact file target and capture-time Git
 HEAD and indexes `SHA256SUMS` and selected native public-interface fields.
 Verify the manifest and payload digests, the source identity and every artifact

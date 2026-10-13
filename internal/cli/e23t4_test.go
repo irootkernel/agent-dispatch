@@ -331,8 +331,13 @@ func e23t4Request(t *testing.T, path string, args ...string) (int, map[string]an
 }
 
 func TestE23T4LocalControlsShareOperatorResumeSafety(t *testing.T) {
-	for _, name := range []string{"healthy", "held", "emergency", "busy", "stale", "trust", "transport", "storage", "merge", "index_lock", "foreign_branch", "detached_head", "writer"} {
+	for _, name := range []string{"healthy", "held", "emergency", "busy", "stale", "trust", "transport", "storage", "merge", "index_lock", "foreign_branch", "detached_head", "writer", "pause_stale", "pause_held"} {
 		t.Run(name, func(t *testing.T) {
+			action := "resume"
+			if strings.HasPrefix(name, "pause_") {
+				action = "pause"
+				name = strings.TrimPrefix(name, "pause_")
+			}
 			f := newResumeFixture(t)
 			f.cfg.Sync.Management = &config.SyncManagement{Enabled: true, Actions: []string{"pause", "resume"}}
 			f.writeConfig(t)
@@ -341,14 +346,22 @@ func TestE23T4LocalControlsShareOperatorResumeSafety(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			code, value := e23t4Request(t, f.path, "prepare", "--group", f.cfg.Sync.GroupID, "--action", "resume")
+			if action == "pause" && name == "held" {
+				paused, err = f.store.HoldSyncControl(context.Background(), f.cfg.Sync.GroupID, "trust_failure", revision, time.Now().UTC().Format(time.RFC3339Nano))
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			code, value := e23t4Request(t, f.path, "prepare", "--group", f.cfg.Sync.GroupID, "--action", action)
 			if code != 0 {
 				t.Fatalf("prepare%d %v", code, value)
 			}
 			id := value["result"].(map[string]any)["request_id"].(string)
 			switch name {
 			case "held":
-				_, err = f.store.HoldSyncControl(context.Background(), f.cfg.Sync.GroupID, "trust_failure", revision, time.Now().UTC().Format(time.RFC3339Nano))
+				if action == "resume" {
+					_, err = f.store.HoldSyncControl(context.Background(), f.cfg.Sync.GroupID, "trust_failure", revision, time.Now().UTC().Format(time.RFC3339Nano))
+				}
 			case "emergency":
 				_, err = f.store.Exec(`UPDATE sync_controls SET membership_mode='blocked_emergency' WHERE group_id=?`, f.cfg.Sync.GroupID)
 			case "busy":
@@ -447,6 +460,9 @@ func TestE23T4LocalControlsShareOperatorResumeSafety(t *testing.T) {
 				switch name {
 				case "held", "stale":
 					wantMessage = fmt.Sprintf("control revision is %d, expected %d; inspect sync status, complete any required operator recovery, then prepare a new request", before.Revision, paused.Revision)
+					if action == "pause" && name == "held" {
+						wantMessage = "control safety hold remains; inspect sync status and complete its operator recovery before preparing another request"
+					}
 				case "emergency":
 					wantMessage = "membership emergency remains; inspect sync status and adopt a reviewed normal membership replacement through the operator CLI before preparing another request"
 				case "busy":
@@ -1583,5 +1599,22 @@ func TestE23T4KnownRefusalKeepsAmbiguousWorkerEvidence(t *testing.T) {
 				t.Fatal("refusal changed content")
 			}
 		})
+	}
+}
+
+func TestE23T4StoreConflictDiagnosisIsBounded(t *testing.T) {
+	privatePath := filepath.Join(t.TempDir(), "private-store.sqlite")
+	var output bytes.Buffer
+	err := errors.Join(sqlite.ErrSyncAdmissionConflict, fmt.Errorf("private storage diagnosis: %s", privatePath))
+	code := managementStoreError(context.Background(), &output, "sync request submit", err, nil)
+	var carrier map[string]any
+	if err := json.Unmarshal(output.Bytes(), &carrier); err != nil {
+		t.Fatal(err)
+	}
+	failure := carrier["error"].(map[string]any)
+	message := failure["message"].(string)
+	want := "request conflicts with current control or admission state; inspect sync status and the same handle; prepare a new request if its bound control revision changed"
+	if code != 14 || carrier["ok"] != false || failure["code"] != "sync_request_conflict" || failure["category"] != "conflict" || failure["retryable"] != false || message != want || len([]byte(message)) > 256 || strings.Contains(message, privatePath) || strings.Contains(message, "private storage diagnosis") || carrier["result"] != nil {
+		t.Fatalf("store conflict lost its closed recovery diagnosis: %d %s", code, output.Bytes())
 	}
 }

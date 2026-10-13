@@ -6,7 +6,11 @@ import (
 	"errors"
 	"time"
 
+	"github.com/irootkernel/agent-dispatch/internal/adapters/gitlocal"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/resourceguard"
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/app/maintenance"
+	"github.com/irootkernel/agent-dispatch/internal/app/syncmembership"
 	"github.com/irootkernel/agent-dispatch/internal/domain/syncmanagement"
 )
 
@@ -85,9 +89,15 @@ func (s *peerService) recoverManagement(ctx context.Context) {
 		e := &managementExecution{request: r, service: s}
 		// Inspect current authority without reusing the expired effect claim.
 		e.request.State = "queued"
+		operatorHold := r.State == "blocked" && r.Outcome != nil &&
+			(r.Outcome.Reason == "membership_adoption_requires_operator" || r.Outcome.Reason == "checkpoint_adoption_requires_operator")
 		if err := e.authorized(ctx); err != nil || r.Attempts >= syncmanagement.AttemptLimit {
 			state = "blocked"
-			outcome = &syncmanagement.Outcome{Status: "blocked", Reason: "no effect admitted; current authority or attempt budget refuses another execution"}
+			if !operatorHold {
+				outcome = &syncmanagement.Outcome{Status: "blocked", Reason: "no effect admitted; current authority or attempt budget refuses another execution"}
+			}
+		} else if operatorHold && !s.managementAdoptionHoldCleared(ctx, r) {
+			state = "blocked"
 		} else {
 			state = "queued"
 			outcome = nil
@@ -101,6 +111,44 @@ func (s *peerService) recoverManagement(ctx context.Context) {
 	if err != nil {
 		s.warn("management recovery result remains unresolved")
 	}
+}
+
+// A standing operator-adoption hold is not removed by an empty effect journal.
+// Inspect current adopted refs without fetching, signing or changing them.
+func (s *peerService) managementAdoptionHoldCleared(ctx context.Context, r sqlite.ManagementRequest) bool {
+	guard, err := resourceguard.Acquire(stateDirOf(s.cfg), s.cfg.Sync.Resource)
+	if err != nil {
+		return false
+	}
+	defer guard.Close()
+	client, err := membershipGitClient(s.cfg, s.cfg.Sync)
+	if err != nil {
+		return false
+	}
+	membership, err := client.ResolveRef(ctx, s.cfg.Sync.MembershipRef)
+	if err != nil {
+		return false
+	}
+	if _, err := loadConfiguredMembers(ctx, s.cfg, client, membership); err != nil {
+		return false
+	}
+	if r.Outcome.Reason == "membership_adoption_requires_operator" {
+		remote, err := client.RemoteRef(ctx, s.cfg.Sync.RemoteName, s.cfg.Sync.MembershipRef, s.cfg.Sync.RemoteRepositoryDigest)
+		return err == nil && remote == membership
+	}
+	if r.Outcome.TargetCommit == nil {
+		return false
+	}
+	head, err := client.ResolveRef(ctx, s.cfg.Sync.ContentRef)
+	if err != nil {
+		return false
+	}
+	relation, err := client.Compare(ctx, *r.Outcome.TargetCommit, head)
+	if err != nil || relation != gitlocal.RelationEqual && relation != gitlocal.RelationBehind {
+		return false
+	}
+	history, err := syncmembership.LoadHistory(ctx, client, membership, membershipBinding(s.cfg, s.cfg.Sync), s.cfg.Sync.Bounds.HistoryCommits)
+	return err == nil && verifyContentHeadContext(ctx, client, history, s.cfg, s.cfg.Sync, head) == nil
 }
 
 func (s *peerService) pruneManagement(ctx context.Context) {

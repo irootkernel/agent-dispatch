@@ -1,0 +1,555 @@
+{
+  "control_pair": {
+    "paused_result": "incomplete",
+    "resumed_result": "complete"
+  },
+  "format": "selected-public-cli-fields",
+  "historical_lookup": {
+    "linux": {
+      "after": {
+        "action": "sync-now",
+        "attempts": 1,
+        "binding_current": true,
+        "claim_fence": 1,
+        "executor": "available",
+        "jobs": [],
+        "kind": "request",
+        "outcome": {
+          "quiescence": null,
+          "reason": "guarded reconciliation observed the configured target",
+          "status": "no_op"
+        },
+        "phase": "show",
+        "schema_version": "agent-dispatch.sync-management/v1",
+        "side_effects": [],
+        "state": "finished"
+      },
+      "before": {
+        "action": "sync-now",
+        "attempts": 1,
+        "binding_current": true,
+        "claim_fence": 1,
+        "executor": "available",
+        "jobs": [],
+        "kind": "request",
+        "outcome": {
+          "quiescence": null,
+          "reason": "guarded reconciliation observed the configured target",
+          "status": "no_op"
+        },
+        "phase": "show",
+        "schema_version": "agent-dispatch.sync-management/v1",
+        "side_effects": [],
+        "state": "finished"
+      }
+    },
+    "mac": {
+      "after": {
+        "action": "sync-now",
+        "attempts": 1,
+        "binding_current": true,
+        "claim_fence": 1,
+        "executor": "available",
+        "jobs": [],
+        "kind": "request",
+        "outcome": {
+          "quiescence": null,
+          "reason": "guarded reconciliation observed the configured target",
+          "status": "no_op"
+        },
+        "phase": "show",
+        "schema_version": "agent-dispatch.sync-management/v1",
+        "side_effects": [],
+        "state": "finished"
+      },
+      "before": {
+        "action": "sync-now",
+        "attempts": 1,
+        "binding_current": true,
+        "claim_fence": 1,
+        "executor": "available",
+        "jobs": [],
+        "kind": "request",
+        "outcome": {
+          "quiescence": null,
+          "reason": "guarded reconciliation observed the configured target",
+          "status": "no_op"
+        },
+        "phase": "show",
+        "schema_version": "agent-dispatch.sync-management/v1",
+        "side_effects": [],
+        "state": "finished"
+      }
+    }
+  },
+  "identity_and_dynamic_metadata_redacted": true,
+  "lost_response": {
+    "duplicate_side_effects": [],
+    "finished": {
+      "action": "verify-all",
+      "attempts": 1,
+      "binding_current": true,
+      "claim_fence": 1,
+      "executor": "available",
+      "jobs": [
+        {
+          "association_reason": "verification_target",
+          "attempts": 1,
+          "kind": "verification",
+          "state": "complete"
+        }
+      ],
+      "kind": "request",
+      "outcome": {
+        "quiescence": null,
+        "reason": "exact verification result recorded",
+        "status": "complete"
+      },
+      "phase": "show",
+      "schema_version": "agent-dispatch.sync-management/v1",
+      "side_effects": [],
+      "state": "finished"
+    },
+    "queued": {
+      "action": "verify-all",
+      "attempts": 0,
+      "binding_current": true,
+      "claim_fence": 0,
+      "executor": "stopped",
+      "jobs": [],
+      "kind": "request",
+      "phase": "show",
+      "schema_version": "agent-dispatch.sync-management/v1",
+      "side_effects": [],
+      "state": "queued"
+    },
+    "submitter_exit": -13
+  },
+  "native_management": {
+    "native_darwin_arm64": {
+      "after_uninstall": {
+        "definition_matches": false,
+        "loaded": false,
+        "present": false
+      },
+      "capabilities": {
+        "available_actions": [
+          "pause",
+          "resume",
+          "retry",
+          "sync-now",
+          "verify-all"
+        ],
+        "configured_actions": [
+          "pause",
+          "resume",
+          "retry",
+          "sync-now",
+          "verify-all"
+        ],
+        "contract_digest": "sha256:77dba7fac82cf1e627ad29ab89057c18d4d5c2c380251112579e551d1122cf39",
+        "data_capacity": 100,
+        "enabled": true,
+        "executor": "available",
+        "kind": "capabilities",
+        "limits": {
+          "association_limit": 1000,
+          "call_deadline_seconds": 5,
+          "claim_lease_seconds": 30,
+          "claim_renewal_seconds": 10,
+          "cumulative_attempts": 20,
+          "execution_deadline_seconds": 240,
+          "executor_freshness_seconds": 60,
+          "expired_draft_retention_seconds": 86400,
+          "management_per_recovery_pass": 1,
+          "minimum_terminal_retention_days": 180,
+          "preparation_ttl_seconds": 600,
+          "prepared_control_limit": 16,
+          "prepared_data_limit": 256,
+          "reason_bytes": 256,
+          "result_bytes": 1048576,
+          "shutdown_seconds": 30,
+          "terminal_control_limit": 1000,
+          "terminal_data_limit": 10000,
+          "unresolved_control_limit": 16,
+          "unresolved_data_max": 1000,
+          "unresolved_data_min": 2
+        },
+        "schema_version": "agent-dispatch.sync-management/v1",
+        "side_effects": []
+      },
+      "executor_after_uninstall": "stopped",
+      "paused_requests": {
+        "sync-now": {
+          "blocked": {
+            "action": "sync-now",
+            "attempts": 0,
+            "binding_current": true,
+            "claim_fence": 0,
+            "executor": "available",
+            "jobs": [],
+            "kind": "request",
+            "outcome": {
+              "quiescence": null,
+              "reason": "current policy, binding or control refuses execution",
+              "status": "blocked"
+            },
+            "phase": "show",
+            "schema_version": "agent-dispatch.sync-management/v1",
+            "side_effects": [],
+            "state": "blocked"
+          },
+          "finished": {
+            "action": "sync-now",
+            "attempts": 1,
+            "binding_current": true,
+            "claim_fence": 1,
+            "executor": "available",
+            "jobs": [],
+            "kind": "request",
+            "outcome": {
+              "quiescence": null,
+              "reason": "guarded reconciliation observed the configured target",
+              "status": "no_op"
+            },
+            "phase": "show",
+            "schema_version": "agent-dispatch.sync-management/v1",
+            "side_effects": [],
+            "state": "finished"
+          }
+        },
+        "verify-all": {
+          "blocked": {
+            "action": "verify-all",
+            "attempts": 0,
+            "binding_current": true,
+            "claim_fence": 0,
+            "executor": "available",
+            "jobs": [],
+            "kind": "request",
+            "outcome": {
+              "quiescence": null,
+              "reason": "current policy, binding or control refuses execution",
+              "status": "blocked"
+            },
+            "phase": "show",
+            "schema_version": "agent-dispatch.sync-management/v1",
+            "side_effects": [],
+            "state": "blocked"
+          },
+          "finished": {
+            "action": "verify-all",
+            "attempts": 1,
+            "binding_current": true,
+            "claim_fence": 1,
+            "executor": "available",
+            "jobs": [
+              {
+                "association_reason": "verification_target",
+                "attempts": 1,
+                "kind": "verification",
+                "state": "complete"
+              }
+            ],
+            "kind": "request",
+            "outcome": {
+              "quiescence": null,
+              "reason": "exact verification result recorded",
+              "status": "complete"
+            },
+            "phase": "show",
+            "schema_version": "agent-dispatch.sync-management/v1",
+            "side_effects": [],
+            "state": "finished"
+          }
+        }
+      },
+      "retry": {
+        "action": "retry",
+        "attempts": 1,
+        "binding_current": true,
+        "claim_fence": 0,
+        "executor": "available",
+        "jobs": [
+          {
+            "association_reason": "retry_obligation",
+            "attempts": 1,
+            "kind": "verification",
+            "state": "complete"
+          }
+        ],
+        "kind": "request",
+        "outcome": {
+          "quiescence": null,
+          "reason": "predecessor obligations are durably settled",
+          "status": "already_settled"
+        },
+        "phase": "submit",
+        "schema_version": "agent-dispatch.sync-management/v1",
+        "side_effects": [
+          "request_acceptance_write"
+        ],
+        "state": "finished"
+      },
+      "service_inspection": {
+        "definition_matches": true,
+        "loaded": true,
+        "present": true
+      },
+      "verification": {
+        "node_count": 2,
+        "nodes": [
+          {
+            "evidence_fresh": true,
+            "governed_dirty": false,
+            "membership_current": true,
+            "pending_work": false,
+            "state": "applied",
+            "uncertain": false
+          },
+          {
+            "evidence_fresh": true,
+            "governed_dirty": false,
+            "membership_current": true,
+            "pending_work": false,
+            "state": "applied",
+            "uncertain": false
+          }
+        ],
+        "result": "complete"
+      }
+    },
+    "native_linux_arm64": {
+      "after_uninstall": {
+        "definition_matches": false,
+        "loaded": false,
+        "present": false
+      },
+      "capabilities": {
+        "available_actions": [
+          "pause",
+          "resume",
+          "retry",
+          "sync-now",
+          "verify-all"
+        ],
+        "configured_actions": [
+          "pause",
+          "resume",
+          "retry",
+          "sync-now",
+          "verify-all"
+        ],
+        "contract_digest": "sha256:77dba7fac82cf1e627ad29ab89057c18d4d5c2c380251112579e551d1122cf39",
+        "data_capacity": 100,
+        "enabled": true,
+        "executor": "available",
+        "kind": "capabilities",
+        "limits": {
+          "association_limit": 1000,
+          "call_deadline_seconds": 5,
+          "claim_lease_seconds": 30,
+          "claim_renewal_seconds": 10,
+          "cumulative_attempts": 20,
+          "execution_deadline_seconds": 240,
+          "executor_freshness_seconds": 60,
+          "expired_draft_retention_seconds": 86400,
+          "management_per_recovery_pass": 1,
+          "minimum_terminal_retention_days": 180,
+          "preparation_ttl_seconds": 600,
+          "prepared_control_limit": 16,
+          "prepared_data_limit": 256,
+          "reason_bytes": 256,
+          "result_bytes": 1048576,
+          "shutdown_seconds": 30,
+          "terminal_control_limit": 1000,
+          "terminal_data_limit": 10000,
+          "unresolved_control_limit": 16,
+          "unresolved_data_max": 1000,
+          "unresolved_data_min": 2
+        },
+        "schema_version": "agent-dispatch.sync-management/v1",
+        "side_effects": []
+      },
+      "executor_after_uninstall": "stopped",
+      "paused_requests": {
+        "sync-now": {
+          "blocked": {
+            "action": "sync-now",
+            "attempts": 0,
+            "binding_current": true,
+            "claim_fence": 0,
+            "executor": "available",
+            "jobs": [],
+            "kind": "request",
+            "outcome": {
+              "quiescence": null,
+              "reason": "current policy, binding or control refuses execution",
+              "status": "blocked"
+            },
+            "phase": "show",
+            "schema_version": "agent-dispatch.sync-management/v1",
+            "side_effects": [],
+            "state": "blocked"
+          },
+          "finished": {
+            "action": "sync-now",
+            "attempts": 1,
+            "binding_current": true,
+            "claim_fence": 1,
+            "executor": "available",
+            "jobs": [],
+            "kind": "request",
+            "outcome": {
+              "quiescence": null,
+              "reason": "guarded reconciliation observed the configured target",
+              "status": "no_op"
+            },
+            "phase": "show",
+            "schema_version": "agent-dispatch.sync-management/v1",
+            "side_effects": [],
+            "state": "finished"
+          }
+        },
+        "verify-all": {
+          "blocked": {
+            "action": "verify-all",
+            "attempts": 0,
+            "binding_current": true,
+            "claim_fence": 0,
+            "executor": "available",
+            "jobs": [],
+            "kind": "request",
+            "outcome": {
+              "quiescence": null,
+              "reason": "current policy, binding or control refuses execution",
+              "status": "blocked"
+            },
+            "phase": "show",
+            "schema_version": "agent-dispatch.sync-management/v1",
+            "side_effects": [],
+            "state": "blocked"
+          },
+          "finished": {
+            "action": "verify-all",
+            "attempts": 1,
+            "binding_current": true,
+            "claim_fence": 1,
+            "executor": "available",
+            "jobs": [
+              {
+                "association_reason": "verification_target",
+                "attempts": 1,
+                "kind": "verification",
+                "state": "complete"
+              }
+            ],
+            "kind": "request",
+            "outcome": {
+              "quiescence": null,
+              "reason": "exact verification result recorded",
+              "status": "complete"
+            },
+            "phase": "show",
+            "schema_version": "agent-dispatch.sync-management/v1",
+            "side_effects": [],
+            "state": "finished"
+          }
+        }
+      },
+      "retry": {
+        "action": "retry",
+        "attempts": 1,
+        "binding_current": true,
+        "claim_fence": 0,
+        "executor": "available",
+        "jobs": [
+          {
+            "association_reason": "retry_obligation",
+            "attempts": 1,
+            "kind": "verification",
+            "state": "complete"
+          }
+        ],
+        "kind": "request",
+        "outcome": {
+          "quiescence": null,
+          "reason": "predecessor obligations are durably settled",
+          "status": "already_settled"
+        },
+        "phase": "submit",
+        "schema_version": "agent-dispatch.sync-management/v1",
+        "side_effects": [
+          "request_acceptance_write"
+        ],
+        "state": "finished"
+      },
+      "service_inspection": {
+        "definition_matches": true,
+        "loaded": true,
+        "present": true
+      },
+      "verification": {
+        "node_count": 2,
+        "nodes": [
+          {
+            "evidence_fresh": true,
+            "governed_dirty": false,
+            "membership_current": true,
+            "pending_work": false,
+            "state": "applied",
+            "uncertain": false
+          },
+          {
+            "evidence_fresh": true,
+            "governed_dirty": false,
+            "membership_current": true,
+            "pending_work": false,
+            "state": "applied",
+            "uncertain": false
+          }
+        ],
+        "result": "complete"
+      }
+    }
+  },
+  "product_source_commit": "48181a25d366c52aff0f0856a281d99985a812f5",
+  "source_archive_sha256": "389acc7f4ec24ce8f342a2535814d6eb87f41399f44dbb5054d1d17cbf92717e",
+  "stopped_worker": {
+    "finished": {
+      "action": "sync-now",
+      "attempts": 1,
+      "binding_current": true,
+      "claim_fence": 1,
+      "executor": "available",
+      "jobs": [],
+      "kind": "request",
+      "outcome": {
+        "quiescence": null,
+        "reason": "guarded reconciliation observed the configured target",
+        "status": "no_op"
+      },
+      "phase": "show",
+      "schema_version": "agent-dispatch.sync-management/v1",
+      "side_effects": [],
+      "state": "finished"
+    },
+    "queued": {
+      "action": "sync-now",
+      "attempts": 0,
+      "binding_current": true,
+      "claim_fence": 0,
+      "executor": "stopped",
+      "jobs": [],
+      "kind": "request",
+      "phase": "show",
+      "schema_version": "agent-dispatch.sync-management/v1",
+      "side_effects": [],
+      "state": "queued"
+    }
+  },
+  "version": {
+    "name": "agent-dispatch",
+    "version": "v0.3.0"
+  }
+}

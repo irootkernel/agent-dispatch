@@ -522,10 +522,10 @@ func scheduleUninstall(command string, def scheduleDefinition, stdout, stderr io
 }
 
 // runScheduleRun is the internal command the plist invokes directly. In
-// after-command recovery mode it performs one due-only drain for the
-// route (plus the automatic drift evaluation); in scheduled mode it
-// runs the scheduled reconciliation first and drains only after a
-// healthy (exit 0) pass.
+// after-command recovery mode it performs one due-only dispatch and
+// notification drain for the route (plus the automatic drift
+// evaluation); in scheduled mode it runs the scheduled reconciliation
+// first and drains only after a healthy (exit 0) pass.
 func runScheduleRun(command string, args []string, stdout, stderr io.Writer) int {
 	flags, code := parseDispatchesFlags(command, args, stderr, map[string]bool{"--config": true, "--route": true})
 	if code != 0 {
@@ -565,13 +565,14 @@ func runScheduleRun(command string, args []string, stdout, stderr io.Writer) int
 	if store == nil {
 		return 0 // the deferral note already landed on stderr
 	}
+	defer store.Close()
 	if _, err := evaluateDriftNotifications(requestCtx(), cfg, store, dispatch.Timestamp(time.Now())); err != nil {
 		return planErr(stderr, command, "sqlite_query_failed", "storage", err.Error(), 20)
 	}
 	// The runner drains its own route under EITHER automatic mode
-	// (round-1 F001): after-command recovery drains due work directly,
-	// and scheduled mode chains the drain after the healthy
-	// reconciliation above.
+	// (round-1 F001): after-command recovery drains due dispatch and
+	// notification work directly, and scheduled mode chains the drain
+	// after the healthy reconciliation above.
 	autoDrainCfg(command, cfg, store, stderr, map[string]bool{
 		config.DrainModeAfterCommand: true, config.DrainModeScheduled: true,
 	}, routeID)

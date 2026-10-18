@@ -602,8 +602,12 @@ func runDispatchesDrain(command string, args []string, stdout, stderr io.Writer)
 // idempotency key (the dedup-safe path). One dispatch's failure never
 // aborts the others; failures are returned as visible warnings.
 func reconcileUnknownDispatches(cfg *config.Config, store storeOp, sink ports.Sink, routeID string, backoff dispatch.Backoff) ([]map[string]any, []string, error) {
+	return reconcileUnknownDispatchesCtx(requestCtx(), cfg, store, sink, routeID, backoff)
+}
+
+func reconcileUnknownDispatchesCtx(ctx context.Context, cfg *config.Config, store storeOp, sink ports.Sink, routeID string, backoff dispatch.Backoff) ([]map[string]any, []string, error) {
 	recon := &reconcile.Service{Store: store, Sink: sink, Now: func() string { return dispatch.Timestamp(time.Now()) }}
-	intents, err := store.ListIntents(requestCtx(), ports.IntentFilter{RouteID: routeID, State: "unknown", Limit: 1000})
+	intents, err := store.ListIntents(ctx, ports.IntentFilter{RouteID: routeID, State: "unknown", Limit: 1000})
 	if err != nil {
 		// DUR-006 ordering: without enumeration the required lookup
 		// cannot run, so no further submission may start.
@@ -616,6 +620,9 @@ func reconcileUnknownDispatches(cfg *config.Config, store storeOp, sink ports.Si
 		scope = resolvedTargetScope(resolved)
 	}
 	for _, sum := range intents {
+		if ctx.Err() != nil {
+			return out, failures, ctx.Err()
+		}
 		// The reconciliation must read the same target identity and
 		// scope that were configured at submission: a configuration
 		// change that re-points the route to a different target or
@@ -625,7 +632,7 @@ func reconcileUnknownDispatches(cfg *config.Config, store storeOp, sink ports.Si
 			failures = append(failures, fmt.Sprintf("reconciling %s skipped: it was accepted by target %q but the route now resolves to %q", sum.DispatchID, sum.TargetID, sink.ID()))
 			continue
 		}
-		snap, loadErr := store.LoadIntent(requestCtx(), sum.DispatchID)
+		snap, loadErr := store.LoadIntent(ctx, sum.DispatchID)
 		if loadErr != nil {
 			// Failing closed: without the recorded scope the identity
 			// proof is unavailable, so the dispatch is never
@@ -641,7 +648,7 @@ func reconcileUnknownDispatches(cfg *config.Config, store storeOp, sink ports.Si
 			failures = append(failures, fmt.Sprintf("reconciling %s skipped: it was submitted against target scope %q but the route now resolves to scope %q; restore the accepting scope or resolve the dispatch manually", sum.DispatchID, snap.TargetScope, scope))
 			continue
 		}
-		res, err := recon.Reconcile(requestCtx(), sum.DispatchID, "drain", backoff.Exhausted(sum.AttemptCount))
+		res, err := recon.Reconcile(ctx, sum.DispatchID, "drain", backoff.Exhausted(sum.AttemptCount))
 		if err != nil {
 			failures = append(failures, fmt.Sprintf("reconciling %s failed: %v", sum.DispatchID, err))
 			continue
@@ -666,7 +673,7 @@ func intentErr(stderr io.Writer, command string, err error) int {
 	case errors.Is(err, ports.ErrIdempotencyConflict):
 		writeError(stderr, command, "dispatch_duplicate", "conflict", err.Error())
 		return 14
-	case errors.Is(err, ports.ErrRouteSlotHeld):
+	case errors.Is(err, ports.ErrRouteSlotHeld), errors.Is(err, ports.ErrGroupSlotHeld):
 		writeError(stderr, command, "route_slot_held", "conflict", err.Error())
 		return 14
 	case errors.Is(err, ports.ErrStateNotEligible):

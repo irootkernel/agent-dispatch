@@ -260,6 +260,18 @@ func (s *Store) AcquireAttempt(ctx context.Context, req ports.AcquireAttempt) (s
 		fmt.Sprintf(`{"reason":%q,"attempt_id":%q,"lease_owner":%q,"lease_expires_at":%q}`, reason, req.AttemptID, req.Owner, expires)); err != nil {
 		return "", err
 	}
+	routeID, lane, laneErr := s.laneOfDispatch(tx, req.DispatchID)
+	if laneErr != nil {
+		return "", laneErr
+	}
+	// E15-T3 (CON-011, CON-012): acquire or verify the serialization-group
+	// slot inside the lease transaction before the sink is ever invoked.
+	// Normal arrivals already hold the slot (idempotent); a follow-up or
+	// due recovery intent claims the open or promoted-reserved group slot
+	// atomically, and another lane's hold or reservation refuses here.
+	if err := s.acquireGroupSlotTx(tx, routeID, lane, req.DispatchID, req.Owner, now); err != nil {
+		return "", err
+	}
 	if err := tx.Commit(); err != nil {
 		return "", err
 	}
@@ -601,6 +613,9 @@ func (s *Store) CloseDeadLetter(ctx context.Context, dispatchID, actor, reason, 
 	}
 	if n, _ := res.RowsAffected(); n > 0 {
 		outcome.SlotReleased = true
+	}
+	if err := s.releaseGroupSlotTx(tx, routeID, lane, dispatchID, actor, now); err != nil {
+		return outcome, err
 	}
 	merged, mErr := s.laneSnapshotInTx(tx, routeID, lane)
 	if mErr != nil {

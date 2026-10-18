@@ -353,19 +353,39 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	if exit != 0 {
 		return exit
 	}
+	defer outcome.Close()
 	if outcome.merged {
 		// Another dispatch holds every selected lane: the burst merged
 		// into the lanes' durable dirty generations (CON-002, CON-008,
 		// FBK-001). The envelope carries the merged lanes; stderr stays
 		// quiet on this all-merged path by the legacy clean-stderr
 		// contract the E8/G4 suites pin (the mixed activate+merge path
-		// below prints the per-lane note).
-		return writeEnvelope(stdout, command, map[string]any{
+		// below prints the per-lane note). When a lane is held by an
+		// unsubmitted due follow-up (FOLLOWUP_READY) or due retry_wait
+		// intent, the one-shot dispatch invocation also runs the route's
+		// "+ 1 already due recovery intent" drain pass (processing-pipeline
+		// §7, cli-spec §5) so the waiting follow-up submits and promotes
+		// into ACTIVE_DIRTY instead of stranding in ready.
+		submitted := false
+		var drained dispatch.DrainReport
+		if !noSubmit && artifacts.route.Enabled && outcome.store != nil {
+			drained = drainMergedRouteDueIntent(command, artifacts, outcome.store, stderr)
+			submitted = drained.Processed > 0
+			maybeAfterCommandDrainCfg(command, artifacts.cfg, outcome.store, stderr, artifacts.opts.routeID)
+		}
+		env := map[string]any{
 			"route_id": artifacts.opts.routeID, "disposition": "merge_pending",
-			"dirty_generation": outcome.dirty, "submitted": false,
+			"dirty_generation": outcome.dirty, "submitted": submitted,
 			"merged_lanes": laneResultsEnvelope(outcome.children),
 			"failed_lanes": laneFailuresEnvelope(outcome.failures),
-		})
+		}
+		if drained.Processed > 0 {
+			env["drained"] = map[string]any{
+				"processed": drained.Processed,
+				"skipped":   drained.Skipped,
+			}
+		}
+		return writeEnvelope(stdout, command, env)
 	}
 	// The fan-out envelope lists every selected destination's dispatch
 	// (E12-T2, FAN-002): dispatch_id stays the canonically-first lane's
@@ -388,7 +408,6 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "note: destination lane %s merged into its dirty generation (generation %d); a lane already held the slot\n", merged.DestinationID, merged.DirtyGeneration)
 	}
 	if noSubmit {
-		outcome.Close()
 		return writeEnvelope(stdout, command, map[string]any{
 			"route_id": artifacts.opts.routeID, "dispatch_id": outcome.dispatchID,
 			"state": "ready", "submitted": false, "fanout": fanout, "failed_lanes": failedLanes, "merged_lanes": mergedLanes,
@@ -397,7 +416,6 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	// The YAML key half of the two-key gate (E7-T6/M-2): a configuration
 	// disabled route persists its arrival but never submits it.
 	if !artifacts.route.Enabled {
-		outcome.Close()
 		return writeEnvelopeWithWarnings(stdout, command, map[string]any{
 			"route_id": artifacts.opts.routeID, "dispatch_id": outcome.dispatchID,
 			"state": "ready", "submitted": false, "fanout": fanout, "failed_lanes": failedLanes, "merged_lanes": mergedLanes,
@@ -407,7 +425,6 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	// and ready, and no automatic target fallback exists (DUR-008).
 	sink, err := resolveSink(artifacts.cfg, artifacts.opts.routeID, opsLogger(stderr, artifacts.cfg))
 	if err != nil {
-		outcome.Close()
 		return writeSinkError(stderr, command, err)
 	}
 	backoff, err := backoffFromConfig(artifacts.route.SubmissionRetry)
@@ -419,26 +436,69 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	// evaluated; this second pass covers only the race where the lease
 	// expired between that sweep and this submit (E8-T2/H-6).
 	if _, err := rt.Recover(requestCtx(), artifacts.opts.routeID); err != nil {
-		outcome.Close()
 		return intentErr(stderr, command, err)
 	}
 	report, err := rt.SubmitOnce(requestCtx(), outcome.dispatchID, "agent-dispatch-dispatch")
 	if err != nil {
-		outcome.Close()
 		return intentErr(stderr, command, err)
 	}
+	_ = drainMergedRouteDueIntent(command, artifacts, outcome.store, stderr)
 	// The registered post-commit pass (E16-T3): the core transaction
 	// committed and the command succeeded, so every affected
 	// after-command route drains its existing due work before the
 	// process exits — silent on success, bounded stderr on problems.
 	maybeAfterCommandDrainCfg(command, artifacts.cfg, outcome.store, stderr, artifacts.opts.routeID)
-	outcome.Close()
 	return writeEnvelope(stdout, command, map[string]any{
 		"route_id": artifacts.opts.routeID, "dispatch_id": outcome.dispatchID,
 		"state": string(report.To), "reason": string(report.Reason), "submitted": true,
 		"fanout": laneResultsEnvelope(outcome.children), "failed_lanes": laneFailuresEnvelope(outcome.failures),
 		"merged_lanes": mergedLanes,
 	})
+}
+
+// drainMergedRouteDueIntent runs the "+ 1 already due recovery intent"
+// pass (processing-pipeline §7, cli-spec §5) when a lane on the route
+// holds an unsubmitted due follow-up (FOLLOWUP_READY) or due retry_wait
+// intent. When the route holds only an already-accepted active task,
+// hasDueOrRecoverableDispatches returns false before resolving the
+// target sink so ordinary merge_pending arrivals stay free of
+// subprocess probes and stderr output.
+func drainMergedRouteDueIntent(command string, artifacts *planArtifacts, store storeOp, stderr io.Writer) dispatch.DrainReport {
+	ctx := requestCtx()
+	backoff, err := backoffFromConfig(artifacts.route.SubmissionRetry)
+	if err != nil {
+		return dispatch.DrainReport{}
+	}
+	if !hasDueOrRecoverableDispatches(ctx, store, artifacts.opts.routeID, backoff) {
+		return dispatch.DrainReport{}
+	}
+	sink, err := resolveSinkCtx(ctx, artifacts.cfg, artifacts.opts.routeID, nil)
+	if err != nil {
+		fmt.Fprintf(stderr, "warning: route %s due follow-up drain skipped: %v\n", artifacts.opts.routeID, err)
+		return dispatch.DrainReport{}
+	}
+	rt := newSubmitRuntime(store, sink, artifacts.cfg, submitTimeoutOf(artifacts.resolved), backoff, "dispatch", io.Discard)
+	if _, err := rt.Recover(ctx, artifacts.opts.routeID); err != nil {
+		fmt.Fprintf(stderr, "warning: route %s lease recovery failed: %v\n", artifacts.opts.routeID, err)
+		return dispatch.DrainReport{}
+	}
+	if _, warnings, err := reconcileUnknownDispatchesCtx(ctx, artifacts.cfg, store, sink, artifacts.opts.routeID, backoff); err != nil {
+		fmt.Fprintf(stderr, "%s\n", err.Error())
+		return dispatch.DrainReport{}
+	} else {
+		for _, w := range warnings {
+			fmt.Fprintf(stderr, "%s\n", w)
+		}
+	}
+	report, err := rt.Drain(ctx, artifacts.opts.routeID, 1, store)
+	if err != nil {
+		fmt.Fprintf(stderr, "warning: route %s due follow-up drain failed: %v\n", artifacts.opts.routeID, err)
+		return report
+	}
+	for _, w := range report.Warnings {
+		fmt.Fprintf(stderr, "%s\n", w)
+	}
+	return report
 }
 
 // laneFailuresEnvelope renders the per-destination fan-out failures for
@@ -498,9 +558,10 @@ type persistOutcome struct {
 
 // Close releases the outcome's store handle when the submit phase is
 // done with it.
-func (o persistOutcome) Close() {
+func (o *persistOutcome) Close() {
 	if o.closer != nil {
 		o.closer.Close()
+		o.closer = nil
 	}
 }
 
@@ -597,26 +658,28 @@ func persistThroughCoordinator(command string, artifacts *planArtifacts, stderr 
 	}
 	if len(outcome.Activated) == 0 && len(outcome.Failed) == 0 {
 		// Every lane merged: the occurrence is owed work recorded in the
-		// lanes' dirty generations (CON-002, CON-008).
+		// lanes' dirty generations (CON-002, CON-008). Keep the store
+		// open so the submit phase can drain a waiting follow-up or run
+		// the post-commit after-command pass before closing.
 		snap, err := store.LoadRouteState(requestCtx(), artifacts.opts.routeID)
-		closer.Close()
 		if err != nil {
+			closer.Close()
 			writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
 			return persistOutcome{}, 20
 		}
-		return persistOutcome{merged: true, dirty: snap.DirtyGeneration, children: outcome.Merged}, 0
+		return persistOutcome{merged: true, dirty: snap.DirtyGeneration, children: outcome.Merged, store: store, closer: closer}, 0
 	}
 	if len(outcome.Activated) == 0 {
 		// No lane activated but some failed beside merges: the occurrence
 		// is partially recorded; report the merged lanes with the failures
 		// visible instead of a bare merge envelope.
 		snap, err := store.LoadRouteState(requestCtx(), artifacts.opts.routeID)
-		closer.Close()
 		if err != nil {
+			closer.Close()
 			writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
 			return persistOutcome{}, 20
 		}
-		return persistOutcome{merged: true, dirty: snap.DirtyGeneration, children: outcome.Merged, failures: outcome.Failed}, 0
+		return persistOutcome{merged: true, dirty: snap.DirtyGeneration, children: outcome.Merged, failures: outcome.Failed, store: store, closer: closer}, 0
 	}
 	return persistOutcome{dispatchID: outcome.Activated[0].DispatchID, children: outcome.Activated, mergedChildren: outcome.Merged, failures: outcome.Failed, store: store, closer: closer}, 0
 }

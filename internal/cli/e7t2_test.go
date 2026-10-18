@@ -164,3 +164,60 @@ func TestScheduledReconcileSubmitsDueFollowup(t *testing.T) {
 		t.Fatalf("the accepted follow-up must be active (B-3): %q %v", routeState, err)
 	}
 }
+
+// TestWatchmanArrivalSubmitsDueFollowup proves that a Watchman arrival
+// on a route in FOLLOWUP_READY merges the new burst into dirty_generation
+// AND drains the waiting ready follow-up intent (+ 1 already due recovery
+// intent, processing-pipeline §7), promoting the lane to ACTIVE_DIRTY so
+// the follow-up runs and the newly merged burst still schedules the next
+// generation.
+func TestWatchmanArrivalSubmitsDueFollowup(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	first := e7t2NoSubmitDispatch(t, configPath, vault)
+
+	var out, errb bytes.Buffer
+	if code := Run([]string{"dispatches", "drain", "--route", "wiki", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("drain: %s", errb.String())
+	}
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", first, "--run-id", "r1", "--external-task-id", "t_00000001"}, &out, &errb); code != 0 {
+		t.Fatalf("work begin: %s", errb.String())
+	}
+	setPlanEnv(t, vault, false)
+	withStdin(t, `[{"name":"Inbox/during.md","exists":true,"new":true,"size":5,"type":"f"}]`, func() {
+		Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman", "--no-submit"}, &out, &errb)
+	})
+	withStdin(t, `[]`, func() {
+		Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", first, "--run-id", "r1", "--manifest", "-"}, &out, &errb)
+	})
+	var followup string
+	store := e5t1Store(t, configPath)
+	if err := store.QueryRow(`SELECT dispatch_id FROM dispatch_intents WHERE state = 'ready'`).Scan(&followup); err != nil || followup == "" {
+		t.Fatalf("the completion must leave one due follow-up: %q %v", followup, err)
+	}
+	store.Close()
+
+	// Next Watchman trigger (without --no-submit): the new arrival merges
+	// into dirty_generation AND submits the waiting follow-up.
+	out.Reset()
+	errb.Reset()
+	setPlanEnv(t, vault, false)
+	withStdin(t, `[{"name":"Inbox/after.md","exists":true,"new":true,"size":5,"type":"f"}]`, func() {
+		if code := Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman"}, &out, &errb); code != 0 {
+			t.Fatalf("watchman dispatch on FOLLOWUP_READY: %d %s", code, errb.String())
+		}
+	})
+	res := decodeEnvelope(t, &out)
+	if res["disposition"] != "merge_pending" || res["submitted"] != true {
+		t.Fatalf("merge_pending arrival must submit the waiting follow-up: %v", res)
+	}
+	healed := e5t1Store(t, configPath)
+	defer healed.Close()
+	var state, laneState string
+	var dirty int
+	if err := healed.QueryRow(`SELECT state FROM dispatch_intents WHERE dispatch_id = ?`, followup).Scan(&state); err != nil || state != "accepted" {
+		t.Fatalf("the waiting follow-up must reach accepted on the next Watchman arrival: %q %v", state, err)
+	}
+	if err := healed.QueryRow(`SELECT lane_state, dirty_generation FROM destination_lane_state WHERE route_id = 'wiki'`).Scan(&laneState, &dirty); err != nil || laneState != "ACTIVE_DIRTY" || dirty != 1 {
+		t.Fatalf("the accepted follow-up with a merged burst must promote to ACTIVE_DIRTY (dirty=1): state=%q dirty=%d err=%v", laneState, dirty, err)
+	}
+}

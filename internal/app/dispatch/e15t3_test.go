@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -10,7 +11,9 @@ import (
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/state"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
+	"github.com/irootkernel/agent-dispatch/internal/testsupport/fakesink"
 )
 
 // E15-T3 acceptance coverage (ADR-0021, CON-011 through CON-014,
@@ -175,6 +178,7 @@ func TestE15T3CompletionPromotesOldestFirstDirtyLane(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	followup2.RouteRevision = "route-rev-2"
 	if _, err := c.Completion(ctx, ports.ActiveCompletion{
 		RouteID: "audit", DispatchID: "dispatch-101", ReceiptRef: "wr-101",
 		FollowupRequest: &followup2, DirtyLineageJSON: `{"generations":[102]}`,
@@ -190,13 +194,61 @@ func TestE15T3CompletionPromotesOldestFirstDirtyLane(t *testing.T) {
 			t.Fatalf("the release promotes the oldest waiting lane as a reservation, got %+v", g)
 		}
 	}
-	// The releaser's own follow-up waits behind the reservation...
+	// A concurrent topology recalculation (reconcile) must preserve the
+	// promotion reservation rather than resetting the group to OPEN.
+	if _, err := s.MaterializeSerializationGroups(ctx, []sqlite.SerializationGroupMemberInput{
+		{RouteID: "wiki", DestinationID: "wiki-primary", GroupID: "shared"},
+		{RouteID: "audit", DestinationID: "wiki-primary", GroupID: "shared"},
+		{RouteID: "wiki", DestinationID: "wiki-secondary", GroupID: "independent"},
+	}, "reconcile", "2026-08-20T00:05:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	// The releaser's own follow-up waits behind the reservation both at
+	// the coordinator gate and at the submit runtime (before any sink call)...
 	if err := c.Activate(ctx, followup2.DispatchID); err == nil {
 		t.Fatal("the releaser's follow-up must wait behind the promoted lane")
 	}
-	// ...and the promoted lane's follow-up takes the reserved slot.
-	if err := c.Activate(ctx, followup1.DispatchID); err != nil {
-		t.Fatalf("the promoted lane's follow-up activates through the reservation: %v", err)
+	rt := &Runtime{Store: s, Sink: fakesink.New("hermes-kanban-main"), Now: time.Now, LeaseTTL: time.Minute, Actor: "test"}
+	if _, err := rt.SubmitOnce(ctx, followup2.DispatchID, "test"); !errors.Is(err, ports.ErrGroupSlotHeld) {
+		t.Fatalf("SubmitOnce on the releaser's follow-up must refuse with ErrGroupSlotHeld before sink submission, got %v", err)
+	}
+	if drep, derr := rt.Drain(ctx, "audit", 1, s); derr != nil || drep.Processed != 0 || drep.Skipped < 1 {
+		t.Fatalf("Drain on the releaser's route must skip the group-blocked follow-up: rep=%+v err=%v", drep, derr)
+	}
+	// If the promoted follow-up is in-flight (leased in submitting state,
+	// still FOLLOWUP_READY on the lane), a concurrent topology recalculation
+	// must also preserve its group hold so the releaser cannot slip through.
+	if _, err := s.AcquireAttempt(ctx, ports.AcquireAttempt{
+		DispatchID: followup1.DispatchID, AttemptID: "att-inflight-1", Owner: "test",
+		Now: "2026-08-20T00:06:00Z", LeaseExpiresAt: "2026-08-20T00:07:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.MaterializeSerializationGroups(ctx, []sqlite.SerializationGroupMemberInput{
+		{RouteID: "wiki", DestinationID: "wiki-primary", GroupID: "shared"},
+		{RouteID: "audit", DestinationID: "wiki-primary", GroupID: "shared"},
+		{RouteID: "wiki", DestinationID: "wiki-secondary", GroupID: "independent"},
+	}, "reconcile", "2026-08-20T00:06:05Z"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rt.SubmitOnce(ctx, followup2.DispatchID, "test"); !errors.Is(err, ports.ErrGroupSlotHeld) {
+		t.Fatalf("SubmitOnce on the releaser's follow-up must still refuse while the promoted follow-up is in-flight after MaterializeSerializationGroups, got %v", err)
+	}
+	if err := s.CompleteAttempt(ctx, ports.AttemptResult{
+		AttemptID: "att-inflight-1", DispatchID: followup1.DispatchID,
+		Outcome: "transport_failure", ErrorCode: "transient",
+		CompletedAt: "2026-08-20T00:06:10Z", Diagnostic: "transient failure",
+		Transition: ports.AttemptTransition{
+			To: records.IntentRetryWait, Reason: state.ReasonTransientFailure,
+			TransitionID: "att-inflight-1:transient_failure",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// ...and the promoted lane's follow-up takes the reserved slot through
+	// the submit runtime and activates its lane.
+	if drep, derr := rt.Drain(ctx, "wiki", 1, s); derr != nil || drep.Processed != 1 {
+		t.Fatalf("the promoted lane's follow-up drains and activates through the reservation: rep=%+v err=%v", drep, derr)
 	}
 }
 
@@ -542,5 +594,91 @@ func TestE15T4ReconcileChildRespectsOccupiedGroup(t *testing.T) {
 	}
 	if err := s.CommitReconcileIntent(ctx, reconcileChild, "reconcile", "2026-08-20T04:00:00Z"); err != nil {
 		t.Fatalf("the reconcile child commits once the group is free: %v", err)
+	}
+}
+
+func TestE15T3DiscardedFollowupDoesNotReserveGroupSlot(t *testing.T) {
+	s := e15t3Store(t)
+	c := newCoordinator(s)
+	ctx := context.Background()
+
+	if _, err := c.Arrival(ctx, e15t3Lineage(t, 601, "wiki")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Arrival(ctx, e15t3Lineage(t, 602, "wiki")); err != nil {
+		t.Fatal(err)
+	}
+	active, err := s.LoadIntent(ctx, "dispatch-601")
+	if err != nil {
+		t.Fatal(err)
+	}
+	followup, err := BuildFollowupRequest(active, e15t3Manifest(1), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Completion(ctx, ports.ActiveCompletion{
+		RouteID: "wiki", DispatchID: "dispatch-601", ReceiptRef: "wr-601",
+		FollowupRequest: &followup, DirtyLineageJSON: `{"generations":[602]}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Follow-up is leased, rejected, dead-lettered, and discarded.
+	if _, err := s.AcquireAttempt(ctx, ports.AcquireAttempt{
+		DispatchID: followup.DispatchID, AttemptID: "att-reject-601", Owner: "test",
+		Now: "2026-08-20T00:01:00Z", LeaseExpiresAt: "2026-08-20T00:02:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CompleteAttempt(ctx, ports.AttemptResult{
+		AttemptID: "att-reject-601", DispatchID: followup.DispatchID,
+		Outcome: "rejected", ErrorCode: "invalid_board",
+		CompletedAt: "2026-08-20T00:01:05Z", Diagnostic: "definite rejection",
+		Receipt: &ports.ReceiptInput{
+			ReceiptID: "rcpt-reject-601", Acceptance: records.AcceptanceRejected,
+			ReceivedAt: "2026-08-20T00:01:05Z", BoundedPayload: `{"rejected":true}`,
+		},
+		Transition: ports.AttemptTransition{
+			To: records.IntentRejected, Reason: state.ReasonDefiniteRejection,
+			TransitionID: "att-reject-601:definite_rejection",
+			Evidence:     state.IntentEvidence{ReceiptRef: "rcpt-reject-601"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeadLetterRejected(ctx, followup.DispatchID, "test", "2026-08-20T00:01:06Z"); err != nil {
+		t.Fatal(err)
+	}
+	outcome, err := s.CloseDeadLetter(ctx, followup.DispatchID, "operator", "discard rejected followup", "2026-08-20T00:01:07Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !outcome.SlotReleased || outcome.RouteToIDLE {
+		t.Fatalf("discarding a follow-up releases its slot while leaving the lane for reconciliation, got %+v", outcome)
+	}
+	// Sibling lane runs and completes cleanly; the discarded follow-up lane
+	// must not receive or retain a promotion reservation.
+	if _, err := c.Arrival(ctx, e15t3Lineage(t, 603, "audit")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CompleteActive(ctx, ports.ActiveCompletion{
+		RouteID: "audit", DispatchID: "dispatch-603", ReceiptRef: "wr-603", Actor: "test", Now: "2026-08-20T00:02:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.MaterializeSerializationGroups(ctx, []sqlite.SerializationGroupMemberInput{
+		{RouteID: "wiki", DestinationID: "wiki-primary", GroupID: "shared"},
+		{RouteID: "audit", DestinationID: "wiki-primary", GroupID: "shared"},
+		{RouteID: "wiki", DestinationID: "wiki-secondary", GroupID: "independent"},
+	}, "reconcile", "2026-08-20T00:02:05Z"); err != nil {
+		t.Fatal(err)
+	}
+	groups, err := s.LoadSerializationGroups(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, g := range groups {
+		if g.GroupID == "shared" && g.State != sqlite.GroupStateOpen {
+			t.Fatalf("shared group must be OPEN after sibling completion and topology recalculation, got %+v", g)
+		}
 	}
 }

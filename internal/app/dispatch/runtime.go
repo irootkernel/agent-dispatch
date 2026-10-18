@@ -333,6 +333,19 @@ type DrainLister interface {
 	RouteCoordinationView
 }
 
+// groupSlotChecker is the optional serialization-group slot view
+// implemented by the durable store (E15-T3, CON-011/CON-012).
+type groupSlotChecker interface {
+	GroupSlotFree(ctx context.Context, routeID, destinationID string) (bool, string, error)
+}
+
+func intentLaneID(destinationID string) string {
+	if destinationID == "" {
+		return ports.LegacyDestinationLaneID
+	}
+	return destinationID
+}
+
 // Drain submits up to max due ready/retry_wait intents for one route.
 // The attempt budget stops automatic processing (DUR-007); an ambiguity
 // stops the drain for operator reconciliation rather than falling over
@@ -370,6 +383,14 @@ func (r *Runtime) Drain(ctx context.Context, routeID string, max int, lister Dra
 			out.Skipped++
 			continue
 		}
+		if g, ok := lister.(groupSlotChecker); ok {
+			if free, _, gerr := g.GroupSlotFree(ctx, sum.RouteID, intentLaneID(sum.DestinationID)); gerr != nil {
+				return out, fmt.Errorf("drain stopped at %s: group slot unreadable: %w", sum.DispatchID, gerr)
+			} else if !free {
+				out.Skipped++
+				continue
+			}
+		}
 		if sum.NextAttemptAt != "" && sum.NextAttemptAt > now {
 			out.Skipped++
 			continue
@@ -380,6 +401,10 @@ func (r *Runtime) Drain(ctx context.Context, routeID string, max int, lister Dra
 		}
 		report, err := r.SubmitOnce(ctx, sum.DispatchID, "drain")
 		if err != nil {
+			if errors.Is(err, ports.ErrGroupSlotHeld) {
+				out.Skipped++
+				continue
+			}
 			if errors.Is(err, ports.ErrStaleRouteRevision) {
 				// A stale intent the rebuilder could not resolve (for
 				// example its route or target left the configuration)
@@ -419,6 +444,11 @@ func (r *Runtime) promoteAcceptedFollowup(ctx context.Context, routeID string, l
 		}
 		if rs.ActiveDispatchID != "" && rs.ActiveDispatchID != sum.DispatchID {
 			continue
+		}
+		if g, ok := lister.(groupSlotChecker); ok {
+			if free, _, gerr := g.GroupSlotFree(ctx, sum.RouteID, intentLaneID(sum.DestinationID)); gerr != nil || !free {
+				continue
+			}
 		}
 		if err := lister.ActivateFollowup(ctx, sum.DispatchID, r.Actor, Timestamp(r.Now())); err != nil {
 			r.logEvent(observability.LevelWarn, observability.EventDispatchUnknown, sum.DispatchID, "", routeID, "", "drain-time follow-up promotion failed", map[string]any{"error": err.Error()})

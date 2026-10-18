@@ -386,6 +386,10 @@ func submitTimeoutOf(resolved config.ResolvedTarget) string {
 // decisions such as mutex suppression are operator-visible (E9-T3,
 // T3-F007).
 func resolveSink(cfg *config.Config, routeID string, log *observability.Logger) (ports.Sink, error) {
+	return resolveSinkCtx(requestCtx(), cfg, routeID, log)
+}
+
+func resolveSinkCtx(ctx context.Context, cfg *config.Config, routeID string, log *observability.Logger) (ports.Sink, error) {
 	dest, resolved, rerr := resolveRouteTarget(cfg, routeID)
 	if rerr != nil {
 		return nil, rerr
@@ -424,8 +428,8 @@ func resolveSink(cfg *config.Config, routeID string, log *observability.Logger) 
 		// cannot be opened here leaves the eligibility-only gate; the
 		// staleness machinery re-asserts the acknowledgement anyway.
 		stateDir := resolveStateDirOverride(cfg.Instance.StateDir)
-		if store, serr := sqlite.Open(filepath.Join(stateDir, StateDBName)); serr == nil {
-			if snap, lerr := store.LoadRouteState(context.Background(), routeID); lerr == nil && snap.CapabilityFingerprint != "" {
+		if store, serr := sqlite.OpenContext(ctx, filepath.Join(stateDir, StateDBName)); serr == nil {
+			if snap, lerr := store.LoadRouteState(ctx, routeID); lerr == nil && snap.CapabilityFingerprint != "" {
 				sink.BindCapabilityFingerprint(snap.CapabilityFingerprint)
 			} else if lerr != nil && log != nil {
 				log.Warn(observability.EventCapabilityBindingUnavailable, observability.Correlation{
@@ -438,7 +442,7 @@ func resolveSink(cfg *config.Config, routeID string, log *observability.Logger) 
 				TraceID: globalTraceID, RouteID: routeID, TargetID: dest.Target,
 			}, "the activation-bound capability fingerprint could not be loaded; the submit path degrades to the eligibility-only gate until the store is readable", nil)
 		}
-		if _, err := sink.Probe(context.Background()); err != nil {
+		if _, err := sink.Probe(ctx); err != nil {
 			return nil, fmt.Errorf("target %s: %w", dest.Target, err)
 		}
 		return sink, nil
@@ -457,7 +461,7 @@ func resolveSink(cfg *config.Config, routeID string, log *observability.Logger) 
 		if err != nil {
 			return nil, err
 		}
-		if _, err := sink.Probe(context.Background()); err != nil {
+		if _, err := sink.Probe(ctx); err != nil {
 			return nil, fmt.Errorf("target %s: %w", dest.Target, err)
 		}
 		return sink, nil

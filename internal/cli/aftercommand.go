@@ -21,8 +21,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
+	"github.com/irootkernel/agent-dispatch/internal/app/dispatch"
 	"github.com/irootkernel/agent-dispatch/internal/app/notifications"
 	"github.com/irootkernel/agent-dispatch/internal/config"
+	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/state"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
 
@@ -129,6 +133,22 @@ func autoDrainCfg(command string, cfg *config.Config, store afterCommandStore, s
 	defer cancel()
 	if deadline, ok := ctx.Deadline(); !ok || !deadline.After(time.Now()) {
 		return // the invocation's budget is exhausted
+	}
+	// Due dispatch intents (for example a FOLLOWUP_READY follow-up
+	// created by work complete, or a due retry_wait intent on an
+	// after-command route) drain first under the shared invocation
+	// budget so any notifications their transitions enqueue are
+	// delivered in the same post-commit pass. Commands that own their
+	// own explicit submission cap or flag (dispatch, trigger watchman,
+	// reconcile) skip this step so a single Watchman arrival never
+	// exceeds "1 new intent + 1 already due recovery intent" (cli-spec §5)
+	// and reconcile without --submit stays non-submitting.
+	if command != "dispatch" && command != "trigger watchman" && command != "reconcile" {
+		dispatchRoutes := expandGroupPromotedRoutes(ctx, cfg, store, modes, routes)
+		drainAfterCommandDispatches(ctx, cfg, store, stderr, dispatchRoutes)
+		if ctx.Err() != nil {
+			return
+		}
 	}
 	resolver := notificationSinkResolver(cfg, stderr)
 	// F004: the pass interleaves one notification per route per round in
@@ -277,4 +297,164 @@ func afterCommandRoutesInModes(cfg *config.Config, modes map[string]bool, affect
 // the invocation clock.
 func boundedAfterCommandNote(stderr io.Writer, msg string) {
 	afterCommandClock.note(stderr, msg)
+}
+
+type serializationGroupLoader interface {
+	LoadSerializationGroups(ctx context.Context) ([]sqlite.SerializationGroupRow, error)
+}
+
+// expandGroupPromotedRoutes adds any automatic-mode route whose lane
+// holds a serialization-group promotion reservation (State == HELD with
+// an empty HolderDispatchID) so a completion on one route that promoted
+// a waiting sibling route in the same serialization group also drains
+// the promoted route's follow-up in the same post-commit pass.
+func expandGroupPromotedRoutes(ctx context.Context, cfg *config.Config, store afterCommandStore, modes map[string]bool, routes []string) []string {
+	gl, ok := store.(serializationGroupLoader)
+	if !ok {
+		return routes
+	}
+	groups, err := gl.LoadSerializationGroups(ctx)
+	if err != nil || len(groups) == 0 {
+		return routes
+	}
+	expanded := append([]string(nil), routes...)
+	for _, g := range groups {
+		if g.State == sqlite.GroupStateHeld && g.HolderDispatchID == "" && g.HolderRouteID != "" {
+			expanded = append(expanded, g.HolderRouteID)
+		}
+	}
+	return afterCommandRoutesInModes(cfg, modes, expanded)
+}
+
+// drainAfterCommandDispatches submits bounded due dispatch intents for
+// every affected automatic-mode route when the caller's open store
+// exposes the full operator dispatch surface (storeOp). Routes that are
+// disabled or have no due/recoverable dispatch work are skipped before
+// resolving any target sink so dry passes never spawn external probe
+// subprocesses.
+func drainAfterCommandDispatches(ctx context.Context, cfg *config.Config, store afterCommandStore, stderr io.Writer, routes []string) {
+	ds, ok := store.(storeOp)
+	if !ok {
+		return
+	}
+	for _, routeID := range routes {
+		if ctx.Err() != nil {
+			return
+		}
+		route, ok := cfg.Routes[routeID]
+		if !ok || !route.Enabled {
+			continue
+		}
+		backoff, berr := backoffFromConfig(route.SubmissionRetry)
+		if berr != nil {
+			boundedAfterCommandNote(stderr, fmt.Sprintf("route %s: submission retry policy invalid; automatic dispatch submission skipped: %v", routeID, berr))
+			continue
+		}
+		if !hasDueOrRecoverableDispatches(ctx, ds, routeID, backoff) {
+			continue
+		}
+		policy, err := config.EffectiveNotificationDrain(route.Notifications)
+		if err != nil {
+			boundedAfterCommandNote(stderr, fmt.Sprintf("route %s: drain policy unreadable; automatic dispatch submission skipped", routeID))
+			continue
+		}
+		_, resolved, rerr := resolveRouteTarget(cfg, routeID)
+		if rerr != nil {
+			boundedAfterCommandNote(stderr, fmt.Sprintf("route %s: target resolution failed; automatic dispatch submission skipped: %v", routeID, rerr))
+			continue
+		}
+		sink, serr := resolveSinkCtx(ctx, cfg, routeID, nil)
+		if serr != nil {
+			boundedAfterCommandNote(stderr, fmt.Sprintf("route %s: target unavailable during automatic dispatch drain: %v", routeID, serr))
+			continue
+		}
+		rt := newSubmitRuntime(ds, sink, cfg, submitTimeoutOf(resolved), backoff, "after-command", io.Discard)
+		if _, err := rt.Recover(ctx, routeID); err != nil {
+			boundedAfterCommandNote(stderr, fmt.Sprintf("route %s: automatic lease recovery stopped early: %v", routeID, err))
+			continue
+		}
+		if _, warnings, err := reconcileUnknownDispatchesCtx(ctx, cfg, ds, sink, routeID, backoff); err != nil {
+			boundedAfterCommandNote(stderr, fmt.Sprintf("route %s: automatic unknown reconciliation stopped early: %v", routeID, err))
+			continue
+		} else {
+			for _, w := range warnings {
+				boundedAfterCommandNote(stderr, w)
+			}
+		}
+		report, err := rt.Drain(ctx, routeID, policy.Limit, ds)
+		if err != nil {
+			boundedAfterCommandNote(stderr, fmt.Sprintf("route %s: automatic dispatch submission stopped early: %v", routeID, err))
+			continue
+		}
+		for _, w := range report.Warnings {
+			boundedAfterCommandNote(stderr, w)
+		}
+	}
+}
+
+// hasDueOrRecoverableDispatches reports whether one enabled route holds
+// any dispatch work that a bounded drain pass can advance: an expired
+// submitting lease to recover, an unknown dispatch to reconcile, an
+// accepted follow-up awaiting lane promotion, or a due ready/retry_wait
+// intent whose lane and serialization-group slots are admissible.
+// Checking this in SQLite before resolving the target sink keeps dry
+// passes free of external probe subprocesses.
+func hasDueOrRecoverableDispatches(ctx context.Context, store storeOp, routeID string, backoff dispatch.Backoff) bool {
+	rs, err := store.LoadRouteState(ctx, routeID)
+	if err != nil || rs.ActivationState != "enabled" {
+		return false
+	}
+	if rs.State == state.RouteUncertain || rs.State == state.RouteQuarantined {
+		return false
+	}
+	now := dispatch.Timestamp(time.Now())
+	if stale, err := store.StaleLeases(ctx, now); err == nil && len(stale) > 0 {
+		if submitting, lerr := store.ListIntents(ctx, ports.IntentFilter{RouteID: routeID, State: records.IntentSubmitting, Limit: 1}); lerr == nil && len(submitting) > 0 {
+			return true
+		}
+	}
+	intents, err := store.ListIntents(ctx, ports.IntentFilter{RouteID: routeID, Limit: 1000})
+	if err != nil {
+		return false
+	}
+	for _, sum := range intents {
+		lane := sum.DestinationID
+		if lane == "" {
+			lane = ports.LegacyDestinationLaneID
+		}
+		switch sum.State {
+		case records.IntentUnknown:
+			return true
+		case records.IntentAccepted:
+			if laneSnap, lerr := store.LoadIntentLane(ctx, sum.DispatchID); lerr == nil && laneSnap.State == state.RouteFollowupReady &&
+				(laneSnap.ActiveDispatchID == "" || laneSnap.ActiveDispatchID == sum.DispatchID) {
+				if free, _, gerr := store.GroupSlotFree(ctx, sum.RouteID, lane); gerr == nil && !free {
+					continue
+				}
+				return true
+			}
+		case records.IntentReady, records.IntentRetryWait:
+			if sum.NextAttemptAt != "" && sum.NextAttemptAt > now {
+				continue
+			}
+			if backoff != (dispatch.Backoff{}) && backoff.Exhausted(sum.AttemptCount) {
+				continue
+			}
+			laneSnap, lerr := store.LoadIntentLane(ctx, sum.DispatchID)
+			if lerr != nil {
+				continue
+			}
+			if laneSnap.State == state.RouteUncertain || laneSnap.State == state.RouteQuarantined || laneSnap.ActivationState != "enabled" {
+				continue
+			}
+			if laneSnap.ActiveDispatchID != "" && laneSnap.ActiveDispatchID != sum.DispatchID {
+				continue
+			}
+			if free, _, gerr := store.GroupSlotFree(ctx, sum.RouteID, lane); gerr == nil && !free {
+				continue
+			}
+			return true
+		}
+	}
+	return false
 }

@@ -367,7 +367,7 @@ agent-dispatch dispatch \
 
 - `--dry-run`: no SQLite mutation and no target call. Dry-run output is the structured dispatch plan and accepts only `--output json`.
 - `--no-submit`: persists observation, batch, decision, and eligible intent, but leaves it ready. This option is operator-only and is not used by the installed Watchman trigger.
-- default: persist and attempt the one newly eligible intent plus at most one route-local recovery intent, as bounded by architecture.
+- default: persist and attempt the one newly eligible intent plus at most one route-local recovery intent, as bounded by architecture (including a due `ready` follow-up holding `FOLLOWUP_READY` or a due `retry_wait` intent when the incoming burst merges into `dirty_generation`).
 
 A no-op meaningful-change result exits 0 with disposition `drop`.
 
@@ -830,7 +830,10 @@ render/install with the same durable-override rules as launchd.
 ### 19c. Shared runner, timing store, and enablement gate
 
 `schedule run` is mode-driven on every platform: in `after-command`
-recovery it performs the due-only drain plus the automatic OPS-013 drift
+recovery it performs the due-only dispatch and notification drain (matching the
+registered post-commit `after-command` pass, which also drains due `ready`
+follow-ups and `retry_wait` dispatch intents before notifications) plus the
+automatic OPS-013 drift
 evaluation; in `scheduled` mode it runs the scheduled reconciliation first
 (`reconcile --reason scheduled --submit`) and chains the drift evaluation
 and drain only after a healthy exit-0 pass. The `--at` override is durable

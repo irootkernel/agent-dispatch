@@ -5,6 +5,14 @@ SOT snapshots, not product releases. Product release notes and pending user-faci
 changes belong to the root [changelog](../CHANGELOG.md). Historical entries below
 retain their recorded scope; migrated document pointers use their current paths.
 
+## Automatic follow-up dispatch draining - 2026-10-18
+
+- Clarify in `docs/contracts/cli-spec.md` (§5, §19c) and
+  `docs/architecture/processing-pipeline.md` (§7) that `dispatch` drains at most
+  one due recovery or `FOLLOWUP_READY` intent even when the arriving burst merges
+  into `dirty_generation`, and that `after-command` post-commit and `schedule run`
+  passes drain due dispatch intents before due notifications.
+
 ## Selected-source amd64 qualification - 2026-10-13
 
 - Record [DF-010](deferred-feedback/010-e23-amd64-qualification.md) as resolved

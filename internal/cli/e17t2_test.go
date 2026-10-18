@@ -712,3 +712,152 @@ func TestE17T2ManualDrainEnvelopeHelper(t *testing.T) {
 		t.Fatalf("an absent route resolves to the zero envelope: %+v", missing)
 	}
 }
+
+// TestAfterCommandWorkCompleteSubmitsFollowupAutomatically proves that
+// when an active task on an after-command route completes with a dirty
+// generation (for example because the agent modified vault files during
+// its run and Watchman merged the burst while the task was still active),
+// work complete's post-commit after-command pass immediately submits the
+// resulting ready follow-up intent and promotes the lane to ACTIVE_CLEAN
+// without waiting for another file change or manual drain, while keeping
+// the work complete stdout envelope unchanged.
+func TestAfterCommandWorkCompleteSubmitsFollowupAutomatically(t *testing.T) {
+	configPath, vault := e17t2AfterCommandFixture(t)
+	res, _ := e4t3Dispatch(t, configPath, vault)
+	dispatchID, _ := res["dispatch_id"].(string)
+
+	var out, errb bytes.Buffer
+	markInvocationStart()
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1", "--external-task-id", "t_00000001"}, &out, &errb); code != 0 {
+		t.Fatalf("work begin: %d %s", code, errb.String())
+	}
+	// Agent or human edits a file while the task is active: the burst
+	// merges into dirty_generation (ACTIVE_CLEAN -> ACTIVE_DIRTY).
+	g4Edit(t, configPath, vault, "Notes/agent-edit.md", "updated wiki index")
+
+	out.Reset()
+	errb.Reset()
+	markInvocationStart()
+	withStdin(t, `[]`, func() {
+		if code := Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1", "--manifest", "-"}, &out, &errb); code != 0 {
+			t.Fatalf("work complete: %d %s", code, errb.String())
+		}
+	})
+	completed := decodeEnvelope(t, &out)
+	followupID, _ := completed["followup_dispatch_id"].(string)
+	if completed["route_state"] != "FOLLOWUP_READY" || followupID == "" {
+		t.Fatalf("work complete envelope must preserve its core FOLLOWUP_READY contract: %v", completed)
+	}
+	s := e17t2Store(t, configPath)
+	var intentState, laneState, activeDispatch string
+	if err := s.QueryRow(`SELECT state FROM dispatch_intents WHERE dispatch_id = ?`, followupID).Scan(&intentState); err != nil || intentState != "accepted" {
+		t.Fatalf("after-command post-commit pass must submit the follow-up intent to accepted: state=%q err=%v (stderr=%s)", intentState, err, errb.String())
+	}
+	if err := s.QueryRow(`SELECT lane_state, active_dispatch_id FROM destination_lane_state WHERE route_id = 'wiki'`).Scan(&laneState, &activeDispatch); err != nil || laneState != "ACTIVE_CLEAN" || activeDispatch != followupID {
+		t.Fatalf("accepted follow-up must promote the lane to ACTIVE_CLEAN under %s: lane_state=%q active=%q err=%v", followupID, laneState, activeDispatch, err)
+	}
+}
+
+// TestAfterCommandScheduleRunSubmitsStrandedFollowup proves that the
+// 15-minute after-command schedule runner (`schedule run`) also drains
+// and promotes a ready follow-up intent that was left unsubmitted (for
+// example when the prior command's 10s after-command budget expired or
+// the target was momentarily unavailable).
+func TestAfterCommandScheduleRunSubmitsStrandedFollowup(t *testing.T) {
+	configPath, vault := e17t2AfterCommandFixture(t)
+	res, _ := e4t3Dispatch(t, configPath, vault)
+	dispatchID, _ := res["dispatch_id"].(string)
+
+	var out, errb bytes.Buffer
+	markInvocationStart()
+	if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1", "--external-task-id", "t_00000001"}, &out, &errb); code != 0 {
+		t.Fatalf("work begin: %d %s", code, errb.String())
+	}
+	g4Edit(t, configPath, vault, "Notes/stranded.md", "dirty generation before completion")
+
+	// Simulate an exhausted after-command budget during work complete so
+	// the follow-up remains stranded in ready / FOLLOWUP_READY.
+	out.Reset()
+	errb.Reset()
+	withStdin(t, `[]`, func() {
+		afterCommandClock.mu.Lock()
+		afterCommandClock.startedAt = time.Now().Add(-afterCommandBudget - time.Second)
+		afterCommandClock.mu.Unlock()
+		// Call runWork directly after setting the expired clock so Run's
+		// markInvocationStart does not reset it.
+		if code := runWork([]string{"complete", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-1", "--manifest", "-"}, &out, &errb); code != 0 {
+			t.Fatalf("work complete: %d %s", code, errb.String())
+		}
+	})
+	completed := decodeEnvelope(t, &out)
+	followupID, _ := completed["followup_dispatch_id"].(string)
+	if followupID == "" {
+		t.Fatalf("expected follow-up dispatch ID: %v", completed)
+	}
+	s := e17t2Store(t, configPath)
+	var beforeState string
+	if err := s.QueryRow(`SELECT state FROM dispatch_intents WHERE dispatch_id = ?`, followupID).Scan(&beforeState); err != nil || beforeState != "ready" {
+		t.Fatalf("follow-up must start stranded in ready when the invocation budget was exhausted: %q %v", beforeState, err)
+	}
+
+	// Now the 15-minute after-command recovery schedule runs.
+	out.Reset()
+	errb.Reset()
+	markInvocationStart()
+	if code := Run([]string{"schedule", "run", "--route", "wiki", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("schedule run: %d %s", code, errb.String())
+	}
+	var afterState, laneState string
+	if err := s.QueryRow(`SELECT state FROM dispatch_intents WHERE dispatch_id = ?`, followupID).Scan(&afterState); err != nil || afterState != "accepted" {
+		t.Fatalf("schedule run in after-command mode must submit the stranded follow-up: state=%q err=%v (stderr=%s)", afterState, err, errb.String())
+	}
+	if err := s.QueryRow(`SELECT lane_state FROM destination_lane_state WHERE route_id = 'wiki'`).Scan(&laneState); err != nil || laneState != "ACTIVE_CLEAN" {
+		t.Fatalf("schedule run must promote the accepted follow-up to ACTIVE_CLEAN: %q %v", laneState, err)
+	}
+}
+
+// TestAfterCommandWatchmanArrivalCapsRecoveryAtOne proves that on an
+// after-command route with two independent destination lanes both holding
+// due ready intents, a single merged Watchman arrival submits at most 1
+// due recovery intent (cli-spec §5: "1 new intent + 1 already due recovery
+// intent") instead of letting the post-commit after-command hook drain up
+// to policy.Limit additional intents.
+func TestAfterCommandWatchmanArrivalCapsRecoveryAtOne(t *testing.T) {
+	configPath, vault := e17t2AfterCommandFixture(t)
+	twoDestinationBlockFixture(t, configPath,
+		"      - id: main\n        target: hermes-main\n        profile: wiki-maintainer\n        skills: [llm-wiki]\n        serialization_group: group-main\n        workstream: main\n        execution_hints:\n          max_runtime: 30m\n          max_attempts: 2\n"+
+			"      - id: review\n        target: hermes-main\n        profile: wiki-maintainer\n        skills: [llm-wiki]\n        serialization_group: group-review\n        workstream: review\n        execution_hints:\n          max_runtime: 30m\n          max_attempts: 2")
+	setPlanEnv(t, vault, false)
+	e4t3RegisterRoute(t, configPath)
+	var out, errb bytes.Buffer
+
+	// Seed two ready intents across the two independent lanes (--no-submit).
+	withStdin(t, `[{"name":"Inbox/new.md","exists":true,"new":true,"size":5,"type":"f"}]`, func() {
+		if code := Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman", "--no-submit"}, &out, &errb); code != 0 {
+			t.Fatalf("no-submit dispatch: %d %s", code, errb.String())
+		}
+	})
+
+	// Next Watchman arrival merges into both lanes and drains at most 1
+	// already-due recovery intent.
+	out.Reset()
+	errb.Reset()
+	g4Edit(t, configPath, vault, "Inbox/second.md", "second arrival")
+	t.Setenv("WATCHMAN_CLOCK", "c:100:2")
+	withStdin(t, `[{"name":"Inbox/second.md","exists":true,"new":true,"size":14,"type":"f"}]`, func() {
+		if code := Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman"}, &out, &errb); code != 0 {
+			t.Fatalf("merged watchman dispatch: %d %s", code, errb.String())
+		}
+	})
+	s := e17t2Store(t, configPath)
+	var accepted, ready int
+	if err := s.QueryRow(`SELECT COUNT(*) FROM dispatch_intents WHERE state = 'accepted'`).Scan(&accepted); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.QueryRow(`SELECT COUNT(*) FROM dispatch_intents WHERE state = 'ready'`).Scan(&ready); err != nil {
+		t.Fatal(err)
+	}
+	if accepted != 1 || ready != 1 {
+		t.Fatalf("one merged Watchman arrival must submit at most 1 due recovery intent (accepted=%d ready=%d)", accepted, ready)
+	}
+}

@@ -45,7 +45,7 @@ func (s *Store) RouteRegistered(ctx context.Context, routeID string) (bool, erro
 // dispatch is the first lane holder in destination order, and the dirty
 // generation is the lanes' maximum.
 func (s *Store) LoadRouteState(ctx context.Context, routeID string) (state.RouteSnapshot, error) {
-	rec, err := s.LoadRouteRuntimeState(routeID)
+	rec, err := s.LoadRouteRuntimeStateContext(ctx, routeID)
 	if err != nil {
 		return state.RouteSnapshot{}, fmt.Errorf("route %s: %v", routeID, err)
 	}
@@ -68,7 +68,7 @@ func (s *Store) LoadRouteState(ctx context.Context, routeID string) (state.Route
 		// values (the uncertainty/resolution flows stay route-keyed).
 		return snap, nil
 	}
-	return s.aggregateLaneState(s.DB, snap)
+	return s.aggregateLaneStateCtx(ctx, s.DB, snap)
 }
 
 // rowsQueryer is the read surface the lane aggregation needs: one
@@ -77,16 +77,37 @@ type rowsQueryer interface {
 	Query(query string, args ...any) (*sql.Rows, error)
 }
 
+type rowsQueryerCtx interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
 // aggregateLaneState folds the route's lanes into one route snapshot
 // inside the caller's read. A lane row in a hold state surfaces as the
 // route state (the defensive arm: holds are route-level by construction).
 func (s *Store) aggregateLaneState(q rowsQueryer, snap state.RouteSnapshot) (state.RouteSnapshot, error) {
+	if qCtx, ok := q.(rowsQueryerCtx); ok {
+		return s.aggregateLaneStateCtx(context.Background(), qCtx, snap)
+	}
 	rows, err := q.Query(`SELECT lane_state, COALESCE(active_dispatch_id, ''), dirty_generation
 		FROM destination_lane_state WHERE route_id = ? ORDER BY destination_id`, snap.RouteID)
 	if err != nil {
 		return snap, err
 	}
 	defer rows.Close()
+	return foldLaneRows(rows, snap)
+}
+
+func (s *Store) aggregateLaneStateCtx(ctx context.Context, q rowsQueryerCtx, snap state.RouteSnapshot) (state.RouteSnapshot, error) {
+	rows, err := q.QueryContext(ctx, `SELECT lane_state, COALESCE(active_dispatch_id, ''), dirty_generation
+		FROM destination_lane_state WHERE route_id = ? ORDER BY destination_id`, snap.RouteID)
+	if err != nil {
+		return snap, err
+	}
+	defer rows.Close()
+	return foldLaneRows(rows, snap)
+}
+
+func foldLaneRows(rows *sql.Rows, snap state.RouteSnapshot) (state.RouteSnapshot, error) {
 	snap.State = state.RouteIdle
 	snap.ActiveDispatchID = ""
 	snap.DirtyGeneration = 0

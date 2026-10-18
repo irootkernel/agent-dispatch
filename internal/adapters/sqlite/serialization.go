@@ -157,7 +157,28 @@ func (s *Store) materializeSerializationGroupsTx(tx *sql.Tx, members []Serializa
 	rows, err := tx.Query(`SELECT m.group_id, l.route_id, l.destination_id, l.active_dispatch_id
 		FROM destination_lane_state l
 		JOIN serialization_group_members m ON m.route_id = l.route_id AND m.destination_id = l.destination_id
-		WHERE l.lane_state IN ('ACTIVE_CLEAN','ACTIVE_DIRTY') AND l.active_dispatch_id IS NOT NULL`)
+		WHERE l.active_dispatch_id IS NOT NULL
+		  AND (
+		    l.lane_state IN ('ACTIVE_CLEAN','ACTIVE_DIRTY')
+		    OR (
+		      l.lane_state = 'FOLLOWUP_READY'
+		      AND (
+		        EXISTS (
+		          SELECT 1 FROM dispatch_intents d
+		          WHERE d.dispatch_id = l.active_dispatch_id
+		            AND d.state IN ('submitting','unknown','submitted','running')
+		        )
+		        OR EXISTS (
+		          SELECT 1 FROM serialization_groups g
+		          JOIN dispatch_intents d ON d.dispatch_id = l.active_dispatch_id
+		          WHERE g.group_id = m.group_id
+		            AND g.state = 'HELD'
+		            AND g.holder_dispatch_id = l.active_dispatch_id
+		            AND d.state NOT IN ('completed','superseded','cancelled')
+		        )
+		      )
+		    )
+		  )`)
 	if err != nil {
 		return nil, err
 	}
@@ -210,6 +231,35 @@ func (s *Store) materializeSerializationGroupsTx(tx *sql.Tx, members []Serializa
 			next = GroupStateConflict
 			for _, h := range active {
 				collisions = append(collisions, SerializationGroupCollision{RouteID: h.route, DestinationID: h.destination, DispatchID: h.dispatch})
+			}
+		case state == GroupStateHeld && nullText(holderDis) == "" && nullText(holderRoute) != "" && nullText(holderDest) != "":
+			// Preserve an active promotion reservation (CON-012) while the
+			// promoted lane remains a member of this group with waiting
+			// dirty work or a live FOLLOWUP_READY dispatch.
+			var waiting int
+			err := tx.QueryRow(`SELECT 1
+				FROM destination_lane_state l
+				JOIN serialization_group_members m ON m.route_id = l.route_id AND m.destination_id = l.destination_id
+				WHERE m.group_id = ? AND l.route_id = ? AND l.destination_id = ?
+				  AND (
+				    l.dirty_generation > 0
+				    OR (
+				      l.lane_state = 'FOLLOWUP_READY'
+				      AND l.active_dispatch_id IS NOT NULL
+				      AND EXISTS (
+				        SELECT 1 FROM dispatch_intents d
+				        WHERE d.dispatch_id = l.active_dispatch_id
+				          AND d.state NOT IN ('completed','superseded','cancelled')
+				      )
+				    )
+				  )`,
+				id, nullText(holderRoute), nullText(holderDest)).Scan(&waiting)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return nil, err
+			}
+			if waiting == 1 {
+				next = GroupStateHeld
+				nextRoute, nextDest = nullText(holderRoute), nullText(holderDest)
 			}
 		}
 		raw, err := json.Marshal(collisions)
@@ -563,7 +613,18 @@ func (s *Store) releaseGroupSlotTx(tx *sql.Tx, routeID, destinationID, dispatchI
 		FROM destination_lane_state l
 		JOIN serialization_group_members m ON m.route_id = l.route_id AND m.destination_id = l.destination_id
 		WHERE m.group_id = ? AND NOT (l.route_id = ? AND l.destination_id = ?)
-		  AND (l.dirty_generation > 0 OR l.lane_state = 'FOLLOWUP_READY')
+		  AND (
+		    l.dirty_generation > 0
+		    OR (
+		      l.lane_state = 'FOLLOWUP_READY'
+		      AND l.active_dispatch_id IS NOT NULL
+		      AND EXISTS (
+		        SELECT 1 FROM dispatch_intents d
+		        WHERE d.dispatch_id = l.active_dispatch_id
+		          AND d.state NOT IN ('completed','superseded','cancelled')
+		      )
+		    )
+		  )
 		ORDER BY l.dirty_since IS NULL, l.dirty_since, l.destination_id, l.route_id
 		LIMIT 1`, groupID, routeID, destinationID)
 	if err := row.Scan(&nextRoute, &nextDest); errors.Is(err, sql.ErrNoRows) {

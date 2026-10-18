@@ -349,7 +349,26 @@ type RouteRuntimeStateRecord struct {
 
 // LoadRouteRuntimeState reads the current route runtime state.
 func (s *Store) LoadRouteRuntimeState(routeID string) (*RouteRuntimeStateRecord, error) {
-	return s.loadRouteRuntimeState(s.DB, routeID)
+	return s.LoadRouteRuntimeStateContext(context.Background(), routeID)
+}
+
+// LoadRouteRuntimeStateContext reads the current route runtime state with context.
+func (s *Store) LoadRouteRuntimeStateContext(ctx context.Context, routeID string) (*RouteRuntimeStateRecord, error) {
+	var rec RouteRuntimeStateRecord
+	var ack, active, dirtySince, pos, reconciled, fingerprint sql.NullString
+	err := s.QueryRowContext(ctx, `SELECT route_id, activation_state, acknowledged_revision, capability_fingerprint, route_state, active_dispatch_id, active_generation, dirty_generation, dirty_since, pending_reconcile, last_source_position, last_reconciled_at, version
+		FROM route_runtime_state WHERE route_id = ?`, routeID).Scan(
+		&rec.RouteID, &rec.ActivationState, &ack, &fingerprint, &rec.RouteState, &active, &rec.ActiveGeneration, &rec.DirtyGeneration,
+		&dirtySince, &rec.PendingReconcile, &pos, &reconciled, &rec.Version)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("route %s has no runtime state: %w", routeID, ErrOptimisticConcurrency)
+	}
+	if err != nil {
+		return nil, err
+	}
+	rec.AcknowledgedRevision, rec.CapabilityFingerprint, rec.ActiveDispatchID, rec.DirtySince, rec.LastSourcePosition, rec.LastReconciledAt =
+		nullText(ack), nullText(fingerprint), nullText(active), nullText(dirtySince), nullText(pos), nullText(reconciled)
+	return &rec, nil
 }
 
 func (s *Store) loadRouteRuntimeState(q queryer, routeID string) (*RouteRuntimeStateRecord, error) {

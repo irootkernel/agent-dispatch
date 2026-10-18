@@ -20,6 +20,10 @@ This file records concise shipped outcomes and pending changes.
 
 ### Fixed
 
+- Submit due `FOLLOWUP_READY` and `retry_wait` dispatch intents automatically
+  during post-commit `after-command` passes, `schedule run` recovery, and
+  `merge_pending` Watchman arrivals so follow-up generations do not remain
+  stranded in `ready`.
 - Resume accepted management requests blocked before job admission after the
   operator pause is lifted, retaining their identity and execution budget.
 

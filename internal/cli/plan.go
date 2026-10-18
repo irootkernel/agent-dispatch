@@ -19,6 +19,7 @@ import (
 	"github.com/irootkernel/agent-dispatch/internal/domain/ids"
 	"github.com/irootkernel/agent-dispatch/internal/domain/policy"
 	"github.com/irootkernel/agent-dispatch/internal/domain/records"
+	"github.com/irootkernel/agent-dispatch/internal/domain/state"
 	"github.com/irootkernel/agent-dispatch/internal/platformpaths"
 	"github.com/irootkernel/agent-dispatch/internal/ports"
 )
@@ -369,7 +370,7 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 		submitted := false
 		var drained dispatch.DrainReport
 		if !noSubmit && artifacts.route.Enabled && outcome.store != nil {
-			drained = drainMergedRouteDueIntent(command, artifacts, outcome.store, stderr)
+			drained = drainMergedRouteDueIntent(command, artifacts, outcome.store, outcome.children, stderr)
 			submitted = drained.Processed > 0
 			maybeAfterCommandDrainCfg(command, artifacts.cfg, outcome.store, stderr, artifacts.opts.routeID)
 		}
@@ -442,7 +443,9 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return intentErr(stderr, command, err)
 	}
-	_ = drainMergedRouteDueIntent(command, artifacts, outcome.store, stderr)
+	if len(outcome.mergedChildren) > 0 {
+		_ = drainMergedRouteDueIntent(command, artifacts, outcome.store, outcome.mergedChildren, stderr)
+	}
 	// The registered post-commit pass (E16-T3): the core transaction
 	// committed and the command succeeded, so every affected
 	// after-command route drains its existing due work before the
@@ -457,48 +460,97 @@ func runDispatch(args []string, stdout, stderr io.Writer) int {
 }
 
 // drainMergedRouteDueIntent runs the "+ 1 already due recovery intent"
-// pass (processing-pipeline §7, cli-spec §5) when a lane on the route
-// holds an unsubmitted due follow-up (FOLLOWUP_READY) or due retry_wait
-// intent. When the route holds only an already-accepted active task,
-// hasDueOrRecoverableDispatches returns false before resolving the
-// target sink so ordinary merge_pending arrivals stay free of
-// subprocess probes and stderr output.
-func drainMergedRouteDueIntent(command string, artifacts *planArtifacts, store storeOp, stderr io.Writer) dispatch.DrainReport {
+// pass (processing-pipeline §7, cli-spec §5) when a merged lane on the
+// route holds an unsubmitted due follow-up (FOLLOWUP_READY) or due
+// retry_wait intent. When merged lanes hold only already-accepted active
+// tasks, it returns before resolving the target sink so ordinary
+// merge_pending arrivals stay free of subprocess probes and stderr output.
+func drainMergedRouteDueIntent(command string, artifacts *planArtifacts, store storeOp, mergedLanes []dispatch.FanoutLaneResult, stderr io.Writer) dispatch.DrainReport {
+	var out dispatch.DrainReport
+	if len(mergedLanes) == 0 {
+		return out
+	}
 	ctx := requestCtx()
 	backoff, err := backoffFromConfig(artifacts.route.SubmissionRetry)
 	if err != nil {
-		return dispatch.DrainReport{}
+		return out
 	}
-	if !hasDueOrRecoverableDispatches(ctx, store, artifacts.opts.routeID, backoff) {
-		return dispatch.DrainReport{}
+	mergedSet := make(map[string]bool, len(mergedLanes))
+	for _, ml := range mergedLanes {
+		lane := ml.DestinationID
+		if lane == "" {
+			lane = ports.LegacyDestinationLaneID
+		}
+		mergedSet[lane] = true
+	}
+	intents, err := store.ListIntents(ctx, ports.IntentFilter{RouteID: artifacts.opts.routeID, Limit: 200})
+	if err != nil {
+		return out
+	}
+	now := dispatch.Timestamp(time.Now())
+	var candidates []string
+	for _, sum := range intents {
+		switch sum.State {
+		case records.IntentReady, records.IntentRetryWait:
+		default:
+			continue
+		}
+		lane := sum.DestinationID
+		if lane == "" {
+			lane = ports.LegacyDestinationLaneID
+		}
+		if !mergedSet[lane] {
+			continue
+		}
+		if sum.NextAttemptAt != "" && sum.NextAttemptAt > now {
+			continue
+		}
+		if backoff != (dispatch.Backoff{}) && backoff.Exhausted(sum.AttemptCount) {
+			continue
+		}
+		rs, lerr := store.LoadIntentLane(ctx, sum.DispatchID)
+		if lerr != nil || rs.ActivationState != "enabled" || rs.State == state.RouteUncertain || rs.State == state.RouteQuarantined {
+			continue
+		}
+		if rs.ActiveDispatchID != "" && rs.ActiveDispatchID != sum.DispatchID {
+			continue
+		}
+		if free, _, gerr := store.GroupSlotFree(ctx, artifacts.opts.routeID, lane); gerr != nil || !free {
+			continue
+		}
+		candidates = append(candidates, sum.DispatchID)
+	}
+	if len(candidates) == 0 {
+		return out
 	}
 	sink, err := resolveSinkCtx(ctx, artifacts.cfg, artifacts.opts.routeID, nil)
 	if err != nil {
 		fmt.Fprintf(stderr, "warning: route %s due follow-up drain skipped: %v\n", artifacts.opts.routeID, err)
-		return dispatch.DrainReport{}
+		return out
 	}
 	rt := newSubmitRuntime(store, sink, artifacts.cfg, submitTimeoutOf(artifacts.resolved), backoff, "dispatch", io.Discard)
-	if _, err := rt.Recover(ctx, artifacts.opts.routeID); err != nil {
-		fmt.Fprintf(stderr, "warning: route %s lease recovery failed: %v\n", artifacts.opts.routeID, err)
-		return dispatch.DrainReport{}
-	}
-	if _, warnings, err := reconcileUnknownDispatchesCtx(ctx, artifacts.cfg, store, sink, artifacts.opts.routeID, backoff); err != nil {
-		fmt.Fprintf(stderr, "%s\n", err.Error())
-		return dispatch.DrainReport{}
-	} else {
-		for _, w := range warnings {
-			fmt.Fprintf(stderr, "%s\n", w)
+	for _, id := range candidates {
+		if out.Processed >= 1 {
+			break
 		}
+		rep, serr := rt.SubmitOnce(ctx, id, "drain")
+		if serr != nil {
+			if errors.Is(serr, ports.ErrGroupSlotHeld) {
+				out.Skipped++
+				continue
+			}
+			if errors.Is(serr, ports.ErrStaleRouteRevision) {
+				out.Skipped++
+				fmt.Fprintf(stderr, "dispatch %s skipped: %v\n", id, serr)
+				continue
+			}
+			fmt.Fprintf(stderr, "warning: route %s due follow-up drain failed: %v\n", artifacts.opts.routeID, serr)
+			return out
+		}
+		out.Processed++
+		out.Reports = append(out.Reports, rep)
 	}
-	report, err := rt.Drain(ctx, artifacts.opts.routeID, 1, store)
-	if err != nil {
-		fmt.Fprintf(stderr, "warning: route %s due follow-up drain failed: %v\n", artifacts.opts.routeID, err)
-		return report
-	}
-	for _, w := range report.Warnings {
-		fmt.Fprintf(stderr, "%s\n", w)
-	}
-	return report
+	return out
 }
 
 // laneFailuresEnvelope renders the per-destination fan-out failures for

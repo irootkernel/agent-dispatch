@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
@@ -22,6 +23,11 @@ func Load(path string) (*Config, error) {
 	cfg, err := Parse(data)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	if abs, err := filepath.Abs(path); err == nil {
+		cfg.SourcePath = abs
+	} else {
+		cfg.SourcePath = filepath.Clean(path)
 	}
 	return cfg, nil
 }

@@ -24,6 +24,9 @@ type Config struct {
 	// Warnings carries non-fatal semantic validation warnings; it is
 	// produced by the loader and never part of the configuration document.
 	Warnings []string `yaml:"-" json:"-"`
+	// SourcePath records the resolved filesystem path Load read the
+	// configuration from; never serialized into the document.
+	SourcePath string `yaml:"-" json:"-"`
 }
 
 type SyncManagement struct {

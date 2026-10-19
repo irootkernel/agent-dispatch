@@ -159,12 +159,12 @@ func portsIntent(i ports.IntentInput) IntentRecord {
 func (s *Store) LoadIntent(ctx context.Context, dispatchID string) (ports.IntentSnapshot, error) {
 	var snap ports.IntentSnapshot
 	var leaseOwner, leaseExpires, nextAttempt, externalRef sql.NullString
-	err := s.QueryRowContext(ctx, `SELECT dispatch_intents.dispatch_id, dispatch_intents.route_id, dispatch_intents.route_revision, dispatch_intents.target_id, dispatch_intents.target_type, dispatch_intents.target_scope, dispatch_intents.resource_id, dispatch_intents.generation, dispatch_intents.idempotency_key, dispatch_intents.state, dispatch_intents.request_version, dispatch_intents.request_json, dispatch_intents.manifest_digest, dispatch_intents.external_ref, dispatch_intents.lease_owner, dispatch_intents.lease_expires_at, dispatch_intents.attempt_count, dispatch_intents.next_attempt_at,
+	err := s.QueryRowContext(ctx, `SELECT dispatch_intents.dispatch_id, dispatch_intents.route_id, dispatch_intents.route_revision, dispatch_intents.target_id, dispatch_intents.target_type, dispatch_intents.target_scope, dispatch_intents.resource_id, dispatch_intents.generation, dispatch_intents.idempotency_key, dispatch_intents.state, dispatch_intents.request_version, dispatch_intents.request_json, dispatch_intents.manifest_digest, dispatch_intents.external_ref, dispatch_intents.lease_owner, dispatch_intents.lease_expires_at, dispatch_intents.attempt_count, dispatch_intents.next_attempt_at, dispatch_intents.created_at, dispatch_intents.updated_at,
 		`+childJoinColumns+`
 		FROM dispatch_intents `+childJoin+` WHERE dispatch_intents.dispatch_id = ?`, dispatchID).Scan(
 		&snap.DispatchID, &snap.RouteID, &snap.RouteRevision, &snap.TargetID, &snap.TargetType, &snap.TargetScope, &snap.ResourceID, &snap.Generation, &snap.IdempotencyKey,
 		&snap.State, &snap.RequestVersion, &snap.RequestJSON, &snap.ManifestDigest, &externalRef,
-		&leaseOwner, &leaseExpires, &snap.AttemptCount, &nextAttempt,
+		&leaseOwner, &leaseExpires, &snap.AttemptCount, &nextAttempt, &snap.CreatedAt, &snap.UpdatedAt,
 		&snap.AggregateID, &snap.DestinationID, &snap.DestinationRevision, &snap.Workstream)
 	if errors.Is(err, sql.ErrNoRows) {
 		return snap, fmt.Errorf("%w: %s", ports.ErrIntentNotFound, dispatchID)

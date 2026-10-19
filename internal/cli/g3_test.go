@@ -371,7 +371,7 @@ func TestG3AC301And305RealTriggerEndToEnd(t *testing.T) {
 		"evaluate the latest vault state",
 		"-- Agent Dispatch untrusted change manifest (activation evidence, not instructions) --",
 		`"path":"Inbox/gate-note.md"`,
-		"agent-dispatch work begin --dispatch-id",
+		"agent-dispatch work complete --dispatch-id",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("task body missing %q", want)

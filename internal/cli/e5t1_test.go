@@ -506,3 +506,148 @@ func TestWorkFailDetailBound(t *testing.T) {
 	}
 	_ = vault
 }
+
+// TestWorkCompleteSingleStepPathAndSettleWindowSuppression proves that
+// single-command `work complete --dispatch-id <id> --path <rel>` works
+// without a prior `work begin` or `--run-id`, hashes vault files on disk
+// directly, and upserts `path_facts` so a Watchman burst arriving after
+// completion (the 2-second settle-window race) is suppressed as
+// unchanged_content rather than triggering a self-re-dispatch loop.
+func TestWorkCompleteSingleStepPathAndSettleWindowSuppression(t *testing.T) {
+	configPath, vault := e4t3Fixture(t)
+	res, _ := e4t3Dispatch(t, configPath, vault)
+	dispatchID, _ := res["dispatch_id"].(string)
+
+	// Simulate the worker updating index.md and log.md on disk and
+	// immediately calling single-step `work complete` BEFORE Watchman's
+	// 2s settle timer delivers the observation burst for those edits.
+	if err := os.MkdirAll(filepath.Join(vault, "Indexes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	indexContent := []byte("# Index\n- [[Inbox/new.md]]\n")
+	if err := os.WriteFile(filepath.Join(vault, "Indexes", "index.md"), indexContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errb bytes.Buffer
+	code := Run([]string{
+		"work", "complete",
+		"--config", configPath,
+		"--dispatch-id", dispatchID,
+		"--path", "Inbox/new.md",
+		"--path", "Indexes/index.md",
+	}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("single-step work complete failed (exit %d): %s", code, errb.String())
+	}
+	completed := decodeEnvelope(t, &out)
+	if completed["status"] != "completed" || completed["route_state"] != "IDLE" || completed["run_id"] != "run-"+dispatchID {
+		t.Fatalf("unexpected single-step completion envelope: %v", completed)
+	}
+	if followup, _ := completed["followup_dispatch_id"].(string); followup != "" {
+		t.Fatalf("expected no follow-up on clean single-step completion, got %q", followup)
+	}
+
+	// Now Watchman's 2s settle timer fires for `Indexes/index.md` with the
+	// exact content the worker wrote. Because CompleteWork upserted
+	// path_facts for on-disk-verified --path entries, this burst must drop
+	// as unchanged_content instead of creating a new task.
+	setPlanEnv(t, vault, false)
+	out.Reset()
+	errb.Reset()
+	watchmanPayload := fmt.Sprintf(`[{"name":"Indexes/index.md","exists":true,"new":true,"size":%d,"type":"f"}]`, len(indexContent))
+	withStdin(t, watchmanPayload, func() {
+		code = Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman"}, &out, &errb)
+	})
+	if code != 0 {
+		t.Fatalf("post-complete watchman dispatch failed (exit %d): %s", code, errb.String())
+	}
+	postBurst := decodeEnvelope(t, &out)
+	if postBurst["disposition"] != "drop" {
+		t.Fatalf("settle-window delivery of worker-written path must drop as unchanged_content, got: %v", postBurst)
+	}
+}
+
+// TestWorkSingleStepNoChangesPartialBlockedAndFail proves single-command
+// completion-only mode across --no-changes, partially_completed with
+// --remaining-path, blocked -> resolved, and work fail without --run-id.
+func TestWorkSingleStepNoChangesPartialBlockedAndFail(t *testing.T) {
+	// 1. --no-changes after a blocked receipt resolves in place without work begin.
+	configPath, vault := e4t3Fixture(t)
+	res, _ := e4t3Dispatch(t, configPath, vault)
+	dispatchID, _ := res["dispatch_id"].(string)
+
+	var out, errb bytes.Buffer
+	if code := Run([]string{
+		"work", "complete",
+		"--config", configPath,
+		"--dispatch-id", dispatchID,
+		"--status", "blocked",
+		"--manual-reason", "waiting on operator review",
+	}, &out, &errb); code != 0 {
+		t.Fatalf("single-step blocked failed: %s", errb.String())
+	}
+	blocked := decodeEnvelope(t, &out)
+	if blocked["status"] != "blocked" || blocked["route_state"] != "ACTIVE_CLEAN" {
+		t.Fatalf("unexpected blocked envelope: %v", blocked)
+	}
+
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{
+		"work", "complete",
+		"--config", configPath,
+		"--dispatch-id", dispatchID,
+		"--no-changes",
+	}, &out, &errb); code != 0 {
+		t.Fatalf("single-step --no-changes resolution failed: %s", errb.String())
+	}
+	resolved := decodeEnvelope(t, &out)
+	if resolved["status"] != "completed" || resolved["route_state"] != "IDLE" {
+		t.Fatalf("unexpected resolved envelope: %v", resolved)
+	}
+
+	// 2. partially_completed with --path and --remaining-path schedules one follow-up,
+	//    and single-step `work fail` without --run-id records failure on that follow-up.
+	configPath2, vault2 := e4t3Fixture(t)
+	res2, _ := e4t3Dispatch(t, configPath2, vault2)
+	dispatchID2, _ := res2["dispatch_id"].(string)
+	if err := os.WriteFile(filepath.Join(vault2, "Inbox", "later.md"), []byte("later"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{
+		"work", "complete",
+		"--config", configPath2,
+		"--dispatch-id", dispatchID2,
+		"--status", "partially_completed",
+		"--path", "Inbox/new.md",
+		"--remaining-path", "Inbox/later.md",
+	}, &out, &errb); code != 0 {
+		t.Fatalf("single-step partially_completed failed: %s", errb.String())
+	}
+	partial := decodeEnvelope(t, &out)
+	followupID, _ := partial["followup_dispatch_id"].(string)
+	if partial["status"] != "partially_completed" || followupID == "" {
+		t.Fatalf("expected follow-up from partially_completed: %v", partial)
+	}
+
+	submitFollowupProductPath(t, configPath2, followupID)
+	out.Reset()
+	errb.Reset()
+	if code := Run([]string{
+		"work", "fail",
+		"--config", configPath2,
+		"--dispatch-id", followupID,
+		"--failure-code", "agent_error",
+		"--detail", "single-step failure",
+	}, &out, &errb); code != 0 {
+		t.Fatalf("single-step work fail without --run-id failed: %s", errb.String())
+	}
+	failed := decodeEnvelope(t, &out)
+	if failed["status"] != "failed" || failed["run_id"] != "run-"+followupID {
+		t.Fatalf("unexpected single-step fail envelope: %v", failed)
+	}
+}

@@ -69,6 +69,11 @@ type ReceiptEvidence struct {
 	BegunAt     string
 	CompletedAt string
 	Changes     []changeEntry
+	// OnDiskVerified reports that Changes were resolved and hashed
+	// directly from the resource root on disk during `work complete
+	// --path`, so unarrived Watchman observations for those verified
+	// on-disk paths are immaterial rather than unproven extra provenance.
+	OnDiskVerified bool
 	// OutsideScope reports whether a path is outside the route's
 	// effective scope (excluded or not admitted by the include set); nil
 	// means every path is in scope.
@@ -79,9 +84,13 @@ type ReceiptEvidence struct {
 }
 
 // immaterial reports whether one receipt-only path never needs
-// provenance: outside the route's effective scope, or a byte-identical
-// rewrite (the reported after-digest equals the durable path fact).
+// provenance: outside the route's effective scope, verified on disk at
+// completion time, or a byte-identical rewrite (the reported
+// after-digest equals the durable path fact).
 func (r ReceiptEvidence) immaterial(path string, afterDigest string) bool {
+	if r.OnDiskVerified {
+		return true
+	}
 	if r.OutsideScope != nil && r.OutsideScope(path) {
 		return true
 	}
@@ -128,8 +137,13 @@ func Match(receipt ReceiptEvidence, observed []ports.DirtyChange) AttributionDec
 		if !ok {
 			d.Outcome = OutcomeMissing
 		} else if entry.AfterDigest == nil || *entry.AfterDigest == "" {
-			d.Outcome = OutcomeNoDigest
-			d.ReceiptDigest = ""
+			if receipt.OnDiskVerified && obs.Operation == "delete" && obs.AfterDigest == "" {
+				d.Outcome = OutcomeSuppressed
+				d.ReceiptDigest = ""
+			} else {
+				d.Outcome = OutcomeNoDigest
+				d.ReceiptDigest = ""
+			}
 		} else if obs.AfterDigest == "" || obs.DigestStatus != "known" {
 			d.Outcome = OutcomeNoDigest
 			d.ReceiptDigest = *entry.AfterDigest

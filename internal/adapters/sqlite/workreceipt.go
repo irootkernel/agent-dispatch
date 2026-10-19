@@ -61,8 +61,9 @@ func (s *Store) InsertWorkReceipt(ctx context.Context, w ports.WorkReceiptInput)
 
 // CompleteWork applies the terminal receipt update and the completion
 // transaction atomically: the receipt row must still be the begun receipt
-// of the same run, and the route transition, dirty-generation collapse,
-// and any follow-up scheduling commit with it or not at all.
+// of the same run (or inserted directly when CompletionOnly is enabled),
+// and the route transition, dirty-generation collapse, and any follow-up
+// scheduling commit with it or not at all.
 func (s *Store) CompleteWork(ctx context.Context, w ports.WorkReceiptInput, req ports.ActiveCompletion) (ports.FollowupCreated, error) {
 	req.Now = normalizeTimestamp(req.Now)
 	tx, err := s.BeginTx(ctx, nil)
@@ -82,24 +83,48 @@ func (s *Store) CompleteWork(ctx context.Context, w ports.WorkReceiptInput, req 
 	if err != nil {
 		return ports.FollowupCreated{}, mapWorkReceiptConstraint(err)
 	}
+	fromState := "begun"
 	if n, _ := res.RowsAffected(); n == 0 {
 		// Distinguish the two contract failures for the caller's error
 		// mapping: an absent row versus an already-terminal run.
 		var status string
 		err := tx.QueryRow(`SELECT status FROM work_receipts WHERE dispatch_id = ? AND run_id = ?`, w.DispatchID, w.RunID).Scan(&status)
 		if errors.Is(err, sql.ErrNoRows) {
-			return ports.FollowupCreated{}, fmt.Errorf("%w: dispatch %s run %s", ports.ErrRunNotBegun, w.DispatchID, w.RunID)
+			if !w.CompletionOnly {
+				return ports.FollowupCreated{}, fmt.Errorf("%w: dispatch %s run %s", ports.ErrRunNotBegun, w.DispatchID, w.RunID)
+			}
+			fromState = ""
+			if err := s.SaveWorkReceipt(tx, row); err != nil {
+				return ports.FollowupCreated{}, mapWorkReceiptConstraint(err)
+			}
+		} else if err != nil {
+			return ports.FollowupCreated{}, err
+		} else if w.CompletionOnly && status == string(records.WorkBlocked) {
+			fromState = status
+			if _, uerr := tx.Exec(`UPDATE work_receipts
+				SET receipt_id = ?, status = ?, failure_code = ?, result_revision = ?, changes_json = ?, completed_scope_json = ?, remaining_scope_json = ?, manual_reason = ?,
+				    submitted_at = ?, validation_state = ?, validation_reasons_json = ?
+				WHERE dispatch_id = ? AND run_id = ? AND status = ?`,
+				w.ReceiptID, w.Status, nullString(w.FailureCode), nullString(w.ResultRevision), w.ChangesJSON,
+				row.CompletedScopeJSON, row.RemainingScopeJSON, nullString(w.ManualReason),
+				w.SubmittedAt, w.ValidationState, w.ValidationReasonsJSON,
+				w.DispatchID, w.RunID, string(records.WorkBlocked)); uerr != nil {
+				return ports.FollowupCreated{}, mapWorkReceiptConstraint(uerr)
+			}
+		} else {
+			return ports.FollowupCreated{}, fmt.Errorf("%w: run %s of dispatch %s is already %s", ports.ErrRunAlreadyRecorded, w.RunID, w.DispatchID, status)
 		}
-		if err != nil {
+	}
+	if len(w.VerifiedPathFacts) > 0 && w.ResourceID != "" {
+		if err := s.upsertVerifiedPathFacts(tx, w.ResourceID, w.VerifiedPathFacts, w.SubmittedAt); err != nil {
 			return ports.FollowupCreated{}, err
 		}
-		return ports.FollowupCreated{}, fmt.Errorf("%w: run %s of dispatch %s is already %s", ports.ErrRunAlreadyRecorded, w.RunID, w.DispatchID, status)
 	}
 	out, err := s.completeActiveTx(ctx, tx, req)
 	if err != nil {
 		return out, err
 	}
-	if err := s.AppendTransition(tx, w.ReceiptID+":"+w.Status, "work_receipt", w.DispatchID, "begun", receiptAuditState(w.Status, w.ValidationState), w.SubmittedAt,
+	if err := s.AppendTransition(tx, w.ReceiptID+":"+w.Status, "work_receipt", w.DispatchID, fromState, receiptAuditState(w.Status, w.ValidationState), w.SubmittedAt,
 		workReceiptAuditContext(w, req.Actor)); err != nil {
 		return out, err
 	}
@@ -107,6 +132,30 @@ func (s *Store) CompleteWork(ctx context.Context, w ports.WorkReceiptInput, req 
 		return out, err
 	}
 	return out, nil
+}
+
+// upsertVerifiedPathFacts records on-disk-verified path facts from a
+// `--path` completion inside the completion transaction so a Watchman
+// settle trigger arriving after `work complete` suppresses the worker's
+// own edits as unchanged content instead of re-dispatching them.
+func (s *Store) upsertVerifiedPathFacts(tx *sql.Tx, resourceID string, changes []ports.ObservationChange, observedAt string) error {
+	applied := false
+	for _, c := range changes {
+		if c.AfterDigest == "" && c.ExistsAfter {
+			continue
+		}
+		if _, err := tx.Exec(`INSERT INTO path_facts (resource_id, path, digest, "exists", observed_at) VALUES (?,?,?,?,?)
+			ON CONFLICT (resource_id, path) DO UPDATE SET digest = excluded.digest, "exists" = excluded."exists", observed_at = excluded.observed_at`,
+			resourceID, c.Path, c.AfterDigest, c.ExistsAfter, observedAt); err != nil {
+			return err
+		}
+		applied = true
+	}
+	if !applied {
+		return nil
+	}
+	_, err := tx.Exec(`UPDATE resources SET observation_revision = observation_revision + 1 WHERE resource_id = ?`, resourceID)
+	return err
 }
 
 // BlockWork records the blocked outcome (E12-T3, FBK-011): the run's
@@ -138,18 +187,25 @@ func (s *Store) BlockWork(ctx context.Context, w ports.WorkReceiptInput) error {
 	if err != nil {
 		return mapWorkReceiptConstraint(err)
 	}
+	fromState := string(records.WorkBegan)
 	if n, _ := res.RowsAffected(); n == 0 {
 		var status string
 		err := tx.QueryRow(`SELECT status FROM work_receipts WHERE dispatch_id = ? AND run_id = ?`, w.DispatchID, w.RunID).Scan(&status)
 		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("%w: dispatch %s run %s", ports.ErrRunNotBegun, w.DispatchID, w.RunID)
-		}
-		if err != nil {
+			if !w.CompletionOnly {
+				return fmt.Errorf("%w: dispatch %s run %s", ports.ErrRunNotBegun, w.DispatchID, w.RunID)
+			}
+			fromState = ""
+			if err := s.SaveWorkReceipt(tx, workReceiptRow(w)); err != nil {
+				return mapWorkReceiptConstraint(err)
+			}
+		} else if err != nil {
 			return err
+		} else {
+			return fmt.Errorf("%w: run %s of dispatch %s is already %s", ports.ErrRunAlreadyRecorded, w.RunID, w.DispatchID, status)
 		}
-		return fmt.Errorf("%w: run %s of dispatch %s is already %s", ports.ErrRunAlreadyRecorded, w.RunID, w.DispatchID, status)
 	}
-	if err := s.AppendTransition(tx, w.ReceiptID+":"+w.Status, "work_receipt", w.DispatchID, string(records.WorkBegan),
+	if err := s.AppendTransition(tx, w.ReceiptID+":"+w.Status, "work_receipt", w.DispatchID, fromState,
 		receiptAuditState(w.Status, w.ValidationState), w.SubmittedAt, workReceiptAuditContext(w, "")); err != nil {
 		return err
 	}

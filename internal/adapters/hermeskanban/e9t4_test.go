@@ -40,6 +40,8 @@ func TestE9T4SkillRendererCrossCheck(t *testing.T) {
 	accepted := map[string]bool{
 		"--dispatch-id": true, "--run-id": true, "--external-task-id": true,
 		"--manifest": true, "--failure-code": true, "--config": true,
+		"--path": true, "--remaining-path": true, "--no-changes": true,
+		"--status": true, "--manual-reason": true,
 	}
 	for _, line := range workFlag.FindAllStringSubmatch(rendered.Body, -1) {
 		for _, field := range strings.Fields(line[2]) {
@@ -55,10 +57,10 @@ func TestE9T4SkillRendererCrossCheck(t *testing.T) {
 			}
 		}
 	}
-	// The command identities the body teaches are exactly the work verbs
-	// the renderer emits (begin and complete), and a verb the surface
-	// does not have never appears.
-	for _, verb := range []string{"work begin", "work complete"} {
+	// The command identities the body teaches are the work verbs the
+	// renderer emits (complete and fail), and a verb the surface does
+	// not have never appears.
+	for _, verb := range []string{"work complete", "work fail"} {
 		if !strings.Contains(rendered.Body, "agent-dispatch "+verb) {
 			t.Fatalf("the receipt instructions must teach %q", verb)
 		}

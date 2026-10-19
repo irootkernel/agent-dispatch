@@ -59,21 +59,29 @@ func requestCtx() context.Context {
 // positional operand (the dispatch or batch ID).
 type dispatchesFlags struct {
 	values     map[string]string
+	multi      map[string][]string
 	positional string
 }
 
 // flagVal returns the value of one --flag (with = or space form).
 func (f dispatchesFlags) val(name string) string { return f.values[name] }
 
+// vals returns all values supplied for a repeatable --flag in order.
+func (f dispatchesFlags) vals(name string) []string { return f.multi[name] }
+
 // parseDispatchesFlags parses the shared flags and collects one optional
 // bare positional operand.
 func parseDispatchesFlags(command string, args []string, stderr io.Writer, allowed map[string]bool) (dispatchesFlags, int) {
-	out := dispatchesFlags{values: map[string]string{}}
+	out := dispatchesFlags{values: map[string]string{}, multi: map[string][]string{}}
 	valueFlags := map[string]bool{"--config": true, "--route": true, "--state": true, "--target": true, "--reason": true, "--max": true, "--limit": true, "--offset": true, "--age": true, "--external-ref": true, "--causal": true, "--dispatch": true, "--kind": true, "--acknowledge-production-gate": true, "--output": true}
-	for name := range allowed {
-		valueFlags[name] = true
-	}
 	boolFlags := map[string]bool{"--yes": true}
+	for name, isValue := range allowed {
+		if isValue {
+			valueFlags[name] = true
+		} else {
+			boolFlags[name] = true
+		}
+	}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		name, value := arg, ""
@@ -91,6 +99,7 @@ func parseDispatchesFlags(command string, args []string, stderr io.Writer, allow
 				value = args[i]
 			}
 			out.values[name] = value
+			out.multi[name] = append(out.multi[name], value)
 		case boolFlags[name]:
 			out.values[name] = "true"
 		default:

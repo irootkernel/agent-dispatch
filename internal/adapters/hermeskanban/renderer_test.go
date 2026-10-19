@@ -278,11 +278,25 @@ func TestRenderReceiptAndLatestState(t *testing.T) {
 	if !strings.Contains(rendered.Body, `"mode":"latest_state"`) {
 		t.Fatal("latest-state activation evidence missing")
 	}
-	if !strings.Contains(rendered.Body, "agent-dispatch work begin --dispatch-id 019c2234-5678-7abc-9def-0123456789ab") {
-		t.Fatal("work begin receipt instruction missing")
-	}
-	if !strings.Contains(rendered.Body, "agent-dispatch work complete --dispatch-id 019c2234-5678-7abc-9def-0123456789ab") {
+	if !strings.Contains(rendered.Body, "agent-dispatch work complete --dispatch-id 019c2234-5678-7abc-9def-0123456789ab --path <changed-rel-path>") {
 		t.Fatal("work complete receipt instruction missing")
+	}
+	if !strings.Contains(rendered.Body, "agent-dispatch work fail --dispatch-id 019c2234-5678-7abc-9def-0123456789ab") {
+		t.Fatal("work fail receipt instruction missing")
+	}
+
+	pinned, err := Render(req, RenderOptions{
+		MaxManifestBytes:        goldenManifestBound,
+		ResourceMutexSupported:  true,
+		AgentDispatchExecutable: "/Users/example/.local/bin/agent-dispatch-v0.3.0",
+		AgentDispatchConfigPath: "/Users/example/.config/agent-dispatch/trial.yaml",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPinned := "/Users/example/.local/bin/agent-dispatch-v0.3.0 work complete --dispatch-id 019c2234-5678-7abc-9def-0123456789ab --config /Users/example/.config/agent-dispatch/trial.yaml --path <changed-rel-path>"
+	if !strings.Contains(pinned.Body, wantPinned) {
+		t.Fatalf("pinned binary and config missing from receipt instructions: %s", pinned.Body)
 	}
 }
 

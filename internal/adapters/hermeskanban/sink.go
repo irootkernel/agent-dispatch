@@ -96,6 +96,14 @@ func (s *Sink) SetResourceMutexSupported(supported bool) {
 	s.renderOpts.ResourceMutexSupported = supported
 }
 
+// SetAgentDispatchCommand configures the resolved agent-dispatch
+// executable and configuration file path embedded in rendered work
+// receipt instructions.
+func (s *Sink) SetAgentDispatchCommand(executable, configPath string) {
+	s.renderOpts.AgentDispatchExecutable = executable
+	s.renderOpts.AgentDispatchConfigPath = configPath
+}
+
 // liveFingerprint recomputes the capability-evidence fingerprint for
 // the executable as it stands now: the digest and version halves of the
 // record identity, which is exactly what an executable swap changes.

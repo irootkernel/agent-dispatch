@@ -224,6 +224,8 @@ type IntentSnapshot struct {
 	LeaseExpiresAt string
 	AttemptCount   int
 	NextAttemptAt  string
+	CreatedAt      string
+	UpdatedAt      string
 	// Destination identity of the child record beneath one aggregate
 	// event (E12-T1): empty for a pre-cutover legacy intent, which has no
 	// child row and is only historically inspectable (DAT-012).

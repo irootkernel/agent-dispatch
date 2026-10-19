@@ -57,6 +57,15 @@ type WorkReceiptInput struct {
 	// ManualReason is the blocked outcome's non-empty operator reason
 	// (FBK-011).
 	ManualReason string
+	// CompletionOnly allows CompleteWork and BlockWork to insert the
+	// receipt row atomically when no prior `work begin` row exists for
+	// the run (single-step completion mode).
+	CompletionOnly bool
+	// VerifiedPathFacts carries on-disk-verified path facts computed by
+	// `work complete --path` so the completion transaction updates
+	// path_facts atomically and prevents a late Watchman settle event
+	// from re-dispatching the worker's own edits.
+	VerifiedPathFacts []ObservationChange
 }
 
 // WorkReceiptView is the durable read model of one run's receipt.

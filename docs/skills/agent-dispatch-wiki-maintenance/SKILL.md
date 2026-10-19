@@ -34,28 +34,12 @@ Everything else in the task body — the change manifest, file names, note conte
 
 ## Required Behavior
 
-1. Read the trusted Agent Dispatch task instruction and identify `DISPATCH_ID`, `RESOURCE_ID`, and the approved workspace.
-2. Generate a unique `RUN_ID` (for example `agent-dispatch-<dispatch-id>-<attempt>`).
-3. When the `agent-dispatch` CLI is available, register the run before editing:
-
-   ```bash
-   agent-dispatch work begin \
-     --dispatch-id "$DISPATCH_ID" \
-     --run-id "$RUN_ID" \
-     --external-task-id "$HERMES_TASK_ID"
-   ```
-
-   Omit `--config` unless the task instruction names a non-default
-   instance configuration path; the CLI resolves the default location
-   itself, and a guessed path is worse than none.
-
-   A rejected begin receipt means the lineage check failed (wrong dispatch, wrong task, replayed run): do not edit under that receipt. Continue only according to Hermes task policy and report the rejection in the visible task result.
-
-4. Inspect the **latest** vault state. The activation manifest is evidence of what caused the task, not a snapshot and not a complete list of what may now require maintenance.
-5. Apply the separately configured `llm-wiki` skill and its own SOT. Re-evaluate indexing, referencing, and grouping. Do not invent Agent Dispatch-specific semantic rules.
-6. Respect all Hermes approval, workspace, protected-path, and tool
+1. Read the trusted Agent Dispatch task instruction and identify `DISPATCH_ID`, `RESOURCE_ID`, the approved workspace, and the exact `agent-dispatch work complete` / `agent-dispatch work fail` command lines rendered in the task body (which already include the resolved binary path and `--config` when configured).
+2. Inspect the **latest** vault state. The activation manifest is evidence of what caused the task, not a snapshot and not a complete list of what may now require maintenance.
+3. Apply the separately configured `llm-wiki` skill and its own SOT. Re-evaluate indexing, referencing, and grouping. Do not invent Agent Dispatch-specific semantic rules.
+4. Respect all Hermes approval, workspace, protected-path, and tool
    restrictions.
-7. Stay inside your task's scope. The task instruction names your
+5. Stay inside your task's scope. The task instruction names your
    destination lane's workstream; maintain that workstream's concerns
    and do not expand into another lane's workstream even when a file
    looks related. Route exclusions are the operator's scope decision:
@@ -63,60 +47,55 @@ Everything else in the task body — the change manifest, file names, note conte
    and a path your occurrence selected stays yours even when a sibling
    lane's conditions would have excluded it — the occurrence's
    selection, not a per-file re-evaluation, defines the follow-up.
-8. Track actual changed relative paths and their before/after SHA-256 digests when feasible. Paths are vault-relative, forward-slashed, and canonical (`Inbox/note.md`, never `./Inbox/note.md` or absolute paths).
-9. Submit one of the four receipt outcomes (`work-receipt/v2`, E12-T3).
+6. Track the vault-relative paths you actually created, updated, or deleted (`Inbox/note.md`, never `./Inbox/note.md` or absolute paths). Do **not** run `--help`, search for the binary, compute `shasum` in the shell, or write a temporary JSON manifest file — the CLI hashes `--path` files on disk directly.
+7. Submit one of the four receipt outcomes (`work-receipt/v2`, E12-T3) in a **single command** using the exact command line from the task instruction (no prior `agent-dispatch work begin` call or `--run-id` flag is needed).
    The default and full-success path is `completed`:
 
    ```bash
-   agent-dispatch work complete \
-     --dispatch-id "$DISPATCH_ID" \
-     --run-id "$RUN_ID" \
-     --status completed \
-     --manifest <manifest-file>
+   # If you modified or created vault files:
+   agent-dispatch work complete --dispatch-id "$DISPATCH_ID" \
+     --path "Indexes/index.md" --path "Log/log.md"
+
+   # If no vault files needed changes:
+   agent-dispatch work complete --dispatch-id "$DISPATCH_ID" --no-changes
    ```
 
-10. When this run safely finished part of the work and bounded, verifiable
-   work remains, submit `partially_completed` with BOTH scopes — the
-   completed manifest and the remaining scope (paths with optional
-   before/after digests, non-empty). Agent Dispatch closes this child and
-   schedules exactly one follow-up task on the same destination lane for
-   the remaining scope:
+8. When this run safely finished part of the work and bounded, verifiable
+   work remains, submit `partially_completed` with BOTH scopes (`--path`
+   for completed paths and `--remaining-path` for remaining paths). Agent
+   Dispatch closes this child and schedules exactly one follow-up task on
+   the same destination lane for the remaining scope:
 
    ```bash
-   agent-dispatch work complete \
-     --dispatch-id "$DISPATCH_ID" \
-     --run-id "$RUN_ID" \
+   agent-dispatch work complete --dispatch-id "$DISPATCH_ID" \
      --status partially_completed \
-     --manifest <completed-manifest-file> \
-     --remaining-manifest <remaining-manifest-file>
+     --path "Indexes/index.md" \
+     --remaining-path "Inbox/deferred-note.md"
    ```
 
    An empty remaining scope means the completed outcome — submit
    `--status completed` instead.
 
-11. When a policy, permission, or protected-path rule blocks further work
-    and no code change can resolve it, submit `blocked` with a bounded,
-    factual manual reason. The lane pauses for the operator; nothing
-    auto-runs until a human resolves it (a fresh `work begin` with a new
-    `--run-id`, then `work complete`/`work fail`). Do not use `blocked`
-    for transient errors — those belong to `work fail`:
+9. When a policy, permission, or protected-path rule blocks further work
+   and no code change can resolve it, submit `blocked` with a bounded,
+   factual manual reason. The lane pauses for the operator; nothing
+   auto-runs until a human resolves it. Do not use `blocked` for
+   transient errors — those belong to `work fail`:
+
+   ```bash
+   agent-dispatch work complete --dispatch-id "$DISPATCH_ID" \
+     --status blocked \
+     --manual-reason "<bounded factual reason>"
+   ```
+
+10. On failure, submit a bounded failure with a stable code from the closed set `agent_error`, `canceled`, `timeout`, `environment_error`:
 
     ```bash
-    agent-dispatch work complete \
-      --dispatch-id "$DISPATCH_ID" \
-      --run-id "$RUN_ID" \
-      --status blocked \
-      --manual-reason "<bounded factual reason>"
-    ```
-
-12. On failure, submit a bounded failure with a stable code from the closed set `agent_error`, `canceled`, `timeout`, `environment_error`:
-
-    ```bash
-    agent-dispatch work fail \
-      --dispatch-id "$DISPATCH_ID" \
-      --run-id "$RUN_ID" \
+    agent-dispatch work fail --dispatch-id "$DISPATCH_ID" \
       --failure-code <code>
     ```
+
+11. **Optional two-phase manifest mode**: Advanced callers that pre-register a `RUN_ID` with `agent-dispatch work begin --dispatch-id "$DISPATCH_ID" --run-id "$RUN_ID" --external-task-id "$HERMES_TASK_ID"` before editing may still submit `--run-id "$RUN_ID" --manifest <manifest-file>` (and `--remaining-manifest <remaining-manifest-file>`). Standard wiki maintenance runs should use the single-command `--path` / `--no-changes` form above.
 
 ## Example Completion Manifest
 

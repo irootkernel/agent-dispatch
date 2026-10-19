@@ -48,6 +48,9 @@ func runWorkFlags(command string, args []string, stderr io.Writer) (dispatchesFl
 		// selector plus the members partially_completed and blocked
 		// require.
 		"--status": true, "--remaining-manifest": true, "--manual-reason": true,
+		// Single-command completion flags: repeatable --path /
+		// --remaining-path and boolean --no-changes.
+		"--path": true, "--remaining-path": true, "--no-changes": false,
 	})
 }
 
@@ -134,6 +137,9 @@ func runWorkComplete(command string, args []string, stdout, stderr io.Writer) in
 	dispatchID := flags.val("--dispatch-id")
 	runID := flags.val("--run-id")
 	manifestRef := flags.val("--manifest")
+	paths := flags.vals("--path")
+	remainingPaths := flags.vals("--remaining-path")
+	noChanges := flags.val("--no-changes") == "true"
 	// The outcome selector (E12-T3, FBK-009): completed is the default;
 	// partially_completed requires the remaining scope beside the
 	// completed manifest; blocked requires the manual reason and changes
@@ -147,22 +153,31 @@ func runWorkComplete(command string, args []string, stdout, stderr io.Writer) in
 	default:
 		return usageError(stderr, command, fmt.Sprintf("--status %q is not a work complete outcome (completed, partially_completed, blocked)", status))
 	}
-	if dispatchID == "" || runID == "" {
-		return usageError(stderr, command, "work complete requires --dispatch-id and --run-id")
+	if dispatchID == "" {
+		return usageError(stderr, command, "work complete requires --dispatch-id")
+	}
+	if manifestRef != "" && (len(paths) > 0 || noChanges) {
+		return usageError(stderr, command, "--manifest cannot be combined with --path or --no-changes")
+	}
+	if len(paths) > 0 && noChanges {
+		return usageError(stderr, command, "--path cannot be combined with --no-changes")
+	}
+	if flags.val("--remaining-manifest") != "" && len(remainingPaths) > 0 {
+		return usageError(stderr, command, "--remaining-manifest cannot be combined with --remaining-path")
 	}
 	// The flag grammar stays closed over the outcome (review round 1,
-	// security finding): --remaining-manifest belongs to the explicit
-	// partial outcome only — a v2 document carries its own scopes without
-	// the flag — and a blocked outcome takes its manual reason from the
-	// flag or its v2 document.
-	if flags.val("--remaining-manifest") != "" && status != workreceipt.StatusPartiallyComplete {
+	// security finding): --remaining-manifest / --remaining-path belongs
+	// to the explicit partial outcome only — a v2 document carries its own
+	// scopes without the flag — and a blocked outcome takes its manual
+	// reason from the flag or its v2 document.
+	if (flags.val("--remaining-manifest") != "" || len(remainingPaths) > 0) && status != workreceipt.StatusPartiallyComplete {
 		return usageError(stderr, command, "--remaining-manifest requires --status partially_completed (a work-receipt/v2 document carries its own remaining scope)")
 	}
 	if status == workreceipt.StatusBlocked && flags.val("--manual-reason") == "" && manifestRef == "" {
 		return usageError(stderr, command, "work complete --status blocked requires --manual-reason (or a work-receipt/v2 blocked document through --manifest)")
 	}
-	if manifestRef == "" && status != workreceipt.StatusBlocked {
-		return usageError(stderr, command, "work complete requires --manifest (the completed scope; a blocked outcome takes --manual-reason or a v2 blocked document)")
+	if manifestRef == "" && len(paths) == 0 && !noChanges && status != workreceipt.StatusBlocked {
+		return usageError(stderr, command, "work complete requires --path, --no-changes, or --manifest (the completed scope; a blocked outcome takes --manual-reason or a v2 blocked document)")
 	}
 	manifest := "[]"
 	if manifestRef != "" {
@@ -187,12 +202,15 @@ func runWorkComplete(command string, args []string, stdout, stderr io.Writer) in
 	if exit != 0 {
 		return exit
 	}
+	completionOnly := runID == "" || len(paths) > 0 || len(remainingPaths) > 0 || noChanges
 	// The raw flag rides through (empty when the operator did not select
 	// one): a v2 full document names its own outcome and the service
 	// reconciles the two (review round 1) — an explicit conflicting
 	// --status is rejected there.
 	result, err := service.Complete(requestCtx(), workreceipt.CompleteInput{
 		DispatchID: dispatchID, RunID: runID, ManifestJSON: manifest,
+		Paths: paths, RemainingPaths: remainingPaths, NoChanges: noChanges,
+		CompletionOnly: completionOnly,
 		ResultRevision: flags.val("--result-revision"),
 		Status:         flags.val("--status"), RemainingManifestJSON: remainingManifest,
 		ManualReason: flags.val("--manual-reason"),
@@ -218,8 +236,8 @@ func runWorkFail(command string, args []string, stdout, stderr io.Writer) int {
 	dispatchID := flags.val("--dispatch-id")
 	runID := flags.val("--run-id")
 	failureCode := flags.val("--failure-code")
-	if dispatchID == "" || runID == "" || failureCode == "" {
-		return usageError(stderr, command, "work fail requires --dispatch-id, --run-id, and --failure-code")
+	if dispatchID == "" || failureCode == "" {
+		return usageError(stderr, command, "work fail requires --dispatch-id and --failure-code")
 	}
 	intent, store, exit := loadWorkIntent(command, flags.val("--config"), dispatchID, stderr)
 	if exit != 0 {
@@ -232,6 +250,7 @@ func runWorkFail(command string, args []string, stdout, stderr io.Writer) int {
 	}
 	result, err := service.Fail(requestCtx(), workreceipt.FailInput{
 		DispatchID: dispatchID, RunID: runID, FailureCode: failureCode, Detail: flags.val("--detail"),
+		CompletionOnly: runID == "",
 	})
 	if err != nil {
 		return workReceiptErr(stderr, command, err)
@@ -315,6 +334,7 @@ func workService(command, configPath string, store storeOp, routeID string, stde
 		Store:         store,
 		Now:           time.Now,
 		Resolver:      runtime.resolver,
+		MaxHashBytes:  runtime.maxHash,
 		FailureBudget: route.FailureBudget,
 		OutsideScope:  outsideScope,
 		Log:           opsLogger(stderr, cfg),

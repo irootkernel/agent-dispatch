@@ -389,12 +389,15 @@ Next safe command: agent-dispatch notifications list --state pending`,
 
 Usage: agent-dispatch work <begin|complete|fail> [flags]
 
-Flags: --dispatch-id (required), --run-id, --external-task-id,
-  --reason (fail), --manifest (bounded path evidence), and for
-  complete: --status completed|partially_completed|blocked (default
-  completed), --remaining-manifest (partially_completed, or the v2
-  document's own remaining scope), --manual-reason (blocked, or the v2
-  document's own manual reason).
+Flags: --dispatch-id (required), --run-id (required for begin; optional
+  for complete/fail, defaulting to run-<dispatch-id>), --external-task-id,
+  --failure-code (fail), --path <rel-path> (repeatable on-disk hashed
+  path for complete), --no-changes (complete with zero changes),
+  --manifest (bounded path evidence), and for complete:
+  --status completed|partially_completed|blocked (default completed),
+  --remaining-path <rel-path> / --remaining-manifest (partially_completed,
+  or the v2 document's own remaining scope), --manual-reason (blocked,
+  or the v2 document's own manual reason).
 
 Exit codes: 0; 2 usage; 3 configuration; 4 rejected receipt (invalid
 evidence, unknown dispatch or run, unknown document version, status
@@ -403,7 +406,7 @@ conflict); 14 conflict (generation fence, state guards); 20 storage.
 Side effects: records the work receipt beside the dispatch lineage.
 
 Example:
-  agent-dispatch work begin --dispatch-id <id> --run-id run-1
+  agent-dispatch work complete --dispatch-id <id> --path index.md --path log.md
 
 Next safe command: agent-dispatch receipts list --kind work`,
 	"quarantine": `quarantine — held-path operator exits

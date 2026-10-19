@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/irootkernel/agent-dispatch/internal/adapters/hermeskanban"
@@ -405,6 +407,7 @@ func resolveSinkCtx(ctx context.Context, cfg *config.Config, routeID string, log
 			return nil, err
 		}
 		sink.Log, sink.TraceID = log, globalTraceID
+		sink.SetAgentDispatchCommand(resolveAgentDispatchExecutable(), cfg.SourcePath)
 		// HER-018: bind the activation-accepted capability fingerprint
 		// when the route is enabled, so the submit path re-proves the
 		// live executable identity before any side effect. A store that
@@ -483,6 +486,21 @@ func resolveSinkCtx(ctx context.Context, cfg *config.Config, routeID string, log
 		return sink, nil
 	}
 	return nil, fmt.Errorf("unknown target %q: no sink adapter exists and no fallback is permitted (DUR-008)", dest.Target)
+}
+
+func resolveAgentDispatchExecutable() string {
+	exe, err := os.Executable()
+	if err != nil || exe == "" {
+		return "agent-dispatch"
+	}
+	base := filepath.Base(exe)
+	if strings.HasSuffix(base, ".test") || strings.HasSuffix(base, ".test.exe") || strings.Contains(exe, "/go-build") {
+		return "agent-dispatch"
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil && resolved != "" {
+		return resolved
+	}
+	return exe
 }
 
 // backoffFromConfig maps the route's configured submission retry policy

@@ -191,6 +191,9 @@ type Service struct {
 	// Resolver enforces path containment against the resource root
 	// (SEC-002); nil restricts validation to the lexical rules.
 	Resolver *localfs.Resolver
+	// MaxHashBytes bounds on-disk file hashing for --path and
+	// --remaining-path (defaults to 64 MiB when zero).
+	MaxHashBytes int64
 	// FailureBudget is the route's configured consecutive-failure budget.
 	FailureBudget int
 	// OutsideScope reports whether a path is outside the route's
@@ -255,6 +258,20 @@ type CompleteInput struct {
 	// ManifestJSON is the raw manifest document: either the full
 	// work-receipt object or its bare changes array.
 	ManifestJSON string
+	// Paths are vault-relative paths changed by the run (--path). When
+	// provided, Service resolves and hashes each file on disk directly
+	// from s.Resolver without requiring ManifestJSON.
+	Paths []string
+	// RemainingPaths are vault-relative paths remaining for
+	// partially_completed runs (--remaining-path).
+	RemainingPaths []string
+	// NoChanges indicates the run completed with an empty change set
+	// (--no-changes).
+	NoChanges bool
+	// CompletionOnly permits completing or blocking a run without a
+	// prior `work begin` receipt, anchoring BegunAt to the dispatch
+	// intent's CreatedAt timestamp.
+	CompletionOnly bool
 	// Status is the outcome (E12-T3, FBK-009): completed (the default),
 	// partially_completed (FBK-010), or blocked (FBK-011). The failed
 	// outcome stays on `work fail`.
@@ -269,10 +286,11 @@ type CompleteInput struct {
 
 // FailInput is the `work fail` submission.
 type FailInput struct {
-	DispatchID  string
-	RunID       string
-	FailureCode string
-	Detail      string
+	DispatchID     string
+	RunID          string
+	FailureCode    string
+	Detail         string
+	CompletionOnly bool
 }
 
 // Result reports one accepted receipt.
@@ -349,6 +367,13 @@ func (s *Service) logEvent(event, dispatchID, runID string) {
 // pending reconciliation remains, exactly one latest-state follow-up is
 // scheduled atomically with the receipt update (CON-003).
 func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error) {
+	if in.RunID == "" && in.DispatchID != "" {
+		in.RunID = "run-" + in.DispatchID
+		in.CompletionOnly = true
+	}
+	if len(in.Paths) > 0 || len(in.RemainingPaths) > 0 || in.NoChanges {
+		in.CompletionOnly = true
+	}
 	// The outcome vocabulary is closed (FBK-009): completed is the
 	// default; partially_completed and blocked carry their own required
 	// members; failed stays on `work fail`. A v2 full document names its
@@ -371,16 +396,35 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 		s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: reasons})
 		return Result{}, &InvalidError{Reasons: reasons}
 	}
-	// A blocked run may have changed nothing: the empty manifest is the
-	// honest scope when no document was submitted (FBK-011).
-	manifestJSON := in.ManifestJSON
-	if manifestJSON == "" {
-		manifestJSON = "[]"
-	}
-	changes, resultRevision, document, manifestReasons := s.validateManifest(manifestJSON, in.DispatchID, in.RunID, intent.ResourceID, intent.ExternalRef)
-	if len(manifestReasons) > 0 {
-		s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: manifestReasons})
-		return Result{}, &InvalidError{Reasons: manifestReasons}
+	var changes []changeEntry
+	var resultRevision string
+	var document manifestDocument
+	var verifiedFacts []ports.ObservationChange
+	onDiskVerified := false
+	if len(in.Paths) > 0 {
+		var pathReasons []string
+		changes, verifiedFacts, pathReasons = s.resolveFlagPaths(in.Paths)
+		if len(pathReasons) > 0 {
+			s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: pathReasons})
+			return Result{}, &InvalidError{Reasons: pathReasons}
+		}
+		onDiskVerified = true
+	} else if in.NoChanges {
+		changes = []changeEntry{}
+		onDiskVerified = true
+	} else {
+		// A blocked run may have changed nothing: the empty manifest is the
+		// honest scope when no document was submitted (FBK-011).
+		manifestJSON := in.ManifestJSON
+		if manifestJSON == "" {
+			manifestJSON = "[]"
+		}
+		var manifestReasons []string
+		changes, resultRevision, document, manifestReasons = s.validateManifest(manifestJSON, in.DispatchID, in.RunID, intent.ResourceID, intent.ExternalRef)
+		if len(manifestReasons) > 0 {
+			s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: manifestReasons})
+			return Result{}, &InvalidError{Reasons: manifestReasons}
+		}
 	}
 	if in.ResultRevision != "" {
 		resultRevision = in.ResultRevision
@@ -462,15 +506,26 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 		}
 	}
 	// The begun receipt anchors the attribution window; a completion
-	// without one is rejected by the atomic update too, but the matcher
-	// needs its timestamp before any mutation.
+	// without one is rejected in two-phase mode, or anchored to the
+	// dispatch's creation timestamp in single-step completion-only mode.
 	begun, err := s.Store.LoadWorkReceipt(ctx, in.DispatchID, in.RunID)
 	if errors.Is(err, ports.ErrWorkReceiptNotFound) {
-		reason := fmt.Sprintf("run %s has no begun receipt for dispatch %s", boundEcho(in.RunID, idEchoBound), boundEcho(in.DispatchID, idEchoBound))
-		s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: []string{reason}})
-		return Result{}, &InvalidError{Reasons: []string{reason}}
-	}
-	if err != nil {
+		if !in.CompletionOnly {
+			reason := fmt.Sprintf("run %s has no begun receipt for dispatch %s", boundEcho(in.RunID, idEchoBound), boundEcho(in.DispatchID, idEchoBound))
+			s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: []string{reason}})
+			return Result{}, &InvalidError{Reasons: []string{reason}}
+		}
+		begunAt := intent.CreatedAt
+		if begunAt == "" {
+			begunAt = s.timestamp()
+		}
+		begun = ports.WorkReceiptView{
+			DispatchID: in.DispatchID,
+			RunID:      in.RunID,
+			Status:     StatusBegun,
+			BegunAt:    begunAt,
+		}
+	} else if err != nil {
 		return Result{}, ports.WrapStore(err)
 	}
 	// The blocked outcome (FBK-011): the receipt records its manual
@@ -484,8 +539,9 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 	// The partially_completed outcome (FBK-010): the remaining scope is
 	// required, bounded, and non-empty (an empty scope is the completed
 	// outcome — the operator is told so). The scope comes from
-	// --remaining-manifest or the v2 document's remaining_scope; both
-	// present with different content is an explicit conflict.
+	// --remaining-manifest / --remaining-path or the v2 document's
+	// remaining_scope; both present with different content is an explicit
+	// conflict.
 	var remainingScope []records.ChangeItem
 	// The v2 document's completed_scope is authoritative when present
 	// (E12 epic validation): persist it on the receipt row exactly as the
@@ -511,7 +567,14 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 	}
 	if status == StatusPartiallyComplete {
 		remainingEntries := document.RemainingScope
-		if strings.TrimSpace(in.RemainingManifestJSON) != "" {
+		if len(in.RemainingPaths) > 0 {
+			flagRemaining, _, remReasons := s.resolveFlagPaths(in.RemainingPaths)
+			if len(remReasons) > 0 {
+				s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: remReasons})
+				return Result{}, &InvalidError{Reasons: remReasons}
+			}
+			remainingEntries = flagRemaining
+		} else if strings.TrimSpace(in.RemainingManifestJSON) != "" {
 			flagRemaining, _, flagDoc, flagReasons := s.validateManifest(in.RemainingManifestJSON, in.DispatchID, in.RunID, intent.ResourceID, intent.ExternalRef)
 			if len(flagReasons) > 0 {
 				s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: flagReasons})
@@ -542,15 +605,18 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 	}
 	changesJSON, _ := json.Marshal(changes)
 	w := ports.WorkReceiptInput{
-		ReceiptID:       s.receiptID(in.DispatchID),
-		DispatchID:      in.DispatchID,
-		RunID:           in.RunID,
-		ResourceID:      intent.ResourceID,
-		Status:          status,
-		ResultRevision:  resultRevision,
-		ChangesJSON:     string(changesJSON),
-		SubmittedAt:     s.timestamp(),
-		ValidationState: "valid",
+		ReceiptID:         s.receiptID(in.DispatchID),
+		DispatchID:        in.DispatchID,
+		RunID:             in.RunID,
+		ResourceID:        intent.ResourceID,
+		Status:            status,
+		ResultRevision:    resultRevision,
+		ChangesJSON:       string(changesJSON),
+		SubmittedAt:       s.timestamp(),
+		ValidationState:   "valid",
+		BegunAt:           begun.BegunAt,
+		CompletionOnly:    in.CompletionOnly,
+		VerifiedPathFacts: verifiedFacts,
 		// The partial outcome's scopes persist beside the receipt
 		// (migration v14): the completed scope is the document's own when
 		// it carried one, else the manifest above; the remaining scope is
@@ -575,7 +641,7 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 	evidence := ReceiptEvidence{
 		ReceiptID: w.ReceiptID, DispatchID: in.DispatchID, RunID: in.RunID,
 		ResourceID: intent.ResourceID, BegunAt: begun.BegunAt, CompletedAt: w.SubmittedAt,
-		Changes: changes, OutsideScope: s.OutsideScope,
+		Changes: changes, OnDiskVerified: onDiskVerified, OutsideScope: s.OutsideScope,
 	}
 	factsUnavailable := false
 	if facts, ferr := s.Store.LoadPathFacts(ctx, intent.ResourceID); ferr == nil {
@@ -629,6 +695,10 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 // remaining failure budget decides follow-up versus operator resolution
 // (feedback-loop §7).
 func (s *Service) Fail(ctx context.Context, in FailInput) (Result, error) {
+	if in.RunID == "" && in.DispatchID != "" {
+		in.RunID = "run-" + in.DispatchID
+		in.CompletionOnly = true
+	}
 	var reasons []string
 	if !failureCodes[in.FailureCode] {
 		reasons = append(reasons, fmt.Sprintf("failure_code %q is outside the closed set (agent_error, canceled, timeout, environment_error)", in.FailureCode))
@@ -645,6 +715,10 @@ func (s *Service) Fail(ctx context.Context, in FailInput) (Result, error) {
 		s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: reasons})
 		return Result{}, &InvalidError{Reasons: reasons}
 	}
+	begunAt := intent.CreatedAt
+	if begunAt == "" {
+		begunAt = s.timestamp()
+	}
 	w := ports.WorkReceiptInput{
 		ReceiptID:       s.receiptID(in.DispatchID),
 		DispatchID:      in.DispatchID,
@@ -654,6 +728,8 @@ func (s *Service) Fail(ctx context.Context, in FailInput) (Result, error) {
 		FailureCode:     in.FailureCode,
 		SubmittedAt:     s.timestamp(),
 		ValidationState: "valid",
+		BegunAt:         begunAt,
+		CompletionOnly:  in.CompletionOnly,
 	}
 	budget, err := s.Store.FailureBudgetRemaining(ctx, intent.RouteID, s.FailureBudget)
 	if err != nil {
@@ -685,9 +761,17 @@ func (s *Service) Fail(ctx context.Context, in FailInput) (Result, error) {
 // change. Resolution is operator-only: a later `work complete`/`work
 // fail` for the same dispatch (a fresh run), or a rerun.
 func (s *Service) completeBlocked(ctx context.Context, intent ports.IntentSnapshot, snap state.RouteSnapshot, in CompleteInput) (Result, error) {
-	if _, err := s.Store.LoadWorkReceipt(ctx, in.DispatchID, in.RunID); errors.Is(err, ports.ErrWorkReceiptNotFound) {
-		s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: []string{fmt.Sprintf("run %s has no begun receipt for dispatch %s", in.RunID, in.DispatchID)}})
-		return Result{}, &InvalidError{Reasons: []string{fmt.Sprintf("run %s has no begun receipt for dispatch %s", in.RunID, in.DispatchID)}}
+	begun, err := s.Store.LoadWorkReceipt(ctx, in.DispatchID, in.RunID)
+	if errors.Is(err, ports.ErrWorkReceiptNotFound) {
+		if !in.CompletionOnly {
+			s.auditInvalid(ctx, in.DispatchID, in.RunID, &InvalidError{Reasons: []string{fmt.Sprintf("run %s has no begun receipt for dispatch %s", in.RunID, in.DispatchID)}})
+			return Result{}, &InvalidError{Reasons: []string{fmt.Sprintf("run %s has no begun receipt for dispatch %s", in.RunID, in.DispatchID)}}
+		}
+		begunAt := intent.CreatedAt
+		if begunAt == "" {
+			begunAt = s.timestamp()
+		}
+		begun = ports.WorkReceiptView{BegunAt: begunAt}
 	} else if err != nil {
 		return Result{}, ports.WrapStore(err)
 	}
@@ -699,7 +783,9 @@ func (s *Service) completeBlocked(ctx context.Context, intent ports.IntentSnapsh
 		Status:          StatusBlocked,
 		SubmittedAt:     s.timestamp(),
 		ValidationState: "valid",
+		BegunAt:         begun.BegunAt,
 		ManualReason:    strings.TrimSpace(in.ManualReason),
+		CompletionOnly:  in.CompletionOnly,
 	}
 	if err := s.Store.BlockWork(ctx, w); err != nil {
 		return Result{}, ports.WrapStore(err)
@@ -709,6 +795,80 @@ func (s *Service) completeBlocked(ctx context.Context, intent ports.IntentSnapsh
 		ReceiptID: w.ReceiptID, DispatchID: in.DispatchID, RunID: in.RunID,
 		Status: StatusBlocked, RouteState: string(snap.State), ManualIntervention: true,
 	}, nil
+}
+
+// resolveFlagPaths normalizes, deduplicates, checks containment, and
+// hashes vault-relative paths directly on disk for `--path` /
+// `--remaining-path`.
+func (s *Service) resolveFlagPaths(paths []string) ([]changeEntry, []ports.ObservationChange, []string) {
+	var reasons []string
+	var entries []changeEntry
+	var facts []ports.ObservationChange
+	seen := map[string]bool{}
+	maxHash := s.MaxHashBytes
+	if maxHash <= 0 {
+		maxHash = 64 << 20
+	}
+	for _, raw := range paths {
+		normalized, err := records.NormalizePath(raw)
+		if err != nil {
+			reasons = append(reasons, fmt.Sprintf("path %q is not a normalized relative path: %v", raw, err))
+			continue
+		}
+		if seen[normalized] {
+			continue
+		}
+		seen[normalized] = true
+		if s.Resolver == nil {
+			entries = append(entries, changeEntry{Path: normalized})
+			continue
+		}
+		if _, err := s.Resolver.Resolve(normalized); err != nil {
+			reasons = append(reasons, fmt.Sprintf("path %q fails containment: %v", normalized, err))
+			continue
+		}
+		f, _, err := s.Resolver.OpenRegular(normalized, maxHash)
+		if err != nil {
+			if errors.Is(err, localfs.ErrMissing) {
+				entries = append(entries, changeEntry{Path: normalized, AfterDigest: nil})
+				facts = append(facts, ports.ObservationChange{
+					Path:         normalized,
+					Operation:    "delete",
+					ExistsAfter:  false,
+					FileType:     "missing",
+					AfterDigest:  "",
+					DigestStatus: "unavailable",
+				})
+				continue
+			}
+			reasons = append(reasons, fmt.Sprintf("path %q cannot be hashed as a regular file: %v", normalized, err))
+			continue
+		}
+		digest, _, over, herr := records.SumBounded(f, maxHash)
+		_ = f.Close()
+		if herr != nil {
+			reasons = append(reasons, fmt.Sprintf("path %q hash failed: %v", normalized, herr))
+			continue
+		}
+		if over {
+			reasons = append(reasons, fmt.Sprintf("path %q exceeds max_hash_bytes %d", normalized, maxHash))
+			continue
+		}
+		d := string(digest)
+		entries = append(entries, changeEntry{Path: normalized, AfterDigest: &d})
+		facts = append(facts, ports.ObservationChange{
+			Path:         normalized,
+			Operation:    "modify",
+			ExistsAfter:  true,
+			FileType:     "regular",
+			AfterDigest:  d,
+			DigestStatus: "known",
+		})
+	}
+	if len(entries) > MaxChanges {
+		reasons = append(reasons, fmt.Sprintf("change set carries %d entries (limit %d)", len(entries), MaxChanges))
+	}
+	return entries, facts, reasons
 }
 
 // scopeOperation derives a scope item's change operation from its

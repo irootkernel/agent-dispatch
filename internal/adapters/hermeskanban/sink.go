@@ -76,12 +76,13 @@ func NewSink(targetID, executable, minimumVersion string, board string, limits P
 		renderOpts: RenderOptions{
 			MaxManifestBytes: maxManifestBytes,
 			// resource_mutex is consulted before --mutex-key is ever sent
-			// (E8-T3, M-6): a target that does not honor the flag never
-			// receives it. The default is the frozen 0.20.5 runtime-
-			// verified interface; the CLI replaces it with the fresh
-			// per-executable probe truth through SetResourceMutexSupported
-			// (E11-T2) whenever the capability record is current.
-			ResourceMutexSupported: true,
+			// (E8-T3, M-6; HER-019, HER-021): a target that does not
+			// honor the flag never receives it. The floor default is
+			// agent-dispatch-group-enforced (false); the CLI enables the
+			// complementary target mutex through SetResourceMutexSupported
+			// (E11-T2, E15-T2) only when fresh per-executable capability
+			// evidence certifies agent-dispatch-group-plus-target-mutex.
+			ResourceMutexSupported: false,
 		},
 		targetID: targetID,
 	}, nil

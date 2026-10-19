@@ -405,31 +405,16 @@ func resolveSinkCtx(ctx context.Context, cfg *config.Config, routeID string, log
 			return nil, err
 		}
 		sink.Log, sink.TraceID = log, globalTraceID
-		// E15-T2 (HER-020): the fresh per-executable capability record
-		// certifies one effective serialization mode and owns the
-		// resource-mutex posture — the renderer sends the effective
-		// serialization group as the complementary target mutex exactly
-		// in agent-dispatch-group-plus-target-mutex mode and suppresses
-		// the flag otherwise (the normal 0.20.5 group-enforced posture,
-		// never a failure). A missing or stale record keeps the
-		// frozen-interface default; the submit path's fingerprint
-		// re-proof still blocks a changed executable before any side
-		// effect, and revalidation cannot change or bypass the certified
-		// mode because the mode is derived from the same evidence the
-		// fingerprint binds.
-		if record, rerr := hermeskanban.LoadCapabilityRecord(capabilityCachePath(dest.Target)); rerr == nil {
-			if digest, derr := hermeskanban.ExecutableDigest(t.Executable); derr == nil && record.StaleReasonForProfile(t.Executable, digest, "", "") == "" {
-				sink.SetResourceMutexSupported(record.EffectiveSerializationMode() == hermeskanban.SerializationModeGroupPlusTargetMutex)
-			}
-		}
 		// HER-018: bind the activation-accepted capability fingerprint
 		// when the route is enabled, so the submit path re-proves the
 		// live executable identity before any side effect. A store that
 		// cannot be opened here leaves the eligibility-only gate; the
 		// staleness machinery re-asserts the acknowledgement anyway.
+		var boundFingerprint string
 		stateDir := resolveStateDirOverride(cfg.Instance.StateDir)
 		if store, serr := sqlite.OpenContext(ctx, filepath.Join(stateDir, StateDBName)); serr == nil {
 			if snap, lerr := store.LoadRouteState(ctx, routeID); lerr == nil && snap.CapabilityFingerprint != "" {
+				boundFingerprint = snap.CapabilityFingerprint
 				sink.BindCapabilityFingerprint(snap.CapabilityFingerprint)
 			} else if lerr != nil && log != nil {
 				log.Warn(observability.EventCapabilityBindingUnavailable, observability.Correlation{
@@ -441,6 +426,37 @@ func resolveSinkCtx(ctx context.Context, cfg *config.Config, routeID string, log
 			log.Warn(observability.EventCapabilityBindingUnavailable, observability.Correlation{
 				TraceID: globalTraceID, RouteID: routeID, TargetID: dest.Target,
 			}, "the activation-bound capability fingerprint could not be loaded; the submit path degrades to the eligibility-only gate until the store is readable", nil)
+		}
+		// E15-T2 (HER-020, HER-021): the fresh per-executable capability
+		// record certifies one effective serialization mode and owns the
+		// resource-mutex posture — the renderer sends the effective
+		// serialization group as the complementary target mutex exactly
+		// in agent-dispatch-group-plus-target-mutex mode and suppresses
+		// the flag otherwise (the normal 0.20.5+ group-enforced posture,
+		// never a failure). A missing, stale, or overwritten record for
+		// another executable is never used as evidence for t.Executable;
+		// when an activation-bound route's cached record is missing or
+		// stale, re-probe t.Executable so the cache and renderer reflect
+		// the current executable's actual surface.
+		cachePath := capabilityCachePath(dest.Target)
+		var certified *hermeskanban.CapabilityRecord
+		if record, rerr := hermeskanban.LoadCapabilityRecord(cachePath); rerr == nil {
+			if digest, derr := hermeskanban.ExecutableDigest(t.Executable); derr == nil && record.StaleReasonForProfile(t.Executable, digest, "", "") == "" {
+				if boundFingerprint == "" || record.Fingerprint == boundFingerprint {
+					certified = record
+				}
+			}
+		}
+		if certified == nil && boundFingerprint != "" {
+			if prober, perr := hermeskanban.NewProber(dest.Target, t.Executable, t.MinimumVersion, t.Board, dest.Profile, limits); perr == nil {
+				if fresh, ferr := prober.Probe(ctx); ferr == nil && fresh.Fingerprint == boundFingerprint {
+					_ = hermeskanban.WriteCapabilityRecord(fresh, cachePath)
+					certified = fresh
+				}
+			}
+		}
+		if certified != nil {
+			sink.SetResourceMutexSupported(certified.EffectiveSerializationMode() == hermeskanban.SerializationModeGroupPlusTargetMutex)
 		}
 		if _, err := sink.Probe(ctx); err != nil {
 			return nil, fmt.Errorf("target %s: %w", dest.Target, err)

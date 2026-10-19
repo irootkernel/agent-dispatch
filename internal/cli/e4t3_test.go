@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/irootkernel/agent-dispatch/internal/adapters/hermeskanban"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/sqlite"
 	"github.com/irootkernel/agent-dispatch/internal/adapters/watchman"
 	"github.com/irootkernel/agent-dispatch/internal/config"
@@ -70,6 +71,11 @@ func e4t3RegisterRoute(t *testing.T, configPath string) {
 func e4t3Fixture(t *testing.T) (configPath, vault string) {
 	t.Helper()
 	dir := t.TempDir()
+	prevCacheDir := testCapabilityCacheDir
+	testCapabilityCacheDir = filepath.Join(dir, "capcache")
+	t.Cleanup(func() {
+		testCapabilityCacheDir = prevCacheDir
+	})
 	vault = filepath.Join(dir, "vault")
 	if err := os.MkdirAll(filepath.Join(vault, "Inbox"), 0o755); err != nil {
 		t.Fatal(err)
@@ -80,6 +86,36 @@ func e4t3Fixture(t *testing.T) (configPath, vault string) {
 	stateDir := filepath.Join(dir, "state")
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		t.Fatal(err)
+	}
+	bin := stubhermes.Write(t)
+	if digest, err := hermeskanban.ExecutableDigest(bin); err == nil {
+		skills := []string{"llm-wiki", "obsidian-cli"}
+		rec := &hermeskanban.CapabilityRecord{
+			SchemaVersion:     hermeskanban.CapabilityRecordSchema,
+			Contract:          hermeskanban.ProbeContractVersion,
+			ProbedAt:          "2026-08-20T00:00:00Z",
+			ExecutablePath:    bin,
+			ExecutableDigest:  digest,
+			HermesVersion:     "0.20.5",
+			Profile:           "wiki-maintainer",
+			EnabledSkills:     &skills,
+			SerializationMode: hermeskanban.SerializationModeGroupPlusTargetMutex,
+			Shapes: hermeskanban.ProbeShapes{
+				Version:       hermeskanban.ProbeShape{Ran: true, Passed: true, Detail: "0.20.5"},
+				AssigneesJSON: hermeskanban.ProbeShape{Ran: true, Passed: true, Detail: "2 assignees"},
+				ListJSON:      hermeskanban.ProbeShape{Ran: true, Passed: true, Detail: "0 tasks"},
+				CreateSurface: hermeskanban.ProbeShape{Ran: true, Passed: true, Detail: "required create flags present"},
+				SkillTable:    hermeskanban.ProbeShape{Ran: true, Passed: true, Detail: "2 enabled skills"},
+			},
+			Fingerprint: hermeskanban.DeriveFingerprint(
+				hermeskanban.CapabilityRecordSchema,
+				hermeskanban.ProbeContractVersion,
+				bin,
+				digest,
+				"0.20.5",
+			),
+		}
+		_ = hermeskanban.WriteCapabilityRecord(rec, capabilityCachePath("hermes-main"))
 	}
 	cfg := `version: 1
 instance:
@@ -97,7 +133,7 @@ hermes_targets:
     board: agent-dispatch-test
     minimum_version: 0.20.5
     compatibility: capability_probe
-    executable: ` + stubhermes.Write(t) + `
+    executable: ` + bin + `
     submit_timeout: 30s
     lookup_timeout: 30s
     environment_allowlist: [PATH, HOME]

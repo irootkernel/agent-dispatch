@@ -2,6 +2,8 @@
 
 Recorded 2026-09-08 from the E18 delivery (twice in one day).
 
+**Status:** Resolved 2026-10-19.
+
 **Affected authority.** `internal/cli/hermes_cmds.go` derives the
 capability cache path from the platform default (the user's real
 `~/.config/agent-dispatch/`), and `TestG9AC905...` writes
@@ -25,3 +27,18 @@ overridable (for example a test-scoped `AGENT_DISPATCH_CONFIG_DIR` or a
 never touch the real user configuration; pick it up with the next
 roadmap task that touches the hermes command wiring or test hermeticity.
 Until then, run this repository's suites only through `make`.
+
+**Resolution: 2026-10-19.** `capabilityCachePath` in
+`internal/cli/hermes_cmds.go` now exposes a test-scoped
+`testCapabilityCacheDir` seam, wired in `TestMain`
+(`internal/cli/e18t1_test.go`) and per-test in `e4t3Fixture`
+(`internal/cli/e4t3_test.go`), so `go test ./internal/cli/...` never
+writes capability records into the operator's real
+`~/.config/agent-dispatch/` even when invoked directly outside `make`.
+In addition, `NewSink` in `internal/adapters/hermeskanban/sink.go`
+defaults `ResourceMutexSupported` to `false`
+(`agent-dispatch-group-enforced`, HER-019/HER-021), and `resolveSinkCtx`
+in `internal/cli/state.go` rejects stale or foreign capability records
+and re-probes activation-bound targets when the cache is missing or
+stale. `TestE15T2SubmitIgnoresOverwrittenCapabilityCacheAndHeals` in
+`internal/cli/e15t2_test.go` covers the overwritten-cache regression.

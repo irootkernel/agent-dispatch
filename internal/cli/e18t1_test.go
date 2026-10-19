@@ -456,5 +456,21 @@ func TestMain(m *testing.M) {
 	if len(os.Args) > 1 && os.Args[1] == "dispatch" {
 		os.Exit(0)
 	}
-	os.Exit(m.Run())
+	testStartupHome, _ = os.UserHomeDir()
+	testStartupXDGConfig = os.Getenv("XDG_CONFIG_HOME")
+	testRoot, err := os.MkdirTemp("", "agent-dispatch-cli-test-*")
+	if err == nil {
+		capCacheDir := filepath.Join(testRoot, "capcache")
+		hermesHome := filepath.Join(testRoot, "hermes")
+		_ = os.MkdirAll(capCacheDir, 0o700)
+		_ = os.MkdirAll(hermesHome, 0o700)
+		testCapabilityCacheDir = capCacheDir
+		_ = os.Setenv("HERMES_HOME", hermesHome)
+		_ = os.Setenv("HERMES_KANBAN_HOME", hermesHome)
+	}
+	code := m.Run()
+	if testRoot != "" {
+		_ = os.RemoveAll(testRoot)
+	}
+	os.Exit(code)
 }

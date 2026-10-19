@@ -347,3 +347,109 @@ func TestE15T2SetMinimumVersionRepairsLegacyFloor(t *testing.T) {
 		t.Fatal("a refused repair must leave the invalid original untouched")
 	}
 }
+
+func TestE15T2SubmitIgnoresOverwrittenCapabilityCacheAndHeals(t *testing.T) {
+	// Regression for handoff 0fcef551-1e00-4ec8-94d4-aa06f1782081
+	// (HER-019, HER-020, HER-021): when a target executable lacks
+	// --mutex-key (such as Hermes v0.22.2, which rejects --mutex-key at
+	// exit 2) and the capability cache file on disk was overwritten by a
+	// foreign fixture's agent-dispatch-group-plus-target-mutex record,
+	// the submit path must never use the overwritten record as evidence
+	// for the live executable, must suppress --mutex-key, and must
+	// refresh the cache back to agent-dispatch-group-enforced.
+	bin := stubhermes.WriteVersioned(t, "Hermes Agent v0.22.2 (2026.9.24)")
+	raw, err := os.ReadFile(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := strings.Replace(string(raw), " [--mutex-key KEY]", "", 1)
+	if script == string(raw) {
+		t.Fatal("the stub's create help does not carry --mutex-key to strip")
+	}
+	rejectMutex := "  create)\n" +
+		"    printf '%s\\n' \"$*\" >> \"$DIR/argv-create\"\n" +
+		"    for arg in \"$@\"; do\n" +
+		"      if [ \"$arg\" = \"--mutex-key\" ]; then\n" +
+		"        echo 'hermes: error: unrecognized arguments: --mutex-key' >&2\n" +
+		"        exit 2\n" +
+		"      fi\n" +
+		"    done\n"
+	script = strings.Replace(script, "  create)\n", rejectMutex, 1)
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	configPath := e15t2FloorConfig(t, bin, "0.20.5")
+	cfgRaw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, bytes.Replace(cfgRaw, []byte("enabled: false"), []byte("enabled: true"), 1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setPlanEnv(t, cfg.Resources["vault-main"].Root, false)
+	t.Setenv("WATCHMAN_TRIGGER", "agent-dispatch.wiki.e15t2")
+	e4t3RegisterRoute(t, configPath)
+	revision, _ := config.RouteRevision(cfg, "wiki")
+	var out, errb bytes.Buffer
+	if code := Run([]string{"route", "enable", "--config", configPath, "--route", "wiki", "--acknowledge-production-gate", revision, "--yes"}, &out, &errb); code != 0 {
+		t.Fatalf("route enable: %s", errb.String())
+	}
+
+	// Pollute the capability cache with a foreign executable's
+	// group-plus-target-mutex record.
+	foreignBin := stubhermes.Write(t)
+	foreignProber, err := hermeskanban.NewProber("hermes-main", foreignBin, "0.20.5", "agent-dispatch-test", "wiki-maintainer", hermeskanban.ProcessLimits{SubmitTimeout: 30e9, LookupTimeout: 30e9})
+	if err != nil {
+		t.Fatal(err)
+	}
+	foreignRecord, err := foreignProber.Probe(requestCtx())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if foreignRecord.EffectiveSerializationMode() != hermeskanban.SerializationModeGroupPlusTargetMutex {
+		t.Fatalf("foreign fixture must certify group-plus-target-mutex, got %s", foreignRecord.EffectiveSerializationMode())
+	}
+	cachePath := capabilityCachePath("hermes-main")
+	if err := hermeskanban.WriteCapabilityRecord(foreignRecord, cachePath); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(cfg.Resources["vault-main"].Root, "Inbox"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg.Resources["vault-main"].Root, "Inbox", "new.md"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	errb.Reset()
+	var code int
+	withStdin(t, `[{"name":"Inbox/new.md","exists":true,"new":true,"size":5,"type":"f"}]`, func() {
+		code = Run([]string{"dispatch", "--route", "wiki", "--config", configPath, "--input", "watchman"}, &out, &errb)
+	})
+	if code != 0 {
+		t.Fatalf("dispatch exit %d: %s", code, errb.String())
+	}
+	res := decodeEnvelope(t, &out)
+	if res["state"] != "accepted" || res["submitted"] != true {
+		t.Fatalf("dispatch must be accepted without sending --mutex-key, got %v (stderr: %s)", res, errb.String())
+	}
+	argvLog, err := os.ReadFile(filepath.Join(filepath.Dir(bin), "state", "argv-create"))
+	if err != nil {
+		t.Fatalf("create argv log missing: %v", err)
+	}
+	if strings.Contains(string(argvLog), "--mutex-key") {
+		t.Fatalf("renderer must never send --mutex-key to a target without it, got: %s", argvLog)
+	}
+	healed, err := hermeskanban.LoadCapabilityRecord(cachePath)
+	if err != nil {
+		t.Fatalf("healed capability record: %v", err)
+	}
+	if healed.ExecutablePath != bin || healed.EffectiveSerializationMode() != hermeskanban.SerializationModeGroupEnforced {
+		t.Fatalf("cache must be healed to the live executable's group-enforced record, got path=%q mode=%q", healed.ExecutablePath, healed.EffectiveSerializationMode())
+	}
+}

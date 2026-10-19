@@ -74,9 +74,24 @@ func hermesTargetSelection(command string, args []string, stderr io.Writer) (*co
 	return cfg, targetID, &flags, refresh, 0
 }
 
+// testCapabilityCacheDir, when non-empty, redirects capabilityCachePath
+// away from the operator's real home directory unless a test explicitly
+// overrides HOME or XDG_CONFIG_HOME (DF-001).
+var (
+	testCapabilityCacheDir string
+	testStartupHome        string
+	testStartupXDGConfig   string
+)
+
 // capabilityCachePath resolves the per-target evidence cache path:
 // the platform capability directory keyed by target ID.
 func capabilityCachePath(targetID string) string {
+	if testCapabilityCacheDir != "" {
+		home, _ := os.UserHomeDir()
+		if home == testStartupHome && os.Getenv("XDG_CONFIG_HOME") == testStartupXDGConfig {
+			return filepath.Join(testCapabilityCacheDir, "hermes-capability-"+targetID+".json")
+		}
+	}
 	return filepath.Join(filepath.Dir(platformpaths.DefaultCapabilityReportPath()), "hermes-capability-"+targetID+".json")
 }
 

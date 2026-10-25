@@ -20,6 +20,10 @@ This file records concise shipped outcomes and pending changes.
 
 ### Fixed
 
+- Generate work receipt IDs accepted by signed publication, preserving UTC
+  timestamp precision and the random suffix.
+- Adopt verified remote membership on a node's first `sync reconcile` when its
+  local membership ref is absent, without a manual Git fetch.
 - Submit due `FOLLOWUP_READY` and `retry_wait` dispatch intents automatically
   during post-commit `after-command` passes, `schedule run` recovery, and
   `merge_pending` Watchman arrivals so follow-up generations do not remain

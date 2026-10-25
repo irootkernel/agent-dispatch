@@ -89,7 +89,7 @@ func reconcileConfiguredSync(ctx context.Context, cfg *config.Config, store *sql
 		return blockReconcileContext(ctx, stdout, stderr, store, s.GroupID, revision, "trust_failure", "membership_stale", err)
 	}
 	localMembership, err := client.ResolveRef(ctx, s.MembershipRef)
-	if err != nil {
+	if err != nil && !errors.Is(err, gitlocal.ErrMissingRef) {
 		return blockReconcileContext(ctx, stdout, stderr, store, s.GroupID, revision, "trust_failure", "membership_stale", err)
 	}
 	remoteHistory, err := syncmembership.LoadHistory(ctx, client, remoteMembership, membershipBinding(cfg, s), s.Bounds.HistoryCommits)
@@ -104,12 +104,17 @@ func reconcileConfiguredSync(ctx context.Context, cfg *config.Config, store *sql
 		if ctx.Value(managementExecutionKey{}) != nil {
 			return reconcileEnvelopeCode(stdout, "blocked", "membership_adoption_requires_operator", map[string]any{"side_effects": []string{}}, 14)
 		}
-		relation, compareErr := client.Compare(ctx, localMembership, remoteMembership)
-		if compareErr != nil || relation != gitlocal.RelationBehind {
-			if compareErr == nil {
-				compareErr = errors.New("approved remote membership is not a signed fast-forward of the locally adopted revision")
+		// A first participant has no adopted revision to compare. The verified
+		// history above still binds its bootstrap to the configured trust anchor;
+		// UpdateRefExpected below creates the ref only while it remains absent.
+		if localMembership != "" {
+			relation, compareErr := client.Compare(ctx, localMembership, remoteMembership)
+			if compareErr != nil || relation != gitlocal.RelationBehind {
+				if compareErr == nil {
+					compareErr = errors.New("approved remote membership is not a signed fast-forward of the locally adopted revision")
+				}
+				return blockReconcileContext(ctx, stdout, stderr, store, s.GroupID, revision, "trust_failure", "membership_stale", compareErr)
 			}
-			return blockReconcileContext(ctx, stdout, stderr, store, s.GroupID, revision, "trust_failure", "membership_stale", compareErr)
 		}
 		if remoteMembershipRecord.Mode == "blocked_emergency" {
 			control, err = store.ReconcileAdoptedMembership(ctx, s.GroupID, remoteMembershipRecord.Mode, remoteMembership, revision, time.Now().UTC().Format(time.RFC3339Nano))

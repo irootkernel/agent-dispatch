@@ -1425,7 +1425,7 @@ func (s *Service) auditInvalid(ctx context.Context, dispatchID, runID string, in
 }
 
 func (s *Service) receiptID(dispatchID string) string {
-	return "rcpt-work-" + dispatchID + "-" + s.Now().UTC().Format("20060102T150405.000000000") + "-" + ids.RandomSuffix()
+	return "rcpt-work-" + dispatchID + "-" + ids.CompactTimestamp(s.Now().UTC().Format("20060102T150405.000000000")) + "-" + ids.RandomSuffix()
 }
 
 func (s *Service) timestamp() string {

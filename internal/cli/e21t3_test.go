@@ -317,6 +317,18 @@ exec %s "$@"
 	if err != nil {
 		t.Fatal(err)
 	}
+	for _, id := range publicationRecord.ReceiptIDs {
+		var status, validation string
+		if err := store.QueryRow(`SELECT status,validation_state FROM work_receipts WHERE receipt_id=?`, id).Scan(&status, &validation); err != nil || status != "completed" || validation != "valid" {
+			t.Fatalf("publication must cite a real completed work receipt: %q %s %s %v", id, status, validation, err)
+		}
+	}
+	e9Validate(t, e9SchemaSet(t), "sync-publication.schema.json", "generated work receipt publication", json.RawMessage(publicationPayload))
+	if !t.Run("peer imports generated work receipts", func(t *testing.T) {
+		assertWorkReceiptPublicationPeerImport(t, cfg, configPath, repo, realGit, publicationRecord, published.Result.CandidateCommit)
+	}) {
+		return
+	}
 	if _, err := store.Exec(`DELETE FROM sync_jobs WHERE kind='delivery'`); err != nil {
 		t.Fatal(err)
 	}
@@ -960,23 +972,27 @@ func seedE21T3Eligibility(t *testing.T, cfg *config.Config, configPath string, c
 		if err := store.SaveDecision(nil, sqlite.DecisionRecord{DecisionID: decisionID, RouteID: routeID, RouteRevision: routeRevision, PolicyRevision: config.PolicyRevision(route), GenerationLineageJSON: `{"generation":1}`, Disposition: "dispatch", Classification: "normal", ReasonCodesJSON: "[]", CreatedAt: "2026-09-21T00:00:00Z", Actor: "test"}); err != nil {
 			t.Fatal(err)
 		}
-		if err := store.SaveIntent(nil, sqlite.IntentRecord{DispatchID: dispatchID, DecisionID: decisionID, RouteID: routeID, RouteRevision: routeRevision, TargetID: route.Destinations[0].Target, TargetType: "hermes-kanban", TargetScope: route.Destinations[0].ID, ResourceID: cfg.Sync.Resource, Generation: 1, IdempotencyKey: "idem-" + routeID, ContentFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", ManifestDigest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", RequestVersion: "v1", RequestJSON: "{}", CreatedAt: "2026-09-21T00:00:00Z"}); err != nil {
+		if err := store.SaveIntent(nil, sqlite.IntentRecord{DispatchID: dispatchID, DecisionID: decisionID, RouteID: routeID, RouteRevision: routeRevision, TargetID: route.Destinations[0].Target, TargetType: "hermes-kanban", TargetScope: route.Destinations[0].ID, ResourceID: cfg.Sync.Resource, Generation: 1, IdempotencyKey: "idem-" + routeID, ContentFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", ManifestDigest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", RequestVersion: "agent-dispatch.hermes-task/v1", RequestJSON: "{}", CreatedAt: "2026-09-21T00:00:00Z"}); err != nil {
 			t.Fatal(err)
 		}
-		if err := store.SaveWorkReceipt(nil, sqlite.WorkReceiptRecord{ReceiptID: "receipt-" + routeID, DispatchID: dispatchID, RunID: "run-" + routeID, ResourceID: cfg.Sync.Resource, Status: "completed", ChangesJSON: "[]", CompletedScopeJSON: "[]", RemainingScopeJSON: "[]", SubmittedAt: "2026-09-21T00:01:00Z", ValidationState: "valid", ValidationReasonsJSON: "[]", BegunAt: "2026-09-21T00:00:00Z"}); err != nil {
+		if _, err := store.Exec(`UPDATE dispatch_intents SET state='accepted' WHERE dispatch_id=?`, dispatchID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.Exec(`UPDATE destination_lane_state SET lane_state='ACTIVE_CLEAN' WHERE route_id=?`, routeID); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := store.Exec(`UPDATE route_runtime_state SET route_state='IDLE',active_dispatch_id=NULL,pending_reconcile=0 WHERE route_id=?`, routeID); err != nil {
 			t.Fatal(err)
 		}
-	}
-	sum := sha256.Sum256(content)
-	digest := "sha256:" + hex.EncodeToString(sum[:])
-	if _, err := store.Exec(`UPDATE resources SET observation_revision=1 WHERE resource_id=?`, cfg.Sync.Resource); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.Exec(`INSERT INTO path_facts(resource_id,path,digest,"exists",observed_at) VALUES(?,?,?,1,'2026-09-21T00:01:00Z')`, cfg.Sync.Resource, "note.md", digest); err != nil {
-		t.Fatal(err)
+		for _, args := range [][]string{
+			{"work", "begin", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-" + routeID},
+			{"work", "complete", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "run-" + routeID, "--path", "note.md"},
+		} {
+			var stdout, stderr bytes.Buffer
+			if code := Run(args, &stdout, &stderr); code != 0 {
+				t.Fatalf("maintenance receipt: %v exit=%d out=%s err=%s", args, code, stdout.String(), stderr.String())
+			}
+		}
 	}
 }
 

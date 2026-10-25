@@ -238,6 +238,9 @@ establish fresh convergence.
 Begin with the [manual sync runbook](docs/ops/runbook.md#3a-normal-manual-sync-flow)
 for Git refs and remotes, signing keys, reviewed membership and checkpoints,
 private Tailscale HTTPS endpoints, and explicit configuration acknowledgement.
+After the first node applies the reviewed membership bootstrap, the second
+node's `sync reconcile` verifies and adopts that membership. A second pass
+imports content; the managed peer worker performs it automatically.
 The [managed-service runbook](docs/ops/runbook.md#3b-managed-sync-service)
 covers the peer listener and native service controls. Inspect capabilities
 without enabling sync:

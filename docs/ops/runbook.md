@@ -69,6 +69,14 @@ not require a cooperative-import acknowledgement, but live-tree import does.
 The repository worktree must have the configured `content_ref` checked out on
 both nodes; a detached or different `HEAD` fails closed.
 
+Apply the reviewed membership bootstrap once. On the other node, with the
+same remote, group, content ref, administrator trust anchor, and configured
+members, run `sync reconcile --group <group-id>`. It verifies the signed
+membership history and creates the missing local membership ref, reporting
+`membership_adopted`. Run reconcile again for content import; the `sync serve`
+worker performs that second pass automatically. Existing trust or conflict
+holds still require their documented recovery.
+
 After both nodes have reconciled, run
 `sync verify --group <group-id> --output json` on either node. Require
 `result: complete` and two collected nodes before

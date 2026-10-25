@@ -38,6 +38,7 @@ Keep the same explicit `--config` path for diagnosis and resolution.
 | `sync reconcile` reports `failed` with `publication_recovery_precondition` or `publication_recovery_error` | an already-signed publication could not complete recovery because of a publisher precondition or store error; no new history hold was created | inspect the publication journal, control, and reported error; correct that cause, then rerun reconcile | treat exit 14 alone as proof of divergent history or clear the unresolved job |
 | `sync reconcile` blocks after a configured remote ref disappears or is rewritten | approved content or membership history is no longer a safe fast-forward | preserve both histories, restore the approved ref or prepare the applicable reviewed administrator checkpoint, then reconcile | force-fetch, reset, or silently adopt the replacement history |
 | `pre_signature_publications_pending` is nonzero | a publication has no live publisher claim and still needs signing; the service cannot resolve its key | inspect the oldest time and unresolved logical identity, then re-enter explicit `sync publish` under the reviewed configuration; escalate a stranded older identity for operator review | ask the service to sign or remove the unresolved row by hand |
+| `sync publish` reports `sync_trust_failed` with `invalid receipt identity set` | an older binary generated a completed receipt ID containing an uppercase `T` and a decimal point | follow [publication receipt recovery](#publication-receipt-recovery) to create fresh maintenance evidence with the corrected binary | rename stored receipt IDs, edit SQLite, or relax the frozen publication schema |
 | `sync reconcile` exits 14 with `blocked` | divergent history, live protected claim, or missing exact checkpoint; a `failed` result at 14 follows the publication-recovery row above | resolve with ordinary Git, then use reviewed `sync checkpoint plan`, `sync checkpoint apply`, and reconcile | merge, rebase, force-push, or clear the control row by hand |
 | `sync reconcile` or `sync resume` exits 30 with `membership_mode: blocked_emergency` | an emergency membership is the adopted posture; resume has re-armed `membership_emergency`, or reconcile is reporting a blocked emergency after any stronger hold was resolved | review and adopt a normal `sync membership plan` / `apply` replacement; an exact checkpoint may resolve a stronger conflict, trust, or recovery hold but preserves the emergency posture | clear the control row by hand or assume a checkpoint cleared emergency membership |
 | `sync reconcile` exits 30 with `membership_adoption_incomplete` / `membership_emergency` | emergency posture was durably armed but the local membership ref did not move | repair the reported local ref precondition and rerun `sync reconcile`; then adopt a reviewed normal membership replacement | use a content checkpoint or clear either posture or ref by hand |
@@ -47,6 +48,22 @@ Keep the same explicit `--config` path for diagnosis and resolution.
 | `sync reconcile`, `sync publish`, or checkpoint recovery exits 30 with `recovery_required` or `trust_failure` | an earlier protected effect or trust failure remains unresolved; remote-move recording preserves the stronger hold and any signed candidate | inspect the import journal and exact Git/file state, then after review use checkpoint kind `history_bound_exhausted`; the verified checkpoint may linearly cover and retire or complete an older stored import plan | classify the hold as a signature failure, retry the publication through it, use `conflict_resolution`, or clear the control row by hand |
 | `sync reconcile` exits 13 with `uncertain` and `import_state: applying`, `recovering`, or `uncertain` | file, index, ref, and SQLite effects cannot yet be proven complete | stop participating writers, preserve the import journal and both Git/file states, then rerun only after inspection or prepare an administrator checkpoint | infer success from equal bytes or lease expiry alone |
 | `sync publish` loses its approved fast-forward | another signed child moved the remote from the same base | preserve both signed commits, resolve ordinary Git history, then use reviewed `sync checkpoint plan --kind conflict_resolution`, `sync checkpoint apply`, and reconcile | retry with force, merge, rebase, or discard either signed history |
+
+## Publication Receipt Recovery
+
+The v0.3.0 fix generates new work receipt IDs within the existing publication
+format. It preserves previously stored receipts and signed history. An older
+receipt containing `T` and `.` still cannot enter a v1 publication.
+
+After upgrading, make an intended Markdown edit on each affected enabled route
+and let its new maintenance generation begin and complete with the corrected binary.
+Use `work complete --path <relative-path>` for the maintained files so their
+current digests are recorded. Wait for follow-up work to finish and require
+the routes to be `IDLE`, with path facts matching the governed Markdown set.
+Then retry `sync publish` with the current configuration revision and reconcile
+the peer. Keep the old receipts for inspection; completed work cannot be
+reopened by retrying its terminal run. A control hold created by an earlier
+reconcile failure still needs its own reviewed recovery above.
 
 ## Recovery Principles
 

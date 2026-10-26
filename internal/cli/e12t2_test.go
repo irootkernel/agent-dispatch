@@ -358,9 +358,19 @@ func TestE12T2DestinationEditPausesSubmissionUntilReacknowledged(t *testing.T) {
 func e12t2ConditionedFixture(t *testing.T) (string, string) {
 	t.Helper()
 	configPath, vault := e4t3Fixture(t)
-	block := "      - id: alpha\n        target: hermes-main\n        profile: wiki-maintainer\n        skills: [llm-wiki]\n        workstream: indexing\n        execution_hints:\n          max_runtime: 30m\n          max_attempts: 2\n        conditions:\n          path_include: [\"alpha/**\"]\n" +
-		"      - id: beta\n        target: hermes-main\n        profile: wiki-maintainer\n        skills: [llm-wiki]\n        workstream: review\n        execution_hints:\n          max_runtime: 30m\n          max_attempts: 2\n        conditions:\n          path_include: [\"beta/**\"]"
+	block := "      - id: alpha\n        target: hermes-main\n        profile: wiki-maintainer\n        skills: [llm-wiki]\n        workstream: indexing\n        serialization_group: fixture-alpha\n        execution_hints:\n          max_runtime: 30m\n          max_attempts: 2\n        conditions:\n          path_include: [\"alpha/**\"]\n" +
+		"      - id: beta\n        target: hermes-main\n        profile: wiki-maintainer\n        skills: [llm-wiki]\n        workstream: review\n        serialization_group: fixture-beta\n        execution_hints:\n          max_runtime: 30m\n          max_attempts: 2\n        conditions:\n          path_include: [\"beta/**\"]"
 	twoDestinationBlockFixture(t, configPath, block)
+	// Independent conditioned lanes need distinct groups and the explicit
+	// cross-group acknowledgement while testing CON-008.
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw = bytes.Replace(raw, []byte("    fanout_mode: all\n"), []byte("    allow_cross_group_concurrency: true\n    fanout_mode: all\n"), 1)
+	if err := os.WriteFile(configPath, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	return configPath, vault
 }
 

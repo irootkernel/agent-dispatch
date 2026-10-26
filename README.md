@@ -25,7 +25,7 @@ is long-lived and has separate managed launchd and systemd controls.
 ## Requirements
 
 - **Supported platforms** are `darwin/arm64`, `linux/amd64`, and `linux/arm64`
-  ([D-029](docs/specs/decision-log.md)). The v0.2.0 release provides binaries
+  ([D-029](docs/specs/decision-log.md)). Release builds provide binaries
   for all three platform and architecture pairs.
 - Watchman, and Hermes **0.20.5 or newer** with the public Kanban interface.
   Version eligibility is checked separately from the capabilities of your
@@ -46,9 +46,9 @@ commands. Install and select skills explicitly in Hermes; setup does not do this
 
 ### Build this checkout
 
-This README describes v0.2.0, including opt-in two-node Markdown sync and
-the existing Hermes dispatch workflow. See [v0.2.0](CHANGELOG.md#v020---2026-10-01)
-for the release changes.
+This README describes v0.3.0, including bounded local sync management,
+opt-in two-node Markdown sync, and the Hermes dispatch workflow. See the
+[changelog](CHANGELOG.md) for the release changes.
 
 From the repository root:
 
@@ -60,7 +60,7 @@ install -m 755 bin/agent-dispatch "$HOME/.local/bin/agent-dispatch"
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-This checkout builds the `agent-dispatch v0.3.0` development version and migrates
+This checkout builds `agent-dispatch v0.3.0` and migrates
 opened state to schema 29. `sync request capabilities` reports local policy and
 `sync request show` reads an exact retained handle. New preparation and admission
 support configured `sync-now`, `verify-all`, `retry`, `pause`, and `resume`
@@ -71,8 +71,8 @@ request handles, local authority, and bounded recovery. The
 native ARM paired qualification and the selected-source Linux amd64 full gate.
 Those results cover its pinned source and artifacts; changed inputs need fresh
 applicable qualification. Plugin admission and publication remain separate.
-Use the v0.2.0 release tag or a published binary for the released version.
-Before opening existing state with a development build, back up its database
+Use the matching release tag or a published binary for released installations.
+Before opening existing state with a new build, back up its database
 and matching configuration. An older binary refuses schema 29; rollback requires
 a stopped-service backup restore. See the
 [migration guide](docs/implementation-tips/migration-and-versioning.md).
@@ -86,14 +86,13 @@ refer to the executable.
 
 Choose a version from the repository's
 [GitHub Releases](https://github.com/irootkernel/agent-dispatch/releases), and read
-that version's section in the [changelog](CHANGELOG.md). Once v0.2.0 is
-published, download and install its binary for the current supported host
-as follows. No Go toolchain is needed. Watchman and Hermes remain separate
-requirements.
+that version's section in the [changelog](CHANGELOG.md). Download and install
+the selected version's binary for the current supported host as follows. No Go
+toolchain is needed. Watchman and Hermes remain separate requirements.
 
 ```sh
 set -eu
-release_version=v0.2.0
+release_version=v0.3.0
 case "$(uname -s)/$(uname -m)" in
   Darwin/arm64) platform=darwin-arm64 ;;
   Linux/x86_64) platform=linux-amd64 ;;

@@ -8,15 +8,19 @@ This file records concise shipped outcomes and pending changes.
 
 - Inspect management policy and exact retained requests with
   `sync request capabilities` and `sync request show`.
-- Prepare and submit bounded local sync, verification, retry, pause, and resume
-  requests. Interrupted work retains its recorded jobs, targets, and retry budget;
-  local control remains available independently of the worker.
+- Prepare and submit opt-in bounded sync, verification, retry, pause, and resume requests,
+  retaining job identities, targets, retry budgets, and worker-independent local control.
+- Complete or fail a dispatch without a separate `work begin`, using on-disk path
+  hashing or explicit no-change reporting for completion.
 
 ### Changed
 
-- Advance SQLite to schema 29 for bounded local management requests and worker
-  availability evidence. Rollback requires a stopped-service backup restore
-  before an older binary can run.
+- Advance SQLite to schema 29 for management requests and worker availability;
+  rollback requires restoring a compatible backup with services and writers stopped.
+- Retain terminal management request evidence for at least 180 days while preserving
+  unresolved request and job lineage.
+- Pin generated Hermes task commands to the resolved Agent Dispatch executable
+  and configuration paths.
 
 ### Fixed
 
@@ -24,12 +28,12 @@ This file records concise shipped outcomes and pending changes.
   timestamp precision and the random suffix.
 - Adopt verified remote membership on a node's first `sync reconcile` when its
   local membership ref is absent, without a manual Git fetch.
-- Submit due `FOLLOWUP_READY` and `retry_wait` dispatch intents automatically
-  during post-commit `after-command` passes, `schedule run` recovery, and
-  `merge_pending` Watchman arrivals so follow-up generations do not remain
-  stranded in `ready`.
-- Resume accepted management requests blocked before job admission after the
-  operator pause is lifted, retaining their identity and execution budget.
+- Automatically submit due follow-up and retry intents during after-command and scheduled
+  recovery and merged Watchman arrivals, without draining unrelated destination lanes.
+- Resume accepted management requests blocked before job admission after an operator pause,
+  preserving their identities and execution budgets.
+- Require current executable and acknowledged capability evidence before adding Hermes
+  target mutex flags, retaining local serialization when target mutex support is unavailable.
 
 ## v0.2.0 - 2026-10-01
 

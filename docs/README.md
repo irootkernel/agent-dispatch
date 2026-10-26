@@ -23,7 +23,7 @@ E23 delivers the v0.3.0 successor for constrained local sync management. Its
 [requirements](specs/required-spec.md#20-post-v020-constrained-sync-management),
 [frozen implementation contract](contracts/sync-management-contract.md), and
 [canonical outcomes](roadmap/roadmap.md#e23-constrained-sync-management-request-provider) are separate from the frozen
-v0.2.0 release gates. Development builds use v0.3.0 with schema 28's local request
+v0.2.0 release gates. The v0.3.0 implementation adds schema 28's local request
 ledger and schema 29's worker availability evidence. The closed management CLI
 exposes capabilities, preparation, submission and exact retained-handle lookup.
 Configured actions use the existing worker and bounded recovery; management

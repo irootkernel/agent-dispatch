@@ -69,6 +69,8 @@ Agent Dispatch turns Markdown vault changes into Hermes Kanban tasks; this file 
 
 ## Project Configuration
 
+- Aquarium release notes: CHANGELOG.md
+
 ### Repository Index and Authorities
 
 - The [README](README.md) introduces Agent Dispatch and its Watchman, SQLite, Hermes, launchd, and systemd integrations. `docs/README.md` indexes the canonical specification package and its precedence; `docs/roadmap/roadmap.md` alone owns roadmap identity, order, dependencies, and lifecycle status.

@@ -34,7 +34,7 @@ Do not tie all axes to the product version.
 
 Each release notes whether downgrade is unsupported and how to restore the backup.
 
-The v0.3.0 development build advances schema 27 to 29 with additive management
+The v0.3.0 upgrade advances schema 27 to 29 with additive management
 request, acceptance, execution and job-association tables. Existing jobs remain
 unchanged and have no invented request ancestry. A schema-27 binary refuses the
 upgraded database. Stop the service and restore its compatible pre-migration

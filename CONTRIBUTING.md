@@ -75,8 +75,9 @@ integration behavior. See [VALIDATION.md](docs/VALIDATION.md) for dated evidence
 
 ## Commit and Review
 
-Follow [AGENTS.md](AGENTS.md). Commit subjects use `[E<n>] <summary>` for the
-owning epic; bodies include `Confidence:`, `Scope-risk:`, `Reversibility:`, and
-`Tested:` lines. Preserve unrelated changes and report any skipped verification.
+Follow the commit subjects, attribution, and trailer rules in the Project
+Configuration of [AGENTS.md](AGENTS.md). Commit messages include `Confidence:`,
+`Scope-risk:`, `Reversibility:`, and `Tested:` trailers. Preserve unrelated changes
+and report any skipped verification.
 Commit, push, release publication, and runtime installation are separate actions.
 See the [release guide](docs/implementation-tips/release-guide.md) for release work.

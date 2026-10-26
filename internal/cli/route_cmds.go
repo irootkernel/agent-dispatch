@@ -220,6 +220,11 @@ func runRouteEnable(command string, args []string, stdout, stderr io.Writer) int
 	if code != 0 {
 		return code
 	}
+	// Direct enablement is a supported first-use path without reconcile.
+	// Its routes must have group membership before they can accept work.
+	if _, err := materializeSerializationGroups(closer, cfg, "route-enable"); err != nil {
+		return planErr(stderr, command, "sqlite_query_failed", "storage", err.Error(), 20)
+	}
 	if err := store.SetRouteActivation(requestCtx(), routeID, "enabled", revision, capabilityFingerprint, dispatch.Timestamp(time.Now())); err != nil {
 		if errors.Is(err, sqlite.ErrOptimisticConcurrency) {
 			// First use: materialize the registration from the

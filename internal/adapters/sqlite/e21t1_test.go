@@ -845,6 +845,9 @@ func TestE21T3PublicationEligibilityBindsIdleRouteReceiptAndFacts(t *testing.T) 
 	if _, err := s.Exec(`UPDATE route_runtime_state SET route_state='IDLE',active_dispatch_id=NULL,pending_reconcile=0 WHERE route_id='wiki-maintenance'`); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := s.Exec(`UPDATE destination_lane_state SET lane_state='IDLE',active_dispatch_id=NULL WHERE route_id='wiki-maintenance'`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := s.Exec(`UPDATE resources SET observation_revision=1 WHERE resource_id='vault-main'`); err != nil {
 		t.Fatal(err)
 	}
@@ -857,6 +860,27 @@ func TestE21T3PublicationEligibilityBindsIdleRouteReceiptAndFacts(t *testing.T) 
 	}
 	if got.SourceRevision != 1 || len(got.ReceiptIDs) != 1 || got.ReceiptIDs[0] != "receipt-publish" || got.PathDigests["note.md"] == "" {
 		t.Fatalf("eligibility=%+v", got)
+	}
+	// The raw route row remains IDLE while destination lanes coordinate
+	// new work. An earlier receipt cannot authorize that work's publication.
+	if _, err := s.Exec(`INSERT INTO destination_lane_state(route_id,destination_id,lane_state) VALUES('wiki-maintenance','publishing','IDLE')`); err != nil {
+		t.Fatal(err)
+	}
+	for _, laneState := range []string{"ACTIVE_CLEAN", "ACTIVE_DIRTY", "FOLLOWUP_READY", "UNCERTAIN", "QUARANTINED"} {
+		t.Run(laneState, func(t *testing.T) {
+			if _, err := s.Exec(`UPDATE destination_lane_state SET lane_state=? WHERE route_id='wiki-maintenance'`, laneState); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.LoadPublicationEligibility(ctx, "vault-main"); !errors.Is(err, ErrSyncPrecondition) {
+				t.Fatalf("busy lane eligible: %v", err)
+			}
+		})
+	}
+	if _, err := s.Exec(`UPDATE destination_lane_state SET lane_state='IDLE' WHERE route_id='wiki-maintenance'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.LoadPublicationEligibility(ctx, "vault-main"); err != nil {
+		t.Fatalf("idle lane must remain eligible: %v", err)
 	}
 	if _, err := s.Exec(`UPDATE route_runtime_state SET route_state='ACTIVE_DIRTY' WHERE route_id='wiki-maintenance'`); err != nil {
 		t.Fatal(err)
@@ -885,6 +909,9 @@ func TestE21T3PublicationEligibilityIgnoresDisabledRoute(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := s.Exec(`UPDATE route_runtime_state SET route_state='IDLE',pending_reconcile=0 WHERE route_id='wiki-maintenance'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Exec(`UPDATE destination_lane_state SET lane_state='IDLE',active_dispatch_id=NULL WHERE route_id='wiki-maintenance'`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Exec(`UPDATE resources SET observation_revision=1 WHERE resource_id='vault-main'`); err != nil {

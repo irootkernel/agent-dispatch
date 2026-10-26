@@ -139,7 +139,9 @@ func (s *Store) LoadPublicationEligibility(ctx context.Context, resourceID strin
 	if out.SourceRevision < 1 {
 		return out, fmt.Errorf("resource has no maintained observation revision: %w", ErrSyncPrecondition)
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT r.route_id, r.revision, COALESCE(rrs.activation_state,''), COALESCE(rrs.route_state,''), COALESCE(rrs.pending_reconcile,1)
+	rows, err := tx.QueryContext(ctx, `SELECT r.route_id, r.revision, COALESCE(rrs.activation_state,''), COALESCE(rrs.route_state,''), COALESCE(rrs.pending_reconcile,1),
+		EXISTS (SELECT 1 FROM destination_lane_state l WHERE l.route_id=r.route_id
+			AND (l.lane_state!='IDLE' OR l.active_dispatch_id IS NOT NULL OR l.dirty_generation>0))
 		FROM routes r LEFT JOIN route_runtime_state rrs ON rrs.route_id=r.route_id WHERE r.resource_id=? ORDER BY r.route_id`, resourceID)
 	if err != nil {
 		return out, err
@@ -147,11 +149,12 @@ func (s *Store) LoadPublicationEligibility(ctx context.Context, resourceID strin
 	type route struct {
 		id, revision, activation, state string
 		pending                         int
+		busyLane                        bool
 	}
 	var routes []route
 	for rows.Next() {
 		var r route
-		if err := rows.Scan(&r.id, &r.revision, &r.activation, &r.state, &r.pending); err != nil {
+		if err := rows.Scan(&r.id, &r.revision, &r.activation, &r.state, &r.pending, &r.busyLane); err != nil {
 			rows.Close()
 			return out, err
 		}
@@ -165,7 +168,7 @@ func (s *Store) LoadPublicationEligibility(ctx context.Context, resourceID strin
 		if r.activation == "disabled" {
 			continue
 		}
-		if r.activation != "enabled" || r.state != "IDLE" || r.pending != 0 {
+		if r.activation != "enabled" || r.state != "IDLE" || r.pending != 0 || r.busyLane {
 			return out, fmt.Errorf("route %s is not idle and maintained: %w", r.id, ErrSyncPrecondition)
 		}
 		enabled++

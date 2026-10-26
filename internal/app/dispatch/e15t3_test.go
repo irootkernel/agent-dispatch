@@ -193,6 +193,73 @@ func TestE15T3AcknowledgedIndependentGroupsProgressConcurrently(t *testing.T) {
 	}
 }
 
+func TestE15T3ReadyFollowupPrecedesNewerDirtyLane(t *testing.T) {
+	s := e15t3Store(t)
+	ctx := context.Background()
+	if _, err := s.MaterializeSerializationGroups(ctx, []sqlite.SerializationGroupMemberInput{
+		{RouteID: "wiki", DestinationID: "wiki-primary", GroupID: "shared"},
+		{RouteID: "audit", DestinationID: "wiki-primary", GroupID: "shared"},
+		{RouteID: "wiki", DestinationID: "wiki-secondary", GroupID: "shared"},
+	}, "test", "2026-08-20T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	c := newCoordinator(s)
+	now := "2026-08-20T01:00:00Z"
+	c.Now = func() string { return now }
+	if _, err := c.Arrival(ctx, e15t3Lineage(t, 1, "wiki")); err != nil {
+		t.Fatal(err)
+	}
+	now = "2026-08-20T01:00:01Z"
+	if merged, err := c.Arrival(ctx, e15t3Lineage(t, 2, "wiki")); err != nil || !merged {
+		t.Fatalf("older dirty work: merged=%v err=%v", merged, err)
+	}
+	active, err := s.LoadIntent(ctx, "dispatch-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	followup, err := BuildFollowupRequest(active, e15t3Manifest(1), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now = "2026-08-20T01:00:02Z"
+	if _, err := c.Completion(ctx, ports.ActiveCompletion{
+		RouteID: "wiki", DispatchID: "dispatch-1", ReceiptRef: "wr-old",
+		FollowupRequest: &followup, DirtyLineageJSON: `{"generations":[2]}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	now = "2026-08-20T01:00:03Z"
+	if _, err := c.Arrival(ctx, e15t3Lineage(t, 101, "audit")); err != nil {
+		t.Fatal(err)
+	}
+	newer := e15t3Lineage(t, 201, "wiki")
+	newer.Intent.Fanout.DestinationID = "wiki-secondary"
+	newer.Intent.Fanout.Selections[0].DestinationID = "wiki-secondary"
+	newer.Intent.Fanout.Revisions[0].DestinationID = "wiki-secondary"
+	now = "2026-08-20T01:00:04Z"
+	if merged, err := c.Arrival(ctx, newer); err != nil || !merged {
+		t.Fatalf("newer dirty work: merged=%v err=%v", merged, err)
+	}
+	now = "2026-08-20T01:00:05Z"
+	if _, err := c.Completion(ctx, ports.ActiveCompletion{RouteID: "audit", DispatchID: "dispatch-101", ReceiptRef: "wr-holder"}); err != nil {
+		t.Fatal(err)
+	}
+	groups, err := s.LoadSerializationGroups(ctx)
+	if err != nil || len(groups) != 1 {
+		t.Fatalf("shared group: %+v %v", groups, err)
+	}
+	if got := groups[0]; got.HolderRouteID != "wiki" || got.HolderDestinationID != "wiki-primary" || got.HolderDispatchID != "" {
+		t.Fatalf("older ready follow-up must precede newer dirty lane: %+v", got)
+	}
+	if err := c.Activate(ctx, followup.DispatchID); err != nil {
+		t.Fatal(err)
+	}
+	var cleared bool
+	if err := s.QueryRow(`SELECT dirty_since IS NULL FROM destination_lane_state WHERE route_id='wiki' AND destination_id='wiki-primary'`).Scan(&cleared); err != nil || !cleared {
+		t.Fatalf("activation must consume the ready follow-up's waiting age: cleared=%v err=%v", cleared, err)
+	}
+}
+
 func TestE15T3CompletionPromotesOldestFirstDirtyLane(t *testing.T) {
 	// AC-1103: a lane whose follow-up waits on the group slot is the
 	// waiting lane; the holder's completion promotes exactly the oldest

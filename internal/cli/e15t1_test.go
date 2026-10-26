@@ -179,6 +179,64 @@ func TestE15T1PreflightBlocksUnacknowledgedCrossGroupTopology(t *testing.T) {
 	}
 }
 
+func TestE15T1FreshEnableEnforcesSharedGroup(t *testing.T) {
+	bin := stubhermes.Write(t)
+	configPath := e15t1TwoRouteConfig(t, bin, "shared", "shared", false, false)
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, bytes.ReplaceAll(raw, []byte("enabled: false"), []byte("enabled: true")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setPlanEnv(t, cfg.Resources["vault-main"].Root, false)
+	var out, errb bytes.Buffer
+	if code := Run([]string{"hermes", "probe", "--config", configPath}, &out, &errb); code != 0 {
+		t.Fatalf("probe: %d %s", code, errb.String())
+	}
+	for _, route := range []string{"wiki", "audit"} {
+		if code := enableRouteAck(t, configPath, route); code != 0 {
+			t.Fatalf("fresh route enable %s: %d", route, code)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(cfg.Resources["vault-main"].Root, "Inbox"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, route := range []string{"wiki", "audit"} {
+		path := "Inbox/" + route + ".md"
+		if err := os.WriteFile(filepath.Join(cfg.Resources["vault-main"].Root, path), []byte(route), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("WATCHMAN_TRIGGER", cfg.Routes[route].Source.TriggerName)
+		out.Reset()
+		errb.Reset()
+		withStdin(t, `[{"name":"`+path+`","exists":true,"new":true,"type":"f"}]`, func() {
+			if code := Run([]string{"dispatch", "--route", route, "--config", configPath, "--input", "watchman"}, &out, &errb); code != 0 {
+				t.Fatalf("dispatch %s: %d %s", route, code, errb.String())
+			}
+		})
+	}
+	store, err := openStateStore(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	var active, waiting int
+	if err := store.QueryRow(`SELECT COUNT(*) FROM destination_lane_state WHERE lane_state IN ('ACTIVE_CLEAN','ACTIVE_DIRTY')`).Scan(&active); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.QueryRow(`SELECT dirty_generation FROM destination_lane_state WHERE route_id='audit' AND destination_id='main'`).Scan(&waiting); err != nil {
+		t.Fatal(err)
+	}
+	if active != 1 || waiting != 1 {
+		t.Fatalf("fresh enabled routes must serialize: active=%d waiting=%d", active, waiting)
+	}
+}
+
 func TestE15T1PreflightPartialAcknowledgementStillBlocks(t *testing.T) {
 	// CON-013: EVERY involved route must acknowledge; one is not enough.
 	bin := stubhermes.Write(t)

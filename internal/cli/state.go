@@ -101,7 +101,7 @@ func notificationPolicyResolver(cfg *config.Config) func(routeID string) *ports.
 // when the topology write itself failed — the caller surfaces the
 // degraded signal (round-1 F005: a silent topology failure must not
 // read as a clean reconciliation).
-func materializeSerializationGroups(store *sqlite.Store, cfg *config.Config) ([]sqlite.SerializationGroupRow, error) {
+func materializeSerializationGroups(store *sqlite.Store, cfg *config.Config, actor string) ([]sqlite.SerializationGroupRow, error) {
 	memberships := config.SerializationGroupMemberships(cfg)
 	members := make([]sqlite.SerializationGroupMemberInput, 0, len(memberships))
 	for _, m := range memberships {
@@ -109,7 +109,7 @@ func materializeSerializationGroups(store *sqlite.Store, cfg *config.Config) ([]
 			RouteID: m.RouteID, DestinationID: m.DestinationID, GroupID: m.Group,
 		})
 	}
-	return store.MaterializeSerializationGroups(requestCtx(), members, "reconcile", time.Now().UTC().Format(time.RFC3339Nano))
+	return store.MaterializeSerializationGroups(requestCtx(), members, actor, time.Now().UTC().Format(time.RFC3339Nano))
 }
 
 // openUnmigratedStore opens the SQLite store without applying

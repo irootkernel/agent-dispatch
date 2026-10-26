@@ -251,7 +251,7 @@ func runReconcile(args []string, stdout, stderr io.Writer) int {
 	// the command surfaces the conflict instead of failing the snapshot
 	// paths that must remain available, and a topology write failure is
 	// reported rather than silently skipped (round-1 F005).
-	serializationConflicts, serializationErr := materializeSerializationGroups(closer, artifacts.cfg)
+	serializationConflicts, serializationErr := materializeSerializationGroups(closer, artifacts.cfg, "reconcile")
 	if serializationErr != nil {
 		fmt.Fprintf(stderr, "warning: the serialization-group topology could not be materialized: %v; the durable group state is not current\n", serializationErr)
 	}

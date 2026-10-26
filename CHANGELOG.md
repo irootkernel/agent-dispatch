@@ -24,8 +24,8 @@ This file records concise shipped outcomes and pending changes.
 
 ### Fixed
 
-- Generate work receipt IDs accepted by signed publication, preserving UTC
-  timestamp precision and the random suffix.
+- Generate publication-compatible work receipt IDs; affected upgrades need fresh maintenance
+  generations via the [legacy receipt recovery guide](docs/ops/failure-recovery.md#publication-receipt-recovery).
 - Adopt verified remote membership on a node's first `sync reconcile` when its
   local membership ref is absent, without a manual Git fetch.
 - Automatically submit due follow-up and retry intents during after-command and scheduled
@@ -36,8 +36,10 @@ This file records concise shipped outcomes and pending changes.
   target mutex flags, retaining local serialization when target mutex support is unavailable.
 - Preserve the retained receipt ID when completing, failing, or blocking a begun work run,
   so returned IDs resolve through receipt inspection.
-- Record an idle lane's first-dirty work while its serialization group is occupied,
-  so completion can reserve the oldest waiting lane.
+- Initialize serialization groups before direct activation or dispatch and retain first-dirty
+  ordering across occupied lanes and ready follow-ups.
+- Require every enabled route's destination lanes to be idle before signed publication.
+- Return exit 40 when management output pipes close, without undoing committed requests.
 
 ## v0.2.0 - 2026-10-01
 

@@ -628,6 +628,13 @@ func persistThroughCoordinator(command string, artifacts *planArtifacts, stderr 
 	if exit != 0 {
 		return persistOutcome{}, exit
 	}
+	// Repair membership for previously enabled first-use routes as well
+	// as fresh ones before the coordinator admits any new group work.
+	if _, err := materializeSerializationGroups(closer, artifacts.cfg, "dispatch-cli"); err != nil {
+		closer.Close()
+		writeError(stderr, command, "sqlite_query_failed", "storage", err.Error())
+		return persistOutcome{}, 20
+	}
 	// Head-of-entry recovery (DUR-010, E8-T2/H-6): expired submitting
 	// leases are recovered — and their unknowns reconciled — before this
 	// arrival is evaluated, so a process that died mid-submit heals on

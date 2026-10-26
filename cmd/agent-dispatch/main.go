@@ -6,11 +6,16 @@ package main
 
 import (
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/irootkernel/agent-dispatch/internal/cli"
 )
 
 func main() {
+	// Let failed stdout/stderr writes reach the CLI's exit-40 handling
+	// instead of terminating on SIGPIPE after a durable command commits.
+	signal.Ignore(syscall.SIGPIPE)
 	defer func() {
 		if r := recover(); r != nil {
 			cli.WriteInternalError(os.Stderr, r)

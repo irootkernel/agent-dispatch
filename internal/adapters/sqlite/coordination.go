@@ -695,7 +695,10 @@ func (s *Store) completeActiveTx(ctx context.Context, tx *sql.Tx, req ports.Acti
 		// The pending reconciliation generation collapses into this one
 		// follow-up (repeated reconciliations never stack generations);
 		// the flag stays route-keyed as the shared collapse.
-		if _, err := tx.Exec(`UPDATE destination_lane_state SET active_dispatch_id = NULL, dirty_generation = 0, dirty_since = NULL WHERE route_id = ? AND destination_id = ? AND active_dispatch_id = ?`, routeID, lane, req.DispatchID); err != nil {
+		// Keep the oldest owed work's age while its ready follow-up waits
+		// for the group. Activation consumes that age once no newer dirty
+		// generation remains.
+		if _, err := tx.Exec(`UPDATE destination_lane_state SET active_dispatch_id = NULL, dirty_generation = 0, dirty_since = COALESCE(dirty_since, ?) WHERE route_id = ? AND destination_id = ? AND active_dispatch_id = ?`, now, routeID, lane, req.DispatchID); err != nil {
 			return out, err
 		}
 		// E15-T3 (CON-012): the completed dispatch no longer holds the
@@ -845,7 +848,8 @@ func (s *Store) ActivateFollowup(ctx context.Context, dispatchID, actor, now str
 		auditJSON("reason", reason, "dispatch_id", dispatchID, "dirty_generation", snap.DirtyGeneration, "destination_id", lane)); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`UPDATE destination_lane_state SET active_dispatch_id = ?, active_generation = ? WHERE route_id = ? AND destination_id = ?`,
+	if _, err := tx.Exec(`UPDATE destination_lane_state SET active_dispatch_id = ?, active_generation = ?,
+		dirty_since = CASE WHEN dirty_generation = 0 THEN NULL ELSE dirty_since END WHERE route_id = ? AND destination_id = ?`,
 		dispatchID, int(generation), routeID, lane); err != nil {
 		return err
 	}

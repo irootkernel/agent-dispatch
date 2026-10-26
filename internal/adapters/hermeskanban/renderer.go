@@ -67,6 +67,8 @@ func (e *InvalidRequestError) Error() string {
 // scratch | worktree | worktree:<path> | dir:<path>.
 var workspaceForm = regexp.MustCompile(`^(scratch|worktree|worktree:.+|dir:.+)$`)
 
+var receiptShellWord = regexp.MustCompile(`^[A-Za-z0-9_@%+=:,./-]+$`)
+
 // RenderedTask is the deterministic rendering of one logical request:
 // the contract title, the trusted instruction with the strictly
 // separated untrusted manifest and receipt instructions, and the create
@@ -280,9 +282,10 @@ func receiptInstructions(req ports.TaskRequest, opts RenderOptions) string {
 	if bin == "" {
 		bin = "agent-dispatch"
 	}
+	bin = quoteReceiptWord(bin)
 	cfgArg := ""
 	if opts.AgentDispatchConfigPath != "" {
-		cfgArg = " --config " + opts.AgentDispatchConfigPath
+		cfgArg = " --config " + quoteReceiptWord(opts.AgentDispatchConfigPath)
 	}
 	base := fmt.Sprintf("%s work complete --dispatch-id %s%s", bin, req.DispatchID, cfgArg)
 	failBase := fmt.Sprintf("%s work fail --dispatch-id %s%s", bin, req.DispatchID, cfgArg)
@@ -292,6 +295,13 @@ func receiptInstructions(req ports.TaskRequest, opts RenderOptions) string {
 %s --status partially_completed --path <completed-rel-path> --remaining-path <remaining-rel-path>
 %s --status blocked --manual-reason <bounded text>
 %s --failure-code <agent_error|canceled|timeout|environment_error>`, base, base, base, base, failBase)
+}
+
+func quoteReceiptWord(value string) string {
+	if receiptShellWord.MatchString(value) {
+		return value
+	}
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
 // guardInterpolatedMember rejects trusted members that would corrupt the

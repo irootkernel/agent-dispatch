@@ -306,8 +306,9 @@ func (s *Store) unionBatchSelectionTx(tx *sql.Tx, batchID string, selectedDestin
 // mergeLanesTx bumps the named lanes' dirty generations with the E3-T1
 // merge guards inside the caller's transaction (CON-008): an IDLE lane
 // with an empty slot records the owed work as the route's pending
-// reconciliation instead (the route-keyed collapse), a reserved-but-not-
-// activated slot consumes its reservation first, active lanes take the
+// reconciliation, and an occupied group also retains its first-dirty
+// generation for promotion. A reserved slot consumes its reservation
+// before activation, active lanes take the
 // ACTIVE_* -> ACTIVE_DIRTY edge, and FOLLOWUP_READY or route-level
 // UNCERTAIN lanes keep their state with the dirty count still recorded.
 // It returns the highest new dirty count and whether any lane recorded a
@@ -340,18 +341,34 @@ func (s *Store) mergeLanesTx(tx *sql.Tx, routeID string, selectedDestinations []
 		// A lane-level IDLE merge with an empty slot has no dispatch that
 		// could own the burst's dirty generation (a disabled or paused
 		// lane, or the slot winner completing inside the race window):
-		// recording dirty here would wedge the next clean completion
-		// against a count no later receipt can clear. The owed work is
-		// recorded as the route's pending reconciliation instead; the next
-		// arrival or the scheduled reconcile delivers it as latest-state
-		// work (E8-T1 round-1 F001, route-keyed collapse).
+		// pending reconciliation keeps that work owed until the next
+		// arrival or scheduled reconcile delivers it as latest-state work
+		// (E8-T1 round-1 F001, route-keyed collapse). An enabled lane
+		// waiting on another group holder also needs its dirty generation
+		// and first-dirty time so group release can promote it (CON-012).
 		if snap.State == state.RouteIdle && snap.ActiveDispatchID == "" {
 			idleEmpty = true
-			continue
+			waitingForGroup := false
+			if snap.ActivationState == "enabled" {
+				if groupID, ok, gerr := s.groupOfLaneTx(tx, routeID, dest); gerr != nil {
+					return 0, false, gerr
+				} else if ok {
+					var groupState string
+					var holderRoute, holderDest sql.NullString
+					if err := tx.QueryRow(`SELECT state, holder_route_id, holder_destination_id FROM serialization_groups WHERE group_id = ?`, groupID).
+						Scan(&groupState, &holderRoute, &holderDest); err != nil {
+						return 0, false, err
+					}
+					waitingForGroup = groupState == GroupStateHeld && (nullText(holderRoute) != routeID || nullText(holderDest) != dest)
+				}
+			}
+			if !waitingForGroup {
+				continue
+			}
 		}
-		// Merging onto IDLE only happens when this arrival lost the lane's
-		// slot race: the winner's completion collapses the recorded
-		// generation (the loser reached here through ErrRouteSlotHeld).
+		// An IDLE lane may also have a reserved dispatch whose activation
+		// lost the slot race. Its completion collapses the recorded
+		// generation once group admission allows it to activate.
 		dirtyAfter := ownDirty + 1
 		if snap.State == state.RouteIdle && snap.ActiveDispatchID != "" {
 			// A reserved-but-not-yet-activated dispatch still implies lane

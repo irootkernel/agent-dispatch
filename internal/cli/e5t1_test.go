@@ -248,6 +248,66 @@ func TestWorkCompleteCleanSchedulesNothing(t *testing.T) {
 	}
 }
 
+func TestWorkReceiptIdentitySurvivesRunOutcome(t *testing.T) {
+	for _, outcome := range []string{"completed", "failed", "blocked"} {
+		t.Run(outcome, func(t *testing.T) {
+			configPath, vault := e4t3Fixture(t)
+			res, _ := e4t3Dispatch(t, configPath, vault)
+			dispatchID := res["dispatch_id"].(string)
+			var out, errb bytes.Buffer
+			if code := Run([]string{"work", "begin", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "identity-run"}, &out, &errb); code != 0 {
+				t.Fatalf("begin: %d %s", code, &errb)
+			}
+			begun := decodeEnvelope(t, &out)
+			receiptID := begun["receipt_id"].(string)
+			args := []string{"work", "complete", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "identity-run"}
+			switch outcome {
+			case "completed":
+				args = append(args, "--manifest", "-")
+			case "failed":
+				args[1] = "fail"
+				args = append(args, "--failure-code", "agent_error")
+			case "blocked":
+				args = append(args, "--status", "blocked", "--manual-reason", "operator review")
+			}
+			out.Reset()
+			errb.Reset()
+			withStdin(t, "[]", func() {
+				if code := Run(args, &out, &errb); code != 0 {
+					t.Fatalf("%s: %d %s", outcome, code, &errb)
+				}
+			})
+			result := decodeEnvelope(t, &out)
+			if result["status"] != outcome {
+				t.Fatalf("work result status = %v, want %s", result["status"], outcome)
+			}
+			if result["receipt_id"] != receiptID {
+				t.Fatalf("%s changed retained receipt identity: got %v, want %s", outcome, result["receipt_id"], receiptID)
+			}
+			out.Reset()
+			errb.Reset()
+			if code := Run([]string{"receipts", "show", "--config", configPath, receiptID}, &out, &errb); code != 0 {
+				t.Fatalf("lookup returned receipt: %d %s", code, &errb)
+			}
+			view := decodeEnvelope(t, &out)
+			if view["receipt_id"] != receiptID || view["dispatch_id"] != dispatchID || view["receipt_kind"] != "work" {
+				t.Fatalf("retained receipt lookup = %v", view)
+			}
+			if outcome == "blocked" {
+				out.Reset()
+				errb.Reset()
+				if code := Run([]string{"work", "complete", "--config", configPath, "--dispatch-id", dispatchID, "--run-id", "identity-run", "--no-changes"}, &out, &errb); code != 0 {
+					t.Fatalf("resolve blocked run: %d %s", code, &errb)
+				}
+				resolved := decodeEnvelope(t, &out)
+				if resolved["receipt_id"] != receiptID || resolved["status"] != "completed" {
+					t.Fatalf("blocked resolution changed retained receipt identity: %v", resolved)
+				}
+			}
+		})
+	}
+}
+
 // TestWorkCompleteDirtySchedulesOneFollowup proves the atomic completion
 // transaction: changes that arrived while the dispatch was active keep
 // the route dirty, and the completion schedules exactly one latest-state

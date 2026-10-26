@@ -100,6 +100,71 @@ func TestE15T3SharedGroupNeverRunsParallelChildren(t *testing.T) {
 	}
 }
 
+func TestE15T3FirstWaitingLaneIsPromoted(t *testing.T) {
+	s := e15t3Store(t)
+	c := newCoordinator(s)
+	ctx := context.Background()
+	if _, err := c.Arrival(ctx, e15t3Lineage(t, 1, "wiki")); err != nil {
+		t.Fatal(err)
+	}
+	merged, err := c.Arrival(ctx, e15t3Lineage(t, 101, "audit"))
+	if err != nil || !merged {
+		t.Fatalf("first waiting arrival: merged=%v err=%v", merged, err)
+	}
+	waiting, err := s.LoadLaneState(ctx, "audit", "wiki-primary")
+	if err != nil || waiting.DirtyGeneration != 1 || waiting.ActiveDispatchID != "" {
+		t.Fatalf("waiting lane must retain first-dirty work without an active child: %+v %v", waiting, err)
+	}
+	if _, err := c.Completion(ctx, ports.ActiveCompletion{
+		RouteID: "wiki", DispatchID: "dispatch-1", ReceiptRef: "wr-holder",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	groups, err := s.LoadSerializationGroups(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, group := range groups {
+		if group.GroupID != "shared" {
+			continue
+		}
+		if group.State != sqlite.GroupStateHeld || group.HolderRouteID != "audit" || group.HolderDestinationID != "wiki-primary" || group.HolderDispatchID != "" {
+			t.Fatalf("completion must reserve the first waiting lane: %+v", group)
+		}
+		if merged, err := c.Arrival(ctx, e15t3Lineage(t, 102, "audit")); err != nil || merged {
+			t.Fatalf("promoted lane must admit its next dispatch: merged=%v err=%v", merged, err)
+		}
+		active, err := s.LoadIntent(ctx, "dispatch-102")
+		if err != nil {
+			t.Fatal(err)
+		}
+		followup, err := BuildFollowupRequest(active, e15t3Manifest(1), nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		followup.RouteRevision = "route-rev-2"
+		completed, err := c.Completion(ctx, ports.ActiveCompletion{
+			RouteID: "audit", DispatchID: "dispatch-102", ReceiptRef: "wr-waiting",
+			FollowupRequest: &followup, DirtyLineageJSON: `{"generations":[101]}`,
+		})
+		if err != nil {
+			t.Fatalf("promoted lane completion must preserve its owed work: %v", err)
+		}
+		if completed.FollowupDispatchID != "" {
+			if err := c.Activate(ctx, completed.FollowupDispatchID); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := c.Completion(ctx, ports.ActiveCompletion{
+				RouteID: "audit", DispatchID: completed.FollowupDispatchID, ReceiptRef: "wr-reconciled",
+			}); err != nil {
+				t.Fatalf("waiting work must settle without wedging its lane: %v", err)
+			}
+		}
+		return
+	}
+	t.Fatal("shared serialization group missing")
+}
+
 func TestE15T3AcknowledgedIndependentGroupsProgressConcurrently(t *testing.T) {
 	// AC-1104: independent groups over one resource run concurrently —
 	// the guarantee is state-database scoped and never described as

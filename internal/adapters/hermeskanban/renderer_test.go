@@ -3,6 +3,9 @@ package hermeskanban
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -297,6 +300,61 @@ func TestRenderReceiptAndLatestState(t *testing.T) {
 	wantPinned := "/Users/example/.local/bin/agent-dispatch-v0.3.0 work complete --dispatch-id 019c2234-5678-7abc-9def-0123456789ab --config /Users/example/.config/agent-dispatch/trial.yaml --path <changed-rel-path>"
 	if !strings.Contains(pinned.Body, wantPinned) {
 		t.Fatalf("pinned binary and config missing from receipt instructions: %s", pinned.Body)
+	}
+}
+
+func TestRenderReceiptPathsRemainSingleShellArguments(t *testing.T) {
+	for _, name := range []string{"plain", "with spaces", "with $(touch expanded) ' quotes"} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			binName, configName := "agent-dispatch", "config.yaml"
+			if name != "plain" {
+				binName += " " + name
+				configName = "config " + name + ".yaml"
+			}
+			bin := filepath.Join(dir, binName)
+			config := filepath.Join(dir, configName)
+			if err := os.WriteFile(bin, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\"\n"), 0700); err != nil {
+				t.Fatal(err)
+			}
+			req := loadGoldenRequest(t)
+			rendered, err := Render(req, RenderOptions{
+				MaxManifestBytes: goldenManifestBound, AgentDispatchExecutable: bin,
+				AgentDispatchConfigPath: config,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			commands := 0
+			for _, line := range strings.Split(rendered.Body, "\n") {
+				var want []string
+				switch {
+				case strings.HasSuffix(line, " --no-changes"):
+					want = []string{"work", "complete", "--dispatch-id", req.DispatchID, "--config", config, "--no-changes"}
+				case strings.HasSuffix(line, " --failure-code <agent_error|canceled|timeout|environment_error>"):
+					line = strings.TrimSuffix(line, "<agent_error|canceled|timeout|environment_error>") + "agent_error"
+					want = []string{"work", "fail", "--dispatch-id", req.DispatchID, "--config", config, "--failure-code", "agent_error"}
+				default:
+					continue
+				}
+				cmd := exec.Command("sh", "-c", line)
+				cmd.Dir = dir
+				out, err := cmd.CombinedOutput()
+				if err != nil {
+					t.Fatalf("rendered receipt command failed: %v\n%s", err, out)
+				}
+				if got := strings.Split(strings.TrimSuffix(string(out), "\n"), "\n"); !slices.Equal(got, want) {
+					t.Fatalf("receipt argv = %q, want %q", got, want)
+				}
+				commands++
+			}
+			if commands != 2 {
+				t.Fatalf("executed %d receipt commands, want complete and fail", commands)
+			}
+			if _, err := os.Stat(filepath.Join(dir, "expanded")); !os.IsNotExist(err) {
+				t.Fatalf("receipt path executed shell substitution: %v", err)
+			}
+		})
 	}
 }
 

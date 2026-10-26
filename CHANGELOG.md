@@ -19,8 +19,8 @@ This file records concise shipped outcomes and pending changes.
   rollback requires restoring a compatible backup with services and writers stopped.
 - Retain terminal management request evidence for at least 180 days while preserving
   unresolved request and job lineage.
-- Pin generated Hermes task commands to the resolved Agent Dispatch executable
-  and configuration paths.
+- Pin generated Hermes task commands to the resolved executable and configuration paths,
+  preserving shell argument boundaries for paths with spaces or quoting characters.
 
 ### Fixed
 
@@ -34,6 +34,10 @@ This file records concise shipped outcomes and pending changes.
   preserving their identities and execution budgets.
 - Require current executable and acknowledged capability evidence before adding Hermes
   target mutex flags, retaining local serialization when target mutex support is unavailable.
+- Preserve the retained receipt ID when completing, failing, or blocking a begun work run,
+  so returned IDs resolve through receipt inspection.
+- Record an idle lane's first-dirty work while its serialization group is occupied,
+  so completion can reserve the oldest waiting lane.
 
 ## v0.2.0 - 2026-10-01
 

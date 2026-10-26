@@ -604,8 +604,12 @@ func (s *Service) Complete(ctx context.Context, in CompleteInput) (Result, error
 		}
 	}
 	changesJSON, _ := json.Marshal(changes)
+	receiptID := begun.ReceiptID
+	if receiptID == "" {
+		receiptID = s.receiptID(in.DispatchID)
+	}
 	w := ports.WorkReceiptInput{
-		ReceiptID:         s.receiptID(in.DispatchID),
+		ReceiptID:         receiptID,
 		DispatchID:        in.DispatchID,
 		RunID:             in.RunID,
 		ResourceID:        intent.ResourceID,
@@ -719,8 +723,18 @@ func (s *Service) Fail(ctx context.Context, in FailInput) (Result, error) {
 	if begunAt == "" {
 		begunAt = s.timestamp()
 	}
+	begun, err := s.Store.LoadWorkReceipt(ctx, in.DispatchID, in.RunID)
+	if err != nil && !errors.Is(err, ports.ErrWorkReceiptNotFound) {
+		return Result{}, ports.WrapStore(err)
+	}
+	receiptID := begun.ReceiptID
+	if receiptID == "" {
+		receiptID = s.receiptID(in.DispatchID)
+	} else {
+		begunAt = begun.BegunAt
+	}
 	w := ports.WorkReceiptInput{
-		ReceiptID:       s.receiptID(in.DispatchID),
+		ReceiptID:       receiptID,
 		DispatchID:      in.DispatchID,
 		RunID:           in.RunID,
 		ResourceID:      intent.ResourceID,
@@ -775,8 +789,12 @@ func (s *Service) completeBlocked(ctx context.Context, intent ports.IntentSnapsh
 	} else if err != nil {
 		return Result{}, ports.WrapStore(err)
 	}
+	receiptID := begun.ReceiptID
+	if receiptID == "" {
+		receiptID = s.receiptID(in.DispatchID)
+	}
 	w := ports.WorkReceiptInput{
-		ReceiptID:       s.receiptID(in.DispatchID),
+		ReceiptID:       receiptID,
 		DispatchID:      in.DispatchID,
 		RunID:           in.RunID,
 		ResourceID:      intent.ResourceID,

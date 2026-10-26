@@ -46,9 +46,9 @@ commands. Install and select skills explicitly in Hermes; setup does not do this
 
 ### Build this checkout
 
-This README describes v0.3.0, including bounded local sync management,
-opt-in two-node Markdown sync, and the Hermes dispatch workflow. See the
-[changelog](CHANGELOG.md) for the release changes.
+This checkout tracks v0.3.1 development after the stable v0.3.0 release.
+It includes bounded local sync management, opt-in two-node Markdown sync,
+and the Hermes dispatch workflow. See the [changelog](CHANGELOG.md) for shipped changes.
 
 From the repository root:
 
@@ -60,7 +60,7 @@ install -m 755 bin/agent-dispatch "$HOME/.local/bin/agent-dispatch"
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-This checkout builds `agent-dispatch v0.3.0` and migrates
+This checkout builds `agent-dispatch v0.3.1` and migrates
 opened state to schema 29. `sync request capabilities` reports local policy and
 `sync request show` reads an exact retained handle. New preparation and admission
 support configured `sync-now`, `verify-all`, `retry`, `pause`, and `resume`

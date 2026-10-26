@@ -8,8 +8,8 @@ belong to [operations](../ops/installation.md#5-upgrade-ops-009).
 
 ## Current release candidate
 
-The selected candidate is v0.3.0, adding E23's constrained local sync management
-to the v0.2.0 two-node release. `SMR-*` and G19 own its additional requirements
+The selected development target is v0.3.1, following the stable v0.3.0 release.
+The v0.3.0 release adds E23's constrained local sync management to v0.2.0. `SMR-*` and G19 own its additional requirements
 and acceptance criteria. Historical G18, G19, and provider-handoff results remain
 bound to their named sources and artifacts; changed release inputs require
 applicable requalification.
@@ -31,7 +31,7 @@ Record the explicitly selected version, full Git commit, and documentation scope
 Use the [roadmap](../roadmap/roadmap.md) for delivery status, the
 [acceptance criteria](../specs/acceptance-criteria.md) for gates, and
 [validation records](../VALIDATION.md) for evidence tied to an exact snapshot.
-The v0.3.0 candidate follows [v0.2.0 - 2026-10-01](../../CHANGELOG.md#v020---2026-10-01).
+The v0.3.1 target follows [v0.3.0 - 2026-10-26](../../CHANGELOG.md#v030---2026-10-26).
 Its open section in the root changelog describes the selected outcomes;
 publication requires the final gates below.
 
